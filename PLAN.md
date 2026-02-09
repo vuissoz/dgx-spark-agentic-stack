@@ -130,7 +130,8 @@ Créer `/srv/agentic/bin/agent` avec au minimum :
 ### C1 Déployer Ollama + volume persistant
 **Implémentation**
 - ajouter service `ollama` (GPU) dans `compose.core.yml`
-- volume : `/srv/agentic/ollama/`
+- configurer un env `OLLAMA_MODELS_DIR` pour le mount des modèles (ex: `${OLLAMA_MODELS_DIR:-/srv/agentic/ollama/models}:/root/.ollama/models`)
+- valeur locale existante à supporter sans copie : `/home/vuissoz/wkdir/open-webui/ollama_data/models/`
 - bind hôte : `127.0.0.1:11434:11434`
 - healthcheck HTTP `/api/version`
 
@@ -139,6 +140,7 @@ Créer `/srv/agentic/bin/agent` avec au minimum :
 - `ss -lntp | grep 11434` → écoute sur `127.0.0.1` uniquement
 - interne : `curl -fsS http://ollama:11434/api/version` OK
 - health docker : `healthy`
+- `docker inspect ollama` confirme le source mount des modèles = valeur effective de `OLLAMA_MODELS_DIR` (ou fallback par défaut)
 
 ### C2 Smoke test génération
 **Implémentation**
