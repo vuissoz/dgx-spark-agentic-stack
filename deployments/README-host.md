@@ -8,6 +8,7 @@ This checklist validates host readiness before deploying the DGX Spark stack.
 - Docker Compose v2 (`docker compose`)
 - NVIDIA driver + `nvidia-smi` on host
 - NVIDIA Container Toolkit (containerized GPU access)
+- `iptables` for `DOCKER-USER` enforcement (Step B)
 
 ## Minimal diagnostics
 
@@ -18,12 +19,14 @@ docker version
 docker compose version
 nvidia-smi
 docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi
+sudo iptables -S DOCKER-USER
 ```
 
 Expected result:
 
 - All commands exit with status 0.
 - `docker run ... nvidia-smi` prints GPU inventory from inside the container.
+- `iptables -S DOCKER-USER` returns chain rules (chain may be empty before deployment).
 
 ## Notes
 

@@ -13,13 +13,17 @@ Usage:
   agent ps
   agent logs <service>
   agent test <A|B|C|D|E|F|G|H|I|J|K|all>
-  agent doctor
+  agent doctor [--fix-net]
 USAGE
 }
 
 die() {
   echo "ERROR: $*" >&2
   exit 1
+}
+
+warn() {
+  echo "WARN: $*" >&2
 }
 
 require_cmd() {
@@ -49,14 +53,26 @@ parse_targets() {
   echo "$raw"
 }
 
+targets_include() {
+  local needle="$1"
+  shift
+  local item
+  for item in "$@"; do
+    if [[ "$item" == "$needle" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 run_compose_on_targets() {
   local action="$1"
   local target_arg="$2"
   shift 2
   local -a compose_args=()
-  local target
   local compose_file
 
+  local target
   for target in $(parse_targets "$target_arg"); do
     compose_file="$(stack_to_compose_file "$target")"
     [[ -f "$compose_file" ]] || die "Compose file not found for target '$target': $compose_file"
@@ -65,6 +81,22 @@ run_compose_on_targets() {
 
   require_cmd docker
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" "$action" "$@"
+}
+
+ensure_core_runtime() {
+  if ! "${AGENTIC_REPO_ROOT}/deployments/core/init_runtime.sh"; then
+    die "failed to initialize core runtime in ${AGENTIC_ROOT}; re-run with sudo or set AGENTIC_ROOT to a writable path"
+  fi
+}
+
+apply_core_network_policy() {
+  if [[ "${AGENTIC_SKIP_DOCKER_USER_APPLY:-0}" == "1" ]]; then
+    warn "skipping DOCKER-USER policy apply because AGENTIC_SKIP_DOCKER_USER_APPLY=1"
+    return 0
+  fi
+  if ! "${AGENTIC_REPO_ROOT}/deployments/net/apply_docker_user.sh"; then
+    die "failed to apply DOCKER-USER policy; re-run with sudo or set AGENTIC_SKIP_DOCKER_USER_APPLY=1 for local dry-runs"
+  fi
 }
 
 run_tests() {
@@ -103,11 +135,24 @@ cmd="${1:-}"
 case "$cmd" in
   up)
     [[ $# -ge 2 ]] || die "Usage: agent up <core|agents|ui|obs|rag|optional>"
-    run_compose_on_targets up "$2" -d
+    target_arg="$2"
+    read -r -a targets <<<"$(parse_targets "$target_arg")"
+
+    if targets_include "core" "${targets[@]}"; then
+      ensure_core_runtime
+    fi
+
+    run_compose_on_targets up "$target_arg" -d
+
+    if targets_include "core" "${targets[@]}"; then
+      apply_core_network_policy
+    fi
     ;;
   down)
     [[ $# -ge 2 ]] || die "Usage: agent down <core|agents|ui|obs|rag|optional>"
-    run_compose_on_targets down "$2" --remove-orphans
+    target_arg="$2"
+    read -r -a targets <<<"$(parse_targets "$target_arg")"
+    run_compose_on_targets down "$target_arg" --remove-orphans
     ;;
   ps)
     require_cmd docker
@@ -125,7 +170,8 @@ case "$cmd" in
     run_tests "$2"
     ;;
   doctor)
-    exec "${SCRIPT_DIR}/doctor.sh"
+    shift
+    exec "${SCRIPT_DIR}/doctor.sh" "$@"
     ;;
   help|-h|--help)
     usage

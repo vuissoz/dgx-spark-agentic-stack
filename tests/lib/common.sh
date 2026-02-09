@@ -10,6 +10,10 @@ ok() {
   echo "OK: $*"
 }
 
+warn() {
+  echo "WARN: $*" >&2
+}
+
 assert_cmd() {
   local cmd="$1"
   command -v "$cmd" >/dev/null 2>&1 || fail "command not found: ${cmd}"
@@ -70,4 +74,78 @@ assert_proxy_enforced() {
   echo "$env_dump" | grep -q '^HTTPS_PROXY=' || fail "${container}: HTTPS_PROXY is missing"
 
   ok "proxy env is enforced for ${container}"
+}
+
+service_container_id() {
+  local service="$1"
+  local project="${AGENTIC_COMPOSE_PROJECT:-agentic}"
+
+  docker ps \
+    --filter "label=com.docker.compose.project=${project}" \
+    --filter "label=com.docker.compose.service=${service}" \
+    --format '{{.ID}}' | head -n 1
+}
+
+require_service_container() {
+  local service="$1"
+  local container_id
+  container_id="$(service_container_id "$service")"
+  [[ -n "$container_id" ]] || fail "service '${service}' is not running in compose project '${AGENTIC_COMPOSE_PROJECT:-agentic}'"
+  printf '%s\n' "$container_id"
+}
+
+wait_for_container_ready() {
+  local container_id="$1"
+  local timeout_seconds="${2:-45}"
+  local elapsed=0
+  local state
+  local health
+
+  while (( elapsed < timeout_seconds )); do
+    state="$(docker inspect --format '{{.State.Status}}' "${container_id}" 2>/dev/null || true)"
+    health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${container_id}" 2>/dev/null || true)"
+
+    if [[ "${state}" == "running" ]]; then
+      if [[ -z "${health}" || "${health}" == "healthy" ]]; then
+        return 0
+      fi
+    fi
+
+    sleep 1
+    ((elapsed += 1))
+  done
+
+  fail "container '${container_id}' did not become ready within ${timeout_seconds}s (state=${state}, health=${health})"
+}
+
+assert_network_internal() {
+  local network_name="${1:-${AGENTIC_NETWORK:-agentic}}"
+  assert_cmd docker
+
+  local internal_flag
+  internal_flag="$(docker network inspect "$network_name" --format '{{.Internal}}' 2>/dev/null)" \
+    || fail "docker network '${network_name}' does not exist"
+
+  [[ "$internal_flag" == "true" ]] || fail "docker network '${network_name}' must be internal=true (actual=${internal_flag})"
+  ok "docker network '${network_name}' is internal"
+}
+
+assert_docker_user_policy() {
+  assert_cmd iptables
+
+  local chain="${AGENTIC_DOCKER_USER_CHAIN:-AGENTIC-DOCKER-USER}"
+  local docker_user_rules
+  local chain_rules
+
+  docker_user_rules="$(iptables -S DOCKER-USER 2>/dev/null)" || fail "iptables chain DOCKER-USER is missing"
+  echo "$docker_user_rules" | grep -Fq -- "-j ${chain}" || fail "DOCKER-USER does not jump to ${chain}"
+
+  chain_rules="$(iptables -S "${chain}" 2>/dev/null)" || fail "iptables chain '${chain}' is missing"
+  echo "$chain_rules" | grep -Fq -- "-m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" \
+    || fail "${chain}: ESTABLISHED,RELATED accept rule missing"
+  echo "$chain_rules" | grep -Fq -- "--log-prefix \"AGENTIC-DROP \"" \
+    || fail "${chain}: LOG rule with AGENTIC-DROP prefix missing"
+  echo "$chain_rules" | grep -Fq -- "-j DROP" || fail "${chain}: DROP rule missing"
+
+  ok "DOCKER-USER enforcement chain '${chain}' is present"
 }
