@@ -11,9 +11,19 @@ AGENT_BIN="${REPO_ROOT}/agent"
 
 marker_file="$(mktemp)"
 doctor_output="$(mktemp)"
-trap 'rm -f "${marker_file}" "${doctor_output}"' EXIT
+isolated_tests_dir="$(mktemp -d)"
+trap 'rm -f "${marker_file}" "${doctor_output}"; rm -rf "${isolated_tests_dir}"' EXIT
 
-AGENT_TEST_MARKER="${marker_file}" "${AGENT_BIN}" test A
+cat > "${isolated_tests_dir}/A_smoke.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n "${AGENT_TEST_MARKER:-}" ]]; then
+  : >"${AGENT_TEST_MARKER}"
+fi
+EOF
+chmod +x "${isolated_tests_dir}/A_smoke.sh"
+AGENTIC_TEST_DIR="${isolated_tests_dir}" AGENT_TEST_MARKER="${marker_file}" "${AGENT_BIN}" test A
 [[ -f "${marker_file}" ]] || fail "agent test A did not execute an A_* test script"
 ok "agent test A executes A_* scripts"
 

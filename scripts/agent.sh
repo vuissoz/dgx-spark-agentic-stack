@@ -72,9 +72,15 @@ run_tests() {
   local -a tests=()
 
   if [[ "$selector" == "all" ]]; then
-    mapfile -t tests < <(find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -name '[0-9A-Z]_*.sh' | sort)
+    mapfile -t tests < <(
+      find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -regextype posix-extended \
+        -regex '.*/([0-9]+|[A-Z][0-9]*)_.*\.sh' | sort
+    )
   elif [[ "$selector" =~ ^[A-K]$ ]]; then
-    mapfile -t tests < <(find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -name "${selector}_*.sh" | sort)
+    mapfile -t tests < <(
+      find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -regextype posix-extended \
+        -regex ".*/${selector}([0-9]+)?_.*\\.sh" | sort
+    )
   else
     die "Invalid test selector '$selector'. Expected one of A..K or all."
   fi

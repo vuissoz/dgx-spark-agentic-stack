@@ -34,7 +34,7 @@ assert_no_public_bind() {
           bad=1
           ;;
       esac
-    done < <(ss -lntH | awk -v p=":${port}" '$4 ~ p"$" { print $4 }')
+    done < <(ss -lntH 2>/dev/null | awk -v p=":${port}" '$4 ~ p"$" { print $4 }')
   done
 
   [[ "$bad" -eq 0 ]] || return 1

@@ -26,4 +26,5 @@ Step 0 defines the runtime filesystem contract used by all later deployment step
 
 - `./agent` is the repo entrypoint and mirrors the future `/srv/agentic/bin/agent` behavior.
 - Runtime root defaults to `/srv/agentic` and can be overridden with `AGENTIC_ROOT` for local tests.
-- Step A introduces the idempotent host bootstrap that creates this tree with strict permissions.
+- Step A introduces the idempotent host bootstrap that creates this tree with strict permissions: `deployments/bootstrap/init_fs.sh`.
+- Host readiness commands are documented in `deployments/README-host.md`.
