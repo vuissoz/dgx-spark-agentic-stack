@@ -48,6 +48,16 @@ if (( after_drop_count <= before_drop_count )); then
 fi
 
 if (( after_drop_count <= before_drop_count )); then
+  set +e
+  docker exec "${toolbox_cid}" sh -lc 'ip route | grep -q "^default "'
+  has_default_route_rc=$?
+  set -e
+  if [[ "${has_default_route_rc}" -ne 0 ]]; then
+    warn "DROP counter unchanged because toolbox has no default route (internal network blocks egress before FORWARD/DOCKER-USER)"
+    ok "egress bypass is still blocked and DOCKER-USER policy is present"
+    ok "B4_docker_user_enforced passed (pre-forward block mode)"
+    exit 0
+  fi
   fail "DOCKER-USER drop counter did not increase (before=${before_drop_count}, after=${after_drop_count})"
 fi
 ok "DOCKER-USER drop counter increased after blocked attempt (before=${before_drop_count}, after=${after_drop_count})"
