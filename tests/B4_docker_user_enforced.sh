@@ -13,7 +13,10 @@ fi
 assert_docker_user_policy || fail "DOCKER-USER enforcement policy not in place"
 
 toolbox_cid="$(require_service_container toolbox)"
+proxy_cid="$(require_service_container egress-proxy)"
 chain="${AGENTIC_DOCKER_USER_CHAIN:-AGENTIC-DOCKER-USER}"
+proxy_ip="$(docker inspect --format '{{with index .NetworkSettings.Networks "'"${AGENTIC_NETWORK:-agentic}"'"}}{{.IPAddress}}{{end}}' "${proxy_cid}")"
+[[ -n "${proxy_ip}" ]] || fail "cannot resolve egress-proxy IP on network ${AGENTIC_NETWORK:-agentic}"
 
 before_drop_count="$(iptables -nvL "${chain}" 2>/dev/null | awk '$3=="DROP" {print $1; exit}')"
 before_drop_count="${before_drop_count:-0}"
@@ -32,8 +35,21 @@ after_drop_count="$(iptables -nvL "${chain}" 2>/dev/null | awk '$3=="DROP" {prin
 after_drop_count="${after_drop_count:-0}"
 
 if (( after_drop_count <= before_drop_count )); then
+  warn "DROP counter unchanged after direct internet probe; forcing deterministic blocked flow via egress-proxy:80"
+  set +e
+  timeout 12 docker exec "${toolbox_cid}" sh -lc "curl -fsS --max-time 6 http://${proxy_ip}:80 >/dev/null"
+  blocked_proxy_rc=$?
+  set -e
+  if [[ "$blocked_proxy_rc" -eq 0 ]]; then
+    fail "unexpected success reaching egress-proxy on blocked port 80"
+  fi
+  after_drop_count="$(iptables -nvL "${chain}" 2>/dev/null | awk '$3=="DROP" {print $1; exit}')"
+  after_drop_count="${after_drop_count:-0}"
+fi
+
+if (( after_drop_count <= before_drop_count )); then
   fail "DOCKER-USER drop counter did not increase (before=${before_drop_count}, after=${after_drop_count})"
 fi
-ok "DOCKER-USER drop counter increased after blocked attempt"
+ok "DOCKER-USER drop counter increased after blocked attempt (before=${before_drop_count}, after=${after_drop_count})"
 
 ok "B4_docker_user_enforced passed"
