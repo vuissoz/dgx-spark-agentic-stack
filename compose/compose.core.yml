@@ -31,6 +31,49 @@ services:
       agentic-egress:
         priority: 1000
 
+  ollama-gate:
+    image: agentic/ollama-gate:local
+    build:
+      context: ..
+      dockerfile: deployments/gate/Dockerfile
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      GATE_LISTEN_HOST: 0.0.0.0
+      GATE_LISTEN_PORT: 11435
+      GATE_CONCURRENCY: 1
+      GATE_QUEUE_WAIT_TIMEOUT_SECONDS: 2
+      GATE_STATE_DIR: /gate/state
+      GATE_STICKY_FILE: /gate/state/sticky_sessions.json
+      GATE_LOG_FILE: /gate/logs/gate.jsonl
+      GATE_ENABLE_TEST_MODE: 1
+      GATE_MAX_TEST_SLEEP_SECONDS: 15
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/gate/state:/gate/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/gate/logs:/gate/logs
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:11435/healthz", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+
   toolbox:
     image: ghcr.io/nicolaka/netshoot:latest
     command:
@@ -50,6 +93,7 @@ services:
     depends_on:
       - unbound
       - egress-proxy
+      - ollama-gate
 
   unbound:
     image: klutchell/unbound:latest

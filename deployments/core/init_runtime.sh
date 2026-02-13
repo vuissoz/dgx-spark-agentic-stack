@@ -44,9 +44,29 @@ set_proxy_runtime_permissions() {
   chown 13:13 "${proxy_logs_dir}"
 }
 
+set_gate_runtime_permissions() {
+  local gate_dir="${AGENTIC_ROOT}/gate"
+  local gate_state_dir="${AGENTIC_ROOT}/gate/state"
+  local gate_logs_dir="${AGENTIC_ROOT}/gate/logs"
+
+  if [[ "${EUID}" -eq 0 ]]; then
+    chmod 0750 "${gate_dir}"
+    chmod 0770 "${gate_state_dir}" "${gate_logs_dir}"
+    return 0
+  fi
+
+  # Non-root local runs can include userns-remapped containers; relax only runtime test paths.
+  chmod 0755 "${gate_dir}"
+  chmod 0777 "${gate_state_dir}" "${gate_logs_dir}"
+  log "non-root runtime init: relaxed gate dir permissions for userns compatibility"
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/ollama"
   install -d -m 0770 "${AGENTIC_ROOT}/ollama/models"
+  install -d -m 0750 "${AGENTIC_ROOT}/gate"
+  install -d -m 0770 "${AGENTIC_ROOT}/gate/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/gate/logs"
   install -d -m 0750 "${AGENTIC_ROOT}/dns"
   install -d -m 0750 "${AGENTIC_ROOT}/proxy"
   install -d -m 0750 "${AGENTIC_ROOT}/proxy/config"
@@ -58,6 +78,7 @@ main() {
   chmod 0644 "${AGENTIC_ROOT}/dns/unbound.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/config/squid.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/allowlist.txt"
+  set_gate_runtime_permissions
   set_proxy_runtime_permissions
 }
 
