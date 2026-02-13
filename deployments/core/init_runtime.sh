@@ -45,6 +45,8 @@ set_proxy_runtime_permissions() {
 }
 
 main() {
+  install -d -m 0750 "${AGENTIC_ROOT}/ollama"
+  install -d -m 0770 "${AGENTIC_ROOT}/ollama/models"
   install -d -m 0750 "${AGENTIC_ROOT}/dns"
   install -d -m 0750 "${AGENTIC_ROOT}/proxy"
   install -d -m 0750 "${AGENTIC_ROOT}/proxy/config"
