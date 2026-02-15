@@ -91,7 +91,10 @@ require_service_container() {
   local service="$1"
   local container_id
   container_id="$(service_container_id "$service")"
-  [[ -n "$container_id" ]] || fail "service '${service}' is not running in compose project '${AGENTIC_COMPOSE_PROJECT:-agentic}'"
+  [[ -n "$container_id" ]] || {
+    fail "service '${service}' is not running in compose project '${AGENTIC_COMPOSE_PROJECT:-agentic}'"
+    return 1
+  }
   printf '%s\n' "$container_id"
 }
 

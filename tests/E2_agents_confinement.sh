@@ -83,10 +83,10 @@ assert_egress_profile() {
 
 assert_cmd docker
 
-claude_cid="$(require_service_container agentic-claude)"
-codex_cid="$(require_service_container agentic-codex)"
-opencode_cid="$(require_service_container agentic-opencode)"
-proxy_cid="$(require_service_container egress-proxy)"
+claude_cid="$(require_service_container agentic-claude)" || exit 1
+codex_cid="$(require_service_container agentic-codex)" || exit 1
+opencode_cid="$(require_service_container agentic-opencode)" || exit 1
+proxy_cid="$(require_service_container egress-proxy)" || exit 1
 
 wait_for_container_ready "${claude_cid}" 60 || fail "agentic-claude is not ready"
 wait_for_container_ready "${codex_cid}" 60 || fail "agentic-codex is not ready"
