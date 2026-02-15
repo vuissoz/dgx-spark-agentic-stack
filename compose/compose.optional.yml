@@ -1,0 +1,32 @@
+services:
+  optional-sentinel:
+    image: alpine:3.20
+    profiles:
+      - optional
+    command:
+      - /bin/sh
+      - -lc
+      - sleep infinity
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -r /etc/alpine-release
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic
+
+networks:
+  agentic:
+    external: true
+    name: ${AGENTIC_NETWORK:-agentic}

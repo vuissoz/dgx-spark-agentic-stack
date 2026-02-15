@@ -42,6 +42,12 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/openhands/logs"
   install -d -m 0770 "${AGENTIC_ROOT}/openhands/workspaces"
 
+  install -d -m 0750 "${AGENTIC_ROOT}/comfyui"
+  install -d -m 0770 "${AGENTIC_ROOT}/comfyui/models"
+  install -d -m 0770 "${AGENTIC_ROOT}/comfyui/input"
+  install -d -m 0770 "${AGENTIC_ROOT}/comfyui/output"
+  install -d -m 0770 "${AGENTIC_ROOT}/comfyui/user"
+
   copy_if_missing "${TEMPLATE_DIR}/openwebui.env" "${AGENTIC_ROOT}/openwebui/config/openwebui.env" 0600
   copy_if_missing "${TEMPLATE_DIR}/openhands.env" "${AGENTIC_ROOT}/openhands/config/openhands.env" 0600
 
@@ -51,7 +57,11 @@ main() {
     chmod 0777 "${AGENTIC_ROOT}/openwebui/data" \
       "${AGENTIC_ROOT}/openhands/state" \
       "${AGENTIC_ROOT}/openhands/logs" \
-      "${AGENTIC_ROOT}/openhands/workspaces"
+      "${AGENTIC_ROOT}/openhands/workspaces" \
+      "${AGENTIC_ROOT}/comfyui/models" \
+      "${AGENTIC_ROOT}/comfyui/input" \
+      "${AGENTIC_ROOT}/comfyui/output" \
+      "${AGENTIC_ROOT}/comfyui/user"
     log "non-root runtime init: relaxed UI runtime dirs for userns compatibility"
   fi
 }

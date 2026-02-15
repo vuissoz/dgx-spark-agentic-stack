@@ -1,0 +1,3 @@
+The DGX Spark agentic stack provides local-first agent services behind loopback-only binds.
+Core components include Ollama, an ollama-gate scheduler, a controlled egress proxy, and agent CLI containers.
+Operational goals are reproducible updates, digest traceability, and deterministic rollback.

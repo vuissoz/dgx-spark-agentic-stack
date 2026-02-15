@@ -117,7 +117,7 @@ else
   warn "skip proxy enforcement check because AGENTIC_SKIP_DOCTOR_PROXY_CHECK=1"
 fi
 
-for service in ollama ollama-gate egress-proxy unbound toolbox; do
+for service in ollama ollama-gate egress-proxy unbound toolbox openwebui openhands comfyui prometheus grafana loki qdrant optional-sentinel; do
   cid="$(service_container_id "${service}")"
   [[ -n "${cid}" ]] || continue
 

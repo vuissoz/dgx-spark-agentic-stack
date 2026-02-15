@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
+import hashlib
 import json
 import os
 import time
@@ -44,6 +45,21 @@ def header_bool(value: str | None) -> bool:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def deterministic_embedding_vector(text: str, size: int = 32) -> list[float]:
+    seed = text.encode("utf-8")
+    values: list[float] = []
+    counter = 0
+    while len(values) < size:
+        digest = hashlib.sha256(seed + counter.to_bytes(4, "big")).digest()
+        counter += 1
+        for idx in range(0, len(digest), 4):
+            chunk = int.from_bytes(digest[idx : idx + 4], "big", signed=False)
+            values.append((chunk / 2147483647.5) - 1.0)
+            if len(values) >= size:
+                break
+    return values
 
 
 class GateState:
@@ -459,6 +475,153 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 endpoint="/v1/chat/completions",
                 decision="denied" if status_code == 429 else decision,
                 model_requested=requested_model if isinstance(requested_model, str) else None,
+                model_served=model_served,
+                status_code=status_code,
+                latency_ms=latency_ms,
+                model_switch=model_switch,
+                reason=reason,
+            )
+        )
+
+
+@app.post("/v1/embeddings")
+async def v1_embeddings(request: Request) -> JSONResponse:
+    payload = await request.json()
+    requested_model = payload.get("model") if isinstance(payload.get("model"), str) else None
+    input_value = payload.get("input")
+
+    if isinstance(input_value, str):
+        inputs = [input_value]
+    elif isinstance(input_value, list) and all(isinstance(item, str) for item in input_value):
+        inputs = input_value
+    else:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "input must be a string or an array of strings",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+    if not inputs:
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"message": "input must not be empty", "type": "invalid_request_error"}},
+        )
+
+    session = request.headers.get("X-Agent-Session", "embeddings")
+    project = request.headers.get("X-Agent-Project", "-")
+    allow_switch = header_bool(request.headers.get("X-Model-Switch"))
+    queue_wait_timeout_seconds = extract_queue_timeout_seconds(request)
+    started = time.monotonic()
+    acquired = False
+    decision = "active"
+    try:
+        decision, acquired = await acquire_gate_slot(queue_wait_timeout_seconds)
+    except asyncio.TimeoutError:
+        latency_ms = int((time.monotonic() - started) * 1000)
+        await state.mark_decision("denied")
+        state.write_log(
+            event_base(
+                session=session,
+                project=project,
+                endpoint="/v1/embeddings",
+                decision="denied",
+                model_requested=requested_model,
+                model_served=None,
+                status_code=429,
+                latency_ms=latency_ms,
+                reason="queue_timeout",
+            )
+        )
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": {
+                    "message": "request denied by gate queue timeout",
+                    "type": "queue_timeout",
+                    "decision": "denied",
+                    "reason": "queue_timeout",
+                }
+            },
+        )
+
+    model_switch = False
+    model_served = None
+    status_code = 200
+    reason = None
+    try:
+        model_served, model_switch = await resolve_model(
+            session=session,
+            requested=requested_model,
+            allow_switch=allow_switch,
+        )
+
+        use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
+        vectors: list[list[float]] = []
+        if use_dry_run:
+            for item in inputs:
+                vectors.append(deterministic_embedding_vector(f"{model_served}:{item}"))
+        else:
+            async with httpx.AsyncClient(timeout=60) as client:
+                for item in inputs:
+                    upstream = await client.post(
+                        f"{state.ollama_base_url}/api/embeddings",
+                        json={"model": model_served, "prompt": item},
+                    )
+                    if upstream.status_code >= 400:
+                        status_code = upstream.status_code
+                        reason = "upstream_error"
+                        return JSONResponse(
+                            status_code=upstream.status_code,
+                            content={"error": {"message": upstream.text, "type": "upstream_error"}},
+                        )
+                    upstream_json = upstream.json()
+                    embedding = upstream_json.get("embedding")
+                    if not isinstance(embedding, list) or not embedding:
+                        status_code = 502
+                        reason = "upstream_invalid_payload"
+                        return JSONResponse(
+                            status_code=502,
+                            content={
+                                "error": {
+                                    "message": "upstream embeddings payload is missing vector",
+                                    "type": "upstream_invalid_payload",
+                                }
+                            },
+                        )
+                    vectors.append([float(value) for value in embedding])
+
+        response_payload = {
+            "object": "list",
+            "data": [
+                {"object": "embedding", "index": idx, "embedding": vector}
+                for idx, vector in enumerate(vectors)
+            ],
+            "model": model_served,
+            "usage": {"prompt_tokens": 0, "total_tokens": 0},
+        }
+        return JSONResponse(
+            status_code=200,
+            content=response_payload,
+            headers={
+                "X-Gate-Decision": decision,
+                "X-Model-Served": model_served or "",
+            },
+        )
+    finally:
+        await release_gate_slot(acquired)
+        await state.mark_decision("denied" if status_code == 429 else decision)
+        latency_ms = int((time.monotonic() - started) * 1000)
+        state.write_log(
+            event_base(
+                session=session,
+                project=project,
+                endpoint="/v1/embeddings",
+                decision="denied" if status_code == 429 else decision,
+                model_requested=requested_model,
                 model_served=model_served,
                 status_code=status_code,
                 latency_ms=latency_ms,

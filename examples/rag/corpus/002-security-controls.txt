@@ -1,0 +1,3 @@
+Security controls include no public service exposure, no docker.sock mounts, and restrictive container privileges.
+Outbound traffic from agents is expected to pass through the egress proxy and DOCKER-USER enforcement chain.
+Persistent state is isolated under /srv/agentic with dedicated folders for logs, workspaces, and service data.

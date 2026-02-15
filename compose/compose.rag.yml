@@ -1,0 +1,31 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/qdrant:/qdrant/storage
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc 'exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf "GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "200 OK" <&3'
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 20s
+    networks:
+      - agentic
+
+networks:
+  agentic:
+    external: true
+    name: ${AGENTIC_NETWORK:-agentic}

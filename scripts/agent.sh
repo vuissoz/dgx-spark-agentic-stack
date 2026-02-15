@@ -8,6 +8,7 @@ source "${SCRIPT_DIR}/lib/runtime.sh"
 AGENT_RUNTIME_ENV_FILE="${AGENTIC_ROOT}/deployments/runtime.env"
 AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapshot.sh"
 AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
+AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_TOOLS=(claude codex opencode)
 
 usage() {
@@ -72,6 +73,20 @@ parse_targets() {
   echo "$raw"
 }
 
+join_targets_csv() {
+  local -a parts=("$@")
+  local out=""
+  local item
+  for item in "${parts[@]}"; do
+    if [[ -z "${out}" ]]; then
+      out="${item}"
+    else
+      out="${out},${item}"
+    fi
+  done
+  printf '%s\n' "${out}"
+}
+
 targets_include() {
   local needle="$1"
   shift
@@ -132,17 +147,24 @@ run_compose_on_targets() {
   local target_arg="$2"
   shift 2
   local -a compose_args=()
+  local -a profile_args=()
+  local -a selected_targets=()
   local compose_file
 
   local target
   for target in $(parse_targets "$target_arg"); do
+    selected_targets+=("${target}")
     compose_file="$(stack_to_compose_file "$target")"
     [[ -f "$compose_file" ]] || die "Compose file not found for target '$target': $compose_file"
     compose_args+=("-f" "$compose_file")
   done
 
+  if targets_include optional "${selected_targets[@]}"; then
+    profile_args+=("--profile" "optional")
+  fi
+
   require_cmd docker
-  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" "$action" "$@"
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${profile_args[@]}" "${compose_args[@]}" "$action" "$@"
 }
 
 ensure_core_runtime() {
@@ -166,6 +188,12 @@ ensure_obs_runtime() {
 ensure_ui_runtime() {
   if ! "${AGENTIC_REPO_ROOT}/deployments/ui/init_runtime.sh"; then
     die "failed to initialize ui runtime in ${AGENTIC_ROOT}; re-run with sudo or set AGENTIC_ROOT to a writable path"
+  fi
+}
+
+ensure_rag_runtime() {
+  if ! "${AGENTIC_REPO_ROOT}/deployments/rag/init_runtime.sh"; then
+    die "failed to initialize rag runtime in ${AGENTIC_ROOT}; re-run with sudo or set AGENTIC_ROOT to a writable path"
   fi
 }
 
@@ -387,6 +415,9 @@ case "$cmd" in
   up)
     [[ $# -ge 2 ]] || die "Usage: agent up <core|agents|ui|obs|rag|optional>"
     target_arg="$2"
+    if [[ "${target_arg}" == "all" ]]; then
+      target_arg="core,agents,ui,obs,rag"
+    fi
     read -r -a targets <<<"$(parse_targets "$target_arg")"
     ensure_runtime_env
 
@@ -402,8 +433,34 @@ case "$cmd" in
     if targets_include "ui" "${targets[@]}"; then
       ensure_ui_runtime
     fi
+    if targets_include "rag" "${targets[@]}"; then
+      ensure_rag_runtime
+    fi
 
-    run_compose_on_targets up "$target_arg" -d
+    if targets_include "optional" "${targets[@]}"; then
+      non_optional_targets=()
+      for target in "${targets[@]}"; do
+        [[ "${target}" == "optional" ]] && continue
+        non_optional_targets+=("${target}")
+      done
+
+      if [[ "${#non_optional_targets[@]}" -gt 0 ]]; then
+        run_compose_on_targets up "$(join_targets_csv "${non_optional_targets[@]}")" -d
+      fi
+
+      if [[ "${AGENTIC_SKIP_OPTIONAL_GATING:-0}" != "1" ]]; then
+        if ! "${AGENT_DOCTOR_SCRIPT}" >/tmp/agent-optional-gate.out 2>&1; then
+          cat /tmp/agent-optional-gate.out >&2
+          die "optional stack gating refused because 'agent doctor' is not green (set AGENTIC_SKIP_OPTIONAL_GATING=1 to bypass intentionally)"
+        fi
+      else
+        warn "skipping optional stack doctor gating because AGENTIC_SKIP_OPTIONAL_GATING=1"
+      fi
+
+      run_compose_on_targets up optional -d
+    else
+      run_compose_on_targets up "$target_arg" -d
+    fi
 
     if targets_include "core" "${targets[@]}"; then
       apply_core_network_policy
