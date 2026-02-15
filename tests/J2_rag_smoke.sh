@@ -21,8 +21,10 @@ wait_for_container_ready "${gate_cid}" 120 || fail "ollama-gate is not ready"
 
 runtime_ingest="${AGENTIC_ROOT:-/srv/agentic}/rag/scripts/ingest.sh"
 runtime_query="${AGENTIC_ROOT:-/srv/agentic}/rag/scripts/query_smoke.sh"
+runtime_docs="${AGENTIC_ROOT:-/srv/agentic}/rag/docs"
 fallback_ingest="${REPO_ROOT}/deployments/rag/ingest.sh"
 fallback_query="${REPO_ROOT}/deployments/rag/query_smoke.sh"
+fallback_docs="${REPO_ROOT}/examples/rag/corpus"
 
 ingest_script="${runtime_ingest}"
 query_script="${runtime_query}"
@@ -31,10 +33,26 @@ query_script="${runtime_query}"
 [[ -x "${ingest_script}" ]] || fail "ingest script is missing or not executable"
 [[ -x "${query_script}" ]] || fail "query smoke script is missing or not executable"
 
-ingest_output="$(RAG_GATE_DRY_RUN=1 "${ingest_script}")"
+docs_dir="${runtime_docs}"
+[[ -d "${docs_dir}" ]] || docs_dir="${fallback_docs}"
+[[ -d "${docs_dir}" ]] || fail "rag docs directory is missing (checked ${runtime_docs} and ${fallback_docs})"
+
+expected_count="$(find "${docs_dir}" -maxdepth 1 -type f -name '*.txt' -size +0c | wc -l | tr -d ' ')"
+[[ "${expected_count}" -gt 0 ]] || fail "rag docs corpus is empty in ${docs_dir}"
+
+ingest_output="$(RAG_DOCS_DIR="${docs_dir}" RAG_GATE_DRY_RUN=1 "${ingest_script}")"
 printf '%s\n' "${ingest_output}" | grep -q '^OK: rag ingest completed' \
   || fail "rag ingest output is invalid: ${ingest_output}"
-ok "rag ingest indexed the local mini-corpus"
+indexed_count="$(printf '%s\n' "${ingest_output}" | grep -o 'indexed=[0-9]\+' | head -n 1 | cut -d= -f2)"
+[[ -n "${indexed_count}" ]] || fail "rag ingest did not report an indexed count: ${ingest_output}"
+[[ "${indexed_count}" -eq "${expected_count}" ]] \
+  || fail "rag ingest indexed=${indexed_count}, expected=${expected_count}"
+ok "rag ingest indexed the expected local mini-corpus count (${indexed_count})"
+
+reingest_output="$(RAG_DOCS_DIR="${docs_dir}" RAG_GATE_DRY_RUN=1 "${ingest_script}")"
+printf '%s\n' "${reingest_output}" | grep -q '^OK: rag ingest completed' \
+  || fail "rag second ingest output is invalid: ${reingest_output}"
+ok "rag ingest is reproducible across repeated runs"
 
 query_output="$(RAG_GATE_DRY_RUN=1 RAG_MIN_HITS=1 "${query_script}")"
 printf '%s\n' "${query_output}" | grep -q '^OK: rag query smoke passed' \

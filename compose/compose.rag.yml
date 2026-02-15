@@ -27,5 +27,6 @@ services:
 
 networks:
   agentic:
-    external: true
     name: ${AGENTIC_NETWORK:-agentic}
+    driver: bridge
+    internal: true

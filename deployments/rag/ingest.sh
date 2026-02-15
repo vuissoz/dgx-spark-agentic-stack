@@ -68,20 +68,42 @@ if not doc_paths:
     raise SystemExit(f"ERROR: no .txt files found in {docs_dir}")
 
 
-def request_json(url: str, payload: dict | None = None, headers: dict | None = None) -> dict:
+def request_json(
+    url: str,
+    payload: dict | None = None,
+    headers: dict | None = None,
+    method: str | None = None,
+) -> dict:
     body = None
     req_headers = {"Content-Type": "application/json"}
     if headers:
         req_headers.update(headers)
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=body, headers=req_headers, method="POST" if payload is not None else "GET")
+    req_method = method or ("POST" if payload is not None else "GET")
+    req = urllib.request.Request(url, data=body, headers=req_headers, method=req_method)
     try:
         with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise SystemExit(f"ERROR: HTTP {exc.code} on {url}: {detail}") from exc
+
+
+def collection_exists() -> bool:
+    req = urllib.request.Request(
+        f"{qdrant_url}/collections/{collection}",
+        headers={"Content-Type": "application/json"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_seconds):
+            return True
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"ERROR: HTTP {exc.code} on {qdrant_url}/collections/{collection}: {detail}") from exc
 
 
 def embedding_for_text(text: str) -> list[float]:
@@ -99,8 +121,8 @@ def embedding_for_text(text: str) -> list[float]:
     return [float(x) for x in vector]
 
 
-def stable_point_id(path: pathlib.Path) -> int:
-    digest = hashlib.sha256(path.as_posix().encode("utf-8")).hexdigest()[:16]
+def stable_point_id(path: pathlib.Path, content: str) -> int:
+    digest = hashlib.sha256(f"{path.name}\n{content}".encode("utf-8")).hexdigest()[:16]
     return int(digest, 16)
 
 
@@ -115,16 +137,18 @@ if not vectors:
     raise SystemExit("ERROR: all candidate docs are empty")
 
 vector_size = len(vectors[0][1])
-request_json(
-    f"{qdrant_url}/collections/{collection}",
-    payload={
-        "vectors": {
-            "size": vector_size,
-            "distance": "Cosine",
-            "on_disk": False,
-        }
-    },
-)
+if not collection_exists():
+    request_json(
+        f"{qdrant_url}/collections/{collection}",
+        payload={
+            "vectors": {
+                "size": vector_size,
+                "distance": "Cosine",
+                "on_disk": False,
+            }
+        },
+        method="PUT",
+    )
 
 indexed = 0
 for doc_path, vector, content in vectors:
@@ -133,7 +157,7 @@ for doc_path, vector, content in vectors:
         payload={
             "points": [
                 {
-                    "id": stable_point_id(doc_path),
+                    "id": stable_point_id(doc_path, content),
                     "vector": vector,
                     "payload": {
                         "path": doc_path.name,
@@ -142,6 +166,7 @@ for doc_path, vector, content in vectors:
                 }
             ]
         },
+        method="PUT",
     )
     indexed += 1
 
