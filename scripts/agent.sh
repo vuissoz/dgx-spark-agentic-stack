@@ -10,6 +10,7 @@ AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapsho
 AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_TOOLS=(claude codex opencode)
+OPTIONAL_MODULES=(clawdbot mcp portainer)
 
 usage() {
   cat <<USAGE
@@ -25,6 +26,9 @@ Usage:
   agent rollback all <release_id>
   agent test <A|B|C|D|E|F|G|H|I|J|K|all>
   agent doctor [--fix-net]
+
+Optional modules (disabled by default):
+  AGENTIC_OPTIONAL_MODULES=clawdbot,mcp,portainer agent up optional
 USAGE
 }
 
@@ -97,6 +101,89 @@ targets_include() {
     fi
   done
   return 1
+}
+
+optional_module_profile() {
+  case "$1" in
+    clawdbot) echo "optional-clawdbot" ;;
+    mcp) echo "optional-mcp" ;;
+    portainer) echo "optional-portainer" ;;
+    *) return 1 ;;
+  esac
+}
+
+optional_module_secret_file() {
+  case "$1" in
+    clawdbot) echo "${AGENTIC_ROOT}/secrets/runtime/clawdbot.token" ;;
+    mcp) echo "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
+    portainer) echo "" ;;
+    *) return 1 ;;
+  esac
+}
+
+parse_optional_modules() {
+  local raw="${AGENTIC_OPTIONAL_MODULES:-}"
+  local module
+  local -a parsed=()
+  local -A seen=()
+
+  [[ -n "${raw}" ]] || return 0
+  raw="${raw//,/ }"
+
+  for module in ${raw}; do
+    [[ -n "${module}" ]] || continue
+    optional_module_profile "${module}" >/dev/null \
+      || die "Unknown optional module '${module}'. Allowed modules: ${OPTIONAL_MODULES[*]}"
+    if [[ -z "${seen[${module}]:-}" ]]; then
+      parsed+=("${module}")
+      seen["${module}"]=1
+    fi
+  done
+
+  printf '%s\n' "${parsed[@]}"
+}
+
+validate_optional_request_file() {
+  local module="$1"
+  local request_file="${AGENTIC_ROOT}/deployments/optional/${module}.request"
+
+  [[ -f "${request_file}" ]] || die "Optional module '${module}' requires request file: ${request_file}"
+  grep -Eq '^need=[^[:space:]].+$' "${request_file}" \
+    || die "Optional module '${module}' request is missing a non-empty 'need=' entry: ${request_file}"
+  grep -Eq '^success=[^[:space:]].+$' "${request_file}" \
+    || die "Optional module '${module}' request is missing a non-empty 'success=' entry: ${request_file}"
+}
+
+validate_optional_module_prereqs() {
+  local module="$1"
+  local secret_file
+  local secret_mode
+
+  validate_optional_request_file "${module}"
+  secret_file="$(optional_module_secret_file "${module}")" || return 1
+  if [[ -n "${secret_file}" ]]; then
+    [[ -s "${secret_file}" ]] \
+      || die "Optional module '${module}' requires a secret file with mode 600: ${secret_file}"
+    secret_mode="$(stat -c '%a' "${secret_file}" 2>/dev/null || echo "")"
+    if [[ "${secret_mode}" != "600" && "${secret_mode}" != "640" ]]; then
+      die "Optional module '${module}' secret must use restrictive permissions (600/640): ${secret_file} (mode=${secret_mode:-unknown})"
+    fi
+  fi
+}
+
+log_optional_activation() {
+  local module="$1"
+  local request_file="${AGENTIC_ROOT}/deployments/optional/${module}.request"
+  local changes_log="${AGENTIC_ROOT}/deployments/changes.log"
+  local actor="${SUDO_USER:-${USER:-unknown}}"
+
+  install -d -m 0750 "${AGENTIC_ROOT}/deployments"
+  touch "${changes_log}"
+  chmod 0640 "${changes_log}" || true
+
+  printf '%s optional module enabled module=%s actor=%s request=%s\n' \
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "${module}" "${actor}" "${request_file}" \
+    >>"${changes_log}"
 }
 
 service_container_id() {
@@ -194,6 +281,12 @@ ensure_ui_runtime() {
 ensure_rag_runtime() {
   if ! "${AGENTIC_REPO_ROOT}/deployments/rag/init_runtime.sh"; then
     die "failed to initialize rag runtime in ${AGENTIC_ROOT}; re-run with sudo or set AGENTIC_ROOT to a writable path"
+  fi
+}
+
+ensure_optional_runtime() {
+  if ! "${AGENTIC_REPO_ROOT}/deployments/optional/init_runtime.sh"; then
+    die "failed to initialize optional runtime in ${AGENTIC_ROOT}; re-run with sudo or set AGENTIC_ROOT to a writable path"
   fi
 }
 
@@ -436,9 +529,11 @@ case "$cmd" in
     if targets_include "rag" "${targets[@]}"; then
       ensure_rag_runtime
     fi
-
     if targets_include "optional" "${targets[@]}"; then
       non_optional_targets=()
+      optional_profiles=(--profile optional)
+      optional_compose_file="$(stack_to_compose_file optional)"
+      optional_modules=()
       for target in "${targets[@]}"; do
         [[ "${target}" == "optional" ]] && continue
         non_optional_targets+=("${target}")
@@ -457,7 +552,20 @@ case "$cmd" in
         warn "skipping optional stack doctor gating because AGENTIC_SKIP_OPTIONAL_GATING=1"
       fi
 
-      run_compose_on_targets up optional -d
+      ensure_optional_runtime
+      mapfile -t optional_modules < <(parse_optional_modules)
+      if [[ "${#optional_modules[@]}" -gt 0 ]]; then
+        for optional_module in "${optional_modules[@]}"; do
+          validate_optional_module_prereqs "${optional_module}"
+          optional_profiles+=(--profile "$(optional_module_profile "${optional_module}")")
+          log_optional_activation "${optional_module}"
+        done
+      fi
+
+      require_cmd docker
+      docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+        "${optional_profiles[@]}" \
+        -f "${optional_compose_file}" up -d
     else
       run_compose_on_targets up "$target_arg" -d
     fi
@@ -470,7 +578,27 @@ case "$cmd" in
     [[ $# -ge 2 ]] || die "Usage: agent down <core|agents|ui|obs|rag|optional>"
     target_arg="$2"
     read -r -a targets <<<"$(parse_targets "$target_arg")"
-    run_compose_on_targets down "$target_arg" --remove-orphans
+    if targets_include "optional" "${targets[@]}"; then
+      non_optional_targets=()
+      for target in "${targets[@]}"; do
+        [[ "${target}" == "optional" ]] && continue
+        non_optional_targets+=("${target}")
+      done
+
+      if [[ "${#non_optional_targets[@]}" -gt 0 ]]; then
+        run_compose_on_targets down "$(join_targets_csv "${non_optional_targets[@]}")"
+      fi
+
+      require_cmd docker
+      docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+        --profile optional \
+        --profile optional-clawdbot \
+        --profile optional-mcp \
+        --profile optional-portainer \
+        -f "$(stack_to_compose_file optional)" down
+    else
+      run_compose_on_targets down "$target_arg"
+    fi
     ;;
   claude|codex|opencode)
     shift

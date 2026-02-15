@@ -1,0 +1,3 @@
+# One DM target identifier per line.
+# Example values: discord:user:1234, slack:U01ABCDE
+discord:user:example

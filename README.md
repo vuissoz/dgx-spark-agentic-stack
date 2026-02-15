@@ -37,7 +37,9 @@ Ce dépôt implémente une **stack de services agentiques conteneurisés** pour 
 
 ### Optionnels (à activer explicitement, risques plus élevés)
 - **Mistral Vibe** (CLI) — alternatif “terminal-first”. :contentReference[oaicite:18]{index=18}  
-- **openclaw / MCP / orchestrateurs** — désactivés par défaut ; activation seulement avec hardening complet. :contentReference[oaicite:19]{index=19}  
+- **Clawdbot** (notifications DM contrôlées) — token runtime + allowlist + audit logs.
+- **MCP Catalog** (catalogue d’outils restreint) — allowlist stricte + audit logs.
+- **Portainer** (inspection locale) — bind loopback-only, sans montage `docker.sock`.
 
 ---
 
@@ -49,7 +51,7 @@ La stack est découpée en plusieurs fichiers Compose, avec **un réseau Docker 
 - `compose.agents.yml` : agents CLI (claude/codex/opencode/option vibe)  
 - `compose.ui.yml` : openwebui, openhands, comfyui  
 - `compose.obs.yml` : prometheus, grafana, loki, exporters, dcgm-exporter  
-- `compose.optional.yml` : openclaw, mcp, conductor/nim… (désactivés) :contentReference[oaicite:20]{index=20}  
+- `compose.optional.yml` : `optional-sentinel` + modules K (`clawdbot`, `mcp`, `portainer`) activés explicitement via profils.
 
 ---
 
@@ -126,6 +128,8 @@ agent logs claude
 agent stop openwebui
 agent update
 agent rollback all
+AGENTIC_OPTIONAL_MODULES=clawdbot agent up optional
+AGENTIC_OPTIONAL_MODULES=mcp,portainer agent up optional
 
 Recommandé :
 agent project [--tool claude] [--model ]

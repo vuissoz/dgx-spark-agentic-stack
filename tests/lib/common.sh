@@ -108,6 +108,22 @@ assert_proxy_enforced() {
   ok "proxy env is enforced for ${container}"
 }
 
+assert_no_docker_sock_mount() {
+  local container="$1"
+  assert_cmd docker
+
+  local mounts
+  mounts="$(docker inspect --format '{{range .Mounts}}{{println .Source "|" .Destination}}{{end}}' "${container}" 2>/dev/null)" \
+    || fail "cannot inspect mounts for container ${container}"
+
+  if echo "${mounts}" | grep -Eq '(^|/| )docker\.sock($| |/)|\|/var/run/docker\.sock$'; then
+    fail "${container}: docker.sock mount detected"
+    return 1
+  fi
+
+  ok "docker.sock mount is absent for ${container}"
+}
+
 service_container_id() {
   local service="$1"
   local project="${AGENTIC_COMPOSE_PROJECT:-agentic}"

@@ -1,0 +1,4 @@
+# One tool name per line.
+# Keep this list short and review it regularly.
+filesystem.read
+http.fetch
