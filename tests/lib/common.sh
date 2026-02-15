@@ -47,32 +47,63 @@ assert_no_public_bind() {
 
 assert_container_security() {
   local container="$1"
+  local status=0
   assert_cmd docker
 
   local inspect_out
-  inspect_out="$(docker inspect --format '{{.Config.User}}|{{.HostConfig.ReadonlyRootfs}}|{{join .HostConfig.CapDrop ","}}|{{json .HostConfig.SecurityOpt}}' "$container" 2>/dev/null)" || fail "cannot inspect container ${container}"
+  inspect_out="$(docker inspect --format '{{.Config.User}}|{{.HostConfig.ReadonlyRootfs}}|{{join .HostConfig.CapDrop ","}}|{{json .HostConfig.SecurityOpt}}' "$container" 2>/dev/null)" \
+    || fail "cannot inspect container ${container}"
+  [[ -n "${inspect_out}" ]] || return 1
 
   local user readonly cap_drop security_opt
   IFS='|' read -r user readonly cap_drop security_opt <<<"$inspect_out"
 
-  [[ -n "$user" && "$user" != "0" && "$user" != "root" ]] || fail "${container}: container user is root or empty"
-  [[ "$readonly" == "true" ]] || fail "${container}: readonly rootfs is not enabled"
-  [[ ",$cap_drop," == *",ALL,"* ]] || fail "${container}: cap_drop does not include ALL"
-  [[ "$security_opt" == *"no-new-privileges:true"* ]] || fail "${container}: no-new-privileges is missing"
+  [[ -n "$user" && "$user" != "0" && "$user" != "root" ]] || {
+    fail "${container}: container user is root or empty"
+    status=1
+  }
+  [[ "$readonly" == "true" ]] || {
+    fail "${container}: readonly rootfs is not enabled"
+    status=1
+  }
+  [[ ",$cap_drop," == *",ALL,"* ]] || {
+    fail "${container}: cap_drop does not include ALL"
+    status=1
+  }
+  [[ "$security_opt" == *"no-new-privileges:true"* ]] || {
+    fail "${container}: no-new-privileges is missing"
+    status=1
+  }
+
+  [[ "${status}" -eq 0 ]] || return 1
 
   ok "container security baseline is satisfied for ${container}"
 }
 
 assert_proxy_enforced() {
   local container="$1"
+  local status=0
   assert_cmd docker
 
   local env_dump
-  env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" 2>/dev/null)" || fail "cannot inspect env for container ${container}"
+  env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" 2>/dev/null)" \
+    || fail "cannot inspect env for container ${container}"
+  [[ -n "${env_dump}" ]] || return 1
 
-  echo "$env_dump" | grep -q '^HTTP_PROXY=' || fail "${container}: HTTP_PROXY is missing"
-  echo "$env_dump" | grep -q '^HTTPS_PROXY=' || fail "${container}: HTTPS_PROXY is missing"
-  echo "$env_dump" | grep -q '^NO_PROXY=' || fail "${container}: NO_PROXY is missing"
+  echo "$env_dump" | grep -q '^HTTP_PROXY=' || {
+    fail "${container}: HTTP_PROXY is missing"
+    status=1
+  }
+  echo "$env_dump" | grep -q '^HTTPS_PROXY=' || {
+    fail "${container}: HTTPS_PROXY is missing"
+    status=1
+  }
+  echo "$env_dump" | grep -q '^NO_PROXY=' || {
+    fail "${container}: NO_PROXY is missing"
+    status=1
+  }
+
+  [[ "${status}" -eq 0 ]] || return 1
 
   ok "proxy env is enforced for ${container}"
 }
@@ -129,27 +160,54 @@ assert_network_internal() {
   local internal_flag
   internal_flag="$(docker network inspect "$network_name" --format '{{.Internal}}' 2>/dev/null)" \
     || fail "docker network '${network_name}' does not exist"
+  [[ -n "${internal_flag}" ]] || return 1
 
-  [[ "$internal_flag" == "true" ]] || fail "docker network '${network_name}' must be internal=true (actual=${internal_flag})"
+  [[ "$internal_flag" == "true" ]] || {
+    fail "docker network '${network_name}' must be internal=true (actual=${internal_flag})"
+    return 1
+  }
   ok "docker network '${network_name}' is internal"
 }
 
 assert_docker_user_policy() {
   assert_cmd iptables
+  local status=0
 
   local chain="${AGENTIC_DOCKER_USER_CHAIN:-AGENTIC-DOCKER-USER}"
   local docker_user_rules
   local chain_rules
 
-  docker_user_rules="$(iptables -S DOCKER-USER 2>/dev/null)" || fail "iptables chain DOCKER-USER is missing"
-  echo "$docker_user_rules" | grep -Fq -- "-j ${chain}" || fail "DOCKER-USER does not jump to ${chain}"
+  docker_user_rules="$(iptables -S DOCKER-USER 2>/dev/null)" || {
+    fail "iptables chain DOCKER-USER is missing"
+    status=1
+  }
+  if [[ -n "${docker_user_rules:-}" ]]; then
+    echo "$docker_user_rules" | grep -Fq -- "-j ${chain}" || {
+      fail "DOCKER-USER does not jump to ${chain}"
+      status=1
+    }
+  fi
 
-  chain_rules="$(iptables -S "${chain}" 2>/dev/null)" || fail "iptables chain '${chain}' is missing"
+  chain_rules="$(iptables -S "${chain}" 2>/dev/null)" || {
+    fail "iptables chain '${chain}' is missing"
+    status=1
+  }
   echo "$chain_rules" | grep -Fq -- "-m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" \
-    || fail "${chain}: ESTABLISHED,RELATED accept rule missing"
+    || {
+      fail "${chain}: ESTABLISHED,RELATED accept rule missing"
+      status=1
+    }
   echo "$chain_rules" | grep -Fq -- "--log-prefix \"AGENTIC-DROP \"" \
-    || fail "${chain}: LOG rule with AGENTIC-DROP prefix missing"
-  echo "$chain_rules" | grep -Fq -- "-j DROP" || fail "${chain}: DROP rule missing"
+    || {
+      fail "${chain}: LOG rule with AGENTIC-DROP prefix missing"
+      status=1
+    }
+  echo "$chain_rules" | grep -Fq -- "-j DROP" || {
+    fail "${chain}: DROP rule missing"
+    status=1
+  }
+
+  [[ "${status}" -eq 0 ]] || return 1
 
   ok "DOCKER-USER enforcement chain '${chain}' is present"
 }
