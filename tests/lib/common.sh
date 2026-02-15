@@ -72,6 +72,7 @@ assert_proxy_enforced() {
 
   echo "$env_dump" | grep -q '^HTTP_PROXY=' || fail "${container}: HTTP_PROXY is missing"
   echo "$env_dump" | grep -q '^HTTPS_PROXY=' || fail "${container}: HTTPS_PROXY is missing"
+  echo "$env_dump" | grep -q '^NO_PROXY=' || fail "${container}: NO_PROXY is missing"
 
   ok "proxy env is enforced for ${container}"
 }

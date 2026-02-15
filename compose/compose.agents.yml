@@ -1,0 +1,131 @@
+services:
+  agentic-claude:
+    image: agentic/agent-cli-base:local
+    build:
+      context: ..
+      dockerfile: deployments/images/agent-cli-base/Dockerfile
+    restart: unless-stopped
+    init: true
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      AGENT_TOOL: claude
+      AGENT_SESSION: claude
+      AGENT_WORKSPACE: /workspace
+      AGENT_STATE_DIR: /state
+      AGENT_LOGS_DIR: /logs
+      OLLAMA_BASE_URL: http://ollama-gate:11435
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/claude/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/claude/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/claude/workspaces:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - tmux has-session -t claude
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+
+  agentic-codex:
+    image: agentic/agent-cli-base:local
+    build:
+      context: ..
+      dockerfile: deployments/images/agent-cli-base/Dockerfile
+    restart: unless-stopped
+    init: true
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      AGENT_TOOL: codex
+      AGENT_SESSION: codex
+      AGENT_WORKSPACE: /workspace
+      AGENT_STATE_DIR: /state
+      AGENT_LOGS_DIR: /logs
+      OLLAMA_BASE_URL: http://ollama-gate:11435
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/codex/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/codex/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/codex/workspaces:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - tmux has-session -t codex
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+
+  agentic-opencode:
+    image: agentic/agent-cli-base:local
+    build:
+      context: ..
+      dockerfile: deployments/images/agent-cli-base/Dockerfile
+    restart: unless-stopped
+    init: true
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      AGENT_TOOL: opencode
+      AGENT_SESSION: opencode
+      AGENT_WORKSPACE: /workspace
+      AGENT_STATE_DIR: /state
+      AGENT_LOGS_DIR: /logs
+      OLLAMA_BASE_URL: http://ollama-gate:11435
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/opencode/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/opencode/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/opencode/workspaces:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - tmux has-session -t opencode
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+
+networks:
+  agentic:
+    external: true
+    name: ${AGENTIC_NETWORK:-agentic}

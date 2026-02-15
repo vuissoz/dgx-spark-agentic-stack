@@ -89,6 +89,12 @@ ensure_core_runtime() {
   fi
 }
 
+ensure_agents_runtime() {
+  if ! "${AGENTIC_REPO_ROOT}/deployments/agents/init_runtime.sh"; then
+    die "failed to initialize agents runtime in ${AGENTIC_ROOT}; re-run with sudo or set AGENTIC_ROOT to a writable path"
+  fi
+}
+
 apply_core_network_policy() {
   if [[ "${AGENTIC_SKIP_DOCKER_USER_APPLY:-0}" == "1" ]]; then
     warn "skipping DOCKER-USER policy apply because AGENTIC_SKIP_DOCKER_USER_APPLY=1"
@@ -140,6 +146,9 @@ case "$cmd" in
 
     if targets_include "core" "${targets[@]}"; then
       ensure_core_runtime
+    fi
+    if targets_include "agents" "${targets[@]}"; then
+      ensure_agents_runtime
     fi
 
     run_compose_on_targets up "$target_arg" -d
