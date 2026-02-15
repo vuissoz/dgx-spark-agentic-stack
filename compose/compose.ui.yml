@@ -1,0 +1,83 @@
+services:
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:latest
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - 127.0.0.1:${OPENWEBUI_HOST_PORT:-8080}:8080
+    env_file:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openwebui/config/openwebui.env
+    environment:
+      WEBUI_AUTH: "True"
+      ENABLE_SIGNUP: "False"
+      OPENAI_API_BASE_URL: http://ollama-gate:11435/v1
+      ENABLE_OLLAMA_API: "False"
+      ENABLE_OPENAI_API: "True"
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openwebui/data:/app/backend/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          r=urllib.request.urlopen("http://127.0.0.1:8080/", timeout=5);
+          sys.exit(0 if r.status in (200,302,401,403) else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+    networks:
+      - agentic
+
+  openhands:
+    image: docker.openhands.dev/openhands/openhands:1.3
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - 127.0.0.1:${OPENHANDS_HOST_PORT:-3000}:3000
+    env_file:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openhands/config/openhands.env
+    environment:
+      RUNTIME: process
+      LLM_BASE_URL: http://ollama-gate:11435/v1
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+      OH_PERSISTENCE_DIR: /.openhands
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openhands/state:/.openhands
+      - ${AGENTIC_ROOT:-/srv/agentic}/openhands/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/openhands/workspaces:/workspace
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          r=urllib.request.urlopen("http://127.0.0.1:3000/", timeout=5);
+          sys.exit(0 if r.status in (200,302,401,403) else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 40s
+    networks:
+      - agentic
+
+networks:
+  agentic:
+    external: true
+    name: ${AGENTIC_NETWORK:-agentic}
