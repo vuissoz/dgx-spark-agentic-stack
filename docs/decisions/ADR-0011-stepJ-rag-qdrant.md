@@ -13,7 +13,7 @@ Step J introduces a minimal reproducible RAG baseline:
 - Add `compose/compose.rag.yml` with `qdrant`:
   - no host-published port,
   - persistence under `${AGENTIC_ROOT}/rag/qdrant`,
-  - connected to external compose network `${AGENTIC_NETWORK}`.
+  - connected to the same internal Docker network `${AGENTIC_NETWORK}` as the core stack.
 - Add RAG runtime bootstrap `deployments/rag/init_runtime.sh`:
   - creates `${AGENTIC_ROOT}/rag/{qdrant,docs,scripts}`,
   - seeds docs from `examples/rag/corpus/*.txt`,
