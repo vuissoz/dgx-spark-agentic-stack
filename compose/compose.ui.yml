@@ -80,12 +80,19 @@ services:
   comfyui:
     image: ghcr.io/comfyanonymous/comfyui:latest
     restart: unless-stopped
+    gpus: all
+    read_only: true
+    tmpfs:
+      - /tmp
     ports:
       - 127.0.0.1:${COMFYUI_HOST_PORT:-8188}:8188
     environment:
+      AGENTIC_GPU_PROFILE: lowprio
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+    labels:
+      - agentic.gpu-profile=lowprio
     command:
       - --listen
       - 0.0.0.0
@@ -101,7 +108,7 @@ services:
         - CMD-SHELL
         - >
           python3 -c 'import sys,urllib.request;
-          r=urllib.request.urlopen("http://127.0.0.1:8188/", timeout=5);
+          r=urllib.request.urlopen("http://127.0.0.1:8188/system_stats", timeout=5);
           sys.exit(0 if r.status in (200,302,401,403) else 1)'
       interval: 30s
       timeout: 10s

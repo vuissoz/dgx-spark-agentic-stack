@@ -17,6 +17,92 @@ comfy_port="${COMFYUI_HOST_PORT:-8188}"
 comfy_cid="$(require_service_container comfyui)" || exit 1
 wait_for_container_ready "${comfy_cid}" 300 || fail "comfyui is not ready"
 
+gpu_requests_json="$(docker inspect --format '{{json .HostConfig.DeviceRequests}}' "${comfy_cid}" 2>/dev/null || true)"
+python3 - "${gpu_requests_json}" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1]
+try:
+    requests = json.loads(raw)
+except json.JSONDecodeError:
+    raise SystemExit("comfyui has invalid HostConfig.DeviceRequests payload")
+
+if not isinstance(requests, list) or not requests:
+    raise SystemExit("comfyui does not request GPU devices")
+
+has_gpu_capability = False
+for req in requests:
+    if not isinstance(req, dict):
+        continue
+    for group in req.get("Capabilities") or []:
+        if isinstance(group, list) and any(str(item).lower() == "gpu" for item in group):
+            has_gpu_capability = True
+            break
+    if has_gpu_capability:
+        break
+
+if not has_gpu_capability:
+    raise SystemExit("comfyui device requests do not include GPU capability")
+PY
+ok "comfyui is configured with a GPU device request"
+
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${comfy_cid}" \
+  | grep -q '^AGENTIC_GPU_PROFILE=lowprio$' \
+  || fail "comfyui is missing AGENTIC_GPU_PROFILE=lowprio"
+ok "comfyui low-priority GPU profile marker is present"
+
+assert_proxy_enforced "${comfy_cid}" || fail "comfyui proxy environment baseline is not enforced"
+
+set +e
+timeout 20 docker exec "${comfy_cid}" sh -lc \
+  'env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY python3 -c "import urllib.request; urllib.request.urlopen(\"https://example.com\", timeout=8).read(8)"'
+direct_rc=$?
+set -e
+if [[ "${direct_rc}" -eq 0 ]]; then
+  fail "comfyui direct egress succeeded without proxy"
+fi
+ok "comfyui direct egress is blocked when proxy env is removed"
+
+proxy_access_log="${AGENTIC_ROOT:-/srv/agentic}/proxy/logs/access.log"
+proxy_lines_before=0
+if [[ -f "${proxy_access_log}" ]]; then
+  proxy_lines_before="$(wc -l <"${proxy_access_log}" | tr -d ' ')"
+fi
+
+timeout 20 docker exec "${comfy_cid}" sh -lc '
+python3 - <<'"'"'PY'"'"'
+import urllib.error
+import urllib.request
+
+opener = urllib.request.build_opener(
+    urllib.request.ProxyHandler(
+        {
+            "http": "http://egress-proxy:3128",
+            "https": "http://egress-proxy:3128",
+        }
+    )
+)
+
+try:
+    with opener.open("https://example.com", timeout=10) as resp:
+        if resp.status < 200 or resp.status >= 500:
+            raise SystemExit(f"unexpected proxy status {resp.status}")
+except urllib.error.HTTPError as exc:
+    if exc.code not in (403, 407):
+        raise SystemExit(f"unexpected proxy HTTP error {exc.code}")
+PY' || fail "comfyui could not reach egress-proxy with explicit proxy settings"
+
+if [[ -f "${proxy_access_log}" ]]; then
+  proxy_lines_after="$(wc -l <"${proxy_access_log}" | tr -d ' ')"
+  if (( proxy_lines_after <= proxy_lines_before )); then
+    fail "comfyui proxy request did not produce an egress-proxy access log entry"
+  fi
+  ok "comfyui proxy path is active (egress-proxy access log increased)"
+else
+  warn "proxy access log not found at ${proxy_access_log}; skipped log delta assertion"
+fi
+
 assert_no_public_bind "${comfy_port}" || fail "comfyui host bind is not loopback-only"
 ok "comfyui host bind is loopback-only"
 
