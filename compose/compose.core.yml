@@ -9,7 +9,7 @@ services:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_MODELS: /root/.ollama/models
     volumes:
-      - ${OLLAMA_MODELS_DIR:-${AGENTIC_ROOT:-/srv/agentic}/ollama/models}:/root/.ollama/models
+      - ${OLLAMA_MODELS_DIR:-${AGENTIC_ROOT:-/srv/agentic}/ollama/models}:/root/.ollama/models:${OLLAMA_MODELS_MOUNT_MODE:-rw}
     cap_drop:
       - ALL
     security_opt:

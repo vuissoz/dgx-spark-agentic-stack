@@ -9,6 +9,7 @@ AGENT_RUNTIME_ENV_FILE="${AGENTIC_ROOT}/deployments/runtime.env"
 AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapshot.sh"
 AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
+AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
 AGENT_TOOLS=(claude codex opencode)
 OPTIONAL_MODULES=(clawdbot mcp portainer)
 
@@ -23,6 +24,8 @@ Usage:
   agent ps
   agent logs <service>
   agent stop <tool>
+  agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
+  agent ollama-models <rw|ro>
   agent update
   agent rollback all <release_id>
   agent test <A|B|C|D|E|F|G|H|I|J|K|all>
@@ -207,6 +210,44 @@ existing_compose_files() {
   done
 }
 
+load_runtime_env() {
+  [[ -f "${AGENT_RUNTIME_ENV_FILE}" ]] || return 0
+
+  local line key value
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -n "${line}" ]] || continue
+    [[ "${line}" != \#* ]] || continue
+    [[ "${line}" == *=* ]] || continue
+
+    key="${line%%=*}"
+    value="${line#*=}"
+    [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+
+    case "${key}" in
+      OLLAMA_MODELS_DIR|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL)
+        export "${key}=${value}"
+        ;;
+      *)
+        ;;
+    esac
+  done < "${AGENT_RUNTIME_ENV_FILE}"
+}
+
+set_runtime_env_value() {
+  local key="$1"
+  local value="$2"
+
+  install -d -m 0750 "${AGENTIC_ROOT}/deployments"
+  touch "${AGENT_RUNTIME_ENV_FILE}"
+  chmod 0640 "${AGENT_RUNTIME_ENV_FILE}" || true
+
+  if grep -Eq "^${key}=" "${AGENT_RUNTIME_ENV_FILE}"; then
+    sed -i "s|^${key}=.*|${key}=${value}|g" "${AGENT_RUNTIME_ENV_FILE}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >>"${AGENT_RUNTIME_ENV_FILE}"
+  fi
+}
+
 ensure_runtime_env() {
   install -d -m 0750 "${AGENTIC_ROOT}/deployments"
   touch "${AGENT_RUNTIME_ENV_FILE}"
@@ -218,6 +259,12 @@ ensure_runtime_env() {
     "AGENTIC_COMPOSE_PROJECT=${AGENTIC_COMPOSE_PROJECT}"
     "AGENTIC_NETWORK=${AGENTIC_NETWORK}"
     "AGENTIC_EGRESS_NETWORK=${AGENTIC_EGRESS_NETWORK}"
+    "OLLAMA_MODELS_DIR=${OLLAMA_MODELS_DIR}"
+    "OLLAMA_MODELS_MOUNT_MODE=${OLLAMA_MODELS_MOUNT_MODE}"
+    "OLLAMA_PRELOAD_GENERATE_MODEL=${OLLAMA_PRELOAD_GENERATE_MODEL}"
+    "OLLAMA_PRELOAD_EMBED_MODEL=${OLLAMA_PRELOAD_EMBED_MODEL}"
+    "OLLAMA_MODEL_STORE_BUDGET_GB=${OLLAMA_MODEL_STORE_BUDGET_GB}"
+    "RAG_EMBED_MODEL=${RAG_EMBED_MODEL}"
   )
 
   local kv key
@@ -237,6 +284,12 @@ cmd_profile() {
   printf 'compose_project=%s\n' "${AGENTIC_COMPOSE_PROJECT}"
   printf 'network=%s\n' "${AGENTIC_NETWORK}"
   printf 'egress_network=%s\n' "${AGENTIC_EGRESS_NETWORK}"
+  printf 'ollama_models_dir=%s\n' "${OLLAMA_MODELS_DIR}"
+  printf 'ollama_models_mount_mode=%s\n' "${OLLAMA_MODELS_MOUNT_MODE}"
+  printf 'ollama_preload_generate_model=%s\n' "${OLLAMA_PRELOAD_GENERATE_MODEL}"
+  printf 'ollama_preload_embed_model=%s\n' "${OLLAMA_PRELOAD_EMBED_MODEL}"
+  printf 'ollama_model_store_budget_gb=%s\n' "${OLLAMA_MODEL_STORE_BUDGET_GB}"
+  printf 'rag_embed_model=%s\n' "${RAG_EMBED_MODEL}"
   printf 'skip_docker_user_apply=%s\n' "${AGENTIC_SKIP_DOCKER_USER_APPLY:-0}"
   printf 'skip_docker_user_check=%s\n' "${AGENTIC_SKIP_DOCKER_USER_CHECK:-0}"
   printf 'skip_doctor_proxy_check=%s\n' "${AGENTIC_SKIP_DOCTOR_PROXY_CHECK:-0}"
@@ -441,6 +494,37 @@ cmd_stop() {
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" stop "${service}"
 }
 
+cmd_ollama_models_mode() {
+  local mode="${1:-}"
+  [[ "${mode}" == "rw" || "${mode}" == "ro" ]] || die "Usage: agent ollama-models <rw|ro>"
+
+  ensure_runtime_env
+  ensure_core_runtime
+  set_runtime_env_value "OLLAMA_MODELS_MOUNT_MODE" "${mode}"
+  export OLLAMA_MODELS_MOUNT_MODE="${mode}"
+
+  local core_compose_file
+  core_compose_file="$(stack_to_compose_file core)"
+  [[ -f "${core_compose_file}" ]] || die "Compose file not found for core stack: ${core_compose_file}"
+
+  require_cmd docker
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${core_compose_file}" up -d --force-recreate ollama
+  printf 'ollama models mount mode updated to %s\n' "${mode}"
+}
+
+cmd_ollama_preload() {
+  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" || "${1:-}" == "help" ]]; then
+    [[ -x "${AGENT_OLLAMA_PRELOAD_SCRIPT}" ]] || die "preload script missing: ${AGENT_OLLAMA_PRELOAD_SCRIPT}"
+    exec "${AGENT_OLLAMA_PRELOAD_SCRIPT}" --help
+  fi
+
+  ensure_runtime_env
+  ensure_core_runtime
+  [[ -x "${AGENT_OLLAMA_PRELOAD_SCRIPT}" ]] || die "preload script missing: ${AGENT_OLLAMA_PRELOAD_SCRIPT}"
+
+  "${AGENT_OLLAMA_PRELOAD_SCRIPT}" "$@"
+}
+
 cmd_update() {
   ensure_runtime_env
   require_cmd docker
@@ -510,6 +594,8 @@ run_tests() {
     bash "${test_script}"
   done
 }
+
+load_runtime_env
 
 cmd="${1:-}"
 [[ -n "$cmd" ]] || {
@@ -637,6 +723,14 @@ case "$cmd" in
   stop)
     [[ $# -ge 2 ]] || die "Usage: agent stop <tool>"
     cmd_stop "$2"
+    ;;
+  ollama-models)
+    [[ $# -ge 2 ]] || die "Usage: agent ollama-models <rw|ro>"
+    cmd_ollama_models_mode "$2"
+    ;;
+  ollama-preload)
+    shift
+    cmd_ollama_preload "$@"
     ;;
   update)
     cmd_update
