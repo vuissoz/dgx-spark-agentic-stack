@@ -74,3 +74,4 @@ The `./agent profile` output is the canonical runtime view and should be checked
 ## Notes
 - `rootless-dev` is intentionally not an acceptance profile.
 - Final compliance evidence should always be produced in `strict-prod`.
+- For a full first-deployment sequence, use `docs/runbooks/first-time-setup.md`.

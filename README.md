@@ -213,6 +213,8 @@ Préconditions (runtime):
 
 ## Documentation détaillée
 
+- Guide pas à pas (première installation complète):
+  - `docs/runbooks/first-time-setup.md`
 - Catalogue des fonctionnalités et des agents implémentés:
   - `docs/runbooks/features-and-agents.md`
 - Profils d'exécution:
