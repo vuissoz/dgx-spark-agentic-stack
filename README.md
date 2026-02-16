@@ -80,6 +80,52 @@ export AGENTIC_PROFILE=rootless-dev
 ./agent doctor
 ```
 
+## Accès distant (Tailscale + tunnel SSH)
+
+Les services sont bindés en `127.0.0.1` sur l'hôte.  
+Conséquence: depuis un autre poste (même sur le réseau Tailscale), `http://<ip-tailscale-hote>:8080` ne fonctionne pas directement.
+
+Le mode d'accès attendu est un tunnel SSH depuis le client vers l'hôte DGX:
+
+```bash
+ssh -N \
+  -L 8080:127.0.0.1:8080 \
+  -L 3000:127.0.0.1:3000 \
+  -L 8188:127.0.0.1:8188 \
+  -L 13000:127.0.0.1:13000 \
+  -L 19090:127.0.0.1:19090 \
+  -L 13100:127.0.0.1:13100 \
+  <user>@<hostname-ou-ip-tailscale>
+```
+
+Ensuite, sur le poste client, ouvrir:
+- `http://127.0.0.1:8080` (OpenWebUI)
+- `http://127.0.0.1:3000` (OpenHands)
+- `http://127.0.0.1:8188` (ComfyUI)
+- `http://127.0.0.1:13000` (Grafana)
+- `http://127.0.0.1:19090` (Prometheus)
+- `http://127.0.0.1:13100` (Loki)
+
+Ports utiles à tunneliser (selon les modules activés):
+- `11434` → Ollama API (`http://127.0.0.1:11434`)
+- `8080` → OpenWebUI (`http://127.0.0.1:8080`)
+- `3000` → OpenHands (`http://127.0.0.1:3000`)
+- `8188` → ComfyUI (`http://127.0.0.1:8188`)
+- `13000` → Grafana (`http://127.0.0.1:13000`)
+- `19090` → Prometheus (`http://127.0.0.1:19090`)
+- `13100` → Loki (`http://127.0.0.1:13100`)
+- `9001` → Portainer optionnel (`http://127.0.0.1:9001`)
+
+Notes:
+- tunneliser uniquement les ports nécessaires;
+- les ports host sont configurables via variables d'environnement (`*_HOST_PORT`) ;
+- `qdrant` n'est pas publié sur un port host dans la config actuelle.
+
+### iPhone
+
+Oui, c'est possible avec une app SSH iOS qui supporte le port forwarding local (par ex. Termius, Blink Shell, Prompt).  
+Principe identique: créer un tunnel local vers `127.0.0.1:<port>` de l'hôte, puis ouvrir `http://127.0.0.1:<port>` depuis l'iPhone (Safari ou navigateur intégré selon l'app).
+
 ## Commandes `agent`
 
 Commandes supportées:

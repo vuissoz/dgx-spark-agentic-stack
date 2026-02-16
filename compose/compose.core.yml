@@ -38,6 +38,7 @@ services:
       context: ..
       dockerfile: deployments/gate/Dockerfile
     restart: unless-stopped
+    user: "${GATE_CONTAINER_USER:-0:0}"
     read_only: true
     tmpfs:
       - /tmp
