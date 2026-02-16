@@ -53,7 +53,7 @@ main() {
 
   local override_file
   override_file="$(mktemp)"
-  trap 'rm -f "${override_file}"' EXIT
+  trap 'if [[ -n "${override_file:-}" ]]; then rm -f "${override_file}"; fi' EXIT
 
   python3 - "${release_dir}/images.json" "${override_file}" <<'PY'
 import json

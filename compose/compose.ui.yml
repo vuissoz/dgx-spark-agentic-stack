@@ -43,6 +43,16 @@ services:
   openhands:
     image: docker.openhands.dev/openhands/openhands:1.3
     restart: unless-stopped
+    user: "42420:42420"
+    group_add:
+      - "${AGENT_RUNTIME_GID:-1000}"
+    entrypoint:
+      - /app/.venv/bin/uvicorn
+      - openhands.server.listen:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "3000"
     read_only: true
     tmpfs:
       - /tmp
@@ -55,7 +65,7 @@ services:
     env_file:
       - ${AGENTIC_ROOT:-/srv/agentic}/openhands/config/openhands.env
     environment:
-      RUNTIME: process
+      RUNTIME: cli
       LLM_BASE_URL: http://ollama-gate:11435/v1
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
