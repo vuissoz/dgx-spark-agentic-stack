@@ -431,7 +431,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 
 ---
 
-## K — Modules optionnels à risque : Clawdbot / MCP Catalog / Portainer (activation conditionnelle)
+## K — Modules optionnels à risque : OpenClaw / MCP Catalog / Portainer (activation conditionnelle)
 
 Principe : **désactivé par défaut**. Un module n’est activé que si :
 - besoin explicite + définition de succès
@@ -446,7 +446,7 @@ Principe : **désactivé par défaut**. Un module n’est activé que si :
 **Test** : `tests/K0_optional_gating.sh`
 - `agent up optional` échoue si doctor rouge, passe si doctor vert
 
-### K1 Clawdbot (si activé)
+### K1 OpenClaw (si activé)
 **Implémentation**
 - auth token fort (secret runtime)
 - DM policy allowlist
@@ -454,7 +454,7 @@ Principe : **désactivé par défaut**. Un module n’est activé que si :
 - egress via proxy + DOCKER-USER
 - logs d’audit centralisés
 
-**Test** : `tests/K1_clawdbot.sh`
+**Test** : `tests/K1_openclaw.sh`
 - endpoint refuse sans token
 - actions génèrent logs d’audit
 - aucune ouverture `0.0.0.0`

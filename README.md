@@ -15,7 +15,7 @@ Les fichiers Compose sont dans `compose/`:
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`
-- `compose/compose.optional.yml`: `optional-sentinel`, `optional-clawdbot`, `optional-mcp-catalog`, `optional-portainer`
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
 
 ## Profils d'exécution
 
@@ -45,7 +45,7 @@ Dossiers persistants clés:
 - `comfyui/{models,input,output,user}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts}/`
 - `{claude,codex,opencode}/{state,logs,workspaces}/`
-- `optional/{clawdbot,mcp,portainer}/...`
+- `optional/{openclaw,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
 - `shared-ro/`, `shared-rw/`
@@ -194,14 +194,16 @@ Rollback du lien:
 Activation explicite:
 
 ```bash
-AGENTIC_OPTIONAL_MODULES=clawdbot ./agent up optional
-AGENTIC_OPTIONAL_MODULES=mcp,portainer ./agent up optional
+AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
+AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
 ```
 
 Préconditions (runtime):
 - fichiers de demande: `${AGENTIC_ROOT}/deployments/optional/*.request`
+  - `${AGENTIC_ROOT}/deployments/optional/pi-mono.request`
+  - `${AGENTIC_ROOT}/deployments/optional/goose.request`
 - secrets:
-  - `${AGENTIC_ROOT}/secrets/runtime/clawdbot.token`
+  - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
   - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 
 ## Validation

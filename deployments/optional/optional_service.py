@@ -105,8 +105,8 @@ class OptionalHandler(BaseHTTPRequestHandler):
         self._json_response(404, {"error": "not_found"})
 
     def do_POST(self) -> None:
-        if self.cfg["mode"] == "clawdbot":
-            self._handle_clawdbot_dm()
+        if self.cfg["mode"] == "openclaw":
+            self._handle_openclaw_dm()
             return
         if self.cfg["mode"] == "mcp":
             self._handle_mcp_execute()
@@ -114,7 +114,7 @@ class OptionalHandler(BaseHTTPRequestHandler):
 
         self._json_response(404, {"error": "not_found"})
 
-    def _handle_clawdbot_dm(self) -> None:
+    def _handle_openclaw_dm(self) -> None:
         if self.path != "/v1/dm":
             self._json_response(404, {"error": "not_found"})
             return
@@ -133,7 +133,7 @@ class OptionalHandler(BaseHTTPRequestHandler):
                 self.cfg["audit_log"],
                 {
                     "ts": now_ts(),
-                    "module": "clawdbot",
+                    "module": "openclaw",
                     "action": "send_dm",
                     "decision": "deny",
                     "reason": "target_not_allowlisted",
@@ -147,7 +147,7 @@ class OptionalHandler(BaseHTTPRequestHandler):
             self.cfg["audit_log"],
             {
                 "ts": now_ts(),
-                "module": "clawdbot",
+                "module": "openclaw",
                 "action": "send_dm",
                 "decision": "allow",
                 "target": target,
@@ -199,7 +199,7 @@ class OptionalHandler(BaseHTTPRequestHandler):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Agentic optional module service")
-    parser.add_argument("mode", choices=["clawdbot", "mcp"])
+    parser.add_argument("mode", choices=["openclaw", "mcp"])
     return parser.parse_args()
 
 
@@ -210,9 +210,9 @@ def main() -> int:
     bind_port = int(os.environ.get("OPTIONAL_BIND_PORT", "8111"))
     audit_log = os.environ.get("AUDIT_LOG_PATH", "/logs/audit.jsonl")
 
-    if args.mode == "clawdbot":
-        token_file = os.environ.get("CLAWDBOT_AUTH_TOKEN_FILE", "/run/secrets/clawdbot.token")
-        allowlist_file = os.environ.get("CLAWDBOT_DM_ALLOWLIST_FILE", "/config/dm_allowlist.txt")
+    if args.mode == "openclaw":
+        token_file = os.environ.get("OPENCLAW_AUTH_TOKEN_FILE", "/run/secrets/openclaw.token")
+        allowlist_file = os.environ.get("OPENCLAW_DM_ALLOWLIST_FILE", "/config/dm_allowlist.txt")
     else:
         token_file = os.environ.get("MCP_AUTH_TOKEN_FILE", "/run/secrets/mcp.token")
         allowlist_file = os.environ.get("MCP_ALLOWLIST_FILE", "/config/tool_allowlist.txt")

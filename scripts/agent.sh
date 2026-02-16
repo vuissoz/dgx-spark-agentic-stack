@@ -14,7 +14,7 @@ AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_TOOLS=(claude codex opencode)
-OPTIONAL_MODULES=(clawdbot mcp portainer)
+OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
 
 usage() {
   cat <<USAGE
@@ -39,7 +39,7 @@ Usage:
   agent doctor [--fix-net]
 
 Optional modules (disabled by default):
-  AGENTIC_OPTIONAL_MODULES=clawdbot,mcp,portainer agent up optional
+  AGENTIC_OPTIONAL_MODULES=openclaw,mcp,pi-mono,goose,portainer agent up optional
 USAGE
 }
 
@@ -116,8 +116,10 @@ targets_include() {
 
 optional_module_profile() {
   case "$1" in
-    clawdbot) echo "optional-clawdbot" ;;
+    openclaw) echo "optional-openclaw" ;;
     mcp) echo "optional-mcp" ;;
+    pi-mono) echo "optional-pi-mono" ;;
+    goose) echo "optional-goose" ;;
     portainer) echo "optional-portainer" ;;
     *) return 1 ;;
   esac
@@ -125,8 +127,10 @@ optional_module_profile() {
 
 optional_module_secret_file() {
   case "$1" in
-    clawdbot) echo "${AGENTIC_ROOT}/secrets/runtime/clawdbot.token" ;;
+    openclaw) echo "${AGENTIC_ROOT}/secrets/runtime/openclaw.token" ;;
     mcp) echo "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
+    pi-mono) echo "" ;;
+    goose) echo "" ;;
     portainer) echo "" ;;
     *) return 1 ;;
   esac
@@ -763,8 +767,10 @@ case "$cmd" in
       require_cmd docker
       docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
         --profile optional \
-        --profile optional-clawdbot \
+        --profile optional-openclaw \
         --profile optional-mcp \
+        --profile optional-pi-mono \
+        --profile optional-goose \
         --profile optional-portainer \
         -f "$(stack_to_compose_file optional)" down
     else

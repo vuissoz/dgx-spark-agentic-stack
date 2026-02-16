@@ -4,31 +4,35 @@
 Optional modules are disabled by default and are deployed only with explicit activation intent.
 
 Supported modules:
-- `clawdbot`
+- `openclaw`
 - `mcp`
+- `pi-mono`
+- `goose`
 - `portainer`
 
 ## Preconditions
 1. Baseline stack is healthy: `./agent doctor` returns success.
 2. Activation request file exists with non-empty `need=` and `success=` values:
-   - `/srv/agentic/deployments/optional/clawdbot.request`
+   - `/srv/agentic/deployments/optional/openclaw.request`
    - `/srv/agentic/deployments/optional/mcp.request`
+   - `/srv/agentic/deployments/optional/pi-mono.request`
+   - `/srv/agentic/deployments/optional/goose.request`
    - `/srv/agentic/deployments/optional/portainer.request`
 3. Runtime secrets are present for token-protected modules:
-   - `/srv/agentic/secrets/runtime/clawdbot.token`
+   - `/srv/agentic/secrets/runtime/openclaw.token`
    - `/srv/agentic/secrets/runtime/mcp.token`
 
 ## Activation
 Example (single module):
 
 ```bash
-AGENTIC_OPTIONAL_MODULES=clawdbot ./agent up optional
+AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 ```
 
 Example (multiple modules):
 
 ```bash
-AGENTIC_OPTIONAL_MODULES=mcp,portainer ./agent up optional
+AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
 ```
 
 Activation appends an audit entry in `/srv/agentic/deployments/changes.log`.

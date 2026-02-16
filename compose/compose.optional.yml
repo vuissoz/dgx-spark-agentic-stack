@@ -26,15 +26,15 @@ services:
     networks:
       - agentic
 
-  optional-clawdbot:
+  optional-openclaw:
     image: agentic/optional-modules:local
     build:
       context: ..
       dockerfile: deployments/optional/Dockerfile
     profiles:
-      - optional-clawdbot
+      - optional-openclaw
     command:
-      - clawdbot
+      - openclaw
     restart: unless-stopped
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
@@ -48,16 +48,16 @@ services:
       OPTIONAL_BIND_HOST: 0.0.0.0
       OPTIONAL_BIND_PORT: 8111
       AUDIT_LOG_PATH: /logs/audit.jsonl
-      CLAWDBOT_AUTH_TOKEN_FILE: /run/secrets/clawdbot.token
-      CLAWDBOT_DM_ALLOWLIST_FILE: /config/dm_allowlist.txt
+      OPENCLAW_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_DM_ALLOWLIST_FILE: /config/dm_allowlist.txt
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
     volumes:
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/clawdbot/config:/config:ro
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/clawdbot/state:/state
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/clawdbot/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/clawdbot.token:/run/secrets/clawdbot.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -113,6 +113,90 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
+    networks:
+      - agentic
+
+  optional-pi-mono:
+    image: agentic/agent-cli-base:local
+    build:
+      context: ..
+      dockerfile: deployments/images/agent-cli-base/Dockerfile
+    profiles:
+      - optional-pi-mono
+    restart: unless-stopped
+    init: true
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      AGENT_TOOL: pi-mono
+      AGENT_SESSION: pi-mono
+      AGENT_WORKSPACE: /workspace
+      AGENT_STATE_DIR: /state
+      AGENT_LOGS_DIR: /logs
+      OLLAMA_BASE_URL: http://ollama-gate:11435
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/workspaces:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - tmux has-session -t pi-mono
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+
+  optional-goose:
+    image: ghcr.io/block/goose:latest
+    profiles:
+      - optional-goose
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command:
+      - |
+        mkdir -p /workspace /logs /home/goose/.config/goose
+        sleep infinity
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/state:/home/goose/.config/goose
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/workspaces:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - goose --version >/dev/null 2>&1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
     networks:
       - agentic
 
