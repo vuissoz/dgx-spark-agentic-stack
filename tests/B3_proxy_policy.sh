@@ -27,7 +27,7 @@ fi
 ok "direct egress from toolbox is blocked"
 
 set +e
-proxy_output="$(timeout 15 docker exec "${toolbox_cid}" sh -lc 'curl -fsS --max-time 10 -x http://egress-proxy:3128 https://example.com >/dev/null' 2>&1)"
+proxy_output="$(timeout 15 docker exec "${toolbox_cid}" sh -lc 'curl -fkSs --max-time 10 -x http://egress-proxy:3128 https://example.com >/dev/null' 2>&1)"
 proxy_rc=$?
 set -e
 
