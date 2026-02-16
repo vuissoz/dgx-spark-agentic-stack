@@ -49,7 +49,7 @@ main() {
   copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/query_smoke.sh" "${AGENTIC_ROOT}/rag/scripts/query_smoke.sh" 0750
 
   if [[ "${EUID}" -ne 0 ]]; then
-    chmod 0777 "${AGENTIC_ROOT}/rag/qdrant" "${AGENTIC_ROOT}/rag/docs"
+    chmod 0770 "${AGENTIC_ROOT}/rag/qdrant" "${AGENTIC_ROOT}/rag/docs"
     log "non-root runtime init: relaxed rag dirs permissions for userns compatibility"
   fi
 }

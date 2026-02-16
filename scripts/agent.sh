@@ -11,6 +11,8 @@ AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollbac
 AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
+AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
+AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_TOOLS=(claude codex opencode)
 OPTIONAL_MODULES=(clawdbot mcp portainer)
 
@@ -26,11 +28,13 @@ Usage:
   agent logs <service>
   agent stop <tool>
   agent net apply
+  agent ollama-link
   agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
   agent ollama-models <rw|ro>
   agent update
   agent rollback all <release_id>
   agent rollback host-net <backup_id>
+  agent rollback ollama-link <backup_id|latest>
   agent test <A|B|C|D|E|F|G|H|I|J|K|all>
   agent doctor [--fix-net]
 
@@ -227,7 +231,12 @@ load_runtime_env() {
     [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
 
     case "${key}" in
-      OLLAMA_MODELS_DIR|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL)
+      OLLAMA_CONTAINER_MODELS_PATH)
+        if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then
+          export "${key}=${value}"
+        fi
+        ;;
+      AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL)
         export "${key}=${value}"
         ;;
       *)
@@ -262,7 +271,11 @@ ensure_runtime_env() {
     "AGENTIC_COMPOSE_PROJECT=${AGENTIC_COMPOSE_PROJECT}"
     "AGENTIC_NETWORK=${AGENTIC_NETWORK}"
     "AGENTIC_EGRESS_NETWORK=${AGENTIC_EGRESS_NETWORK}"
+    "AGENTIC_OLLAMA_MODELS_LINK=${AGENTIC_OLLAMA_MODELS_LINK}"
+    "AGENTIC_OLLAMA_MODELS_TARGET_DIR=${AGENTIC_OLLAMA_MODELS_TARGET_DIR:-}"
     "OLLAMA_MODELS_DIR=${OLLAMA_MODELS_DIR}"
+    "OLLAMA_CONTAINER_MODELS_PATH=${OLLAMA_CONTAINER_MODELS_PATH}"
+    "OLLAMA_CONTAINER_USER=${OLLAMA_CONTAINER_USER}"
     "OLLAMA_MODELS_MOUNT_MODE=${OLLAMA_MODELS_MOUNT_MODE}"
     "OLLAMA_PRELOAD_GENERATE_MODEL=${OLLAMA_PRELOAD_GENERATE_MODEL}"
     "OLLAMA_PRELOAD_EMBED_MODEL=${OLLAMA_PRELOAD_EMBED_MODEL}"
@@ -288,6 +301,10 @@ cmd_profile() {
   printf 'network=%s\n' "${AGENTIC_NETWORK}"
   printf 'egress_network=%s\n' "${AGENTIC_EGRESS_NETWORK}"
   printf 'ollama_models_dir=%s\n' "${OLLAMA_MODELS_DIR}"
+  printf 'ollama_models_link=%s\n' "${AGENTIC_OLLAMA_MODELS_LINK}"
+  printf 'ollama_models_target_dir=%s\n' "${AGENTIC_OLLAMA_MODELS_TARGET_DIR:-}"
+  printf 'ollama_container_models_path=%s\n' "${OLLAMA_CONTAINER_MODELS_PATH}"
+  printf 'ollama_container_user=%s\n' "${OLLAMA_CONTAINER_USER}"
   printf 'ollama_models_mount_mode=%s\n' "${OLLAMA_MODELS_MOUNT_MODE}"
   printf 'ollama_preload_generate_model=%s\n' "${OLLAMA_PRELOAD_GENERATE_MODEL}"
   printf 'ollama_preload_embed_model=%s\n' "${OLLAMA_PRELOAD_EMBED_MODEL}"
@@ -324,6 +341,17 @@ run_compose_on_targets() {
 }
 
 ensure_core_runtime() {
+  if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
+    [[ -x "${AGENT_OLLAMA_LINK_SCRIPT}" ]] || die "missing script: ${AGENT_OLLAMA_LINK_SCRIPT}"
+    if ! "${AGENT_OLLAMA_LINK_SCRIPT}" --quiet >/tmp/agent-ollama-link.out 2>&1; then
+      cat /tmp/agent-ollama-link.out >&2
+      die "failed to initialize rootless ollama models symlink"
+    fi
+    OLLAMA_MODELS_DIR="$(sed -n 's/^OLLAMA_MODELS_DIR=//p' /tmp/agent-ollama-link.out | tail -n 1)"
+    [[ -n "${OLLAMA_MODELS_DIR}" ]] || die "rootless ollama models link script did not return OLLAMA_MODELS_DIR"
+    export OLLAMA_MODELS_DIR
+  fi
+
   if ! "${AGENTIC_REPO_ROOT}/deployments/core/init_runtime.sh"; then
     die "failed to initialize core runtime in ${AGENTIC_ROOT}; re-run with sudo or set AGENTIC_ROOT to a writable path"
   fi
@@ -528,6 +556,12 @@ cmd_ollama_preload() {
   "${AGENT_OLLAMA_PRELOAD_SCRIPT}" "$@"
 }
 
+cmd_ollama_link() {
+  [[ -x "${AGENT_OLLAMA_LINK_SCRIPT}" ]] || die "missing script: ${AGENT_OLLAMA_LINK_SCRIPT}"
+  ensure_runtime_env
+  "${AGENT_OLLAMA_LINK_SCRIPT}"
+}
+
 cmd_net() {
   local action="${1:-}"
   case "${action}" in
@@ -580,8 +614,13 @@ cmd_rollback() {
       [[ -x "${AGENT_DOCKER_USER_ROLLBACK_SCRIPT}" ]] || die "host-net rollback script missing: ${AGENT_DOCKER_USER_ROLLBACK_SCRIPT}"
       "${AGENT_DOCKER_USER_ROLLBACK_SCRIPT}" "${target_id}"
       ;;
+    ollama-link)
+      [[ -n "${target_id}" ]] || die "Usage: agent rollback ollama-link <backup_id|latest>"
+      [[ -x "${AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT}" ]] || die "ollama-link rollback script missing: ${AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT}"
+      "${AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT}" "${target_id}"
+      ;;
     *)
-      die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id>"
+      die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id> | agent rollback ollama-link <backup_id|latest>"
       ;;
   esac
 }
@@ -754,6 +793,9 @@ case "$cmd" in
     shift
     cmd_net "${1:-}"
     ;;
+  ollama-link)
+    cmd_ollama_link
+    ;;
   ollama-models)
     [[ $# -ge 2 ]] || die "Usage: agent ollama-models <rw|ro>"
     cmd_ollama_models_mode "$2"
@@ -766,7 +808,7 @@ case "$cmd" in
     cmd_update
     ;;
   rollback)
-    [[ $# -ge 3 ]] || die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id>"
+    [[ $# -ge 3 ]] || die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id> | agent rollback ollama-link <backup_id|latest>"
     cmd_rollback "$2" "$3"
     ;;
   test)

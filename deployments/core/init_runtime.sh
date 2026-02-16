@@ -57,7 +57,7 @@ set_gate_runtime_permissions() {
 
   # Non-root local runs can include userns-remapped containers; relax only runtime test paths.
   chmod 0755 "${gate_dir}"
-  chmod 0777 "${gate_state_dir}" "${gate_logs_dir}"
+  chmod 0770 "${gate_state_dir}" "${gate_logs_dir}"
   log "non-root runtime init: relaxed gate dir permissions for userns compatibility"
 }
 

@@ -3,13 +3,14 @@ services:
     image: ollama/ollama:latest
     restart: unless-stopped
     gpus: all
+    user: "${OLLAMA_CONTAINER_USER:-0:0}"
     ports:
       - 127.0.0.1:11434:11434
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
-      OLLAMA_MODELS: /root/.ollama/models
+      OLLAMA_MODELS: ${OLLAMA_CONTAINER_MODELS_PATH:-/root/.ollama/models}
     volumes:
-      - ${OLLAMA_MODELS_DIR:-${AGENTIC_ROOT:-/srv/agentic}/ollama/models}:/root/.ollama/models:${OLLAMA_MODELS_MOUNT_MODE:-rw}
+      - ${OLLAMA_MODELS_DIR:-${AGENTIC_ROOT:-/srv/agentic}/ollama/models}:${OLLAMA_CONTAINER_MODELS_PATH:-/root/.ollama/models}:${OLLAMA_MODELS_MOUNT_MODE:-rw}
     cap_drop:
       - ALL
     security_opt:

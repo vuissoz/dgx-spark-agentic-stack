@@ -115,7 +115,7 @@ wait_for_ollama_api() {
 models_mount_is_readonly() {
   local container_id="$1"
   local rw_flag
-  rw_flag="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/root/.ollama/models"}}{{println .RW}}{{end}}{{end}}' "${container_id}" | head -n 1)"
+  rw_flag="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "'"${OLLAMA_CONTAINER_MODELS_PATH}"'"}}{{println .RW}}{{end}}{{end}}' "${container_id}" | head -n 1)"
   [[ "${rw_flag}" == "false" ]]
 }
 

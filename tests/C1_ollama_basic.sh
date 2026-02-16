@@ -52,8 +52,10 @@ health_status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.St
 ok "ollama container healthcheck is healthy"
 
 expected_models_dir="${OLLAMA_MODELS_DIR:-${AGENTIC_ROOT:-/srv/agentic}/ollama/models}"
-actual_models_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/root/.ollama/models"}}{{println .Source}}{{end}}{{end}}' "${ollama_cid}" | head -n 1)"
-[[ -n "${actual_models_mount}" ]] || fail "missing mount for /root/.ollama/models on ollama container"
+models_dest="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${ollama_cid}" | sed -n 's/^OLLAMA_MODELS=//p' | head -n 1)"
+models_dest="${models_dest:-${OLLAMA_CONTAINER_MODELS_PATH:-/root/.ollama/models}}"
+actual_models_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "'"${models_dest}"'"}}{{println .Source}}{{end}}{{end}}' "${ollama_cid}" | head -n 1)"
+[[ -n "${actual_models_mount}" ]] || fail "missing mount for ${models_dest} on ollama container"
 
 expected_models_dir="$(readlink -f "${expected_models_dir}" 2>/dev/null || printf '%s' "${expected_models_dir}")"
 actual_models_mount="$(readlink -f "${actual_models_mount}" 2>/dev/null || printf '%s' "${actual_models_mount}")"

@@ -91,7 +91,7 @@ main() {
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then
-    chmod 0777 "${AGENTIC_ROOT}/optional/clawdbot/state" \
+    chmod 0770 "${AGENTIC_ROOT}/optional/clawdbot/state" \
       "${AGENTIC_ROOT}/optional/clawdbot/logs" \
       "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \

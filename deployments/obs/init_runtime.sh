@@ -50,7 +50,7 @@ main() {
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then
-    chmod 0777 "${AGENTIC_ROOT}/monitoring/prometheus" \
+    chmod 0770 "${AGENTIC_ROOT}/monitoring/prometheus" \
       "${AGENTIC_ROOT}/monitoring/grafana" \
       "${AGENTIC_ROOT}/monitoring/loki" \
       "${AGENTIC_ROOT}/monitoring/promtail" \

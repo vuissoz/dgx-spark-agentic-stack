@@ -54,7 +54,7 @@ main() {
   chmod 0600 "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "${AGENTIC_ROOT}/openhands/config/openhands.env"
 
   if [[ "${EUID}" -ne 0 ]]; then
-    chmod 0777 "${AGENTIC_ROOT}/openwebui/data" \
+    chmod 0770 "${AGENTIC_ROOT}/openwebui/data" \
       "${AGENTIC_ROOT}/openhands/state" \
       "${AGENTIC_ROOT}/openhands/logs" \
       "${AGENTIC_ROOT}/openhands/workspaces" \

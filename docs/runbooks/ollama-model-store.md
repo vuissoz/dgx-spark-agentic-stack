@@ -30,6 +30,12 @@ Switch mount mode manually:
 ./agent ollama-models ro
 ```
 
+Rollback of the rootless models symlink (after `agent ollama-link` output `backup_id=<id>`):
+
+```bash
+./agent rollback ollama-link <backup_id|latest>
+```
+
 ## Notes
 - `ollama-preload` sets `OLLAMA_MODELS_MOUNT_MODE` in `${AGENTIC_ROOT}/deployments/runtime.env`.
 - The mode persists for later `agent up core` / `agent update` runs.
