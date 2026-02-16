@@ -6,6 +6,27 @@ Ce dépôt implémente une **stack de services agentiques conteneurisés** pour 
 
 ---
 
+## Profils d’exécution
+
+Le dépôt supporte deux profils explicites via `AGENTIC_PROFILE` :
+
+- `strict-prod` (défaut) :
+  - cible CDC stricte ;
+  - runtime dans `/srv/agentic` ;
+  - contrôles `DOCKER-USER` requis.
+- `rootless-dev` :
+  - développement local sans droits root sur l’hôte principal ;
+  - runtime dans `${HOME}/.local/share/agentic` (par défaut) ;
+  - checks host-root-only dégradés en warning dans `agent doctor`.
+
+Commande de diagnostic profil :
+
+```bash
+./agent profile
+```
+
+---
+
 ## Ce que la stack garantit (principes non négociables)
 
 - **Un seul backend LLM partagé** : Ollama, consommé via un **point de contrôle** (`ollama-gate`) pour éviter le chaos multi-clients (queue/priorités/sticky model). :contentReference[oaicite:2]{index=2}  
@@ -57,7 +78,11 @@ La stack est découpée en plusieurs fichiers Compose, avec **un réseau Docker 
 
 ## Arborescence hôte (contrat de persistance)
 
-**Tout est ancré sous `/srv/agentic/`** (volumes lisibles, stables, auditables). :contentReference[oaicite:21]{index=21}
+Racine runtime selon profil :
+- `strict-prod` : `/srv/agentic/`
+- `rootless-dev` : `${HOME}/.local/share/agentic/`
+
+Le layout reste identique dans les deux cas. :contentReference[oaicite:21]{index=21}
 
 /srv/agentic/
 ollama/
@@ -100,9 +125,16 @@ Règles pratiques :
 git clone dgx-agentic-stack
 cd dgx-agentic-stack
 
-### 2) Bootstrap hôte (crée `/srv/agentic`, permissions, configs de base)
+### 2) Bootstrap hôte (crée `<AGENTIC_ROOT>`, permissions, configs de base)
 > Le repo fournit un script de bootstrap (à adapter à votre politique système).
+
+Mode strict-prod :
+export AGENTIC_PROFILE=strict-prod
 sudo ./scripts/bootstrap-host.sh
+
+Mode rootless-dev :
+export AGENTIC_PROFILE=rootless-dev
+./scripts/bootstrap-host.sh
 
 ### 3) Déployer le socle
 sudo docker compose -f deploy/compose/compose.core.yml up -d
@@ -120,6 +152,7 @@ sudo ./agent doctor
 La commande `agent` est l’API opérateur : elle masque Docker/Compose et standardise l’UX. :contentReference[oaicite:24]{index=24}  
 
 Exemples :
+agent profile
 agent claude
 agent codex
 agent opencode

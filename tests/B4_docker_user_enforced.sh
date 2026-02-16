@@ -10,6 +10,11 @@ if [[ "${AGENTIC_SKIP_B_NETWORK_TESTS:-0}" == "1" ]]; then
   exit 0
 fi
 
+if [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" ]]; then
+  ok "B4 skipped in rootless-dev profile (no host DOCKER-USER enforcement expected)"
+  exit 0
+fi
+
 assert_docker_user_policy || fail "DOCKER-USER enforcement policy not in place"
 
 toolbox_cid="$(require_service_container toolbox)"

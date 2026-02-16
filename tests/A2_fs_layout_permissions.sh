@@ -9,7 +9,12 @@ source "${SCRIPT_DIR}/lib/common.sh"
 BOOTSTRAP_SCRIPT="${REPO_ROOT}/deployments/bootstrap/init_fs.sh"
 [[ -x "${BOOTSTRAP_SCRIPT}" ]] || fail "bootstrap script is missing or not executable: ${BOOTSTRAP_SCRIPT}"
 
-AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
+if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
+  AGENTIC_ROOT="${AGENTIC_ROOT:-${HOME}/.local/share/agentic}"
+else
+  AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+fi
 
 "${BOOTSTRAP_SCRIPT}"
 "${BOOTSTRAP_SCRIPT}"

@@ -4,12 +4,38 @@ Ce plan est conçu pour être exécuté par un agent de coding (Codex) : chaque 
 
 Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Compose v2, NVIDIA Container Toolkit, accès distant via Tailscale/SSH. Invariant : **aucun service web n’écoute sur `0.0.0.0`** (bind hôte sur `127.0.0.1` uniquement). Les conteneurs communiquent via un réseau Docker privé.
 
+## Profils d’exécution (obligatoires)
+
+Le plan doit rester exécutable via deux profils explicites :
+
+- `strict-prod` (défaut) :
+  - cible CDC stricte ;
+  - root hôte requis ;
+  - racine runtime : `/srv/agentic` ;
+  - enforcement `DOCKER-USER` requis ;
+  - `agent doctor` échoue sur tout écart structurant.
+- `rootless-dev` :
+  - mode développement local sans privilèges root sur l’hôte principal ;
+  - racine runtime : `${HOME}/.local/share/agentic` (sauf override) ;
+  - pas d’attente `DOCKER-USER` (check/apply désactivés par défaut) ;
+  - `agent doctor` conserve les checks applicables (bind loopback, santé services, hardening conteneurs), et dégrade en warning les contrôles hôte impossibles sans root.
+
+Sélection du profil :
+- `AGENTIC_PROFILE=strict-prod` (défaut)
+- `AGENTIC_PROFILE=rootless-dev`
+
+Règle de conformité : toute exigence CDC “hôte root” reste normative en `strict-prod`; `rootless-dev` est un mode d’implémentation/développement, pas un substitut de conformité finale.
+
 ---
 
 ## 0) Convention “repo” + harness de tests (à créer avant A)
 
 ### 0.1 Arborescence cible sur l’hôte
-Tout vit sous `/srv/agentic/` :
+Racine runtime selon profil :
+- `strict-prod` : `/srv/agentic/`
+- `rootless-dev` : `${HOME}/.local/share/agentic/`
+
+Le contenu attendu reste identique :
 
 - `/srv/agentic/deployments/` : compose, scripts, snapshots (rollback), policies
 - `/srv/agentic/bin/agent` : point d’entrée opérateur (commande unique)
@@ -20,7 +46,7 @@ Tout vit sous `/srv/agentic/` :
 - `/srv/agentic/shared-ro/` et `/srv/agentic/shared-rw/`
 
 ### 0.2 Standard “tests”
-Chaque test est un script shell idempotent dans `/srv/agentic/tests/` :
+Chaque test est un script shell idempotent dans `<AGENTIC_ROOT>/tests/` :
 - `tests/A_*.sh … tests/K_*.sh`
 - retour code `0` si OK, `!=0` sinon
 - output lisible (OK/FAIL) + option : JSON dans `deployments/test-reports/<ts>/`
@@ -29,13 +55,14 @@ Créer `tests/lib/common.sh` (helpers) :
 - `fail()`, `ok()`, `assert_cmd()`, `assert_no_public_bind()`, `assert_container_security()`, `assert_proxy_enforced()`, etc.
 
 ### 0.3 Commande unique `agent` (squelette immédiat)
-Créer `/srv/agentic/bin/agent` avec au minimum :
+Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - `agent up <core|agents|ui|obs|rag|optional>`
 - `agent down <…>`
 - `agent ps`
 - `agent logs <service>`
 - `agent test <A|B|…|K>` (exécute le(s) script(s) correspondants)
 - `agent doctor` (agrégat de conformité “doit rester vert”)
+- `agent profile` (affiche le profil effectif + chemins/réseaux)
 
 **Test automatique** : `tests/00_harness.sh`
 - vérifie que `agent test A` appelle bien un script
@@ -59,14 +86,14 @@ Créer `/srv/agentic/bin/agent` avec au minimum :
 ### A2 Création arbo + permissions
 **Implémentation**
 - script idempotent `deployments/bootstrap/init_fs.sh`
-  - crée groupe `agentic`
-  - crée tous les dossiers sous `/srv/agentic`
-  - applique permissions strictes (pas world-readable, secrets isolés)
+  - `strict-prod` : crée groupe `agentic`, crée tous les dossiers sous `/srv/agentic`, applique permissions strictes ;
+  - `rootless-dev` : ne modifie pas les groupes système, crée les dossiers sous `${HOME}/.local/share/agentic` avec permissions compatibles rootless ;
+  - dans les deux cas : pas de secrets world-readable.
 
 **Test** : `tests/A2_fs_layout_permissions.sh`
-- `test -d /srv/agentic/{deployments,bin,tests,secrets,ollama,gate,proxy,dns}` OK
-- `find /srv/agentic -maxdepth 2 -type d -perm -0002` → **vide**
-- `/srv/agentic/secrets` : pas accessible “others”, fichiers `600/640` selon besoin
+- `test -d <AGENTIC_ROOT>/{deployments,bin,tests,secrets,ollama,gate,proxy,dns}` OK
+- `find <AGENTIC_ROOT> -maxdepth 2 -type d -perm -0002` → **vide**
+- `<AGENTIC_ROOT>/secrets` : pas accessible “others”, fichiers `600/640` selon besoin
 
 ### A3 Invariant “aucun bind 0.0.0.0”
 **Implémentation**
@@ -117,11 +144,13 @@ Créer `/srv/agentic/bin/agent` avec au minimum :
   - allow strict : DNS→unbound, HTTP(S)→proxy, LLM→gate (quand gate existe)
   - le reste : LOG rate-limited + DROP
 - intégrer `apply_docker_user.sh` dans `agent up core` (ou `agent doctor --fix-net`)
+- en `rootless-dev` : `apply/check DOCKER-USER` désactivés par défaut (pas d’échec bloquant)
 
 **Test** : `tests/B4_docker_user_enforced.sh`
 - `iptables -S DOCKER-USER` contient un DROP final + règle LOG
 - tentative d’egress direct (sans proxy) échoue systématiquement
 - compteur/log DOCKER-USER augmente après tentative bloquée (preuve d’enforcement)
+- en `rootless-dev` : test explicitement skip (attendu)
 
 ---
 
@@ -265,11 +294,15 @@ Créer `/srv/agentic/bin/agent` avec au minimum :
   - proxy enforced (pas d’egress direct)
   - conformité conteneurs agents (non-root, NNP, cap_drop, ro)
   - health des conteneurs critiques
+- comportement par profil :
+  - `strict-prod` : tout écart structurant = `FAILED`;
+  - `rootless-dev` : les checks host-root-only (DOCKER-USER, enforcement hôte impossible) passent en warning.
 
 **Test** : `tests/F3_doctor.sh`
 - en état nominal : doctor=PASSED
 - si on force un bind `0.0.0.0` dans un compose de test : doctor=FAILED
 - si DOCKER-USER absent : doctor=FAILED
+- en `rootless-dev` : le test valide l’exécution de doctor sans exiger l’échec DOCKER-USER
 
 ---
 
@@ -375,6 +408,7 @@ Principe : **désactivé par défaut**. Un module n’est activé que si :
 **Implémentation**
 - `deployments/compose/compose.optional.yml` (vide par défaut ou services commentés)
 - `agent up optional` refuse si `agent doctor` n’est pas vert (garde-fou)
+- en `rootless-dev` : ce scénario de refus peut être neutralisé si la non-conformité ne concerne que des contrôles host-root-only.
 
 **Test** : `tests/K0_optional_gating.sh`
 - `agent up optional` échoue si doctor rouge, passe si doctor vert
@@ -426,6 +460,10 @@ La stack est “opérable” quand :
 - UIs demandées (OpenWebUI, OpenHands, ComfyUI) bind local + auth, et ne cassent pas la posture
 - observabilité exploitable (CPU/RAM/disque/GPU, logs, erreurs proxy, drops DOCKER-USER)
 - update/rollback stricts par digest reproductibles
+
+Critères de clôture par profil :
+- `strict-prod` : tous les points ci-dessus sont obligatoires et bloquants.
+- `rootless-dev` : mode accepté pour développement local, avec traçabilité claire des écarts non validables sans root.
 
 ---
 

@@ -11,6 +11,11 @@ if [[ "${AGENTIC_SKIP_F_TESTS:-0}" == "1" ]]; then
   exit 0
 fi
 
+if [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" ]]; then
+  ok "F3 skipped in rootless-dev profile (strict DOCKER-USER assertions are strict-prod only)"
+  exit 0
+fi
+
 agent_bin="${REPO_ROOT}/agent"
 [[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
 

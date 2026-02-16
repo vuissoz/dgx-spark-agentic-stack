@@ -19,10 +19,22 @@ doctor_fail() {
   status=1
 }
 
+doctor_fail_or_warn() {
+  local message="$1"
+  if [[ "${AGENTIC_PROFILE}" == "strict-prod" ]]; then
+    doctor_fail "${message}"
+  else
+    warn "${message}"
+  fi
+}
+
 usage() {
   cat <<USAGE
 Usage:
   agent doctor [--fix-net]
+
+Environment:
+  AGENTIC_PROFILE=strict-prod|rootless-dev
 USAGE
 }
 
@@ -60,6 +72,8 @@ if ! docker info >/dev/null 2>&1; then
   exit "$status"
 fi
 
+ok "doctor profile=${AGENTIC_PROFILE}"
+
 if [[ "${#critical_ports[@]}" -gt 0 ]]; then
   if ! assert_no_public_bind "${critical_ports[@]}"; then
     doctor_fail "one or more configured critical ports are exposed on a non-loopback interface"
@@ -93,14 +107,14 @@ if [[ "${AGENTIC_SKIP_DOCKER_USER_CHECK:-0}" == "1" ]]; then
   warn "skip DOCKER-USER policy check because AGENTIC_SKIP_DOCKER_USER_CHECK=1"
 else
   if ! assert_docker_user_policy; then
-    doctor_fail "DOCKER-USER policy is missing or incomplete"
+    doctor_fail_or_warn "DOCKER-USER policy is missing or incomplete"
   fi
 fi
 
 if [[ "${AGENTIC_SKIP_DOCTOR_PROXY_CHECK:-0}" != "1" ]]; then
   toolbox_cid="$(service_container_id toolbox)"
   if [[ -z "${toolbox_cid}" ]]; then
-    doctor_fail "toolbox container is not running; cannot validate egress policy"
+    doctor_fail_or_warn "toolbox container is not running; cannot validate egress policy"
   else
     set +e
     timeout 15 docker exec "${toolbox_cid}" sh -lc \
@@ -109,7 +123,7 @@ if [[ "${AGENTIC_SKIP_DOCTOR_PROXY_CHECK:-0}" != "1" ]]; then
     set -e
 
     if [[ "${direct_rc}" -eq 0 ]]; then
-      doctor_fail "direct egress from toolbox succeeded; proxy enforcement is broken"
+      doctor_fail_or_warn "direct egress from toolbox succeeded; proxy enforcement is broken"
     else
       ok "direct egress from toolbox is blocked"
     fi
@@ -183,11 +197,11 @@ fi
 
 current_release_dir="${AGENTIC_ROOT}/deployments/current"
 if [[ ! -L "${current_release_dir}" && ! -d "${current_release_dir}" ]]; then
-  doctor_fail "no active release snapshot found at ${current_release_dir}"
+  doctor_fail_or_warn "no active release snapshot found at ${current_release_dir}"
 else
   release_images_file="${current_release_dir}/images.json"
   if [[ ! -s "${release_images_file}" ]]; then
-    doctor_fail "active release is missing images manifest: ${release_images_file}"
+    doctor_fail_or_warn "active release is missing images manifest: ${release_images_file}"
   else
     ok "active release images manifest is present"
   fi

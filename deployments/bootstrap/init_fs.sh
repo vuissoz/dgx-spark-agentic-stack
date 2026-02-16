@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
+
 AGENTIC_GROUP="${AGENTIC_GROUP:-agentic}"
 AGENTIC_SKIP_GROUP_CREATE="${AGENTIC_SKIP_GROUP_CREATE:-0}"
 
@@ -15,6 +19,11 @@ die() {
 }
 
 ensure_group() {
+  if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
+    log "profile rootless-dev: skip system group management"
+    return 0
+  fi
+
   if getent group "${AGENTIC_GROUP}" >/dev/null 2>&1; then
     return 0
   fi
@@ -38,7 +47,7 @@ ensure_dir() {
 
   install -d -m "${mode}" "${path}"
 
-  if getent group "${AGENTIC_GROUP}" >/dev/null 2>&1; then
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]] && getent group "${AGENTIC_GROUP}" >/dev/null 2>&1; then
     if [[ "${EUID}" -eq 0 ]]; then
       chown root:"${AGENTIC_GROUP}" "${path}"
     fi
@@ -57,6 +66,7 @@ ensure_secret_files_mode() {
 }
 
 main() {
+  log "bootstrap profile=${AGENTIC_PROFILE} root=${AGENTIC_ROOT}"
   ensure_group
 
   local -a base_dirs=(

@@ -15,6 +15,7 @@ OPTIONAL_MODULES=(clawdbot mcp portainer)
 usage() {
   cat <<USAGE
 Usage:
+  agent profile
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
   agent <claude|codex|opencode> [project]
@@ -212,6 +213,7 @@ ensure_runtime_env() {
   chmod 0640 "${AGENT_RUNTIME_ENV_FILE}"
 
   local -a keys=(
+    "AGENTIC_PROFILE=${AGENTIC_PROFILE}"
     "AGENTIC_ROOT=${AGENTIC_ROOT}"
     "AGENTIC_COMPOSE_PROJECT=${AGENTIC_COMPOSE_PROJECT}"
     "AGENTIC_NETWORK=${AGENTIC_NETWORK}"
@@ -227,6 +229,17 @@ ensure_runtime_env() {
       printf '%s\n' "${kv}" >>"${AGENT_RUNTIME_ENV_FILE}"
     fi
   done
+}
+
+cmd_profile() {
+  printf 'profile=%s\n' "${AGENTIC_PROFILE}"
+  printf 'root=%s\n' "${AGENTIC_ROOT}"
+  printf 'compose_project=%s\n' "${AGENTIC_COMPOSE_PROJECT}"
+  printf 'network=%s\n' "${AGENTIC_NETWORK}"
+  printf 'egress_network=%s\n' "${AGENTIC_EGRESS_NETWORK}"
+  printf 'skip_docker_user_apply=%s\n' "${AGENTIC_SKIP_DOCKER_USER_APPLY:-0}"
+  printf 'skip_docker_user_check=%s\n' "${AGENTIC_SKIP_DOCKER_USER_CHECK:-0}"
+  printf 'skip_doctor_proxy_check=%s\n' "${AGENTIC_SKIP_DOCTOR_PROXY_CHECK:-0}"
 }
 
 run_compose_on_targets() {
@@ -505,6 +518,9 @@ cmd="${1:-}"
 }
 
 case "$cmd" in
+  profile)
+    cmd_profile
+    ;;
   up)
     [[ $# -ge 2 ]] || die "Usage: agent up <core|agents|ui|obs|rag|optional>"
     target_arg="$2"
