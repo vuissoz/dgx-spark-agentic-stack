@@ -8,6 +8,7 @@ source "${SCRIPT_DIR}/lib/runtime.sh"
 AGENT_RUNTIME_ENV_FILE="${AGENTIC_ROOT}/deployments/runtime.env"
 AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapshot.sh"
 AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
+AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
 AGENT_TOOLS=(claude codex opencode)
@@ -24,10 +25,12 @@ Usage:
   agent ps
   agent logs <service>
   agent stop <tool>
+  agent net apply
   agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
   agent ollama-models <rw|ro>
   agent update
   agent rollback all <release_id>
+  agent rollback host-net <backup_id>
   agent test <A|B|C|D|E|F|G|H|I|J|K|all>
   agent doctor [--fix-net]
 
@@ -525,6 +528,19 @@ cmd_ollama_preload() {
   "${AGENT_OLLAMA_PRELOAD_SCRIPT}" "$@"
 }
 
+cmd_net() {
+  local action="${1:-}"
+  case "${action}" in
+    apply)
+      ensure_runtime_env
+      apply_core_network_policy
+      ;;
+    *)
+      die "Usage: agent net apply"
+      ;;
+  esac
+}
+
 cmd_update() {
   ensure_runtime_env
   require_cmd docker
@@ -550,14 +566,24 @@ cmd_update() {
 
 cmd_rollback() {
   local scope="${1:-}"
-  local release_id="${2:-}"
+  local target_id="${2:-}"
   ensure_runtime_env
 
-  [[ "${scope}" == "all" ]] || die "Usage: agent rollback all <release_id>"
-  [[ -n "${release_id}" ]] || die "Usage: agent rollback all <release_id>"
-  [[ -x "${AGENT_RELEASE_ROLLBACK_SCRIPT}" ]] || die "rollback script missing: ${AGENT_RELEASE_ROLLBACK_SCRIPT}"
-
-  "${AGENT_RELEASE_ROLLBACK_SCRIPT}" "${release_id}"
+  case "${scope}" in
+    all)
+      [[ -n "${target_id}" ]] || die "Usage: agent rollback all <release_id>"
+      [[ -x "${AGENT_RELEASE_ROLLBACK_SCRIPT}" ]] || die "rollback script missing: ${AGENT_RELEASE_ROLLBACK_SCRIPT}"
+      "${AGENT_RELEASE_ROLLBACK_SCRIPT}" "${target_id}"
+      ;;
+    host-net)
+      [[ -n "${target_id}" ]] || die "Usage: agent rollback host-net <backup_id>"
+      [[ -x "${AGENT_DOCKER_USER_ROLLBACK_SCRIPT}" ]] || die "host-net rollback script missing: ${AGENT_DOCKER_USER_ROLLBACK_SCRIPT}"
+      "${AGENT_DOCKER_USER_ROLLBACK_SCRIPT}" "${target_id}"
+      ;;
+    *)
+      die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id>"
+      ;;
+  esac
 }
 
 normalize_logs_target() {
@@ -724,6 +750,10 @@ case "$cmd" in
     [[ $# -ge 2 ]] || die "Usage: agent stop <tool>"
     cmd_stop "$2"
     ;;
+  net)
+    shift
+    cmd_net "${1:-}"
+    ;;
   ollama-models)
     [[ $# -ge 2 ]] || die "Usage: agent ollama-models <rw|ro>"
     cmd_ollama_models_mode "$2"
@@ -736,7 +766,7 @@ case "$cmd" in
     cmd_update
     ;;
   rollback)
-    [[ $# -ge 3 ]] || die "Usage: agent rollback all <release_id>"
+    [[ $# -ge 3 ]] || die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id>"
     cmd_rollback "$2" "$3"
     ;;
   test)

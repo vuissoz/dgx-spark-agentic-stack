@@ -159,11 +159,13 @@ agent opencode
 agent ls
 agent logs claude
 agent stop openwebui
+agent net apply
 agent ollama-preload # preload en RW puis remonte en RO (budget 12GB par défaut)
 agent ollama-models rw
 agent ollama-models ro
 agent update
 agent rollback all
+agent rollback host-net <backup_id>
 AGENTIC_OPTIONAL_MODULES=clawdbot agent up optional
 AGENTIC_OPTIONAL_MODULES=mcp,portainer agent up optional
 
