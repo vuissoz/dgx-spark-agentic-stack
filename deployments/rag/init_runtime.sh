@@ -35,6 +35,7 @@ copy_if_missing() {
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/rag"
   install -d -m 0770 "${AGENTIC_ROOT}/rag/qdrant"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/qdrant-snapshots"
   install -d -m 0770 "${AGENTIC_ROOT}/rag/docs"
   install -d -m 0750 "${AGENTIC_ROOT}/rag/scripts"
 
@@ -49,7 +50,7 @@ main() {
   copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/query_smoke.sh" "${AGENTIC_ROOT}/rag/scripts/query_smoke.sh" 0750
 
   if [[ "${EUID}" -ne 0 ]]; then
-    chmod 0770 "${AGENTIC_ROOT}/rag/qdrant" "${AGENTIC_ROOT}/rag/docs"
+    chmod 0770 "${AGENTIC_ROOT}/rag/qdrant" "${AGENTIC_ROOT}/rag/qdrant-snapshots" "${AGENTIC_ROOT}/rag/docs"
     log "non-root runtime init: relaxed rag dirs permissions for userns compatibility"
   fi
 }

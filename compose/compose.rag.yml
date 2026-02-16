@@ -2,6 +2,9 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     restart: unless-stopped
+    user: "${QDRANT_CONTAINER_USER:-0:0}"
+    environment:
+      QDRANT_INIT_FILE_PATH: /qdrant/storage/.qdrant-initialized
     read_only: true
     tmpfs:
       - /tmp
@@ -11,6 +14,7 @@ services:
       - no-new-privileges:true
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/rag/qdrant:/qdrant/storage
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/qdrant-snapshots:/qdrant/snapshots
     healthcheck:
       test:
         - CMD-SHELL

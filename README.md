@@ -92,7 +92,7 @@ dns/unbound/
 openwebui/
 openhands/
 comfyui/{models,input,output,user}/
-rag/{qdrant,docs}/
+rag/{qdrant,qdrant-snapshots,docs}/
 claude/{state,logs,workspaces}/
 codex/{state,logs,workspaces}/
 opencode/{state,logs,workspaces}/

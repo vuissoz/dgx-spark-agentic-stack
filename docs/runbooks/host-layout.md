@@ -16,6 +16,7 @@ Step 0 defines the runtime filesystem contract used by all later deployment step
 - `/srv/agentic/openhands/`
 - `/srv/agentic/comfyui/`
 - `/srv/agentic/rag/`
+- `/srv/agentic/rag/{qdrant,qdrant-snapshots,docs,scripts}/`
 - `/srv/agentic/monitoring/`
 - `/srv/agentic/{claude,codex,opencode}/{state,logs,workspaces}/`
 - `/srv/agentic/shared-ro/`

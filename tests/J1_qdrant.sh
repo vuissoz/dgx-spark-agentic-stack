@@ -28,4 +28,27 @@ timeout 30 docker exec "${toolbox_cid}" sh -lc 'curl -fsS http://qdrant:6333/hea
   || fail "qdrant health endpoint is not reachable from internal toolbox"
 ok "qdrant health endpoint is reachable from internal network"
 
+expected_storage_dir="${AGENTIC_ROOT:-/srv/agentic}/rag/qdrant"
+expected_snapshots_dir="${AGENTIC_ROOT:-/srv/agentic}/rag/qdrant-snapshots"
+
+actual_storage_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/qdrant/storage"}}{{println .Source}}{{end}}{{end}}' "${qdrant_cid}" | head -n 1)"
+actual_snapshots_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/qdrant/snapshots"}}{{println .Source}}{{end}}{{end}}' "${qdrant_cid}" | head -n 1)"
+qdrant_init_file_path="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${qdrant_cid}" | sed -n 's/^QDRANT_INIT_FILE_PATH=//p' | head -n 1)"
+
+[[ -n "${actual_storage_mount}" ]] || fail "missing /qdrant/storage writable mount"
+[[ -n "${actual_snapshots_mount}" ]] || fail "missing /qdrant/snapshots writable mount"
+
+expected_storage_dir="$(readlink -f "${expected_storage_dir}" 2>/dev/null || printf '%s' "${expected_storage_dir}")"
+expected_snapshots_dir="$(readlink -f "${expected_snapshots_dir}" 2>/dev/null || printf '%s' "${expected_snapshots_dir}")"
+actual_storage_mount="$(readlink -f "${actual_storage_mount}" 2>/dev/null || printf '%s' "${actual_storage_mount}")"
+actual_snapshots_mount="$(readlink -f "${actual_snapshots_mount}" 2>/dev/null || printf '%s' "${actual_snapshots_mount}")"
+
+[[ "${actual_storage_mount}" == "${expected_storage_dir}" ]] \
+  || fail "qdrant storage mount source mismatch (expected=${expected_storage_dir}, actual=${actual_storage_mount})"
+[[ "${actual_snapshots_mount}" == "${expected_snapshots_dir}" ]] \
+  || fail "qdrant snapshots mount source mismatch (expected=${expected_snapshots_dir}, actual=${actual_snapshots_mount})"
+[[ "${qdrant_init_file_path}" == "/qdrant/storage/.qdrant-initialized" ]] \
+  || fail "unexpected QDRANT_INIT_FILE_PATH (expected=/qdrant/storage/.qdrant-initialized, actual=${qdrant_init_file_path:-unset})"
+ok "qdrant storage and snapshots mounts are configured"
+
 ok "J1_qdrant passed"
