@@ -26,6 +26,19 @@ Sélection du profil :
 
 Règle de conformité : toute exigence CDC “hôte root” reste normative en `strict-prod`; `rootless-dev` est un mode d’implémentation/développement, pas un substitut de conformité finale.
 
+### Option pratique : VM dédiée pour tester `strict-prod`
+
+Un troisième chemin d’exécution est autorisé pour les tests d’intégration “prod-like” sans modifier l’hôte principal :
+
+- créer une **VM dédiée** (où l’opérateur a les droits root) ;
+- exécuter le profil `strict-prod` dans la VM ;
+- garder les mêmes garde-fous (`/srv/agentic`, `DOCKER-USER`, bind loopback, doctor strict).
+
+Contrainte mémoire (Ollama) :
+
+- si la VM n’a pas assez de RAM pour des modèles 7B+, utiliser un **petit modèle** uniquement pour les smoke tests (ex: 0.5B à 3B quantisé) ;
+- ce mode valide la posture stack/ops (A→K), pas la performance/capacité cible d’un modèle lourd.
+
 ---
 
 ## 0) Convention “repo” + harness de tests (à créer avant A)
@@ -175,6 +188,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 **Implémentation**
 - script `deployments/ollama/smoke_generate.sh` (prompt court)
 - prévoir modèle minimal de test (ou skip si aucun modèle présent)
+- en VM dédiée à RAM contrainte : autoriser un petit modèle de validation (0.5B–3B) pour ce smoke test
 
 **Test** : `tests/C2_ollama_generate.sh`
 - POST `/api/generate` retourne 200 + payload non vide (avec timeout court)
@@ -464,6 +478,7 @@ La stack est “opérable” quand :
 Critères de clôture par profil :
 - `strict-prod` : tous les points ci-dessus sont obligatoires et bloquants.
 - `rootless-dev` : mode accepté pour développement local, avec traçabilité claire des écarts non validables sans root.
+- `strict-prod` sur VM dédiée : accepté pour validation “prod-like” du pipeline A→K avec petit modèle Ollama ; tests de charge/modèles lourds restent hors périmètre de cette VM contrainte.
 
 ---
 
