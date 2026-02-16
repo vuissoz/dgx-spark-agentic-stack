@@ -165,6 +165,24 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - compteur/log DOCKER-USER augmente après tentative bloquée (preuve d’enforcement)
 - en `rootless-dev` : test explicitement skip (attendu)
 
+### B5 Rollback hôte des changements `sudo` (DOCKER-USER)
+**Implémentation**
+- avant toute application de règles host firewall, sauvegarder l’état précédent (`iptables-save`) dans `${AGENTIC_ROOT}/deployments/host-net/backups/<ts>/`.
+- fournir `deployments/net/rollback_docker_user.sh <backup_id>` :
+  - restaure la chaîne `DOCKER-USER` et la chaîne dédiée `AGENTIC-DOCKER-USER` à l’état sauvegardé ;
+  - retire les règles ajoutées par la stack si le backup d’origine n’en contenait pas.
+- exposer via l’interface opérateur :
+  - `agent net apply` (applique + crée backup),
+  - `agent rollback host-net <backup_id>` (rollback déterministe côté hôte).
+- journaliser chaque `apply/rollback` hôte dans `${AGENTIC_ROOT}/deployments/changes.log` avec acteur, horodatage UTC, backup_id.
+
+**Test** : `tests/B5_host_net_rollback.sh`
+- capture état initial `iptables-save` (hash),
+- applique la politique DOCKER-USER,
+- exécute le rollback du backup créé,
+- vérifie que l’état final (`iptables-save`) est identique à l’état initial (hash égal).
+- en `rootless-dev` : test explicitement skip (attendu).
+
 ---
 
 ## C — Inference de base : Ollama (local-only)
@@ -293,6 +311,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - `deployments/releases/rollback.sh <id>` :
   - repin images par digest (ou tags->digests figés)
   - redeploy compose
+- en `strict-prod`, associer le snapshot de release au dernier backup host-net disponible (référence `backup_id`) pour pouvoir restaurer aussi les changements imposés par `sudo`.
 - journal : `deployments/changes.log`
 
 **Test** : `tests/F2_update_rollback.sh`
@@ -474,6 +493,7 @@ La stack est “opérable” quand :
 - UIs demandées (OpenWebUI, OpenHands, ComfyUI) bind local + auth, et ne cassent pas la posture
 - observabilité exploitable (CPU/RAM/disque/GPU, logs, erreurs proxy, drops DOCKER-USER)
 - update/rollback stricts par digest reproductibles
+- rollback hôte disponible pour les modifications nécessitant `sudo` (au minimum DOCKER-USER), testé et journalisé
 
 Critères de clôture par profil :
 - `strict-prod` : tous les points ci-dessus sont obligatoires et bloquants.
