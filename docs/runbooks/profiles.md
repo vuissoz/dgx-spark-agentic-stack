@@ -1,37 +1,76 @@
 # Runbook: Execution Profiles
 
-## Profiles
+This stack exposes two runtime profiles controlled by `AGENTIC_PROFILE`.
+The profile changes host paths, permission expectations, and compliance strictness.
 
-The stack supports two explicit profiles via `AGENTIC_PROFILE`.
+## Why Profiles Exist
+
+The CDC expects a production-like deployment rooted in `/srv/agentic` with host-level egress guardrails.
+That mode is implemented as `strict-prod`.
+
+For local iteration, testing, or CI where root privileges are limited, `rootless-dev` keeps the same container topology and hardening defaults but degrades host-only controls safely.
+
+## Profile Matrix
 
 ### `strict-prod` (default)
-- Purpose: CDC-compliant production-like deployment.
+- Purpose: CDC-aligned operational mode for acceptance and real operations.
 - Runtime root: `/srv/agentic`.
-- Requires host-level privileges for:
-  - filesystem ownership/permissions under `/srv/agentic`,
-  - `DOCKER-USER` enforcement (`iptables`).
-- `agent doctor` treats structural drift as failure.
+- Typical operator context: `sudo` (or equivalent privileges).
+- Host controls:
+  - applies and validates `DOCKER-USER`-based enforcement via `./agent net apply`,
+  - expects filesystem ownership/permissions under `/srv/agentic` to match contract.
+- Doctor behavior: structural/security drift is treated as failure (non-zero exit).
+- Use this profile for:
+  - release validation,
+  - production-like smoke tests,
+  - final compliance checks before declaring a deployment healthy.
 
 ### `rootless-dev`
-- Purpose: local development without root on the main host.
+- Purpose: development mode without requiring root access for normal workflows.
 - Runtime root (default): `${HOME}/.local/share/agentic`.
-- `DOCKER-USER` checks/application are skipped by default.
-- `agent doctor` keeps applicable checks and warns on root-only host controls.
+- Typical operator context: unprivileged user.
+- Host controls:
+  - skips root-only host firewall application/checks by default,
+  - keeps container-level controls intact (`127.0.0.1` binds, no `docker.sock`, capabilities drop, etc.).
+- Doctor behavior:
+  - runs all applicable checks,
+  - emits warnings where root-only host checks cannot be enforced.
+- Use this profile for:
+  - local documentation/testing iterations,
+  - validating compose wiring and service behavior,
+  - preparing changes before strict acceptance in `strict-prod`.
 
 ## How To Select
+
+Select `rootless-dev`:
 
 ```bash
 export AGENTIC_PROFILE=rootless-dev
 ./agent profile
 ```
 
-Switch back to strict mode:
+Switch back to `strict-prod`:
 
 ```bash
 export AGENTIC_PROFILE=strict-prod
 ./agent profile
 ```
 
+The `./agent profile` output is the canonical runtime view and should be checked before `up`, `update`, `doctor`, or rollback operations.
+
+## Operational Guidance
+
+### Recommended flow during development
+1. Work in `rootless-dev` for rapid iteration.
+2. Validate changes with `./agent doctor` and targeted tests.
+3. Re-run the same scenario in `strict-prod`.
+4. Only consider the result acceptance-grade after strict profile checks pass.
+
+### Common pitfalls
+- Running `strict-prod` commands without sufficient privileges can create partial host state.
+- Assuming a successful `rootless-dev` doctor run implies full CDC conformance is incorrect; host-level controls still need strict validation.
+- Mixing profile roots (`/srv/agentic` and `${HOME}/.local/share/agentic`) during troubleshooting can hide state differences. Always confirm active profile first.
+
 ## Notes
-- `rootless-dev` is a development mode, not final CDC compliance.
-- Final acceptance gates must be validated in `strict-prod`.
+- `rootless-dev` is intentionally not an acceptance profile.
+- Final compliance evidence should always be produced in `strict-prod`.

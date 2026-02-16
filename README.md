@@ -211,6 +211,15 @@ Préconditions (runtime):
 - Diagnostic global: `./agent doctor`
 - Campagnes de tests: `./agent test <A..K|all>`
 
+## Documentation détaillée
+
+- Catalogue des fonctionnalités et des agents implémentés:
+  - `docs/runbooks/features-and-agents.md`
+- Profils d'exécution:
+  - `docs/runbooks/profiles.md`
+- Modules optionnels:
+  - `docs/runbooks/optional-modules.md`
+
 ## Références internes
 
 - `AGENTS.md`
