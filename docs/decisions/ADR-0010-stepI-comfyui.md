@@ -12,8 +12,10 @@ Step I requires a ComfyUI web service for image generation while keeping the sec
 
 ## Decision
 - Extend `compose/compose.ui.yml` with `comfyui`:
-  - image `ghcr.io/comfyanonymous/comfyui:latest`,
-  - host bind `127.0.0.1:${COMFYUI_HOST_PORT:-8188}:8188`,
+  - image built locally as `agentic/comfyui:local` from `deployments/images/comfyui/Dockerfile`,
+  - source checkout from `https://github.com/comfyanonymous/ComfyUI` at build time (`COMFYUI_REF`, default `master`),
+  - `comfyui` service stays on the internal network only;
+  - host bind `127.0.0.1:${COMFYUI_HOST_PORT:-8188}:8188` is published by a dedicated loopback reverse-proxy sidecar (`comfyui-loopback`) attached to both `agentic` and `agentic-egress`,
   - GPU request enabled (`gpus: all`),
   - low-priority GPU profile marker (`AGENTIC_GPU_PROFILE=lowprio`, `agentic.gpu-profile=lowprio`),
   - data volumes:
@@ -30,6 +32,10 @@ Step I requires a ComfyUI web service for image generation while keeping the sec
 
 ## Consequences
 - ComfyUI is available without widening host exposure.
+- The stack no longer depends on a non-existent/unofficial prebuilt ComfyUI image registry path.
 - GPU usage is explicit and traceable as a low-priority workload.
 - Model/output persistence is explicit and auditable under `/srv/agentic`.
 - Smoke generation is deterministic only when at least one checkpoint exists locally.
+
+## Notes
+- The local build approach follows the same deployment principle described by John Aldred ("Running ComfyUI in Docker on Windows or Linux"): build your own container from upstream ComfyUI sources, then run with mounted model/input/output paths.

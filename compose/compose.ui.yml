@@ -7,6 +7,8 @@ services:
       - /tmp
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
     security_opt:
       - no-new-privileges:true
     ports:
@@ -78,26 +80,27 @@ services:
       - agentic
 
   comfyui:
-    image: ghcr.io/comfyanonymous/comfyui:latest
+    image: agentic/comfyui:local
+    build:
+      context: ..
+      dockerfile: deployments/images/comfyui/Dockerfile
+      args:
+        COMFYUI_REF: ${COMFYUI_REF:-master}
     restart: unless-stopped
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     gpus: all
     read_only: true
     tmpfs:
       - /tmp
-    ports:
-      - 127.0.0.1:${COMFYUI_HOST_PORT:-8188}:8188
     environment:
       AGENTIC_GPU_PROFILE: lowprio
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+      XDG_CACHE_HOME: /tmp/.cache
+      HF_HOME: /tmp/.cache/huggingface
     labels:
       - agentic.gpu-profile=lowprio
-    command:
-      - --listen
-      - 0.0.0.0
-      - --port
-      - "8188"
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/models:/comfyui/models
       - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/input:/comfyui/input
@@ -121,7 +124,54 @@ services:
     networks:
       - agentic
 
+  comfyui-loopback:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      comfyui:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
+        cat >/tmp/nginx.conf <<'NGINX'
+        pid /tmp/nginx.pid;
+        events {}
+        http {
+          client_body_temp_path /tmp/client_temp;
+          proxy_temp_path /tmp/proxy_temp;
+          fastcgi_temp_path /tmp/fastcgi_temp;
+          uwsgi_temp_path /tmp/uwsgi_temp;
+          scgi_temp_path /tmp/scgi_temp;
+          server {
+            listen 8188;
+            location / {
+              proxy_pass http://comfyui:8188;
+              proxy_http_version 1.1;
+              proxy_set_header Host comfyui;
+            }
+          }
+        }
+        NGINX
+        exec nginx -g 'daemon off;' -c /tmp/nginx.conf
+    ports:
+      - 127.0.0.1:${COMFYUI_HOST_PORT:-8188}:8188
+    networks:
+      - agentic
+      - agentic-egress
+
 networks:
   agentic:
     external: true
     name: ${AGENTIC_NETWORK:-agentic}
+  agentic-egress:
+    external: true
+    name: ${AGENTIC_EGRESS_NETWORK:-agentic-egress}

@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
+AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/ui"
 
 log() {
@@ -52,6 +54,18 @@ main() {
   copy_if_missing "${TEMPLATE_DIR}/openhands.env" "${AGENTIC_ROOT}/openhands/config/openhands.env" 0600
 
   chmod 0600 "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "${AGENTIC_ROOT}/openhands/config/openhands.env"
+
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
+      "${AGENTIC_ROOT}/openwebui/data" \
+      "${AGENTIC_ROOT}/openhands/state" \
+      "${AGENTIC_ROOT}/openhands/logs" \
+      "${AGENTIC_ROOT}/openhands/workspaces" \
+      "${AGENTIC_ROOT}/comfyui/models" \
+      "${AGENTIC_ROOT}/comfyui/input" \
+      "${AGENTIC_ROOT}/comfyui/output" \
+      "${AGENTIC_ROOT}/comfyui/user"
+  fi
 
   if [[ "${EUID}" -ne 0 ]]; then
     chmod 0770 "${AGENTIC_ROOT}/openwebui/data" \
