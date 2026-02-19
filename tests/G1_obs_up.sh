@@ -136,7 +136,7 @@ if payload.get("status") != "success":
     raise SystemExit(1)
 
 for name in payload.get("data", []):
-    if isinstance(name, str) and name.startswith("dcgm_"):
+    if isinstance(name, str) and name.lower().startswith("dcgm_"):
         raise SystemExit(0)
 raise SystemExit(1)
 PY

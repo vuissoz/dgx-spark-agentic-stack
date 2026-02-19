@@ -31,6 +31,17 @@ copy_if_missing() {
   log "created runtime file: ${dst}"
 }
 
+promtail_path_migration() {
+  local cfg="${AGENTIC_ROOT}/monitoring/config/promtail-config.yml"
+  [[ -f "${cfg}" ]] || return 0
+
+  # Rootless runtimes keep proxy logs under AGENTIC_ROOT; mount to /tmp to stay compatible with read_only rootfs.
+  if grep -q '/var/log/agentic-proxy/access.log\*' "${cfg}"; then
+    sed -i 's#/var/log/agentic-proxy/access.log\*#/tmp/agentic-proxy/access.log*#g' "${cfg}"
+    log "migrated promtail proxy log path to /tmp/agentic-proxy in ${cfg}"
+  fi
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/monitoring"
   install -d -m 0750 "${AGENTIC_ROOT}/monitoring/config"
@@ -44,6 +55,7 @@ main() {
   copy_if_missing "${TEMPLATE_DIR}/prometheus-alerts.yml" "${AGENTIC_ROOT}/monitoring/config/prometheus-alerts.yml" 0644
   copy_if_missing "${TEMPLATE_DIR}/loki-config.yml" "${AGENTIC_ROOT}/monitoring/config/loki-config.yml" 0644
   copy_if_missing "${TEMPLATE_DIR}/promtail-config.yml" "${AGENTIC_ROOT}/monitoring/config/promtail-config.yml" 0644
+  promtail_path_migration
 
   if [[ "${EUID}" -eq 0 ]]; then
     # Grafana official container runs as uid 472.

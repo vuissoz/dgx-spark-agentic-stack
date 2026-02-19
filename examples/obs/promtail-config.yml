@@ -30,7 +30,7 @@ scrape_configs:
           - localhost
         labels:
           job: egress-proxy
-          __path__: /var/log/agentic-proxy/access.log*
+          __path__: /tmp/agentic-proxy/access.log*
     pipeline_stages:
       - regex:
           expression: '^(?P<ts>\d+\.\d+)\s+(?P<duration_ms>\d+)\s+(?P<src_ip>\S+)\s+(?P<squid_result>\S+)/(?P<http_status>\d+)\s+(?P<bytes>\d+)\s+(?P<method>\S+)\s+(?P<url>\S+)\s+(?P<user>\S+)\s+(?P<hierarchy>\S+)/(?P<upstream>\S+)\s+(?P<mime>\S+)'

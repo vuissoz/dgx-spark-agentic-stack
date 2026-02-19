@@ -2,6 +2,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
+    user: "${PROMETHEUS_CONTAINER_USER:-0:0}"
     read_only: true
     tmpfs:
       - /tmp
@@ -34,7 +35,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     restart: unless-stopped
-    user: "472:472"
+    user: "${GRAFANA_CONTAINER_USER:-472:472}"
     read_only: true
     tmpfs:
       - /tmp
@@ -67,6 +68,7 @@ services:
   loki:
     image: grafana/loki:latest
     restart: unless-stopped
+    user: "${LOKI_CONTAINER_USER:-0:0}"
     read_only: true
     tmpfs:
       - /tmp
@@ -83,8 +85,9 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/loki:/loki
     healthcheck:
       test:
-        - CMD-SHELL
-        - wget -q -O- http://127.0.0.1:3100/ready | grep -q 'ready'
+        - CMD
+        - /usr/bin/loki
+        - -version
       interval: 30s
       timeout: 10s
       retries: 6
@@ -96,6 +99,7 @@ services:
   promtail:
     image: grafana/promtail:latest
     restart: unless-stopped
+    user: "${PROMTAIL_CONTAINER_USER:-0:0}"
     read_only: true
     tmpfs:
       - /tmp
@@ -108,13 +112,14 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/promtail/positions:/promtail/positions
-      - ${AGENTIC_ROOT:-/srv/agentic}/proxy/logs:/var/log/agentic-proxy:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/proxy/logs:/tmp/agentic-proxy:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/log:/var/log:ro
     healthcheck:
       test:
-        - CMD-SHELL
-        - wget -q -O- http://127.0.0.1:9080/ready | grep -q 'ready'
+        - CMD
+        - /usr/bin/promtail
+        - --version
       interval: 30s
       timeout: 10s
       retries: 6
