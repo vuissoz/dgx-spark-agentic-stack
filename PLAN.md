@@ -73,6 +73,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - `agent down <…>`
 - `agent ps`
 - `agent logs <service>`
+- `agent forget <target> --yes` (reset destructif ciblé d’un domaine persistant)
 - `agent test <A|B|…|K>` (exécute le(s) script(s) correspondants)
 - `agent doctor` (agrégat de conformité “doit rester vert”)
 - `agent profile` (affiche le profil effectif + chemins/réseaux)
@@ -336,6 +337,62 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - si on force un bind `0.0.0.0` dans un compose de test : doctor=FAILED
 - si DOCKER-USER absent : doctor=FAILED
 - en `rootless-dev` : le test valide l’exécution de doctor sans exiger l’échec DOCKER-USER
+
+### F4 `agent forget` : reset ciblé des environnements persistants (mode “fresh install”)
+**Implémentation**
+- ajouter une commande destructive explicite :
+  - `agent forget <target> --yes`
+  - sans `--yes` : mode interactif obligatoire avec **deux confirmations successives** ;
+  - chaque confirmation a `No` comme valeur par défaut (Entrée vide = `No`) ;
+  - si l’une des deux confirmations n’est pas un `yes` explicite : refus + code non-zéro.
+- objectifs :
+  - supprimer toutes les données persistantes du domaine ciblé ;
+  - recréer immédiatement l’arborescence/permissions/fichiers runtime comme à l’installation initiale (via `init_runtime.sh` concerné) ;
+  - laisser les autres domaines intacts.
+- cibles minimales à supporter :
+  - `ollama`
+  - `claude`
+  - `codex`
+  - `opencode`
+  - `comfyui`
+  - `openclaw`
+- cibles recommandées en plus (cohérence opératoire) :
+  - `openhands`, `openwebui`, `qdrant`, `obs`, `all`.
+- mapping attendu (exemples) :
+  - `ollama` -> `${AGENTIC_ROOT}/ollama/**`
+  - `claude` -> `${AGENTIC_ROOT}/claude/{state,logs,workspaces}/**`
+  - `codex` -> `${AGENTIC_ROOT}/codex/{state,logs,workspaces}/**`
+  - `opencode` -> `${AGENTIC_ROOT}/opencode/{state,logs,workspaces}/**`
+  - `comfyui` -> `${AGENTIC_ROOT}/comfyui/{models,input,output,user}/**`
+  - `openclaw` -> `${AGENTIC_ROOT}/optional/openclaw/{config,state,logs}/**`
+- orchestration de sécurité :
+  - arrêter les services dépendants avant purge (`agent down` ciblé) ;
+  - purge atomique par cible ;
+  - ré-init runtime via scripts existants (`deployments/*/init_runtime.sh`) ;
+  - journaliser l’action dans `${AGENTIC_ROOT}/deployments/changes.log` (acteur, UTC, cible, résultat).
+- sauvegarde avant destruction :
+  - créer un backup daté dans `${AGENTIC_ROOT}/deployments/forget-backups/<ts>-<target>.tar.gz` ;
+  - option `--no-backup` possible mais non défaut.
+- profils :
+  - `strict-prod` : commande exécutable avec privilèges adaptés ;
+  - `rootless-dev` : comportement équivalent sans exiger root, sauf chemins non accessibles (erreur explicite).
+
+**Test** : `tests/F4_forget_command.sh`
+- pour chaque cible minimale (`ollama`, `claude`, `codex`, `opencode`, `comfyui`, `openclaw`) :
+  - créer un marqueur fichier persistant ;
+  - exécuter `agent forget <target>` sans `--yes` puis Entrée vide à l’un des prompts -> refus attendu ;
+  - exécuter `agent forget <target>` sans `--yes` et répondre `yes` aux deux prompts -> succès ;
+  - exécuter `agent forget <target> --yes` -> succès ;
+  - vérifier :
+    - marqueur supprimé ;
+    - arborescence runtime recréée ;
+    - permissions minimales conformes ;
+    - entrée `changes.log` présente ;
+    - backup créé (sauf `--no-backup`).
+- test d’isolation :
+  - un `forget codex` ne supprime pas `claude/opencode`.
+- test idempotence :
+  - relancer `agent forget <target> --yes` sur cible déjà vide -> succès + état cohérent.
 
 ---
 

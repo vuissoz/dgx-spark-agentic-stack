@@ -82,6 +82,23 @@ Required files:
 
 Permissions must be restrictive (`600` or `640`).
 
+### 2.4 Optional host telemetry mount overrides (`obs`)
+
+If your host filesystem layout differs from defaults, set these before `./agent up obs`:
+- `PROMTAIL_DOCKER_CONTAINERS_HOST_PATH` (default `/var/lib/docker/containers`)
+- `PROMTAIL_HOST_LOG_PATH` (default `/var/log`)
+- `NODE_EXPORTER_HOST_ROOT_PATH` (default `/`)
+- `CADVISOR_HOST_ROOT_PATH` (default `/`)
+- `CADVISOR_DOCKER_LIB_HOST_PATH` (default `/var/lib/docker`)
+- `CADVISOR_SYS_HOST_PATH` (default `/sys`)
+- `CADVISOR_DEV_DISK_HOST_PATH` (default `/dev/disk`)
+
+Verify effective values with:
+
+```bash
+./agent profile
+```
+
 ## 3. Bootstrap Host Runtime Tree
 
 ### `strict-prod`

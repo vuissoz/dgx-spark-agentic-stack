@@ -50,6 +50,32 @@ Dossiers persistants clés:
 - `secrets/`
 - `shared-ro/`, `shared-rw/`
 
+## Variables de chemins hôte (montages)
+
+Les montages hôte utilisés par la stack sont paramétrables via variables d'environnement.
+Les chemins persistants applicatifs restent sous `${AGENTIC_ROOT}`.
+
+Pour l'observabilité (montages host telemetry), variables disponibles:
+- `PROMTAIL_DOCKER_CONTAINERS_HOST_PATH` (défaut: `/var/lib/docker/containers`)
+- `PROMTAIL_HOST_LOG_PATH` (défaut: `/var/log`)
+- `NODE_EXPORTER_HOST_ROOT_PATH` (défaut: `/`)
+- `CADVISOR_HOST_ROOT_PATH` (défaut: `/`)
+- `CADVISOR_DOCKER_LIB_HOST_PATH` (défaut: `/var/lib/docker`)
+- `CADVISOR_SYS_HOST_PATH` (défaut: `/sys`)
+- `CADVISOR_DEV_DISK_HOST_PATH` (défaut: `/dev/disk`)
+
+Exemple d'override avant démarrage:
+
+```bash
+export AGENTIC_PROFILE=rootless-dev
+export PROMTAIL_HOST_LOG_PATH=/var/log
+export NODE_EXPORTER_HOST_ROOT_PATH=/
+./agent profile
+./agent up obs
+```
+
+`./agent profile` affiche les valeurs effectives utilisées.
+
 ## Prérequis
 
 - Linux + Docker Engine
@@ -230,6 +256,8 @@ Préconditions (runtime):
 
 ## Documentation détaillée
 
+- Introduction (philosophie de la stack et modèle d'exploitation):
+  - `docs/runbooks/introduction.md`
 - Guide pas à pas (première installation complète):
   - `docs/runbooks/first-time-setup.md`
 - Catalogue des fonctionnalités et des agents implémentés:

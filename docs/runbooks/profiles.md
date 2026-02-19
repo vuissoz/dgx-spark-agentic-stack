@@ -58,6 +58,15 @@ export AGENTIC_PROFILE=strict-prod
 
 The `./agent profile` output is the canonical runtime view and should be checked before `up`, `update`, `doctor`, or rollback operations.
 
+It also reports effective host-mount path variables used by observability services, so operators can verify path overrides before deployment:
+- `PROMTAIL_DOCKER_CONTAINERS_HOST_PATH`
+- `PROMTAIL_HOST_LOG_PATH`
+- `NODE_EXPORTER_HOST_ROOT_PATH`
+- `CADVISOR_HOST_ROOT_PATH`
+- `CADVISOR_DOCKER_LIB_HOST_PATH`
+- `CADVISOR_SYS_HOST_PATH`
+- `CADVISOR_DEV_DISK_HOST_PATH`
+
 ## Operational Guidance
 
 ### Recommended flow during development

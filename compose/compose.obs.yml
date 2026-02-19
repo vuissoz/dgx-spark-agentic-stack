@@ -113,8 +113,8 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/promtail/positions:/promtail/positions
       - ${AGENTIC_ROOT:-/srv/agentic}/proxy/logs:/tmp/agentic-proxy:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/log:/var/log:ro
+      - ${PROMTAIL_DOCKER_CONTAINERS_HOST_PATH:-/var/lib/docker/containers}:/var/lib/docker/containers:ro
+      - ${PROMTAIL_HOST_LOG_PATH:-/var/log}:/var/log:ro
     healthcheck:
       test:
         - CMD
@@ -138,7 +138,7 @@ services:
     command:
       - --path.rootfs=/host
     volumes:
-      - /:/host:ro,rslave
+      - ${NODE_EXPORTER_HOST_ROOT_PATH:-/}:/host:ro,rslave
     networks:
       - agentic
 
@@ -154,10 +154,10 @@ services:
       - --housekeeping_interval=30s
       - --docker_only=true
     volumes:
-      - /:/rootfs:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      - /sys:/sys:ro
-      - /dev/disk:/dev/disk:ro
+      - ${CADVISOR_HOST_ROOT_PATH:-/}:/rootfs:ro
+      - ${CADVISOR_DOCKER_LIB_HOST_PATH:-/var/lib/docker}:/var/lib/docker:ro
+      - ${CADVISOR_SYS_HOST_PATH:-/sys}:/sys:ro
+      - ${CADVISOR_DEV_DISK_HOST_PATH:-/dev/disk}:/dev/disk:ro
     networks:
       - agentic
 

@@ -180,17 +180,27 @@ Interactive entrypoint is through `./agent <tool> [project]`.
 - Role: log collection agent for Docker/container and host logs.
 - Persistence:
   - `${AGENTIC_ROOT}/monitoring/promtail/positions`
+- Host telemetry mounts (configurable):
+  - `PROMTAIL_DOCKER_CONTAINERS_HOST_PATH` -> `/var/lib/docker/containers` in-container
+  - `PROMTAIL_HOST_LOG_PATH` -> `/var/log` in-container
 - Why it exists:
   - forwards logs to Loki with restart-safe file positions.
   - ingests proxy access logs from `${AGENTIC_ROOT}/proxy/logs/access.log*` to provide egress ground truth.
 
 ### `node-exporter`
 - Role: host system metrics exporter.
+- Host telemetry mount (configurable):
+  - `NODE_EXPORTER_HOST_ROOT_PATH` -> `/host` in-container
 - Why it exists:
   - provides CPU/memory/disk/network telemetry to Prometheus.
 
 ### `cadvisor`
 - Role: container metrics exporter.
+- Host telemetry mounts (configurable):
+  - `CADVISOR_HOST_ROOT_PATH` -> `/rootfs`
+  - `CADVISOR_DOCKER_LIB_HOST_PATH` -> `/var/lib/docker`
+  - `CADVISOR_SYS_HOST_PATH` -> `/sys`
+  - `CADVISOR_DEV_DISK_HOST_PATH` -> `/dev/disk`
 - Why it exists:
   - provides per-container runtime statistics to Prometheus.
 

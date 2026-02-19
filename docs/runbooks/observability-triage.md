@@ -18,6 +18,15 @@ Use three layers together:
 2. Network egress layer:
 - Squid access logs are treated as outbound ground truth.
 - In this stack, promtail ingests `${AGENTIC_ROOT}/proxy/logs/access.log*`.
+- Host telemetry mount sources are configurable via:
+  - `PROMTAIL_DOCKER_CONTAINERS_HOST_PATH`
+  - `PROMTAIL_HOST_LOG_PATH`
+  - `NODE_EXPORTER_HOST_ROOT_PATH`
+  - `CADVISOR_HOST_ROOT_PATH`
+  - `CADVISOR_DOCKER_LIB_HOST_PATH`
+  - `CADVISOR_SYS_HOST_PATH`
+  - `CADVISOR_DEV_DISK_HOST_PATH`
+  Check effective values with `./agent profile`.
 
 3. Runtime layer:
 - Prometheus metrics from `node-exporter`, `cadvisor`, `dcgm-exporter`, and service endpoints.
