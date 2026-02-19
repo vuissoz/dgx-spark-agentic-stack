@@ -120,6 +120,23 @@ Notes:
 - tunneliser uniquement les ports nécessaires;
 - les ports host sont configurables via variables d'environnement (`*_HOST_PORT`) ;
 - `qdrant` n'est pas publié sur un port host dans la config actuelle.
+- `optional-openclaw` de ce dépôt n'expose pas de port host (service interne Docker uniquement).
+
+Comportement OpenClaw (upstream) si vous déployez la gateway officielle:
+- gateway: `18789` (control plane + HTTP APIs + Control UI + WebSocket RPC sur un seul port),
+- browser control service: `18791` (`gateway.port + 2`),
+- relay: `18792` (`gateway.port + 3`),
+- CDP local (profils managed browser): `18800-18899` par défaut.
+
+Point de confusion fréquent:
+- un nœud (`openclaw node run`) se connecte en sortie vers la gateway (WebSocket) et n'impose pas un nouveau port inbound côté gateway.
+
+Vérification rapide (hôte Linux/macOS):
+
+```bash
+lsof -nP -iTCP -sTCP:LISTEN | egrep ':(18789|18791|18792|188[0-9]{2})'
+ss -lntp | egrep ':(18789|18791|18792|188[0-9]{2})'
+```
 
 ### iPhone
 
@@ -221,6 +238,10 @@ Préconditions (runtime):
   - `docs/runbooks/profiles.md`
 - Modules optionnels:
   - `docs/runbooks/optional-modules.md`
+- Triage observabilité (latence, erreurs egress, restarts, OOM):
+  - `docs/runbooks/observability-triage.md`
+- Modèle de sécurité OpenClaw (sandbox + egress contrôlé, sans `docker.sock`):
+  - `docs/security/openclaw-sandbox-egress.md`
 
 ## Références internes
 

@@ -10,9 +10,36 @@ clients:
 
 scrape_configs:
   - job_name: docker
+    pipeline_stages:
+      - docker: {}
     static_configs:
       - targets:
           - localhost
         labels:
           job: docker
           __path__: /var/lib/docker/containers/*/*.log
+    relabel_configs:
+      - source_labels:
+          - __path__
+        regex: .*/([a-f0-9]{64})/.*\.log
+        target_label: container_id
+
+  - job_name: egress-proxy
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: egress-proxy
+          __path__: /var/log/agentic-proxy/access.log*
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<ts>\d+\.\d+)\s+(?P<duration_ms>\d+)\s+(?P<src_ip>\S+)\s+(?P<squid_result>\S+)/(?P<http_status>\d+)\s+(?P<bytes>\d+)\s+(?P<method>\S+)\s+(?P<url>\S+)\s+(?P<user>\S+)\s+(?P<hierarchy>\S+)/(?P<upstream>\S+)\s+(?P<mime>\S+)'
+      - regex:
+          source: url
+          expression: '^(?:[a-zA-Z]+://)?(?P<dest_host>[^/:]+)'
+      - labels:
+          src_ip:
+          http_status:
+          method:
+          squid_result:
+          dest_host:

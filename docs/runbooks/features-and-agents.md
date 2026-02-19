@@ -182,6 +182,7 @@ Interactive entrypoint is through `./agent <tool> [project]`.
   - `${AGENTIC_ROOT}/monitoring/promtail/positions`
 - Why it exists:
   - forwards logs to Loki with restart-safe file positions.
+  - ingests proxy access logs from `${AGENTIC_ROOT}/proxy/logs/access.log*` to provide egress ground truth.
 
 ### `node-exporter`
 - Role: host system metrics exporter.
@@ -197,6 +198,9 @@ Interactive entrypoint is through `./agent <tool> [project]`.
 - Role: NVIDIA GPU metrics exporter.
 - Why it exists:
   - adds GPU observability for model/UI workloads that use accelerators.
+
+### Triage Runbook
+- See `docs/runbooks/observability-triage.md` for high-signal incident queries and alert baselines across app, egress, and runtime layers.
 
 ## RAG Stack (`./agent up rag`)
 

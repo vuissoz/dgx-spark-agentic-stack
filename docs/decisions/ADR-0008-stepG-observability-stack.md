@@ -37,3 +37,4 @@ Step G requires an observability baseline for host and container telemetry, logs
 - Observability stack is reproducible and deployable through the `agent` wrapper.
 - GPU telemetry is verified when hardware/runtime support is present.
 - Remaining host-specific validation (GPU/runtime permissions) is captured by Step G tests.
+- Follow-up triage baseline and proxy-log ingestion strategy are documented in ADR-0016.

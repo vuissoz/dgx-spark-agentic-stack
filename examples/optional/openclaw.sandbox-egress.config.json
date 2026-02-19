@@ -1,0 +1,28 @@
+{
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "all",
+        "scope": "session",
+        "workspaceAccess": "none",
+        "docker": {
+          "network": "sbx_egress",
+          "capDrop": [
+            "ALL"
+          ],
+          "readOnlyRoot": true,
+          "tmpfs": [
+            "/tmp",
+            "/var/tmp",
+            "/run"
+          ],
+          "env": {
+            "HTTP_PROXY": "http://egress-proxy:3128",
+            "HTTPS_PROXY": "http://egress-proxy:3128",
+            "NO_PROXY": "localhost,127.0.0.1,openclaw-gateway"
+          }
+        }
+      }
+    }
+  }
+}

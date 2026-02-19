@@ -1,0 +1,23 @@
+{
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "all",
+        "scope": "session",
+        "workspaceAccess": "none",
+        "docker": {
+          "network": "none",
+          "capDrop": [
+            "ALL"
+          ],
+          "readOnlyRoot": true,
+          "tmpfs": [
+            "/tmp",
+            "/var/tmp",
+            "/run"
+          ]
+        }
+      }
+    }
+  }
+}

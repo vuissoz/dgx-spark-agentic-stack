@@ -144,6 +144,10 @@ sudo ./agent up core
 ./agent up core
 ```
 
+If you plan to use default runtime alerting, review:
+- `${AGENTIC_ROOT}/monitoring/config/prometheus-alerts.yml`
+- See `docs/runbooks/observability-triage.md` for the recommended queries and thresholds.
+
 ## 6. Start the Rest of the Baseline Stack
 
 ### `strict-prod`

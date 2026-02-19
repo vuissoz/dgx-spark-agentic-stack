@@ -41,6 +41,7 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/monitoring/promtail/positions"
 
   copy_if_missing "${TEMPLATE_DIR}/prometheus.yml" "${AGENTIC_ROOT}/monitoring/config/prometheus.yml" 0644
+  copy_if_missing "${TEMPLATE_DIR}/prometheus-alerts.yml" "${AGENTIC_ROOT}/monitoring/config/prometheus-alerts.yml" 0644
   copy_if_missing "${TEMPLATE_DIR}/loki-config.yml" "${AGENTIC_ROOT}/monitoring/config/loki-config.yml" 0644
   copy_if_missing "${TEMPLATE_DIR}/promtail-config.yml" "${AGENTIC_ROOT}/monitoring/config/promtail-config.yml" 0644
 

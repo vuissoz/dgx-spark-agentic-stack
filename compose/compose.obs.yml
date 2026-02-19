@@ -17,6 +17,7 @@ services:
       - 127.0.0.1:${PROMETHEUS_HOST_PORT:-19090}:9090
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/prometheus-alerts.yml:/etc/prometheus/prometheus-alerts.yml:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/prometheus:/prometheus
     healthcheck:
       test:
@@ -107,6 +108,7 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/promtail/positions:/promtail/positions
+      - ${AGENTIC_ROOT:-/srv/agentic}/proxy/logs:/var/log/agentic-proxy:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/log:/var/log:ro
     healthcheck:

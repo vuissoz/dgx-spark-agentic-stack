@@ -17,6 +17,14 @@ For that reason, activation requires:
 - Service: `optional-openclaw`
 - Profile: `optional-openclaw`
 - Purpose: token-protected optional API module for scoped workflows.
+- Current repo behavior: no host-published port (service reachable only on the Docker network, internal listener `:8111`).
+- Sandbox and egress hardening blueprint for upstream OpenClaw gateway deployments:
+  - `docs/security/openclaw-sandbox-egress.md`
+- If replaced by upstream OpenClaw gateway, default listeners are typically:
+  - `18789` (gateway),
+  - `18791` (`gateway.port + 2`, browser control),
+  - `18792` (`gateway.port + 3`, relay),
+  - `18800-18899` for local CDP when managed browser profiles are enabled.
 - Runtime data:
   - `${AGENTIC_ROOT}/optional/openclaw/config`
   - `${AGENTIC_ROOT}/optional/openclaw/state`
@@ -118,6 +126,13 @@ Expected result:
 - optional services are healthy,
 - baseline hardening rules remain true,
 - no forbidden mounts or public binds are introduced.
+
+OpenClaw gateway port check (only applicable if you run the upstream gateway variant):
+
+```bash
+lsof -nP -iTCP -sTCP:LISTEN | egrep ':(18789|18791|18792|188[0-9]{2})'
+ss -lntp | egrep ':(18789|18791|18792|188[0-9]{2})'
+```
 
 ## Security Notes
 

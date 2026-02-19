@@ -1,0 +1,46 @@
+groups:
+  - name: agentic-runtime-alerts
+    rules:
+      - alert: AgenticHostDiskUsageHigh
+        expr: |
+          (
+            (node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+            - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})
+            / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host root filesystem usage is above 85%"
+          description: "Disk pressure can cause log ingestion failures and container instability."
+
+      - alert: AgenticContainerRestartStorm
+        expr: |
+          changes(container_start_time_seconds{container_label_com_docker_compose_project!=""}[15m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container restart storm detected"
+          description: "A container restarted more than 3 times in 15 minutes."
+
+      - alert: AgenticContainerOomKill
+        expr: |
+          increase(container_oom_events_total{container_label_com_docker_compose_project!=""}[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container OOM kill detected"
+          description: "One or more containers were OOM-killed in the last 15 minutes."
+
+      - alert: AgenticScrapeTargetDown
+        expr: |
+          up{job=~"node-exporter|cadvisor|dcgm-exporter|ollama-gate"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Critical scrape target is down"
+          description: "Prometheus cannot scrape a key runtime target for at least 5 minutes."
