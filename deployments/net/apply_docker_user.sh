@@ -115,27 +115,39 @@ container_ip_on_network() {
   docker inspect --format "{{with index .NetworkSettings.Networks \"${network_name}\"}}{{.IPAddress}}{{end}}" "${container_id}"
 }
 
-allow_gate_if_present() {
-  local source_subnet="$1"
+append_unique() {
+  local -n array_ref="$1"
+  local value="$2"
+  local existing
 
-  local gate_container_id
-  local gate_ip
+  for existing in "${array_ref[@]:-}"; do
+    if [[ "${existing}" == "${value}" ]]; then
+      return 0
+    fi
+  done
 
-  gate_container_id="$(service_container_id "${AGENTIC_GATE_SERVICE}")"
-  if [[ -z "${gate_container_id}" ]]; then
-    return 0
+  array_ref+=("${value}")
+}
+
+collect_service_ips() {
+  local service="$1"
+  local -n ips_ref="$2"
+  shift 2
+  local -a networks=("$@")
+  local container_id network_name ip
+
+  container_id="$(service_container_id "${service}")"
+  if [[ -z "${container_id}" ]]; then
+    return 1
   fi
 
-  gate_ip="$(container_ip_on_network "${gate_container_id}" "${AGENTIC_NETWORK}")"
-  if [[ -z "${gate_ip}" ]]; then
-    return 0
-  fi
+  for network_name in "${networks[@]}"; do
+    ip="$(container_ip_on_network "${container_id}" "${network_name}")"
+    [[ -n "${ip}" ]] || continue
+    append_unique ips_ref "${ip}"
+  done
 
-  iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
-    -s "${source_subnet}" \
-    -d "${gate_ip}/32" \
-    -p tcp --dport "${AGENTIC_GATE_PORT}" -j ACCEPT
-  log "allowed LLM gate traffic to ${AGENTIC_GATE_SERVICE} (${gate_ip}:${AGENTIC_GATE_PORT})"
+  [[ "${#ips_ref[@]}" -gt 0 ]]
 }
 
 main() {
@@ -144,25 +156,38 @@ main() {
   require_cmd iptables
   require_cmd iptables-save
 
+  local network_name
   local subnet
-  local proxy_container_id
-  local unbound_container_id
+  local src_subnet
   local proxy_ip
   local unbound_ip
+  local gate_ip
   local backup_id
+  local -a source_networks=()
+  local -a source_subnets=()
+  local -a proxy_ips=()
+  local -a unbound_ips=()
+  local -a gate_ips=()
+  declare -A seen_networks=()
 
-  subnet="$(docker network inspect "${AGENTIC_NETWORK}" --format '{{(index .IPAM.Config 0).Subnet}}' 2>/dev/null || true)"
-  [[ -n "${subnet}" ]] || die "docker network '${AGENTIC_NETWORK}' not found; run 'agent up core' first"
+  for network_name in "${AGENTIC_NETWORK}" "${AGENTIC_EGRESS_NETWORK}"; do
+    [[ -n "${network_name}" ]] || continue
+    if [[ -n "${seen_networks[${network_name}]:-}" ]]; then
+      continue
+    fi
+    seen_networks["${network_name}"]=1
+    source_networks+=("${network_name}")
 
-  proxy_container_id="$(service_container_id "${AGENTIC_PROXY_SERVICE}")"
-  unbound_container_id="$(service_container_id "${AGENTIC_UNBOUND_SERVICE}")"
-  [[ -n "${proxy_container_id}" ]] || die "service '${AGENTIC_PROXY_SERVICE}' is not running"
-  [[ -n "${unbound_container_id}" ]] || die "service '${AGENTIC_UNBOUND_SERVICE}' is not running"
+    subnet="$(docker network inspect "${network_name}" --format '{{(index .IPAM.Config 0).Subnet}}' 2>/dev/null || true)"
+    [[ -n "${subnet}" ]] || die "docker network '${network_name}' not found; run 'agent up core' first"
+    append_unique source_subnets "${subnet}"
+  done
 
-  proxy_ip="$(container_ip_on_network "${proxy_container_id}" "${AGENTIC_NETWORK}")"
-  unbound_ip="$(container_ip_on_network "${unbound_container_id}" "${AGENTIC_NETWORK}")"
-  [[ -n "${proxy_ip}" ]] || die "cannot resolve IP for '${AGENTIC_PROXY_SERVICE}' on network '${AGENTIC_NETWORK}'"
-  [[ -n "${unbound_ip}" ]] || die "cannot resolve IP for '${AGENTIC_UNBOUND_SERVICE}' on network '${AGENTIC_NETWORK}'"
+  collect_service_ips "${AGENTIC_PROXY_SERVICE}" proxy_ips "${source_networks[@]}" \
+    || die "cannot resolve IPs for '${AGENTIC_PROXY_SERVICE}' on ${source_networks[*]}"
+  collect_service_ips "${AGENTIC_UNBOUND_SERVICE}" unbound_ips "${source_networks[@]}" \
+    || die "cannot resolve IPs for '${AGENTIC_UNBOUND_SERVICE}' on ${source_networks[*]}"
+  collect_service_ips "${AGENTIC_GATE_SERVICE}" gate_ips "${source_networks[@]}" || true
 
   backup_id="$(create_host_net_backup)"
 
@@ -175,22 +200,32 @@ main() {
 
   iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
-  iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
-    -s "${subnet}" -d "${unbound_ip}/32" -p udp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
-  iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
-    -s "${subnet}" -d "${unbound_ip}/32" -p tcp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
+  for src_subnet in "${source_subnets[@]}"; do
+    for unbound_ip in "${unbound_ips[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+        -s "${src_subnet}" -d "${unbound_ip}/32" -p udp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+        -s "${src_subnet}" -d "${unbound_ip}/32" -p tcp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
+    done
 
-  iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
-    -s "${subnet}" -d "${proxy_ip}/32" -p tcp --dport "${AGENTIC_PROXY_PORT}" -j ACCEPT
+    for proxy_ip in "${proxy_ips[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+        -s "${src_subnet}" -d "${proxy_ip}/32" -p tcp --dport "${AGENTIC_PROXY_PORT}" -j ACCEPT
+    done
 
-  allow_gate_if_present "${subnet}"
+    for gate_ip in "${gate_ips[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+        -s "${src_subnet}" -d "${gate_ip}/32" -p tcp --dport "${AGENTIC_GATE_PORT}" -j ACCEPT
+      log "allowed LLM gate traffic to ${AGENTIC_GATE_SERVICE} (${gate_ip}:${AGENTIC_GATE_PORT})"
+    done
 
-  iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
-    -s "${subnet}" \
-    -m limit --limit 6/min --limit-burst 20 \
-    -j LOG --log-prefix "${AGENTIC_DOCKER_USER_LOG_PREFIX}" --log-level 4
+    iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+      -s "${src_subnet}" \
+      -m limit --limit 6/min --limit-burst 20 \
+      -j LOG --log-prefix "${AGENTIC_DOCKER_USER_LOG_PREFIX}" --log-level 4
 
-  iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${subnet}" -j DROP
+    iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${src_subnet}" -j DROP
+  done
   iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -j RETURN
 
   if [[ "${backup_id}" != "skipped" ]]; then
@@ -198,7 +233,7 @@ main() {
     printf 'backup_id=%s\n' "${backup_id}"
   fi
 
-  log "applied DOCKER-USER enforcement for subnet ${subnet}"
+  log "applied DOCKER-USER enforcement for subnets ${source_subnets[*]}"
 }
 
 main "$@"

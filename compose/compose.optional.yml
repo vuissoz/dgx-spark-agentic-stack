@@ -224,8 +224,12 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/portainer/logs:/logs
     networks:
       - agentic
+      - agentic-egress
 
 networks:
   agentic:
     external: true
     name: ${AGENTIC_NETWORK:-agentic}
+  agentic-egress:
+    external: true
+    name: ${AGENTIC_EGRESS_NETWORK:-agentic-egress}

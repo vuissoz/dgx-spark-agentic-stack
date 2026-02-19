@@ -451,12 +451,20 @@ Principe : **désactivé par défaut**. Un module n’est activé que si :
 - auth token fort (secret runtime)
 - DM policy allowlist
 - sandbox activée
+- **option sandbox séparée** : exécution des actions OpenClaw dans un nouveau conteneur dédié (ex: `optional-openclaw-sandbox`) distinct de `optional-openclaw`, sur réseau Docker interne uniquement, sans bind host direct
+- canal interne OpenClaw -> sandbox explicite (API interne ou queue), avec timeouts et logs d’exécution corrélés (`request_id`)
+- vérification de reachability sandbox côté agent OpenClaw (healthcheck interne + check applicatif de disponibilité avant exécution d’outil)
+- ingress entrant contrôlé pour webhooks (loopback-only côté hôte, auth/signature obligatoire, pas d’ouverture publique)
+- outils OpenClaw exécutables via sandbox dédié avec allowlist explicite des outils/commandes autorisés
 - egress via proxy + DOCKER-USER
 - logs d’audit centralisés
 
 **Test** : `tests/K1_openclaw.sh`
 - endpoint refuse sans token
 - actions génèrent logs d’audit
+- OpenClaw confirme que le sandbox dédié est joignable (health endpoint interne OK)
+- webhook entrant signé atteint OpenClaw (cas nominal) et est rejeté si signature/token invalide
+- au moins un outil allowlisté est exécutable via OpenClaw -> sandbox et produit une trace d’audit
 - aucune ouverture `0.0.0.0`
 - aucun egress direct possible
 

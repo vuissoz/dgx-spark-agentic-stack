@@ -2,6 +2,7 @@ services:
   openwebui:
     image: ghcr.io/open-webui/open-webui:latest
     restart: unless-stopped
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:
       - /tmp
@@ -39,6 +40,7 @@ services:
       start_period: 30s
     networks:
       - agentic
+      - agentic-egress
 
   openhands:
     image: docker.openhands.dev/openhands/openhands:1.3
@@ -88,6 +90,7 @@ services:
       start_period: 40s
     networks:
       - agentic
+      - agentic-egress
 
   comfyui:
     image: agentic/comfyui:local

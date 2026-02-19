@@ -66,6 +66,29 @@ The `./agent profile` output is the canonical runtime view and should be checked
 3. Re-run the same scenario in `strict-prod`.
 4. Only consider the result acceptance-grade after strict profile checks pass.
 
+### How To Run A `rootless-dev` Test Cycle
+Use one shell session with explicit profile exports so both `agent` and test scripts resolve the same runtime/project context:
+
+```bash
+export AGENTIC_PROFILE=rootless-dev
+export AGENTIC_ROOT="${HOME}/.local/share/agentic"
+export AGENTIC_COMPOSE_PROJECT=agentic-dev
+export AGENTIC_NETWORK=agentic-dev
+export AGENTIC_EGRESS_NETWORK=agentic-dev-egress
+
+./agent profile
+./agent up core
+./agent up agents,ui,obs,rag
+./agent update
+./agent doctor
+./agent test all
+```
+
+Notes:
+- `./agent test all` stops on first failure. For progressive diagnosis, run `./agent test A` ... `./agent test K`.
+- In `rootless-dev`, some host-root checks are intentionally skipped/degraded (expected behavior).
+- Optional module tests (`K*`) require a green baseline doctor and module prerequisites (request files/secrets).
+
 ### Common pitfalls
 - Running `strict-prod` commands without sufficient privileges can create partial host state.
 - Assuming a successful `rootless-dev` doctor run implies full CDC conformance is incorrect; host-level controls still need strict validation.

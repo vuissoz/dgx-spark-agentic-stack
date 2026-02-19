@@ -33,6 +33,18 @@ copy_if_missing() {
   log "created runtime file: ${dst}"
 }
 
+ensure_env_key() {
+  local env_file="$1"
+  local key="$2"
+  local value="$3"
+
+  [[ -f "${env_file}" ]] || return 0
+  if ! grep -Eq "^${key}=" "${env_file}"; then
+    printf '%s=%s\n' "${key}" "${value}" >> "${env_file}"
+    log "added missing ${key} to ${env_file}"
+  fi
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui"
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui/config"
@@ -52,6 +64,8 @@ main() {
 
   copy_if_missing "${TEMPLATE_DIR}/openwebui.env" "${AGENTIC_ROOT}/openwebui/config/openwebui.env" 0600
   copy_if_missing "${TEMPLATE_DIR}/openhands.env" "${AGENTIC_ROOT}/openhands/config/openhands.env" 0600
+  ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "OPENAI_API_KEY" "none"
+  ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "WEBUI_SECRET_KEY" "change-me-openwebui-secret"
 
   chmod 0600 "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "${AGENTIC_ROOT}/openhands/config/openhands.env"
 
@@ -77,6 +91,10 @@ main() {
       "${AGENTIC_ROOT}/comfyui/output" \
       "${AGENTIC_ROOT}/comfyui/user"
     log "non-root runtime init: relaxed UI runtime dirs for userns compatibility"
+
+    if [[ -f "${AGENTIC_ROOT}/openwebui/data/webui.db" && ! -w "${AGENTIC_ROOT}/openwebui/data/webui.db" ]]; then
+      log "non-root notice: ${AGENTIC_ROOT}/openwebui/data/webui.db is not writable by current user; fix ownership or rotate the file if OpenWebUI fails to start"
+    fi
   fi
 }
 
