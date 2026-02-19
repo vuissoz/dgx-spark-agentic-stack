@@ -82,6 +82,34 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - vérifie que `agent test A` appelle bien un script
 - vérifie que `agent doctor` existe et retourne `!=0` si aucun compose n’est déployé (mode “pas prêt” explicite)
 
+### 0.4 Script d’onboarding débutant (variables d’environnement)
+**Implémentation**
+- créer un wizard interactif `deployments/bootstrap/onboarding_env.sh` (ou `agent onboard`) qui :
+  - explique en langage simple le rôle de chaque variable d’environnement requise avant déploiement ;
+  - pose des questions une par une avec valeur par défaut affichée ;
+  - accepte `Entrée` comme réponse “garder la valeur par défaut” ;
+  - valide les chemins saisis (existants ou créables) et refuse les valeurs invalides avec message actionnable ;
+  - génère un fichier shell sourçable (ex: `${AGENTIC_ROOT}/deployments/env.sh` ou `.runtime/env.generated.sh`, non committé) ;
+  - propose en fin de wizard la commande exacte à exécuter (`source ...`) puis `./agent profile`.
+- variables minimales couvertes par le wizard :
+  - `AGENTIC_PROFILE` (`strict-prod` par défaut, `rootless-dev` proposé pour dev local),
+  - `AGENTIC_ROOT`,
+  - `AGENTIC_COMPOSE_PROJECT`,
+  - `AGENTIC_NETWORK`,
+  - `AGENTIC_EGRESS_NETWORK`,
+  - `OLLAMA_MODELS_DIR`.
+- contraintes UX :
+  - aucune question “bloquante” sans valeur par défaut ;
+  - mode non interactif disponible via flags (`--profile`, `--root`, etc.) pour CI ;
+  - pas d’écriture de secrets.
+
+**Test** : `tests/00_onboarding_env_wizard.sh`
+- exécution non-interactive avec réponses simulées (stdin) :
+  - `Entrée` sur chaque question -> fichier généré avec valeurs par défaut attendues ;
+  - override d’au moins 2 chemins -> fichier généré avec valeurs custom ;
+- shellcheck/parse du fichier généré (`bash -n`) ;
+- vérifie que le fichier est ignoré par git et n’inclut aucun secret.
+
 ---
 
 ## A — Fondations hôte & arborescence `/srv/agentic`
