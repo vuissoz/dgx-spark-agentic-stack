@@ -33,15 +33,41 @@ copy_if_missing() {
 
 set_proxy_runtime_permissions() {
   local proxy_logs_dir="${AGENTIC_ROOT}/proxy/logs"
+  local -a proxy_log_files=(
+    "${proxy_logs_dir}/access.log"
+    "${proxy_logs_dir}/cache.log"
+  )
 
   chmod 0755 "${proxy_logs_dir}"
 
-  if [[ "${EUID}" -ne 0 ]]; then
-    log "non-root runtime init: keep current owner on ${proxy_logs_dir}"
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown 13:13 "${proxy_logs_dir}"
+    local log_file
+    for log_file in "${proxy_log_files[@]}"; do
+      [[ -e "${log_file}" ]] || continue
+      chown 13:13 "${log_file}" || true
+      chmod 0640 "${log_file}" || true
+    done
     return 0
   fi
 
-  chown 13:13 "${proxy_logs_dir}"
+  if command -v setfacl >/dev/null 2>&1; then
+    # Squid opens log files before dropping from uid 0 to uid 13 (proxy).
+    # With cap_drop=ALL, both uids need explicit write rights on bind-mounted logs.
+    setfacl -m u:0:rwx,u:13:rwx "${proxy_logs_dir}"
+    setfacl -d -m u:0:rwx,u:13:rwx "${proxy_logs_dir}"
+
+    local log_file
+    for log_file in "${proxy_log_files[@]}"; do
+      [[ -e "${log_file}" ]] || continue
+      setfacl -m u:0:rw,u:13:rw "${log_file}"
+    done
+
+    log "non-root runtime init: applied ACL grants (uid 0 + uid 13) on ${proxy_logs_dir}"
+    return 0
+  fi
+
+  log "non-root runtime init: setfacl not found, cannot enforce squid log ACLs on ${proxy_logs_dir}"
 }
 
 set_gate_runtime_permissions() {

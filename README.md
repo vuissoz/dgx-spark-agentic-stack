@@ -82,6 +82,7 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 - Docker Compose v2 (`docker compose`)
 - NVIDIA Container Toolkit (pour services GPU)
 - `iptables` disponible (en `strict-prod` pour `DOCKER-USER`)
+- `acl` / `setfacl` recommandé en `rootless-dev` (ACL des logs Squid)
 
 ## Démarrage rapide
 
