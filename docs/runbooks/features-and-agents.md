@@ -231,6 +231,7 @@ See `docs/runbooks/optional-modules.md` for gating and security details.
 
 Implemented optional services:
 - `optional-openclaw` (`openclaw`)
+- `optional-openclaw-sandbox` (OpenClaw isolated tool runtime)
 - `optional-mcp-catalog` (`mcp`)
 - `optional-pi-mono` (`pi-mono`)
 - `optional-goose` (`goose`)

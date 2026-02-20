@@ -15,9 +15,13 @@ For that reason, activation requires:
 
 ### `openclaw`
 - Service: `optional-openclaw`
+- Sandbox service: `optional-openclaw-sandbox`
 - Profile: `optional-openclaw`
 - Purpose: token-protected optional API module for scoped workflows.
-- Current repo behavior: no host-published port (service reachable only on the Docker network, internal listener `:8111`).
+- Current repo behavior:
+  - internal API listener `:8111` on Docker network,
+  - dedicated sandbox runtime `:8112` on Docker network,
+  - signed webhook ingress on host loopback only (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`).
 - Sandbox and egress hardening blueprint for upstream OpenClaw gateway deployments:
   - `docs/security/openclaw-sandbox-egress.md`
 - If replaced by upstream OpenClaw gateway, default listeners are typically:
@@ -28,8 +32,11 @@ For that reason, activation requires:
 - Runtime data:
   - `${AGENTIC_ROOT}/optional/openclaw/config`
   - `${AGENTIC_ROOT}/optional/openclaw/state`
+  - `${AGENTIC_ROOT}/optional/openclaw/sandbox/state`
   - `${AGENTIC_ROOT}/optional/openclaw/logs`
-- Secret required: `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
+- Secrets required:
+  - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
+  - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 
 ### `mcp`
 - Service: `optional-mcp-catalog`
@@ -91,7 +98,12 @@ Each request file must include non-empty:
 
 3. Required runtime secrets exist with restrictive permissions (`600` or `640`):
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
+- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
+
+4. OpenClaw policy files are reviewed:
+- `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
+- `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
 
 ## Activation
 

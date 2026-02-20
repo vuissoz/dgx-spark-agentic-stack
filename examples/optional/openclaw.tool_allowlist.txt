@@ -1,0 +1,4 @@
+# One sandbox-executable OpenClaw tool per line.
+# Keep this list short and reviewed.
+diagnostics.ping
+time.now_utc

@@ -43,6 +43,7 @@ if [[ -n "${AGENTIC_DOCTOR_CRITICAL_PORTS:-}" ]]; then
   read -r -a critical_ports <<<"${AGENTIC_DOCTOR_CRITICAL_PORTS//,/ }"
 fi
 portainer_host_port="${PORTAINER_HOST_PORT:-9001}"
+openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -132,7 +133,7 @@ else
   warn "skip proxy enforcement check because AGENTIC_SKIP_DOCTOR_PROXY_CHECK=1"
 fi
 
-for service in ollama ollama-gate egress-proxy unbound toolbox openwebui openhands comfyui prometheus grafana loki qdrant optional-sentinel optional-openclaw optional-mcp-catalog optional-pi-mono optional-goose optional-portainer; do
+for service in ollama ollama-gate egress-proxy unbound toolbox openwebui openhands comfyui prometheus grafana loki qdrant optional-sentinel optional-openclaw optional-openclaw-sandbox optional-mcp-catalog optional-pi-mono optional-goose optional-portainer; do
   cid="$(service_container_id "${service}")"
   [[ -n "${cid}" ]] || continue
 
@@ -167,7 +168,7 @@ if [[ "${agents_found}" -eq 0 ]]; then
   warn "no agent containers running; skipped agent confinement checks"
 fi
 
-for service in optional-openclaw optional-mcp-catalog optional-pi-mono optional-goose; do
+for service in optional-openclaw optional-openclaw-sandbox optional-mcp-catalog optional-pi-mono optional-goose; do
   cid="$(service_container_id "${service}")"
   [[ -n "${cid}" ]] || continue
 
@@ -181,6 +182,13 @@ for service in optional-openclaw optional-mcp-catalog optional-pi-mono optional-
     doctor_fail "docker.sock mount detected for optional module '${service}'"
   fi
 done
+
+optional_openclaw_cid="$(service_container_id optional-openclaw)"
+if [[ -n "${optional_openclaw_cid}" ]]; then
+  if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
+    doctor_fail "optional openclaw webhook bind must stay loopback-only on port ${openclaw_webhook_host_port}"
+  fi
+fi
 
 optional_portainer_cid="$(service_container_id optional-portainer)"
 if [[ -n "${optional_portainer_cid}" ]]; then

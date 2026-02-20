@@ -47,6 +47,8 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/config"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/state"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/logs"
+  install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/sandbox"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/sandbox/state"
 
   install -d -m 0750 "${AGENTIC_ROOT}/optional/mcp"
   install -d -m 0750 "${AGENTIC_ROOT}/optional/mcp/config"
@@ -73,6 +75,7 @@ main() {
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
 
   copy_if_missing "${TEMPLATE_DIR}/openclaw.dm_allowlist.txt" "${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt" 0640
+  copy_if_missing "${TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt" 0640
   copy_if_missing "${TEMPLATE_DIR}/mcp.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt" 0640
   copy_if_missing "${TEMPLATE_DIR}/activation.request.example" "${AGENTIC_ROOT}/deployments/optional/openclaw.request" 0640
   copy_if_missing "${TEMPLATE_DIR}/activation.request.example" "${AGENTIC_ROOT}/deployments/optional/mcp.request" 0640
@@ -81,14 +84,17 @@ main() {
   copy_if_missing "${TEMPLATE_DIR}/activation.request.example" "${AGENTIC_ROOT}/deployments/optional/portainer.request" 0640
 
   chmod 0644 "${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt" \
+    "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt" \
     "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
 
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
 
   if [[ "${EUID}" -eq 0 ]]; then
     chown -R "${runtime_uid}:${runtime_gid}" \
       "${AGENTIC_ROOT}/optional/openclaw/state" \
+      "${AGENTIC_ROOT}/optional/openclaw/sandbox/state" \
       "${AGENTIC_ROOT}/optional/openclaw/logs" \
       "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \
@@ -103,6 +109,9 @@ main() {
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.token" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
     fi
+    if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret" ]]; then
+      chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+    fi
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
     fi
@@ -110,6 +119,7 @@ main() {
 
   if [[ "${EUID}" -ne 0 ]]; then
     chmod 0770 "${AGENTIC_ROOT}/optional/openclaw/state" \
+      "${AGENTIC_ROOT}/optional/openclaw/sandbox/state" \
       "${AGENTIC_ROOT}/optional/openclaw/logs" \
       "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \

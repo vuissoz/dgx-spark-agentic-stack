@@ -125,13 +125,15 @@ optional_module_profile() {
   esac
 }
 
-optional_module_secret_file() {
+optional_module_secret_files() {
   case "$1" in
-    openclaw) echo "${AGENTIC_ROOT}/secrets/runtime/openclaw.token" ;;
-    mcp) echo "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
-    pi-mono) echo "" ;;
-    goose) echo "" ;;
-    portainer) echo "" ;;
+    openclaw)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/secrets/runtime/openclaw.token" \
+        "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+      ;;
+    mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
+    pi-mono|goose|portainer) ;;
     *) return 1 ;;
   esac
 }
@@ -173,17 +175,19 @@ validate_optional_module_prereqs() {
   local module="$1"
   local secret_file
   local secret_mode
+  local -a secret_files=()
 
   validate_optional_request_file "${module}"
-  secret_file="$(optional_module_secret_file "${module}")" || return 1
-  if [[ -n "${secret_file}" ]]; then
+  mapfile -t secret_files < <(optional_module_secret_files "${module}") || return 1
+  for secret_file in "${secret_files[@]}"; do
+    [[ -n "${secret_file}" ]] || continue
     [[ -s "${secret_file}" ]] \
       || die "Optional module '${module}' requires a secret file with mode 600: ${secret_file}"
     secret_mode="$(stat -c '%a' "${secret_file}" 2>/dev/null || echo "")"
     if [[ "${secret_mode}" != "600" && "${secret_mode}" != "640" ]]; then
       die "Optional module '${module}' secret must use restrictive permissions (600/640): ${secret_file} (mode=${secret_mode:-unknown})"
     fi
-  fi
+  done
 }
 
 log_optional_activation() {

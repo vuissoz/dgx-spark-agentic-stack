@@ -78,6 +78,7 @@ If the allowlist is too strict, agents/UI that need external APIs will fail outb
 
 Required files:
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
+- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 
 Permissions must be restrictive (`600` or `640`).
@@ -268,7 +269,10 @@ AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
 
 Before activation:
 - fill `${AGENTIC_ROOT}/deployments/optional/*.request` (`need=`, `success=`),
-- place required tokens in `${AGENTIC_ROOT}/secrets/runtime/`,
+- place required tokens/secrets in `${AGENTIC_ROOT}/secrets/runtime/`,
+- review OpenClaw allowlists:
+  - `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
+  - `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
 - run `./agent doctor` and confirm baseline readiness.
 
 See:

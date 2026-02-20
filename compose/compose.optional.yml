@@ -50,12 +50,69 @@ services:
       AUDIT_LOG_PATH: /logs/audit.jsonl
       OPENCLAW_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
       OPENCLAW_DM_ALLOWLIST_FILE: /config/dm_allowlist.txt
+      OPENCLAW_TOOL_ALLOWLIST_FILE: /config/tool_allowlist.txt
+      OPENCLAW_WEBHOOK_SECRET_FILE: /run/secrets/openclaw.webhook_secret
+      OPENCLAW_SANDBOX_URL: http://optional-openclaw-sandbox:8112
+      OPENCLAW_SANDBOX_TIMEOUT_SEC: 3
+      OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,unbound,egress-proxy,optional-openclaw,optional-openclaw-sandbox,localhost,127.0.0.1
+    depends_on:
+      optional-openclaw-sandbox:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}:8111
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/config:/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.webhook_secret:/run/secrets/openclaw.webhook_secret:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8111/healthz", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic
+      - agentic-egress
+
+  optional-openclaw-sandbox:
+    image: agentic/optional-modules:local
+    build:
+      context: ..
+      dockerfile: deployments/optional/Dockerfile
+    profiles:
+      - optional-openclaw
+    command:
+      - openclaw-sandbox
+    restart: unless-stopped
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OPTIONAL_BIND_HOST: 0.0.0.0
+      OPTIONAL_BIND_PORT: 8112
+      AUDIT_LOG_PATH: /logs/audit.jsonl
+      OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_SANDBOX_TOOL_ALLOWLIST_FILE: /config/tool_allowlist.txt
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,optional-openclaw,optional-openclaw-sandbox,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/sandbox/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/logs:/logs
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
     healthcheck:
@@ -63,7 +120,7 @@ services:
         - CMD-SHELL
         - >
           python3 -c 'import sys,urllib.request;
-          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8111/healthz", timeout=3).status == 200 else 1)'
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8112/healthz", timeout=3).status == 200 else 1)'
       interval: 30s
       timeout: 10s
       retries: 5

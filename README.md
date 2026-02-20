@@ -15,7 +15,7 @@ Les fichiers Compose sont dans `compose/`:
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`
-- `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-openclaw-sandbox`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
 
 ## Profils d'exécution
 
@@ -142,12 +142,13 @@ Ports utiles à tunneliser (selon les modules activés):
 - `19090` → Prometheus (`http://127.0.0.1:19090`)
 - `13100` → Loki (`http://127.0.0.1:13100`)
 - `9001` → Portainer optionnel (`http://127.0.0.1:9001`)
+- `18111` → OpenClaw webhook ingress optionnel (`http://127.0.0.1:18111`)
 
 Notes:
 - tunneliser uniquement les ports nécessaires;
 - les ports host sont configurables via variables d'environnement (`*_HOST_PORT`) ;
 - `qdrant` n'est pas publié sur un port host dans la config actuelle.
-- `optional-openclaw` de ce dépôt n'expose pas de port host (service interne Docker uniquement).
+- `optional-openclaw` publie uniquement un ingress webhook local (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), jamais en `0.0.0.0`.
 
 Comportement OpenClaw (upstream) si vous déployez la gateway officielle:
 - gateway: `18789` (control plane + HTTP APIs + Control UI + WebSocket RPC sur un seul port),
@@ -248,6 +249,7 @@ Préconditions (runtime):
   - `${AGENTIC_ROOT}/deployments/optional/goose.request`
 - secrets:
   - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
+  - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
   - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 
 ## Validation
