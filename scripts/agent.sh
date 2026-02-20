@@ -15,6 +15,8 @@ AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_TOOLS=(claude codex opencode)
 OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
+STACK_START_ORDER=(core agents ui obs rag optional)
+STACK_STOP_ORDER=(optional rag obs ui agents core)
 
 usage() {
   cat <<USAGE
@@ -22,11 +24,17 @@ Usage:
   agent profile
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
+  agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
   agent <claude|codex|opencode> [project]
   agent ls
   agent ps
   agent logs <service>
   agent stop <tool>
+  agent stop service <service...>
+  agent stop container <container...>
+  agent start service <service...>
+  agent start container <container...>
+  agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
   agent ollama-link
   agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
@@ -35,7 +43,7 @@ Usage:
   agent rollback all <release_id>
   agent rollback host-net <backup_id>
   agent rollback ollama-link <backup_id|latest>
-  agent test <A|B|C|D|E|F|G|H|I|J|K|all>
+  agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
   agent doctor [--fix-net]
 
 Optional modules (disabled by default):
@@ -86,6 +94,12 @@ parse_targets() {
 
   raw="${raw//,/ }"
   echo "$raw"
+}
+
+stack_all_targets() {
+  local raw="${AGENTIC_STACK_ALL_TARGETS:-core,agents,ui,obs,rag,optional}"
+  raw="${raw//,/ }"
+  printf '%s\n' "${raw}"
 }
 
 join_targets_csv() {
@@ -787,7 +801,7 @@ cmd_ls() {
   done
 }
 
-cmd_stop() {
+cmd_stop_tool() {
   local tool="${1:-}"
   local service compose_file
   [[ -n "${tool}" ]] || die "Usage: agent stop <tool>"
@@ -798,6 +812,215 @@ cmd_stop() {
 
   require_cmd docker
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" stop "${service}"
+}
+
+cmd_service_action() {
+  local action="$1"
+  shift
+  local -a services=("$@")
+  local service
+  local -a container_ids=()
+  local container_id
+
+  [[ "${#services[@]}" -gt 0 ]] || die "Usage: agent ${action} service <service...>"
+
+  require_cmd docker
+  for service in "${services[@]}"; do
+    mapfile -t container_ids < <(
+      docker ps -a \
+        --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
+        --filter "label=com.docker.compose.service=${service}" \
+        --format '{{.ID}}'
+    )
+    [[ "${#container_ids[@]}" -gt 0 ]] || die "Service '${service}' is not present in compose project '${AGENTIC_COMPOSE_PROJECT}'"
+
+    for container_id in "${container_ids[@]}"; do
+      docker "${action}" "${container_id}" >/dev/null
+      printf '%s service=%s container=%s\n' "${action}" "${service}" "${container_id}"
+    done
+  done
+}
+
+resolve_project_container() {
+  local identifier="$1"
+  local container_id label_project
+
+  require_cmd docker
+
+  if docker inspect "${identifier}" >/dev/null 2>&1; then
+    label_project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "${identifier}" 2>/dev/null || true)"
+    [[ "${label_project}" == "${AGENTIC_COMPOSE_PROJECT}" ]] \
+      || die "Container '${identifier}' is not part of compose project '${AGENTIC_COMPOSE_PROJECT}'"
+    docker inspect --format '{{.Id}}' "${identifier}"
+    return 0
+  fi
+
+  container_id="$(docker ps -a \
+    --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
+    --filter "name=^/${identifier}$" \
+    --format '{{.ID}}' | head -n 1)"
+  [[ -n "${container_id}" ]] || die "Container '${identifier}' not found in compose project '${AGENTIC_COMPOSE_PROJECT}'"
+  printf '%s\n' "${container_id}"
+}
+
+cmd_container_action() {
+  local action="$1"
+  shift
+  local -a containers=("$@")
+  local item resolved_id
+
+  [[ "${#containers[@]}" -gt 0 ]] || die "Usage: agent ${action} container <container...>"
+
+  for item in "${containers[@]}"; do
+    resolved_id="$(resolve_project_container "${item}")"
+    docker "${action}" "${resolved_id}" >/dev/null
+    printf '%s container=%s\n' "${action}" "${resolved_id}"
+  done
+}
+
+cmd_stack() {
+  local action="${1:-}"
+  local target_arg="${2:-all}"
+  local selected_raw
+  local -a selected_targets=()
+  local -a order=()
+  local target
+
+  case "${action}" in
+    start|stop) ;;
+    *)
+      die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
+      ;;
+  esac
+
+  if [[ "${target_arg}" == "all" ]]; then
+    selected_raw="$(stack_all_targets)"
+  else
+    selected_raw="$(parse_targets "${target_arg}")"
+  fi
+  read -r -a selected_targets <<<"${selected_raw}"
+  [[ "${#selected_targets[@]}" -gt 0 ]] || die "No stack targets selected"
+
+  for target in "${selected_targets[@]}"; do
+    stack_to_compose_file "${target}" >/dev/null
+  done
+
+  if [[ "${action}" == "start" ]]; then
+    order=("${STACK_START_ORDER[@]}")
+  else
+    order=("${STACK_STOP_ORDER[@]}")
+  fi
+
+  for target in "${order[@]}"; do
+    if ! targets_include "${target}" "${selected_targets[@]}"; then
+      continue
+    fi
+
+    printf 'stack step=%s target=%s\n' "${action}" "${target}"
+    if [[ "${action}" == "start" ]]; then
+      "${0}" up "${target}"
+    else
+      "${0}" down "${target}"
+    fi
+  done
+}
+
+cmd_cleanup() {
+  local force="${AGENTIC_CLEANUP_FORCE:-0}"
+  local backup_mode="ask"
+  local backup_enabled=0
+  local answer confirmation
+  local export_dir="${AGENTIC_CLEANUP_EXPORT_DIR:-${AGENTIC_REPO_ROOT}/.runtime/cleanup-exports}"
+  local backup_path=""
+  local ts target
+  local -a selected_targets=()
+  local tmp_log
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --yes)
+        force=1
+        shift
+        ;;
+      --backup)
+        backup_mode="yes"
+        shift
+        ;;
+      --no-backup)
+        backup_mode="no"
+        shift
+        ;;
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent cleanup [--yes] [--backup|--no-backup]
+
+Description:
+  Stop the stack stepwise, optionally export a backup archive, then purge AGENTIC_ROOT
+  to bring runtime state back to a fresh/brand-new state.
+USAGE
+        return 0
+        ;;
+      *)
+        die "Unknown cleanup argument: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "${AGENTIC_ROOT}" && "${AGENTIC_ROOT}" != "/" ]] || die "Refusing cleanup: invalid AGENTIC_ROOT='${AGENTIC_ROOT}'"
+
+  if [[ "${backup_mode}" == "yes" ]]; then
+    backup_enabled=1
+  elif [[ "${backup_mode}" == "no" ]]; then
+    backup_enabled=0
+  else
+    printf 'Create backup/export before cleanup? [Y/n]: '
+    IFS= read -r answer || die "cleanup aborted: unable to read backup choice"
+    case "${answer}" in
+      ""|Y|y|yes|YES) backup_enabled=1 ;;
+      N|n|no|NO) backup_enabled=0 ;;
+      *) die "cleanup aborted: invalid backup choice '${answer}'" ;;
+    esac
+  fi
+
+  if [[ "${force}" != "1" ]]; then
+    printf 'Cleanup will remove all runtime files under %s . Type CLEAN to continue: ' "${AGENTIC_ROOT}"
+    IFS= read -r confirmation || die "cleanup aborted: confirmation not provided"
+    [[ "${confirmation}" == "CLEAN" ]] || die "cleanup aborted: confirmation token mismatch"
+  fi
+
+  read -r -a selected_targets <<<"$(stack_all_targets)"
+  for target in "${STACK_STOP_ORDER[@]}"; do
+    if ! targets_include "${target}" "${selected_targets[@]}"; then
+      continue
+    fi
+    tmp_log="$(mktemp)"
+    if ! "${0}" down "${target}" >"${tmp_log}" 2>&1; then
+      warn "cleanup: unable to stop target '${target}' cleanly; continuing"
+      cat "${tmp_log}" >&2
+    fi
+    rm -f "${tmp_log}"
+  done
+
+  if [[ "${backup_enabled}" == "1" ]]; then
+    ts="$(date -u +"%Y%m%dT%H%M%SZ")"
+    install -d -m 0750 "${export_dir}"
+    backup_path="${export_dir}/agentic-cleanup-${AGENTIC_PROFILE}-${ts}.tar.gz"
+    if [[ -d "${AGENTIC_ROOT}" ]]; then
+      tar -C "${AGENTIC_ROOT}" -czf "${backup_path}" .
+      printf 'cleanup backup=%s\n' "${backup_path}"
+    else
+      warn "cleanup: runtime root does not exist yet, backup skipped"
+    fi
+  fi
+
+  if [[ -d "${AGENTIC_ROOT}" ]]; then
+    find "${AGENTIC_ROOT}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete
+    find "${AGENTIC_ROOT}" -mindepth 1 -depth -type d -empty -delete
+  fi
+  install -d -m 0750 "${AGENTIC_ROOT}"
+
+  printf 'cleanup completed root=%s\n' "${AGENTIC_ROOT}"
 }
 
 cmd_ollama_models_mode() {
@@ -921,13 +1144,13 @@ run_tests() {
       find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -regextype posix-extended \
         -regex '.*/([0-9]+|[A-Z][0-9]*)_.*\.sh' | sort
     )
-  elif [[ "$selector" =~ ^[A-K]$ ]]; then
+  elif [[ "$selector" =~ ^[A-L]$ ]]; then
     mapfile -t tests < <(
       find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -regextype posix-extended \
         -regex ".*/${selector}([0-9]+)?_.*\\.sh" | sort
     )
   else
-    die "Invalid test selector '$selector'. Expected one of A..K or all."
+    die "Invalid test selector '$selector'. Expected one of A..L or all."
   fi
 
   [[ "${#tests[@]}" -gt 0 ]] || die "No test scripts found for selector '$selector'."
@@ -1050,6 +1273,10 @@ case "$cmd" in
       run_compose_on_targets down "$target_arg"
     fi
     ;;
+  stack)
+    [[ $# -ge 2 ]] || die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
+    cmd_stack "$2" "${3:-all}"
+    ;;
   claude|codex|opencode)
     shift
     cmd_tool_attach "${cmd}" "${1:-}"
@@ -1069,8 +1296,40 @@ case "$cmd" in
     docker logs --tail "${AGENT_LOG_TAIL:-200}" -f "$(normalize_logs_target "$2")"
     ;;
   stop)
-    [[ $# -ge 2 ]] || die "Usage: agent stop <tool>"
-    cmd_stop "$2"
+    [[ $# -ge 2 ]] || die "Usage: agent stop <tool> | agent stop service <service...> | agent stop container <container...>"
+    case "${2}" in
+      service)
+        shift 2
+        [[ $# -gt 0 ]] || die "Usage: agent stop service <service...>"
+        cmd_service_action stop "$@"
+        ;;
+      container)
+        shift 2
+        [[ $# -gt 0 ]] || die "Usage: agent stop container <container...>"
+        cmd_container_action stop "$@"
+        ;;
+      *)
+        cmd_stop_tool "$2"
+        ;;
+    esac
+    ;;
+  start)
+    [[ $# -ge 3 ]] || die "Usage: agent start service <service...> | agent start container <container...>"
+    case "${2}" in
+      service)
+        shift 2
+        [[ $# -gt 0 ]] || die "Usage: agent start service <service...>"
+        cmd_service_action start "$@"
+        ;;
+      container)
+        shift 2
+        [[ $# -gt 0 ]] || die "Usage: agent start container <container...>"
+        cmd_container_action start "$@"
+        ;;
+      *)
+        die "Usage: agent start service <service...> | agent start container <container...>"
+        ;;
+    esac
     ;;
   net)
     shift
@@ -1095,8 +1354,12 @@ case "$cmd" in
     cmd_rollback "$2" "$3"
     ;;
   test)
-    [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|K|all>"
+    [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|all>"
     run_tests "$2"
+    ;;
+  cleanup)
+    shift
+    cmd_cleanup "$@"
     ;;
   doctor)
     shift

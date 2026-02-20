@@ -452,6 +452,50 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - test idempotence :
   - relancer `agent forget <target> --yes` sur cible déjà vide -> succès + état cohérent.
 
+### F5 Pilotage ressources ciblé (stop/start services et conteneurs)
+**Implémentation**
+- ajouter des commandes de contrôle fin pour libérer/reprendre des ressources sans arrêter toute la stack :
+  - `agent stop service <service...>`
+  - `agent start service <service...>`
+  - `agent stop container <container...>`
+  - `agent start container <container...>`
+- garde-fou : `stop/start container` doit refuser les conteneurs hors `com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}`.
+
+**Test** : `tests/L1_stop_resources.sh`
+- démarre une stack minimale (`optional-sentinel`) en projet isolé ;
+- valide `stop/start service` ;
+- valide `stop/start container` ;
+- vérifie les transitions d’état (`running` <-> `exited`).
+
+### F6 Orchestration stack stepwise (partielle ou complète)
+**Implémentation**
+- ajouter une commande unique d’orchestration sûre :
+  - `agent stack stop <targets|all>` : arrêt stepwise en ordre sûr `optional -> rag -> obs -> ui -> agents -> core`
+  - `agent stack start <targets|all>` : démarrage stepwise `core -> agents -> ui -> obs -> rag -> optional`
+- fonctionnement sans intervention manuelle ; en cas d’échec d’une étape, retour non-zéro explicite.
+- `all` doit représenter la baseline complète par défaut.
+
+**Test** : `tests/L2_stack_stepwise.sh`
+- valide le démarrage/arrêt stepwise via `agent stack start all` et `agent stack stop all` ;
+- vérifie l’ordre effectif des étapes dans la sortie ;
+- vérifie que les services ciblés sont bien up/down en fin d’opération.
+
+### F7 Cleanup global “brand new” avec export/backup optionnel
+**Implémentation**
+- ajouter une commande destructive explicite :
+  - `agent cleanup [--yes] [--backup|--no-backup]`
+- comportement attendu :
+  - demande interactive si un backup/export est souhaité (par défaut `yes`) ;
+  - confirmation explicite obligatoire avant purge (ou `--yes`) ;
+  - stop stepwise de la stack ;
+  - export archive si demandé ;
+  - purge complète de `${AGENTIC_ROOT}` pour revenir à un état “fresh/brand new”.
+
+**Test** : `tests/L3_cleanup.sh`
+- couvre le flux interactif (`backup + confirmation`) ;
+- vérifie qu’une archive d’export est produite si demandée ;
+- vérifie que `${AGENTIC_ROOT}` est vidé et que les services ciblés sont arrêtés.
+
 ---
 
 ## G — Observabilité : Prometheus + Grafana + Loki + DCGM exporter

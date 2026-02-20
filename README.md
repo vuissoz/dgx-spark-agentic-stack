@@ -179,11 +179,17 @@ Commandes supportées:
 agent profile
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
+agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
 agent <claude|codex|opencode> [project]
 agent ls
 agent ps
 agent logs <service>
 agent stop <tool>
+agent stop service <service...>
+agent stop container <container...>
+agent start service <service...>
+agent start container <container...>
+agent cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
 agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
@@ -192,7 +198,7 @@ agent update
 agent rollback all <release_id>
 agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
-agent test <A|B|C|D|E|F|G|H|I|J|K|all>
+agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
 agent doctor [--fix-net]
 ```
 
