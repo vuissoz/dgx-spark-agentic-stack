@@ -17,6 +17,42 @@ die() {
   exit 1
 }
 
+repair_rootless_qdrant_layout() {
+  local qdrant_dir="${AGENTIC_ROOT}/rag/qdrant"
+  local snapshots_dir="${AGENTIC_ROOT}/rag/qdrant-snapshots"
+  local needs_repair=0
+  local entry=""
+  local target_uid="${AGENT_RUNTIME_UID:-$(id -u)}"
+  local target_gid="${AGENT_RUNTIME_GID:-$(id -g)}"
+
+  [[ "${EUID}" -ne 0 ]] || return 0
+  [[ -d "${qdrant_dir}" ]] || return 0
+
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    if [[ ! -w "${entry}" ]]; then
+      needs_repair=1
+      break
+    fi
+  done < <(find "${qdrant_dir}" -mindepth 1 -maxdepth 1 -print | sort)
+
+  if [[ "${needs_repair}" -eq 1 ]]; then
+    command -v docker >/dev/null 2>&1 \
+      || die "docker command is required to repair legacy qdrant ownership in rootless-dev"
+    docker run --rm \
+      -v "${qdrant_dir}:/repair/qdrant" \
+      -v "${snapshots_dir}:/repair/snapshots" \
+      busybox:1.36.1 sh -lc \
+      "chown -R ${target_uid}:${target_gid} /repair/qdrant /repair/snapshots && chmod -R u+rwX,g+rwX,o-rwx /repair/qdrant /repair/snapshots" \
+      || die "failed to repair qdrant ownership for rootless-dev runtime"
+    log "repaired legacy qdrant ownership with containerized chown (uid=${target_uid} gid=${target_gid})"
+  fi
+
+  install -d -m 0770 "${qdrant_dir}/aliases"
+  install -d -m 0770 "${qdrant_dir}/collections"
+  chmod 0770 "${qdrant_dir}" "${snapshots_dir}" || true
+}
+
 copy_if_missing() {
   local src="$1"
   local dst="$2"
@@ -50,6 +86,7 @@ main() {
   copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/query_smoke.sh" "${AGENTIC_ROOT}/rag/scripts/query_smoke.sh" 0750
 
   if [[ "${EUID}" -ne 0 ]]; then
+    repair_rootless_qdrant_layout
     chmod 0770 "${AGENTIC_ROOT}/rag/qdrant" "${AGENTIC_ROOT}/rag/qdrant-snapshots" "${AGENTIC_ROOT}/rag/docs"
     log "non-root runtime init: relaxed rag dirs permissions for userns compatibility"
   fi

@@ -338,6 +338,110 @@ build_optional_module_images() {
   done
 }
 
+core_service_build_inputs() {
+  case "$1" in
+    ollama-gate)
+      printf '%s\n' \
+        "${AGENTIC_REPO_ROOT}/deployments/gate/Dockerfile" \
+        "${AGENTIC_REPO_ROOT}/deployments/gate/requirements.txt" \
+        "${AGENTIC_REPO_ROOT}/deployments/gate/app.py"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+core_service_stamp_key() {
+  case "$1" in
+    ollama-gate) echo "ollama-gate-local" ;;
+    *) return 1 ;;
+  esac
+}
+
+core_service_image_ref() {
+  case "$1" in
+    ollama-gate) echo "agentic/ollama-gate:local" ;;
+    *) return 1 ;;
+  esac
+}
+
+core_service_build_fingerprint() {
+  local service="$1"
+  local -a files=()
+  local file
+
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] || continue
+    files+=("${file}")
+  done < <(core_service_build_inputs "${service}")
+
+  [[ "${#files[@]}" -gt 0 ]] || return 1
+
+  require_cmd sha256sum
+  for file in "${files[@]}"; do
+    [[ -f "${file}" ]] || die "core build input missing for ${service}: ${file}"
+  done
+
+  (
+    for file in "${files[@]}"; do
+      sha256sum "${file}"
+    done
+  ) | sha256sum | awk '{print $1}'
+}
+
+build_core_local_images() {
+  local core_compose_file="$1"
+  local -a services=(ollama-gate)
+  local -a build_services=()
+  local -a build_stamp_paths=()
+  local -a build_fingerprints=()
+  local service
+  local stamp_key
+  local image_ref
+  local fingerprint
+  local stamp_dir
+  local stamp_path
+  local stamp_value
+
+  [[ "${AGENTIC_SKIP_CORE_IMAGE_BUILD:-0}" == "1" ]] && {
+    warn "skipping core local image build because AGENTIC_SKIP_CORE_IMAGE_BUILD=1"
+    return 0
+  }
+
+  stamp_dir="${AGENTIC_ROOT}/deployments/image-build-stamps"
+  install -d -m 0750 "${stamp_dir}"
+
+  require_cmd docker
+
+  for service in "${services[@]}"; do
+    stamp_key="$(core_service_stamp_key "${service}")" || continue
+    image_ref="$(core_service_image_ref "${service}")" || continue
+    fingerprint="$(core_service_build_fingerprint "${service}")" || continue
+    stamp_path="${stamp_dir}/${stamp_key}.sha256"
+    stamp_value="$(cat "${stamp_path}" 2>/dev/null || true)"
+
+    if ! docker image inspect "${image_ref}" >/dev/null 2>&1 \
+      || [[ -z "${stamp_value}" ]] \
+      || [[ "${stamp_value}" != "${fingerprint}" ]]; then
+      build_services+=("${service}")
+      build_stamp_paths+=("${stamp_path}")
+      build_fingerprints+=("${fingerprint}")
+    fi
+  done
+
+  [[ "${#build_services[@]}" -gt 0 ]] || return 0
+
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+    -f "${core_compose_file}" build "${build_services[@]}"
+
+  local idx
+  for idx in "${!build_services[@]}"; do
+    printf '%s\n' "${build_fingerprints[${idx}]}" >"${build_stamp_paths[${idx}]}"
+    chmod 0640 "${build_stamp_paths[${idx}]}" || true
+  done
+}
+
 service_container_id() {
   local service="$1"
   docker ps \
@@ -757,6 +861,10 @@ cmd_update() {
     compose_args+=("-f" "${compose_file}")
   done
 
+  if [[ -f "$(stack_to_compose_file core)" ]]; then
+    build_core_local_images "$(stack_to_compose_file core)"
+  fi
+
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" pull --ignore-pull-failures
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" up -d --remove-orphans
 
@@ -850,6 +958,7 @@ case "$cmd" in
 
     if targets_include "core" "${targets[@]}"; then
       ensure_core_runtime
+      build_core_local_images "$(stack_to_compose_file core)"
     fi
     if targets_include "agents" "${targets[@]}"; then
       ensure_agents_runtime
