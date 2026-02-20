@@ -241,6 +241,19 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - POST `/api/generate` retourne 200 + payload non vide (avec timeout court)
 - logs ollama présents
 
+### C3 Backend alternatif : TRT-LLM (NVFP4) derrière le gate
+**Implémentation**
+- ajouter un service `trtllm` dédié dans un compose séparé (ex: `compose.trt.yml`) activé via profile (ex: `trt`), sans exposition host.
+- bind réseau interne uniquement (pas de `ports:`), accès exclusivement depuis `ollama-gate`.
+- stockage dédié (ex: `${AGENTIC_ROOT}/trtllm/{models,state,logs}`) pour moteurs/modèles NVFP4.
+- healthcheck interne du runtime TRT-LLM.
+- documenter les prérequis GPU/moteurs NVFP4 et la procédure de chargement des modèles.
+
+**Test** : `tests/C3_trtllm_basic.sh`
+- `trtllm` est `healthy` lorsqu’activé.
+- aucun port `trtllm` n’est publié sur l’hôte.
+- accès direct externe refusé, accès interne depuis `ollama-gate` seulement.
+ 
 ---
 
 ## D — Point de contrôle LLM : `ollama-gate` (queue/priorités/sticky + logs/metrics)
@@ -250,13 +263,19 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - ajouter service `ollama-gate` dans `compose.core.yml` (interne)
 - endpoints :
   - compat OpenAI `/v1/*`
+  - inclure explicitement `POST /v1/embeddings` (compat OpenAI) pour les flux RAG
   - `/metrics`
+- ajouter un routage multi-backend dans `ollama-gate` :
+  - backend par défaut = `ollama`;
+  - backend alternatif = `trtllm` pour modèles NVFP4 (règles explicites par nom/pattern de modèle);
+  - routage décidé par politique versionnée (ex: `${AGENTIC_ROOT}/gate/config/model_routes.yml`).
 - persistance : `/srv/agentic/gate/{state,logs}/`
 - config : concurrence=1, queue activée, sticky session via header `X-Agent-Session`
 
 **Test** : `tests/D1_gate_up_metrics.sh`
 - `curl -fsS http://ollama-gate:<port>/metrics | grep -q queue_depth` OK
 - `/v1/models` répond
+- `POST /v1/embeddings` répond (200 ou erreur modèle explicite, mais pas 404)
 
 ### D2 Discipline de concurrence + queue/deny explicite
 **Implémentation**
@@ -277,6 +296,17 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - 3 requêtes même session → `model_served` identique
 - tentative de changer modèle “à la volée” sans switch → refus/ignorée
 - switch explicite → OK + log `model_switch:true`
+
+### D4 Routage backend par modèle (Ollama vs TRT-LLM)
+**Implémentation**
+- exposer dans les logs gate le backend résolu (`backend=ollama|trtllm`) pour audit.
+- forcer les modèles NVFP4 vers `trtllm` via la table de routage.
+- conserver l’API client inchangée: les clients appellent toujours `ollama-gate` uniquement.
+
+**Test** : `tests/D4_gate_backend_routing.sh`
+- requête avec modèle standard -> backend `ollama` (preuve logs/headers gate).
+- requête avec modèle NVFP4 -> backend `trtllm` (preuve logs/headers gate).
+- si `trtllm` indisponible pour un modèle NVFP4 routé: erreur explicite et actionnable (pas de fallback silencieux non maîtrisé).
 
 ---
 
@@ -505,7 +535,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 **Implémentation**
 - `/srv/agentic/rag/docs/` corpus test
 - `/srv/agentic/rag/scripts/ingest.sh` :
-  - embeddings via `ollama-gate`
+  - embeddings via `ollama-gate` (backend effectif selon routage : `ollama` ou `trtllm`)
   - index qdrant
 - `/srv/agentic/rag/scripts/query_smoke.sh`
 
@@ -582,6 +612,7 @@ La stack est “opérable” quand :
 - `agent doctor` est vert de façon stable
 - egress libre impossible (proxy + DOCKER-USER prouvés)
 - Ollama local-only fonctionne et est consommé via `ollama-gate` (queue+sticky+metrics)
+- si activé, backend TRT-LLM (modèles NVFP4) est routé via `ollama-gate` vers le conteneur `trtllm` sans exposition host
 - agents CLI persistants (tmux) confinés (non-root, NNP, cap_drop ALL, rootfs ro)
 - UIs demandées (OpenWebUI, OpenHands, ComfyUI) bind local + auth, et ne cassent pas la posture
 - observabilité exploitable (CPU/RAM/disque/GPU, logs, erreurs proxy, drops DOCKER-USER)

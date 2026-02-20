@@ -201,6 +201,143 @@ log_optional_activation() {
     >>"${changes_log}"
 }
 
+optional_module_build_services() {
+  case "$1" in
+    openclaw) echo "optional-openclaw" ;;
+    mcp) echo "optional-mcp-catalog" ;;
+    pi-mono) echo "optional-pi-mono" ;;
+    goose) echo "" ;;
+    portainer) echo "" ;;
+    *) return 1 ;;
+  esac
+}
+
+optional_module_build_stamp_key() {
+  case "$1" in
+    optional-openclaw|optional-mcp-catalog) echo "optional-modules-local" ;;
+    optional-pi-mono) echo "agent-cli-base-local" ;;
+    *) return 1 ;;
+  esac
+}
+
+optional_module_image_ref() {
+  case "$1" in
+    optional-openclaw|optional-mcp-catalog) echo "agentic/optional-modules:local" ;;
+    optional-pi-mono) echo "agentic/agent-cli-base:local" ;;
+    *) return 1 ;;
+  esac
+}
+
+optional_module_build_inputs() {
+  case "$1" in
+    optional-openclaw|optional-mcp-catalog)
+      printf '%s\n' \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py"
+      ;;
+    optional-pi-mono)
+      printf '%s\n' \
+        "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/Dockerfile" \
+        "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/entrypoint.sh"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+optional_module_build_fingerprint() {
+  local service="$1"
+  local -a files=()
+  local file
+
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] || continue
+    files+=("${file}")
+  done < <(optional_module_build_inputs "${service}")
+
+  [[ "${#files[@]}" -gt 0 ]] || return 1
+
+  require_cmd sha256sum
+  for file in "${files[@]}"; do
+    [[ -f "${file}" ]] || die "optional build input missing for ${service}: ${file}"
+  done
+
+  (
+    for file in "${files[@]}"; do
+      sha256sum "${file}"
+    done
+  ) | sha256sum | awk '{print $1}'
+}
+
+build_optional_module_images() {
+  local optional_compose_file="$1"
+  shift
+  local -a modules=("$@")
+  local -a build_services=()
+  local -a build_stamp_paths=()
+  local -a build_fingerprints=()
+  local -A seen_services=()
+  local -A seen_stamp_keys=()
+  local module
+  local service
+  local stamp_key
+  local image_ref
+  local fingerprint
+  local stamp_dir
+  local stamp_path
+  local stamp_value
+
+  [[ "${AGENTIC_SKIP_OPTIONAL_IMAGE_BUILD:-0}" == "1" ]] && {
+    warn "skipping optional local image build because AGENTIC_SKIP_OPTIONAL_IMAGE_BUILD=1"
+    return 0
+  }
+
+  stamp_dir="${AGENTIC_ROOT}/deployments/image-build-stamps"
+  install -d -m 0750 "${stamp_dir}"
+
+  require_cmd docker
+
+  for module in "${modules[@]}"; do
+    service="$(optional_module_build_services "${module}")" || continue
+    [[ -n "${service}" ]] || continue
+    if [[ -n "${seen_services[${service}]:-}" ]]; then
+      continue
+    fi
+    seen_services["${service}"]=1
+
+    stamp_key="$(optional_module_build_stamp_key "${service}")" || continue
+    if [[ -n "${seen_stamp_keys[${stamp_key}]:-}" ]]; then
+      continue
+    fi
+    seen_stamp_keys["${stamp_key}"]=1
+
+    image_ref="$(optional_module_image_ref "${service}")" || continue
+    fingerprint="$(optional_module_build_fingerprint "${service}")" || continue
+    stamp_path="${stamp_dir}/${stamp_key}.sha256"
+    stamp_value="$(cat "${stamp_path}" 2>/dev/null || true)"
+
+    if ! docker image inspect "${image_ref}" >/dev/null 2>&1 \
+      || [[ -z "${stamp_value}" ]] \
+      || [[ "${stamp_value}" != "${fingerprint}" ]]; then
+      build_services+=("${service}")
+      build_stamp_paths+=("${stamp_path}")
+      build_fingerprints+=("${fingerprint}")
+    fi
+  done
+
+  [[ "${#build_services[@]}" -gt 0 ]] || return 0
+
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+    -f "${optional_compose_file}" build "${build_services[@]}"
+
+  local idx
+  for idx in "${!build_services[@]}"; do
+    printf '%s\n' "${build_fingerprints[${idx}]}" >"${build_stamp_paths[${idx}]}"
+    chmod 0640 "${build_stamp_paths[${idx}]}" || true
+  done
+}
+
 service_container_id() {
   local service="$1"
   docker ps \
@@ -757,6 +894,7 @@ case "$cmd" in
           optional_profiles+=(--profile "$(optional_module_profile "${optional_module}")")
           log_optional_activation "${optional_module}"
         done
+        build_optional_module_images "${optional_compose_file}" "${optional_modules[@]}"
       fi
 
       require_cmd docker
