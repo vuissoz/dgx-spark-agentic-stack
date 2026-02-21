@@ -8,6 +8,10 @@ This runbook creates a dedicated VM for prod-like validation (`PLAN.md`, V1).
 - Host has enough free CPU/RAM/disk for your VM sizing.
 - If GPU validation is required, your hypervisor path must expose GPU to the VM.
 
+What is Multipass:
+- Multipass is a lightweight VM manager (by Canonical) that lets you create and run Ubuntu VMs from the CLI.
+- In this repo, `agent vm create` and `agent vm test` use Multipass as the VM provider.
+
 ## 2. Create the VM
 
 From the repository root:
@@ -53,6 +57,19 @@ multipass shell agentic-strict-prod
 The repo is mounted by default at:
 
 - `/home/ubuntu/dgx-spark-agentic-stack`
+
+## 3b. Check whether the VM is running
+
+From the host:
+
+```bash
+multipass list
+multipass info agentic-strict-prod
+```
+
+Expected:
+- `State: Running` means the VM is up.
+- `State: Stopped` or `State: Suspended` means it is not running.
 
 ## 4. Run the full validation campaign from the host
 

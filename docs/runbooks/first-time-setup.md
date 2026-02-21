@@ -46,6 +46,8 @@ echo "${ROOT}"
 
 If you want a prod-like validation environment isolated from your main host:
 
+Prerequisite for this section: `multipass` must be installed on the host.
+
 ```bash
 ./agent vm create --name agentic-strict-prod --cpus 12 --memory 48G --disk 200G --require-gpu
 ```
@@ -54,6 +56,13 @@ Then connect with:
 
 ```bash
 multipass shell agentic-strict-prod
+```
+
+Quick status check from host:
+
+```bash
+multipass list
+multipass info agentic-strict-prod
 ```
 
 Then run the full validation campaign from the host:

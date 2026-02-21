@@ -80,6 +80,7 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 - Linux + Docker Engine
 - Docker Compose v2 (`docker compose`)
+- Multipass (`multipass`) pour les commandes VM (`agent vm create`, `agent vm test`)
 - NVIDIA Container Toolkit (pour services GPU)
 - `iptables` disponible (en `strict-prod` pour `DOCKER-USER`)
 - `acl` / `setfacl` recommandé en `rootless-dev` (ACL des logs Squid)
@@ -269,6 +270,7 @@ Préconditions (runtime):
 - Diagnostic global: `./agent doctor`
 - Campagnes de tests: `./agent test <A..L|V|all>`
 - Campagne VM `strict-prod` (preuves + update/rollback + tests): `./agent vm test --name agentic-strict-prod`
+- Vérifier l'état de la VM: `multipass list` puis `multipass info <vm-name>` (`State: Running` attendu)
 
 ## Documentation détaillée
 
