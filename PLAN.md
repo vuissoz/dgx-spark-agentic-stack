@@ -650,7 +650,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 
 ---
 
-## J — RAG baseline : Qdrant + embeddings via Ollama-gate
+## J — RAG hybride progressif : dense + lexical (skeleton J3/J4)
 
 ### J1 Déployer Qdrant interne
 **Implémentation**
@@ -674,6 +674,41 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - ingestion : nb docs indexés == attendu
 - query : retourne ≥N hits
 - mode offline : si proxy coupé, RAG continue de fonctionner sur corpus local (sans fetch web)
+
+### J3 Schéma canonique des chunks (dense + lexical)
+**Implémentation**
+- définir un schéma unique de document/chunk (JSON Schema) utilisé par ingestion/retrieval :
+  - `doc_id`, `chunk_id`, `text`, `source_type`, `source_path`,
+  - provenance code/pdf (`page` ou `file_path` + `start_line`/`end_line`),
+  - versioning (`repo`, `branch`, `commit_sha`, `timestamp`, `version`),
+  - métadonnées utiles (`section`, `title`, `authors`, `doi`, `language`).
+- artefacts :
+  - `deployments/rag/document.schema.json` (source contrôlée git),
+  - `${AGENTIC_ROOT}/rag/config/document.schema.json` (runtime matérialisé).
+
+**Test** : `tests/J3_rag_schema.sh`
+- schéma JSON valide ;
+- champs requis présents ;
+- champs de provenance code/pdf présents ;
+- enum `source_type` contient au minimum `pdf` et `code`.
+
+### J4 Retrieval orchestrator hybride (skeleton)
+**Implémentation**
+- étendre `compose/compose.rag.yml` avec services internes (sans exposition host) :
+  - `rag-retriever` (API orchestrateur dense+lexical+fusion),
+  - `rag-worker` (worker async pour pipeline retrieval/indexation),
+  - `opensearch` optionnel sous profile `rag-lexical` (BM25 lexical).
+- comportement skeleton attendu (non-final) :
+  - endpoint `rag-retriever` `/v1/retrieve` disponible ;
+  - contrat de réponse avec sections `dense`, `lexical`, `fusion` ;
+  - fusion par défaut annoncée en `rrf` ;
+  - audit minimal des requêtes retrieval.
+
+**Test** : `tests/J4_rag_hybrid_skeleton.sh`
+- `rag-retriever` et `rag-worker` démarrent et passent healthchecks ;
+- aucun port host publié pour les services retrieval ;
+- `/v1/retrieve` répond avec contrat skeleton (`status=skeleton`, `fusion.method=rrf`, `dense.backend=qdrant`) ;
+- si profile `rag-lexical` activé : `opensearch` reste interne-only (pas de publish host).
 
 ---
 

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentic.local/schemas/rag/document.schema.json",
+  "title": "AgenticRagChunk",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "doc_id",
+    "chunk_id",
+    "text",
+    "source_type",
+    "source_path",
+    "language",
+    "timestamp",
+    "version"
+  ],
+  "properties": {
+    "doc_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chunk_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "pdf",
+        "code"
+      ]
+    },
+    "source_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repo": {
+      "type": "string"
+    },
+    "branch": {
+      "type": "string"
+    },
+    "commit_sha": {
+      "type": "string"
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "file_path": {
+      "type": "string"
+    },
+    "start_line": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "end_line": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "section": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "doi": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string",
+      "minLength": 2
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

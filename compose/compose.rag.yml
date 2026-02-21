@@ -29,6 +29,122 @@ services:
     networks:
       - agentic
 
+  rag-retriever:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - /app/retriever_api.py
+    environment:
+      RAG_RETRIEVER_HOST: 0.0.0.0
+      RAG_RETRIEVER_PORT: "7111"
+      RAG_SCHEMA_PATH: /config/document.schema.json
+      RAG_RETRIEVER_STATE_DIR: /state
+      RAG_RETRIEVER_LOG_DIR: /logs
+      RAG_DENSE_BACKEND: qdrant
+      RAG_LEXICAL_BACKEND: ${RAG_LEXICAL_BACKEND:-disabled}
+      RAG_FUSION_METHOD: ${RAG_FUSION_METHOD:-rrf}
+    volumes:
+      - ../deployments/rag/retriever_api.py:/app/retriever_api.py:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/retriever/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/retriever/logs:/logs
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:7111/healthz", timeout=3).read()
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 15s
+    networks:
+      - agentic
+
+  rag-worker:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - /app/rag_worker.py
+    environment:
+      RAG_WORKER_HOST: 0.0.0.0
+      RAG_WORKER_PORT: "7112"
+      RAG_WORKER_STATE_DIR: /state
+      RAG_WORKER_LOG_DIR: /logs
+      RAG_RETRIEVER_URL: http://rag-retriever:7111
+      RAG_WORKER_POLL_INTERVAL_SEC: "10"
+    volumes:
+      - ../deployments/rag/rag_worker.py:/app/rag_worker.py:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/worker/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/worker/logs:/logs
+    depends_on:
+      rag-retriever:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:7112/healthz", timeout=3).read()
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 15s
+    networks:
+      - agentic
+
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    restart: unless-stopped
+    profiles:
+      - rag-lexical
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+      bootstrap.memory_lock: "false"
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/opensearch:/usr/share/opensearch/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc 'exec 3<>/dev/tcp/127.0.0.1/9200 &&
+          printf "GET /_cluster/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "200 OK" <&3'
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    networks:
+      - agentic
+
 networks:
   agentic:
     name: ${AGENTIC_NETWORK:-agentic}

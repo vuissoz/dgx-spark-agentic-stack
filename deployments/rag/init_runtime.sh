@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
 EXAMPLE_CORPUS_DIR="${REPO_ROOT}/examples/rag/corpus"
 DEPLOYMENT_SCRIPT_DIR="${REPO_ROOT}/deployments/rag"
+RAG_SCHEMA_TEMPLATE="${DEPLOYMENT_SCRIPT_DIR}/document.schema.json"
 
 log() {
   echo "INFO: $*"
@@ -70,10 +71,18 @@ copy_if_missing() {
 
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/rag"
+  install -d -m 0750 "${AGENTIC_ROOT}/rag/config"
   install -d -m 0770 "${AGENTIC_ROOT}/rag/qdrant"
   install -d -m 0770 "${AGENTIC_ROOT}/rag/qdrant-snapshots"
   install -d -m 0770 "${AGENTIC_ROOT}/rag/docs"
   install -d -m 0750 "${AGENTIC_ROOT}/rag/scripts"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/retriever"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/retriever/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/retriever/logs"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/worker"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/worker/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/worker/logs"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/opensearch"
 
   if [[ -d "${EXAMPLE_CORPUS_DIR}" ]]; then
     while IFS= read -r source_file; do
@@ -84,10 +93,18 @@ main() {
 
   copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/ingest.sh" "${AGENTIC_ROOT}/rag/scripts/ingest.sh" 0750
   copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/query_smoke.sh" "${AGENTIC_ROOT}/rag/scripts/query_smoke.sh" 0750
+  copy_if_missing "${RAG_SCHEMA_TEMPLATE}" "${AGENTIC_ROOT}/rag/config/document.schema.json" 0640
 
   if [[ "${EUID}" -ne 0 ]]; then
     repair_rootless_qdrant_layout
-    chmod 0770 "${AGENTIC_ROOT}/rag/qdrant" "${AGENTIC_ROOT}/rag/qdrant-snapshots" "${AGENTIC_ROOT}/rag/docs"
+    chmod 0770 "${AGENTIC_ROOT}/rag/qdrant" \
+      "${AGENTIC_ROOT}/rag/qdrant-snapshots" \
+      "${AGENTIC_ROOT}/rag/docs" \
+      "${AGENTIC_ROOT}/rag/retriever/state" \
+      "${AGENTIC_ROOT}/rag/retriever/logs" \
+      "${AGENTIC_ROOT}/rag/worker/state" \
+      "${AGENTIC_ROOT}/rag/worker/logs" \
+      "${AGENTIC_ROOT}/rag/opensearch"
     log "non-root runtime init: relaxed rag dirs permissions for userns compatibility"
   fi
 }
