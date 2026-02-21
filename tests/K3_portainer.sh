@@ -17,6 +17,8 @@ agent_bin="${REPO_ROOT}/agent"
 assert_cmd docker
 assert_cmd curl
 
+"${agent_bin}" down optional >/tmp/agent-k3-down-pre.out 2>&1 || true
+
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
@@ -44,8 +46,16 @@ assert_no_docker_sock_mount "${portainer_cid}" || fail "optional-portainer must 
 portainer_port="${PORTAINER_HOST_PORT:-9001}"
 assert_no_public_bind "${portainer_port}" || fail "optional-portainer must stay loopback-only"
 
-curl -fsS "http://127.0.0.1:${portainer_port}/" >/tmp/agent-k3-portainer-http.out \
-  || fail "optional-portainer endpoint is unreachable on loopback"
+portainer_ready=0
+for _ in $(seq 1 40); do
+  status="$(curl -sS -o /tmp/agent-k3-portainer-http.out -w '%{http_code}' "http://127.0.0.1:${portainer_port}/" || true)"
+  if [[ "${status}" =~ ^(200|301|302|401|403)$ ]]; then
+    portainer_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "${portainer_ready}" -eq 1 ]] || fail "optional-portainer endpoint is unreachable on loopback"
 
 changes_log="${agentic_root}/deployments/changes.log"
 [[ -s "${changes_log}" ]] || fail "changes log missing: ${changes_log}"

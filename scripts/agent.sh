@@ -1073,6 +1073,57 @@ cmd_net() {
   esac
 }
 
+cmd_ensure_release_manifest() {
+  local -a selected_targets=("$@")
+  local -a compose_files=()
+  local -A seen_compose=()
+  local target compose_file
+  local current_release_dir="${AGENTIC_ROOT}/deployments/current"
+  local current_release_images="${current_release_dir}/images.json"
+  local release_id
+
+  if [[ "${AGENTIC_DISABLE_AUTO_SNAPSHOT:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  [[ ! -s "${current_release_images}" ]] || return 0
+
+  if ! docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}' | grep -q .; then
+    return 0
+  fi
+
+  [[ -x "${AGENT_RELEASE_SNAPSHOT_SCRIPT}" ]] || return 0
+
+  if [[ "${#selected_targets[@]}" -gt 0 ]]; then
+    for target in "${selected_targets[@]}"; do
+      compose_file="$(stack_to_compose_file "${target}")" || continue
+      [[ -f "${compose_file}" ]] || continue
+      if [[ -z "${seen_compose[${compose_file}]:-}" ]]; then
+        compose_files+=("${compose_file}")
+        seen_compose["${compose_file}"]=1
+      fi
+    done
+  fi
+
+  if [[ "${#compose_files[@]}" -eq 0 ]]; then
+    mapfile -t compose_files < <(existing_compose_files)
+  fi
+
+  set +e
+  release_id="$("${AGENT_RELEASE_SNAPSHOT_SCRIPT}" --reason up-auto-bootstrap "${compose_files[@]}" 2>/tmp/agent-auto-snapshot.out)"
+  rc=$?
+  set -e
+
+  if [[ "${rc}" -eq 0 && -n "${release_id}" ]]; then
+    printf 'auto snapshot created release=%s\n' "${release_id}"
+  else
+    warn "unable to create automatic release snapshot after up"
+    if [[ -s /tmp/agent-auto-snapshot.out ]]; then
+      cat /tmp/agent-auto-snapshot.out >&2
+    fi
+  fi
+}
+
 cmd_update() {
   ensure_runtime_env
   require_cmd docker
@@ -1244,6 +1295,7 @@ case "$cmd" in
     if targets_include "core" "${targets[@]}"; then
       apply_core_network_policy
     fi
+    cmd_ensure_release_manifest "${targets[@]}"
     ;;
   down)
     [[ $# -ge 2 ]] || die "Usage: agent down <core|agents|ui|obs|rag|optional>"

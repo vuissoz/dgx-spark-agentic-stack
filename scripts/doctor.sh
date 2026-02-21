@@ -209,7 +209,13 @@ if [[ ! -L "${current_release_dir}" && ! -d "${current_release_dir}" ]]; then
 else
   release_images_file="${current_release_dir}/images.json"
   if [[ ! -s "${release_images_file}" ]]; then
-    doctor_fail_or_warn "active release is missing images manifest: ${release_images_file}"
+    legacy_release_images_file="$(find "${current_release_dir}" -mindepth 2 -maxdepth 2 -type f -name images.json 2>/dev/null | sort | tail -n 1 || true)"
+    if [[ -n "${legacy_release_images_file}" && -s "${legacy_release_images_file}" ]]; then
+      warn "legacy current release layout detected (${legacy_release_images_file}); run 'agent update' to migrate current/ to symlink mode"
+      ok "active release images manifest is present"
+    else
+      doctor_fail_or_warn "active release is missing images manifest: ${release_images_file}"
+    fi
   else
     ok "active release images manifest is present"
   fi

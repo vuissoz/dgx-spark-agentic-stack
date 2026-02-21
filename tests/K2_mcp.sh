@@ -17,6 +17,8 @@ agent_bin="${REPO_ROOT}/agent"
 assert_cmd docker
 assert_cmd curl
 
+"${agent_bin}" down optional >/tmp/agent-k2-down-pre.out 2>&1 || true
+
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"

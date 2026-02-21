@@ -202,8 +202,8 @@ If you use a custom `AGENTIC_ROOT`, edit `${ROOT}/openwebui/config/openwebui.env
 
 ## 7. Create First Tracked Release Snapshot
 
-`agent up` starts services, but release traceability is recorded by `agent update`.
-Run it once after first successful startup:
+`agent up` now creates an automatic bootstrap snapshot when no active release exists yet.
+For operational traceability after pulls/image refresh, run `agent update` once after first successful startup:
 
 ### `strict-prod`
 

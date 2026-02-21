@@ -184,6 +184,9 @@ PY
   printf '%s action=snapshot release=%s reason=%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${release_id}" "${reason}" >>"${changes_log}"
 
+  if [[ -d "${current_link}" && ! -L "${current_link}" ]]; then
+    rm -rf "${current_link}"
+  fi
   ln -sfn "${release_dir}" "${current_link}"
   printf '%s\n' "${release_id}"
 }
