@@ -10,6 +10,7 @@ AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapsho
 AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
 AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
+AGENT_ONBOARD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
@@ -43,6 +44,7 @@ Usage:
   agent rollback all <release_id>
   agent rollback host-net <backup_id>
   agent rollback ollama-link <backup_id|latest>
+  agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --output ... --non-interactive]
   agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
   agent doctor [--fix-net]
 
@@ -1060,6 +1062,11 @@ cmd_ollama_link() {
   "${AGENT_OLLAMA_LINK_SCRIPT}"
 }
 
+cmd_onboard() {
+  [[ -x "${AGENT_ONBOARD_SCRIPT}" ]] || die "onboarding wizard script missing or not executable: ${AGENT_ONBOARD_SCRIPT}"
+  "${AGENT_ONBOARD_SCRIPT}" "$@"
+}
+
 cmd_net() {
   local action="${1:-}"
   case "${action}" in
@@ -1404,6 +1411,10 @@ case "$cmd" in
   rollback)
     [[ $# -ge 3 ]] || die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id> | agent rollback ollama-link <backup_id|latest>"
     cmd_rollback "$2" "$3"
+    ;;
+  onboard)
+    shift
+    cmd_onboard "$@"
     ;;
   test)
     [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|all>"
