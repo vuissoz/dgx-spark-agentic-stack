@@ -54,7 +54,7 @@ Dossiers persistants clés:
 - `openhands/{config,state,logs,workspaces}/`
 - `comfyui/{models,input,output,user}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
-- `{claude,codex,opencode}/{state,logs,workspaces}/`
+- `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
 - `optional/{openclaw,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
@@ -88,7 +88,7 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 ## Override de l'image de base des agents (E1b)
 
-Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`) partagent une image commune configurable à runtime.
+Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`) partagent une image commune configurable à runtime.
 
 Variables supportées:
 - `AGENTIC_AGENT_BASE_IMAGE` (défaut: `agentic/agent-cli-base:local`)
@@ -374,6 +374,10 @@ Préconditions (runtime):
   - `docs/runbooks/services-expliques-debutants.md`
 - Guide service par service en anglais (version beginner):
   - `docs/runbooks/services-explained-beginners.en.md`
+- Guide debutant de configuration (variables, valeurs, stockage, secrets):
+  - `docs/runbooks/configuration-expliquee-debutants.md`
+- Beginner configuration reference (variables, values, storage, secrets):
+  - `docs/runbooks/configuration-explained-beginners.en.md`
 - Onboarding ultra-simplifié non-tech (FR/EN/DE/IT):
   - `docs/runbooks/onboarding-ultra-simple.fr.md`
   - `docs/runbooks/onboarding-ultra-simple.en.md`

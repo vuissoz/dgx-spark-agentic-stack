@@ -2,6 +2,10 @@
 
 Optional modules are intentionally gated features. They are not part of the default baseline and are deployed only after explicit, auditable operator intent.
 
+For a full beginner-friendly catalog of configuration variables, allowed values, storage, and secrets handling, see:
+- `docs/runbooks/configuration-expliquee-debutants.md`
+- `docs/runbooks/configuration-explained-beginners.en.md`
+
 ## Why Optional Modules Are Gated
 
 These modules can increase operational or security exposure (more services, more persistence paths, and in some cases external integrations).  

@@ -10,6 +10,7 @@ Objectif:
 
 Ce document complete `docs/runbooks/introduction.md` (le "pourquoi") et `docs/runbooks/features-and-agents.md` (le "catalogue").
 Version anglaise equivalente: `docs/runbooks/services-explained-beginners.en.md`.
+Pour la configuration complete (variables, valeurs, stockage, secrets): `docs/runbooks/configuration-expliquee-debutants.md`.
 
 ## 1) Mini glossaire (bases utiles)
 
@@ -31,7 +32,7 @@ Liens officiels utiles:
 La stack est divisee en 6 plans:
 
 1. `core` (socle): modele IA + controle egress + DNS + outils de debug.
-2. `agents` (execution): conteneurs de sessions agentiques (`claude`, `codex`, `opencode`).
+2. `agents` (execution): conteneurs de sessions agentiques (`claude`, `codex`, `opencode`, `vibestral`).
 3. `ui` (interface): OpenWebUI, OpenHands, ComfyUI.
 4. `obs` (observabilite): Prometheus, Grafana, Loki, exporters.
 5. `rag` (recherche vectorielle): Qdrant.
@@ -139,7 +140,7 @@ Liens officiels:
 
 ## 4) Plan `agents` (execution agentique)
 
-Les 3 services ci-dessous partagent la meme logique:
+Les 4 services ci-dessous partagent la meme logique:
 - par defaut ils tournent avec `agentic/agent-cli-base:local` (override possible via `AGENTIC_AGENT_BASE_*`),
 - ils utilisent `tmux` pour garder des sessions longues,
 - ils ont chacun leurs dossiers `state/logs/workspaces` separes.
@@ -182,6 +183,17 @@ A retenir:
 Liens officiels:
 - OpenCode: https://opencode.ai/
 - Docs CLI OpenCode: https://opencode.ai/docs/cli/
+- tmux: https://github.com/tmux/tmux
+
+### Service `agentic-vibestral`
+
+Role simple:
+- Session agentique dediee a l'outil `vibestral`.
+
+A retenir:
+- Meme modele de confinement et de persistance que les autres agents de base (`agentic-claude`, `agentic-codex`, `agentic-opencode`).
+
+Liens utiles:
 - tmux: https://github.com/tmux/tmux
 
 ## 5) Plan `ui` (interfaces utilisateur)

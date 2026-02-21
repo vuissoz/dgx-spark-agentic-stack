@@ -54,7 +54,7 @@ Key persistent folders:
 - `openhands/{config,state,logs,workspaces}/`
 - `comfyui/{models,input,output,user}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
-- `{claude,codex,opencode}/{state,logs,workspaces}/`
+- `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
 - `optional/{openclaw,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
@@ -88,7 +88,7 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 ## Agent Base Image Override (E1b)
 
-Agent services (`agentic-claude`, `agentic-codex`, `agentic-opencode`) share a common runtime-configurable base image.
+Agent services (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`) share a common runtime-configurable base image.
 
 Supported variables:
 - `AGENTIC_AGENT_BASE_IMAGE` (default: `agentic/agent-cli-base:local`)
@@ -374,6 +374,10 @@ Runtime prerequisites:
   - `docs/runbooks/services-expliques-debutants.md`
 - Beginner service-by-service guide (English):
   - `docs/runbooks/services-explained-beginners.en.md`
+- Beginner configuration reference (French):
+  - `docs/runbooks/configuration-expliquee-debutants.md`
+- Beginner configuration reference (English):
+  - `docs/runbooks/configuration-explained-beginners.en.md`
 - Ultra-simplified non-technical onboarding (FR/EN/DE/IT):
   - `docs/runbooks/onboarding-ultra-simple.fr.md`
   - `docs/runbooks/onboarding-ultra-simple.en.md`

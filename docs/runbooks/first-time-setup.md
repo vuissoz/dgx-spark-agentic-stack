@@ -83,12 +83,16 @@ Detailed guide:
 ## 2. Define Required Configuration Before First Start
 
 Define or review these items before running the full stack.
+For the full configuration catalog (all major variables, values, storage locations, and secret handling), read:
+- `docs/runbooks/configuration-expliquee-debutants.md`
+- `docs/runbooks/configuration-explained-beginners.en.md`
 
 ### 2.1 Security-sensitive credentials
 
-1. Grafana admin password (recommended before starting `obs`):
+1. Grafana admin credentials (recommended before starting `obs`):
 
 ```bash
+export GRAFANA_ADMIN_USER='admin'
 export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 ```
 
@@ -97,6 +101,9 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 - keys:
   - `OPENWEBUI_ADMIN_EMAIL`
   - `OPENWEBUI_ADMIN_PASSWORD`
+  - `OPENWEBUI_OPENAI_API_KEY`
+  - `OPENAI_API_KEY`
+  - `WEBUI_SECRET_KEY`
 
 3. OpenHands model/API settings (`openhands.env`, created during `ui` init):
 - file: `${AGENTIC_ROOT}/openhands/config/openhands.env`

@@ -67,6 +67,10 @@ It also reports effective host-mount path variables used by observability servic
 - `CADVISOR_SYS_HOST_PATH`
 - `CADVISOR_DEV_DISK_HOST_PATH`
 
+For a full variable/secrets catalog (values, storage, and beginner guidance), see:
+- `docs/runbooks/configuration-expliquee-debutants.md`
+- `docs/runbooks/configuration-explained-beginners.en.md`
+
 ## Operational Guidance
 
 ### Recommended flow during development

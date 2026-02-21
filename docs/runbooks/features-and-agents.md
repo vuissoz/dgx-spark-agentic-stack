@@ -10,6 +10,10 @@ The source of truth for service wiring is in:
 - `compose/compose.rag.yml`
 - `compose/compose.optional.yml`
 
+For configuration variables, accepted values, storage locations, and secrets handling:
+- `docs/runbooks/configuration-expliquee-debutants.md`
+- `docs/runbooks/configuration-explained-beginners.en.md`
+
 ## Platform Features (Cross-Cutting)
 
 ### Loopback-only host exposure
@@ -151,6 +155,16 @@ Interactive entrypoint is through `./agent <tool> [project]`.
   - `${AGENTIC_ROOT}/opencode/workspaces`
 - Why it exists:
   - allows running multiple agent tools with a consistent operational contract.
+
+### `agentic-vibestral`
+- `./agent vibestral <project>`
+- Role: Vibestral-oriented agent workspace runtime.
+- Persistence:
+  - `${AGENTIC_ROOT}/vibestral/state`
+  - `${AGENTIC_ROOT}/vibestral/logs`
+  - `${AGENTIC_ROOT}/vibestral/workspaces`
+- Why it exists:
+  - extends the same hardened, persistent agent runtime model to a fourth first-class agent tool.
 
 ### Shared agent paths
 - `${AGENTIC_ROOT}/shared-ro` mounted read-only into agent containers.
@@ -330,6 +344,7 @@ Key implemented capabilities:
   - `agent claude <project>`
   - `agent codex <project>`
   - `agent opencode <project>`
+  - `agent vibestral <project>`
 - operational controls:
   - `agent logs <service>`
   - `agent ls`

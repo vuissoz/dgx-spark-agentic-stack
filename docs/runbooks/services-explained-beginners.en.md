@@ -9,6 +9,7 @@ Goal:
 - provide official links for deeper reading.
 
 This document complements `docs/runbooks/introduction.md` (the "why") and `docs/runbooks/features-and-agents.md` (the feature catalog).
+For full configuration details (variables, values, storage, and secrets), see `docs/runbooks/configuration-explained-beginners.en.md`.
 
 ## 1) Mini Glossary (useful basics)
 
@@ -30,7 +31,7 @@ Useful official links:
 The stack is split into 6 planes:
 
 1. `core`: AI runtime + egress control + DNS + debug tooling.
-2. `agents`: agent session containers (`claude`, `codex`, `opencode`).
+2. `agents`: agent session containers (`claude`, `codex`, `opencode`, `vibestral`).
 3. `ui`: OpenWebUI, OpenHands, ComfyUI.
 4. `obs`: Prometheus, Grafana, Loki, exporters.
 5. `rag`: Qdrant vector storage.
@@ -136,7 +137,7 @@ Official links:
 
 ## 4) `agents` Plane (agent execution)
 
-The 3 services below share the same model:
+The 4 services below share the same model:
 - by default they run on `agentic/agent-cli-base:local` (override available via `AGENTIC_AGENT_BASE_*`),
 - they use `tmux` for long-lived sessions,
 - each has separate `state/logs/workspaces` folders.
@@ -179,6 +180,17 @@ Key idea:
 Official links:
 - OpenCode: https://opencode.ai/
 - OpenCode CLI docs: https://opencode.ai/docs/cli/
+- tmux: https://github.com/tmux/tmux
+
+### Service `agentic-vibestral`
+
+Simple role:
+- Dedicated agent session for `vibestral`.
+
+Key idea:
+- Same confinement and persistence model as the other baseline agent services (`agentic-claude`, `agentic-codex`, and `agentic-opencode`).
+
+Useful links:
 - tmux: https://github.com/tmux/tmux
 
 ## 5) `ui` Plane (user interfaces)

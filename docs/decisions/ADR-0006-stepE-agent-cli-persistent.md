@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+Superseded in part by `ADR-0028-stepE2-vibestral-agent.md` for the fourth baseline agent service (`agentic-vibestral`).
+
 ## Context
 Step E requires long-lived CLI agent containers (`claude`, `codex`, `opencode`) with persistent state/workspaces, strict confinement, and controlled LLM/proxy wiring through previously deployed core services.
 

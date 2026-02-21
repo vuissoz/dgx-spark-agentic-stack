@@ -19,7 +19,7 @@ Step 0 defines the runtime filesystem contract used by all later deployment step
 - `/srv/agentic/rag/`
 - `/srv/agentic/rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `/srv/agentic/monitoring/`
-- `/srv/agentic/{claude,codex,opencode}/{state,logs,workspaces}/`
+- `/srv/agentic/{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
 - `/srv/agentic/shared-ro/`
 - `/srv/agentic/shared-rw/`
 - `/srv/agentic/deployments/{releases,current}/`

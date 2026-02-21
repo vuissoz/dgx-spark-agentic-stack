@@ -176,12 +176,14 @@ Suggested order:
 1. this introduction (`introduction.md`),
 2. `onboarding-ultra-simple.fr.md` / `.en.md` / `.de.md` / `.it.md` (non-technical quickstart),
 3. `profiles.md` (execution semantics),
-4. `first-time-setup.md` (day-0 bootstrap),
-5. `strict-prod-vm.md` (dedicated VM path for prod-like validation),
-6. `features-and-agents.md` (component capabilities),
-7. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
-8. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
-9. specialized runbooks (`optional-modules.md`, `observability-triage.md`, etc.).
+4. `configuration-expliquee-debutants.md` (beginner-friendly FR configuration reference),
+5. `configuration-explained-beginners.en.md` (beginner-friendly EN configuration reference),
+6. `first-time-setup.md` (day-0 bootstrap),
+7. `strict-prod-vm.md` (dedicated VM path for prod-like validation),
+8. `features-and-agents.md` (component capabilities),
+9. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
+10. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
+11. specialized runbooks (`optional-modules.md`, `observability-triage.md`, etc.).
 
 When troubleshooting:
 - always capture active profile and effective runtime values first (`./agent profile`),
