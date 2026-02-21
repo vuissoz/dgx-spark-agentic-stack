@@ -97,16 +97,23 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/ollama"
   install -d -m 0770 "${AGENTIC_ROOT}/ollama/models"
   install -d -m 0750 "${AGENTIC_ROOT}/gate"
+  install -d -m 0750 "${AGENTIC_ROOT}/gate/config"
   install -d -m 0770 "${AGENTIC_ROOT}/gate/state"
   install -d -m 0770 "${AGENTIC_ROOT}/gate/logs"
+  install -d -m 0750 "${AGENTIC_ROOT}/trtllm"
+  install -d -m 0770 "${AGENTIC_ROOT}/trtllm/models"
+  install -d -m 0770 "${AGENTIC_ROOT}/trtllm/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/trtllm/logs"
   install -d -m 0750 "${AGENTIC_ROOT}/dns"
   install -d -m 0750 "${AGENTIC_ROOT}/proxy"
   install -d -m 0750 "${AGENTIC_ROOT}/proxy/config"
   install -d -m 0755 "${AGENTIC_ROOT}/proxy/logs"
 
+  copy_if_missing "${TEMPLATE_DIR}/model_routes.yml" "${AGENTIC_ROOT}/gate/config/model_routes.yml" 0640
   copy_if_missing "${TEMPLATE_DIR}/unbound.conf" "${AGENTIC_ROOT}/dns/unbound.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/squid.conf" "${AGENTIC_ROOT}/proxy/config/squid.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt" 0644
+  chmod 0640 "${AGENTIC_ROOT}/gate/config/model_routes.yml"
   chmod 0644 "${AGENTIC_ROOT}/dns/unbound.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/config/squid.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/allowlist.txt"

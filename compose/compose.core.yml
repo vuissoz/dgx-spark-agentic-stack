@@ -53,6 +53,7 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       GATE_LISTEN_HOST: 0.0.0.0
       GATE_LISTEN_PORT: 11435
+      GATE_MODEL_ROUTES_FILE: /gate/config/model_routes.yml
       GATE_CONCURRENCY: 1
       GATE_QUEUE_WAIT_TIMEOUT_SECONDS: 2
       GATE_STATE_DIR: /gate/state
@@ -61,6 +62,7 @@ services:
       GATE_ENABLE_TEST_MODE: 1
       GATE_MAX_TEST_SLEEP_SECONDS: 15
     volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/gate/config:/gate/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/gate/state:/gate/state
       - ${AGENTIC_ROOT:-/srv/agentic}/gate/logs:/gate/logs
     healthcheck:
@@ -75,6 +77,44 @@ services:
       start_period: 15s
     networks:
       - agentic
+      - agentic-llm
+
+  trtllm:
+    image: agentic/trtllm-runtime:local
+    build:
+      context: ..
+      dockerfile: deployments/trtllm/Dockerfile
+    restart: unless-stopped
+    user: "${TRTLLM_CONTAINER_USER:-0:0}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    profiles:
+      - trt
+    environment:
+      TRTLLM_LISTEN_HOST: 0.0.0.0
+      TRTLLM_PORT: 11436
+      TRTLLM_MODELS: ${TRTLLM_MODELS:-qwen3-nvfp4-demo}
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/models:/models
+      - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/logs:/logs
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:11436/healthz", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic-llm
 
   toolbox:
     image: ghcr.io/nicolaka/netshoot:latest
@@ -155,6 +195,10 @@ services:
 networks:
   agentic:
     name: ${AGENTIC_NETWORK:-agentic}
+    driver: bridge
+    internal: true
+  agentic-llm:
+    name: ${AGENTIC_LLM_NETWORK:-agentic-llm}
     driver: bridge
     internal: true
   agentic-egress:

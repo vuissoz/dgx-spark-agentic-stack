@@ -1,0 +1,20 @@
+version: 1
+
+defaults:
+  backend: ollama
+
+backends:
+  ollama:
+    protocol: ollama
+    base_url: http://ollama:11434
+  trtllm:
+    protocol: ollama
+    base_url: http://trtllm:11436
+
+routes:
+  - name: nvfp4-to-trtllm
+    backend: trtllm
+    match:
+      - "*nvfp4*"
+      - "trtllm/*"
+      - "trt-*"
