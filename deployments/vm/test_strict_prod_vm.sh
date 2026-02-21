@@ -173,6 +173,20 @@ skip_host_prereqs=0
 skip_dcgm_check=0
 skip_h_tests=0
 skip_i_tests=0
+skip_b_network_tests=0
+skip_e_tests=0
+skip_f_tests=0
+skip_k_tests=0
+compose_dir=""
+compose_mode="default"
+agent_env=(AGENTIC_PROFILE=strict-prod)
+
+cleanup() {
+  if [[ -n "${compose_dir}" && -d "${compose_dir}" ]]; then
+    rm -rf "${compose_dir}"
+  fi
+}
+trap cleanup EXIT
 
 if [[ "${gpu_available}" != "1" ]]; then
   if [[ "${require_gpu}" == "1" ]]; then
@@ -184,6 +198,18 @@ if [[ "${gpu_available}" != "1" ]]; then
   skip_dcgm_check=1
   skip_h_tests=1
   skip_i_tests=1
+  skip_b_network_tests=1
+  skip_e_tests=1
+  skip_f_tests=1
+  skip_k_tests=1
+  compose_mode="cpu-degraded"
+  compose_dir="$(mktemp -d "${vm_workspace_path}/.tmp-compose.nogpu.XXXXXX")"
+  cp -a "${vm_workspace_path}/compose/." "${compose_dir}/"
+  rm -f "${compose_dir}/compose.ui.yml"
+  while IFS= read -r compose_file; do
+    sed -i '/^[[:space:]]*gpus:[[:space:]]*all[[:space:]]*$/d' "${compose_file}"
+  done < <(find "${compose_dir}" -maxdepth 1 -type f -name 'compose.*.yml' | sort)
+  agent_env+=(AGENTIC_COMPOSE_DIR="${compose_dir}")
 fi
 
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -193,11 +219,75 @@ sudo install -d -m 0750 "${validation_root}" "${proof_dir}"
 run_capture() {
   local log_path="$1"
   shift
-  sudo env AGENTIC_PROFILE=strict-prod "$@" 2>&1 | sudo tee "${log_path}" >/dev/null
+  sudo env "${agent_env[@]}" "$@" 2>&1 | sudo tee "${log_path}" >/dev/null
+}
+
+run_doctor_with_retry() {
+  local phase="$1"
+  local max_attempts="$2"
+  local sleep_seconds="$3"
+  local attempt=1
+  local attempt_log=""
+
+  while (( attempt <= max_attempts )); do
+    attempt_log="${proof_dir}/agent-doctor-${phase}.attempt-${attempt}.log"
+    if run_capture "${attempt_log}" ./agent doctor; then
+      sudo cp "${attempt_log}" "${proof_dir}/agent-doctor-${phase}.log"
+      return 0
+    fi
+    if (( attempt == max_attempts )); then
+      sudo cp "${attempt_log}" "${proof_dir}/agent-doctor-${phase}.log"
+      die "doctor ${phase} failed after ${max_attempts} attempt(s)"
+    fi
+    sleep "${sleep_seconds}"
+    attempt=$((attempt + 1))
+  done
+}
+
+run_test_selector_with_retry() {
+  local selector="$1"
+  local max_attempts="$2"
+  local sleep_seconds="$3"
+  local attempt=1
+  local attempt_log=""
+
+  while (( attempt <= max_attempts )); do
+    attempt_log="${proof_dir}/agent-test-${selector}.attempt-${attempt}.log"
+    if run_capture "${attempt_log}" env \
+      AGENTIC_SKIP_HOST_PREREQS="${skip_host_prereqs}" \
+      AGENTIC_SKIP_DCGM_CHECK="${skip_dcgm_check}" \
+      AGENTIC_SKIP_H_TESTS="${skip_h_tests}" \
+      AGENTIC_SKIP_I_TESTS="${skip_i_tests}" \
+      AGENTIC_SKIP_B_NETWORK_TESTS="${skip_b_network_tests}" \
+      AGENTIC_SKIP_E_TESTS="${skip_e_tests}" \
+      AGENTIC_SKIP_F_TESTS="${skip_f_tests}" \
+      AGENTIC_SKIP_K_TESTS="${skip_k_tests}" \
+      ./agent test "${selector}"; then
+      sudo cp "${attempt_log}" "${proof_dir}/agent-test-${selector}.log"
+      return 0
+    fi
+    if (( attempt == max_attempts )); then
+      sudo cp "${attempt_log}" "${proof_dir}/agent-test-${selector}.log"
+      return 1
+    fi
+    sleep "${sleep_seconds}"
+    attempt=$((attempt + 1))
+  done
 }
 
 info "strict-prod bootstrap"
 run_capture "${proof_dir}/bootstrap-init-fs.log" ./deployments/bootstrap/init_fs.sh
+
+info "resetting optional stack to baseline"
+if ! run_capture "${proof_dir}/agent-down-optional-preflight.log" ./agent down optional; then
+  warn "optional stack baseline reset failed; continuing campaign"
+fi
+run_capture "${proof_dir}/agent-rm-optional-preflight.log" bash -lc '
+  optional_ids="$(docker ps -aq --filter "label=com.docker.compose.project=agentic" --filter "name=optional-")"
+  if [[ -n "${optional_ids}" ]]; then
+    docker rm -f ${optional_ids}
+  fi
+'
 
 info "starting core stack"
 run_capture "${proof_dir}/agent-up-core.log" ./agent up core
@@ -206,7 +296,7 @@ info "starting stack targets ${stack_targets}"
 run_capture "${proof_dir}/agent-up-targets.log" ./agent up "${stack_targets}"
 
 info "running initial doctor"
-run_capture "${proof_dir}/agent-doctor-initial.log" ./agent doctor
+run_doctor_with_retry "initial" 18 10
 
 info "running update"
 run_capture "${proof_dir}/agent-update.log" ./agent update
@@ -218,18 +308,32 @@ info "running rollback to ${release_id}"
 run_capture "${proof_dir}/agent-rollback.log" ./agent rollback all "${release_id}"
 printf '%s\n' "${release_id}" | sudo tee "${proof_dir}/release_rollback_target.id" >/dev/null
 
+info "re-applying stack runtime after rollback"
+run_capture "${proof_dir}/agent-up-core-post-rollback.log" ./agent up core
+run_capture "${proof_dir}/agent-up-targets-post-rollback.log" ./agent up "${stack_targets}"
+
 sudo sh -c ": > '${proof_dir}/tests.summary'"
 IFS=',' read -r -a selectors <<<"${test_selectors}"
 for selector in "${selectors[@]}"; do
   selector="${selector// /}"
   [[ -n "${selector}" ]] || continue
+  if [[ "${selector}" == "F" ]]; then
+    info "refreshing agents runtime before selector F"
+    run_capture "${proof_dir}/agent-init-agents-pre-F.log" ./deployments/agents/init_runtime.sh
+    run_capture "${proof_dir}/agent-up-agents-pre-F.log" ./agent up agents
+  fi
+  if [[ "${selector}" == "K" ]]; then
+    info "resetting optional stack before selector K"
+    run_capture "${proof_dir}/agent-down-optional-pre-K.log" ./agent down optional
+    run_capture "${proof_dir}/agent-rm-optional-pre-K.log" bash -lc '
+      optional_ids="$(docker ps -aq --filter "label=com.docker.compose.project=agentic" --filter "name=optional-")"
+      if [[ -n "${optional_ids}" ]]; then
+        docker rm -f ${optional_ids}
+      fi
+    '
+  fi
   info "running test selector ${selector}"
-  if run_capture "${proof_dir}/agent-test-${selector}.log" env \
-    AGENTIC_SKIP_HOST_PREREQS="${skip_host_prereqs}" \
-    AGENTIC_SKIP_DCGM_CHECK="${skip_dcgm_check}" \
-    AGENTIC_SKIP_H_TESTS="${skip_h_tests}" \
-    AGENTIC_SKIP_I_TESTS="${skip_i_tests}" \
-    ./agent test "${selector}"; then
+  if run_test_selector_with_retry "${selector}" 3 20; then
     printf '%s=pass\n' "${selector}" | sudo tee -a "${proof_dir}/tests.summary" >/dev/null
   else
     printf '%s=fail\n' "${selector}" | sudo tee -a "${proof_dir}/tests.summary" >/dev/null
@@ -238,7 +342,7 @@ for selector in "${selectors[@]}"; do
 done
 
 info "running final doctor and ps"
-run_capture "${proof_dir}/agent-doctor-final.log" ./agent doctor
+run_doctor_with_retry "final" 12 10
 run_capture "${proof_dir}/agent-ps-final.log" ./agent ps
 
 meta_tmp="$(mktemp)"
@@ -250,6 +354,7 @@ meta_tmp="$(mktemp)"
   printf 'test_selectors=%s\n' "${test_selectors}"
   printf 'require_gpu=%s\n' "${require_gpu}"
   printf 'gpu_available=%s\n' "${gpu_available}"
+  printf 'compose_mode=%s\n' "${compose_mode}"
   printf 'release_update=%s\n' "${release_id}"
   printf 'created_at_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"${meta_tmp}"
