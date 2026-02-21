@@ -54,13 +54,19 @@ set_proxy_runtime_permissions() {
   if command -v setfacl >/dev/null 2>&1; then
     # Squid opens log files before dropping from uid 0 to uid 13 (proxy).
     # With cap_drop=ALL, both uids need explicit write rights on bind-mounted logs.
-    setfacl -m u:0:rwx,u:13:rwx "${proxy_logs_dir}"
-    setfacl -d -m u:0:rwx,u:13:rwx "${proxy_logs_dir}"
+    if ! setfacl -m u:0:rwx,u:13:rwx "${proxy_logs_dir}"; then
+      log "non-root runtime init: unable to set ACL on ${proxy_logs_dir}; continuing"
+      return 0
+    fi
+    if ! setfacl -d -m u:0:rwx,u:13:rwx "${proxy_logs_dir}"; then
+      log "non-root runtime init: unable to set default ACL on ${proxy_logs_dir}; continuing"
+      return 0
+    fi
 
     local log_file
     for log_file in "${proxy_log_files[@]}"; do
       [[ -e "${log_file}" ]] || continue
-      setfacl -m u:0:rw,u:13:rw "${log_file}"
+      setfacl -m u:0:rw,u:13:rw "${log_file}" || true
     done
 
     log "non-root runtime init: applied ACL grants (uid 0 + uid 13) on ${proxy_logs_dir}"

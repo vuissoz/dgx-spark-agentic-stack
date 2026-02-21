@@ -11,7 +11,10 @@ AGENTIC_PROXY_PORT="${AGENTIC_PROXY_PORT:-3128}"
 AGENTIC_UNBOUND_PORT="${AGENTIC_UNBOUND_PORT:-53}"
 AGENTIC_GATE_SERVICE="${AGENTIC_GATE_SERVICE:-ollama-gate}"
 AGENTIC_GATE_PORT="${AGENTIC_GATE_PORT:-11435}"
+AGENTIC_OLLAMA_SERVICE="${AGENTIC_OLLAMA_SERVICE:-ollama}"
+AGENTIC_OLLAMA_PORT="${AGENTIC_OLLAMA_PORT:-11434}"
 AGENTIC_DOCKER_USER_LOG_PREFIX="${AGENTIC_DOCKER_USER_LOG_PREFIX:-AGENTIC-DROP }"
+AGENTIC_DOCKER_USER_SOURCE_NETWORKS="${AGENTIC_DOCKER_USER_SOURCE_NETWORKS:-${AGENTIC_NETWORK}}"
 AGENTIC_HOST_NET_BACKUPS_DIR="${AGENTIC_HOST_NET_BACKUPS_DIR:-${AGENTIC_ROOT}/deployments/host-net/backups}"
 AGENTIC_SKIP_HOST_NET_BACKUP="${AGENTIC_SKIP_HOST_NET_BACKUP:-0}"
 
@@ -24,10 +27,20 @@ die() {
   exit 1
 }
 
-require_root() {
-  if [[ "${EUID}" -ne 0 ]]; then
-    die "apply_docker_user.sh requires root privileges (run with sudo)"
+require_net_admin_access() {
+  if [[ "${EUID}" -eq 0 ]]; then
+    return 0
   fi
+
+  if [[ "${AGENTIC_ALLOW_NON_ROOT_NET_ADMIN:-0}" != "1" ]]; then
+    die "apply_docker_user.sh requires root privileges (run with sudo), or set AGENTIC_ALLOW_NON_ROOT_NET_ADMIN=1 with an iptables helper in PATH"
+  fi
+
+  if ! iptables -S >/dev/null 2>&1; then
+    die "non-root net-admin mode requested but iptables access probe failed; ensure PATH helper can access host netfilter tables"
+  fi
+
+  log "non-root net-admin mode enabled (AGENTIC_ALLOW_NON_ROOT_NET_ADMIN=1)"
 }
 
 require_cmd() {
@@ -175,26 +188,33 @@ collect_service_ips_with_retry() {
 }
 
 main() {
-  require_root
   require_cmd docker
   require_cmd iptables
   require_cmd iptables-save
+  require_net_admin_access
 
   local network_name
+  local raw_network
   local subnet
   local src_subnet
+  local agentic_subnet
   local proxy_ip
   local unbound_ip
   local gate_ip
+  local ollama_ip
   local backup_id
   local -a source_networks=()
+  local -a resolution_networks=()
   local -a source_subnets=()
+  local -a internal_allow_subnets=()
   local -a proxy_ips=()
   local -a unbound_ips=()
   local -a gate_ips=()
+  local -a ollama_ips=()
   declare -A seen_networks=()
 
-  for network_name in "${AGENTIC_NETWORK}" "${AGENTIC_EGRESS_NETWORK}"; do
+  for raw_network in ${AGENTIC_DOCKER_USER_SOURCE_NETWORKS//,/ }; do
+    network_name="${raw_network// /}"
     [[ -n "${network_name}" ]] || continue
     if [[ -n "${seen_networks[${network_name}]:-}" ]]; then
       continue
@@ -207,11 +227,31 @@ main() {
     append_unique source_subnets "${subnet}"
   done
 
-  collect_service_ips_with_retry "${AGENTIC_PROXY_SERVICE}" proxy_ips "${source_networks[@]}" \
-    || die "cannot resolve IPs for '${AGENTIC_PROXY_SERVICE}' on ${source_networks[*]} after ${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20} attempts"
-  collect_service_ips_with_retry "${AGENTIC_UNBOUND_SERVICE}" unbound_ips "${source_networks[@]}" \
-    || die "cannot resolve IPs for '${AGENTIC_UNBOUND_SERVICE}' on ${source_networks[*]} after ${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20} attempts"
-  collect_service_ips_with_retry "${AGENTIC_GATE_SERVICE}" gate_ips "${source_networks[@]}" || true
+  if [[ "${#source_networks[@]}" -eq 0 ]]; then
+    die "no source networks resolved from AGENTIC_DOCKER_USER_SOURCE_NETWORKS='${AGENTIC_DOCKER_USER_SOURCE_NETWORKS}'"
+  fi
+
+  agentic_subnet="$(docker network inspect "${AGENTIC_NETWORK}" --format '{{(index .IPAM.Config 0).Subnet}}' 2>/dev/null || true)"
+  [[ -n "${agentic_subnet}" ]] || die "docker network '${AGENTIC_NETWORK}' not found; run 'agent up core' first"
+  append_unique internal_allow_subnets "${agentic_subnet}"
+
+  unset seen_networks
+  declare -A seen_networks=()
+  for network_name in "${AGENTIC_NETWORK}" "${AGENTIC_EGRESS_NETWORK}"; do
+    [[ -n "${network_name}" ]] || continue
+    if [[ -n "${seen_networks[${network_name}]:-}" ]]; then
+      continue
+    fi
+    seen_networks["${network_name}"]=1
+    resolution_networks+=("${network_name}")
+  done
+
+  collect_service_ips_with_retry "${AGENTIC_PROXY_SERVICE}" proxy_ips "${resolution_networks[@]}" \
+    || die "cannot resolve IPs for '${AGENTIC_PROXY_SERVICE}' on ${resolution_networks[*]} after ${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20} attempts"
+  collect_service_ips_with_retry "${AGENTIC_UNBOUND_SERVICE}" unbound_ips "${resolution_networks[@]}" \
+    || die "cannot resolve IPs for '${AGENTIC_UNBOUND_SERVICE}' on ${resolution_networks[*]} after ${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20} attempts"
+  collect_service_ips_with_retry "${AGENTIC_GATE_SERVICE}" gate_ips "${resolution_networks[@]}" || true
+  collect_service_ips_with_retry "${AGENTIC_OLLAMA_SERVICE}" ollama_ips "${resolution_networks[@]}" || true
 
   backup_id="$(create_host_net_backup)"
 
@@ -225,6 +265,10 @@ main() {
   iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
   for src_subnet in "${source_subnets[@]}"; do
+    for subnet in "${internal_allow_subnets[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${src_subnet}" -d "${subnet}" -j ACCEPT
+    done
+
     for unbound_ip in "${unbound_ips[@]}"; do
       iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
         -s "${src_subnet}" -d "${unbound_ip}/32" -p udp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
@@ -241,6 +285,12 @@ main() {
       iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
         -s "${src_subnet}" -d "${gate_ip}/32" -p tcp --dport "${AGENTIC_GATE_PORT}" -j ACCEPT
       log "allowed LLM gate traffic to ${AGENTIC_GATE_SERVICE} (${gate_ip}:${AGENTIC_GATE_PORT})"
+    done
+
+    for ollama_ip in "${ollama_ips[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+        -s "${src_subnet}" -d "${ollama_ip}/32" -p tcp --dport "${AGENTIC_OLLAMA_PORT}" -j ACCEPT
+      log "allowed Ollama API traffic to ${AGENTIC_OLLAMA_SERVICE} (${ollama_ip}:${AGENTIC_OLLAMA_PORT})"
     done
 
     iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \

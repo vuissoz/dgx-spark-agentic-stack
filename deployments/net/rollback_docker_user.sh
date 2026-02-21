@@ -16,10 +16,20 @@ die() {
   exit 1
 }
 
-require_root() {
-  if [[ "${EUID}" -ne 0 ]]; then
-    die "rollback_docker_user.sh requires root privileges (run with sudo)"
+require_net_admin_access() {
+  if [[ "${EUID}" -eq 0 ]]; then
+    return 0
   fi
+
+  if [[ "${AGENTIC_ALLOW_NON_ROOT_NET_ADMIN:-0}" != "1" ]]; then
+    die "rollback_docker_user.sh requires root privileges (run with sudo), or set AGENTIC_ALLOW_NON_ROOT_NET_ADMIN=1 with an iptables helper in PATH"
+  fi
+
+  if ! iptables -S >/dev/null 2>&1; then
+    die "non-root net-admin mode requested but iptables access probe failed; ensure PATH helper can access host netfilter tables"
+  fi
+
+  log "non-root net-admin mode enabled (AGENTIC_ALLOW_NON_ROOT_NET_ADMIN=1)"
 }
 
 require_cmd() {
@@ -70,8 +80,8 @@ restore_chain_rules_from_snapshot() {
   ' "${snapshot_file}" | while IFS= read -r rule; do
     [[ -n "${rule}" ]] || continue
     # Rules come from iptables-save snapshot captured on the same host.
-    # shellcheck disable=SC2086
-    iptables ${rule}
+    # shellcheck disable=SC2016
+    eval "iptables ${rule}"
   done
 }
 
@@ -94,9 +104,9 @@ main() {
     exit 0
   fi
 
-  require_root
   require_cmd iptables
   require_cmd awk
+  require_net_admin_access
 
   local backup_dir="${AGENTIC_HOST_NET_BACKUPS_DIR}/${backup_id}"
   local snapshot_file="${backup_dir}/iptables-save.rules"

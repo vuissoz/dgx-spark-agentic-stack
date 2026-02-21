@@ -1175,6 +1175,7 @@ cmd_update() {
 
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" pull --ignore-pull-failures
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" up -d --remove-orphans
+  apply_core_network_policy
 
   local release_id
   release_id="$("${AGENT_RELEASE_SNAPSHOT_SCRIPT}" --reason update "${compose_files[@]}")"
@@ -1191,6 +1192,7 @@ cmd_rollback() {
       [[ -n "${target_id}" ]] || die "Usage: agent rollback all <release_id>"
       [[ -x "${AGENT_RELEASE_ROLLBACK_SCRIPT}" ]] || die "rollback script missing: ${AGENT_RELEASE_ROLLBACK_SCRIPT}"
       "${AGENT_RELEASE_ROLLBACK_SCRIPT}" "${target_id}"
+      apply_core_network_policy
       ;;
     host-net)
       [[ -n "${target_id}" ]] || die "Usage: agent rollback host-net <backup_id>"
