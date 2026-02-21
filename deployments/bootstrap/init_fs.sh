@@ -77,6 +77,7 @@ main() {
     "${AGENTIC_ROOT}/bin"
     "${AGENTIC_ROOT}/tests"
     "${AGENTIC_ROOT}/secrets"
+    "${AGENTIC_ROOT}/secrets/runtime"
     "${AGENTIC_ROOT}/ollama"
     "${AGENTIC_ROOT}/gate"
     "${AGENTIC_ROOT}/gate/config"
@@ -189,6 +190,7 @@ main() {
   done
 
   ensure_dir "${AGENTIC_ROOT}/secrets" 0700
+  ensure_dir "${AGENTIC_ROOT}/secrets/runtime" 0700
   ensure_secret_files_mode "${AGENTIC_ROOT}/secrets"
 
   log "filesystem bootstrap completed for ${AGENTIC_ROOT}"

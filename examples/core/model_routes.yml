@@ -10,6 +10,19 @@ backends:
   trtllm:
     protocol: ollama
     base_url: http://trtllm:11436
+  openai:
+    protocol: openai
+    provider: openai
+    base_url: https://api.openai.com/v1
+    api_key_file: /gate/secrets/openai.api_key
+  openrouter:
+    protocol: openai
+    provider: openrouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_file: /gate/secrets/openrouter.api_key
+    extra_headers:
+      HTTP-Referer: https://localhost/agentic
+      X-Title: DGX Spark Agentic Stack
 
 routes:
   - name: nvfp4-to-trtllm
@@ -18,3 +31,12 @@ routes:
       - "*nvfp4*"
       - "trtllm/*"
       - "trt-*"
+  - name: openai-chat
+    backend: openai
+    match:
+      - "gpt-*"
+      - "o*-*"
+  - name: openrouter-prefixed
+    backend: openrouter
+    match:
+      - "openrouter/*"

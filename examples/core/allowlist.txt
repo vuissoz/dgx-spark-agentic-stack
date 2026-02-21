@@ -1,2 +1,4 @@
 # One domain per line. Prefix with a dot for subdomains.
 example.com
+api.openai.com
+openrouter.ai

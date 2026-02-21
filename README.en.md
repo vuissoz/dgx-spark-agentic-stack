@@ -254,6 +254,17 @@ Model link rollback:
 ./agent rollback ollama-link <backup_id|latest>
 ```
 
+## External LLM Routing (D5)
+
+`ollama-gate` can route selected models to `openai`/`openrouter` while keeping a stable client API (`/v1/*`).
+
+Runtime prerequisites:
+- API keys outside git:
+  - `${AGENTIC_ROOT}/secrets/runtime/openai.api_key`
+  - `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key`
+- explicit egress allowlist:
+  - `${AGENTIC_ROOT}/proxy/allowlist.txt` must include `api.openai.com` and `openrouter.ai`
+
 ## Optional Modules
 
 Explicit activation:

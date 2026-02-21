@@ -16,6 +16,13 @@ die() {
   exit 1
 }
 
+ensure_secret_mode() {
+  local file="$1"
+  if [[ -f "${file}" ]]; then
+    chmod 0600 "${file}"
+  fi
+}
+
 copy_if_missing() {
   local src="$1"
   local dst="$2"
@@ -108,6 +115,8 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/proxy"
   install -d -m 0750 "${AGENTIC_ROOT}/proxy/config"
   install -d -m 0755 "${AGENTIC_ROOT}/proxy/logs"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
 
   copy_if_missing "${TEMPLATE_DIR}/model_routes.yml" "${AGENTIC_ROOT}/gate/config/model_routes.yml" 0640
   copy_if_missing "${TEMPLATE_DIR}/unbound.conf" "${AGENTIC_ROOT}/dns/unbound.conf" 0644
@@ -117,6 +126,8 @@ main() {
   chmod 0644 "${AGENTIC_ROOT}/dns/unbound.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/config/squid.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/allowlist.txt"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key"
   set_gate_runtime_permissions
   set_proxy_runtime_permissions
 }

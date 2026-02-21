@@ -109,6 +109,9 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 - file: `${AGENTIC_ROOT}/proxy/allowlist.txt`
 - default template is intentionally minimal.
 - add only domains required for your workflows.
+- for D5 external LLM routing via `ollama-gate`, keep at least:
+  - `api.openai.com`
+  - `openrouter.ai`
 
 If the allowlist is too strict, agents/UI that need external APIs will fail outbound calls by design.
 
@@ -118,6 +121,8 @@ Required files:
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
+- `${AGENTIC_ROOT}/secrets/runtime/openai.api_key` (if OpenAI routing enabled)
+- `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key` (if OpenRouter routing enabled)
 
 Permissions must be restrictive (`600` or `640`).
 

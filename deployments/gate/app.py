@@ -64,11 +64,19 @@ def deterministic_embedding_vector(text: str, size: int = 32) -> list[float]:
     return values
 
 
+class BackendAuthError(RuntimeError):
+    pass
+
+
 class GateState:
     def __init__(self) -> None:
         self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
         self.trtllm_base_url = os.getenv("TRTLLM_BASE_URL", "http://trtllm:11436").rstrip("/")
         self.model_routes_file = Path(os.getenv("GATE_MODEL_ROUTES_FILE", "/gate/config/model_routes.yml"))
+        self.openai_api_key_file = os.getenv("GATE_OPENAI_API_KEY_FILE", "/gate/secrets/openai.api_key")
+        self.openrouter_api_key_file = os.getenv(
+            "GATE_OPENROUTER_API_KEY_FILE", "/gate/secrets/openrouter.api_key"
+        )
 
         self.concurrency = max(1, env_int("GATE_CONCURRENCY", 1))
         self.default_queue_wait_timeout_seconds = max(
@@ -91,7 +99,7 @@ class GateState:
         self._sticky_dirty = False
 
         self.default_backend = "ollama"
-        self.backends: Dict[str, Dict[str, str]] = {}
+        self.backends: Dict[str, Dict[str, Any]] = {}
         self.model_routes: list[Tuple[str, str]] = []
 
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -120,9 +128,21 @@ class GateState:
         os.replace(tmp, self.sticky_file)
 
     def _load_model_routes(self) -> None:
-        backends: Dict[str, Dict[str, str]] = {
-            "ollama": {"protocol": "ollama", "base_url": self.ollama_base_url},
-            "trtllm": {"protocol": "ollama", "base_url": self.trtllm_base_url},
+        backends: Dict[str, Dict[str, Any]] = {
+            "ollama": {"protocol": "ollama", "provider": "local", "base_url": self.ollama_base_url},
+            "trtllm": {"protocol": "ollama", "provider": "local", "base_url": self.trtllm_base_url},
+            "openai": {
+                "protocol": "openai",
+                "provider": "openai",
+                "base_url": "https://api.openai.com/v1",
+                "api_key_file": self.openai_api_key_file,
+            },
+            "openrouter": {
+                "protocol": "openai",
+                "provider": "openrouter",
+                "base_url": "https://openrouter.ai/api/v1",
+                "api_key_file": self.openrouter_api_key_file,
+            },
         }
         default_backend = "ollama"
         model_routes: list[Tuple[str, str]] = []
@@ -150,14 +170,23 @@ class GateState:
                 if not isinstance(backend_cfg, dict):
                     continue
 
-                base_url = backend_cfg.get("base_url")
-                protocol = backend_cfg.get("protocol")
-
                 merged = dict(backends.get(backend_name, {}))
-                if isinstance(base_url, str) and base_url.strip():
-                    merged["base_url"] = base_url.strip().rstrip("/")
-                if isinstance(protocol, str) and protocol.strip():
-                    merged["protocol"] = protocol.strip()
+                for field in ("base_url", "protocol", "provider", "api_key_file", "api_key_env"):
+                    value = backend_cfg.get(field)
+                    if isinstance(value, str) and value.strip():
+                        if field == "base_url":
+                            merged[field] = value.strip().rstrip("/")
+                        else:
+                            merged[field] = value.strip()
+
+                extra_headers = backend_cfg.get("extra_headers")
+                if isinstance(extra_headers, dict):
+                    sanitized_headers: Dict[str, str] = {}
+                    for key, value in extra_headers.items():
+                        if isinstance(key, str) and key.strip() and isinstance(value, str):
+                            sanitized_headers[key.strip()] = value.strip()
+                    if sanitized_headers:
+                        merged["extra_headers"] = sanitized_headers
 
                 if "base_url" in merged and "protocol" in merged:
                     backends[backend_name] = merged
@@ -250,17 +279,58 @@ class GateState:
 
         return self.default_backend
 
-    def backend_config(self, backend_name: str) -> Dict[str, str] | None:
+    def backend_config(self, backend_name: str) -> Dict[str, Any] | None:
         cfg = self.backends.get(backend_name)
         if not isinstance(cfg, dict):
             return None
+
         base_url = cfg.get("base_url")
         protocol = cfg.get("protocol")
         if not isinstance(base_url, str) or not base_url:
             return None
         if not isinstance(protocol, str) or not protocol:
             return None
-        return {"base_url": base_url, "protocol": protocol}
+
+        normalized: Dict[str, Any] = {
+            "base_url": base_url.rstrip("/"),
+            "protocol": protocol.strip().lower(),
+        }
+
+        provider = cfg.get("provider")
+        if isinstance(provider, str) and provider.strip():
+            normalized["provider"] = provider.strip().lower()
+        elif normalized["protocol"] == "ollama":
+            normalized["provider"] = "local"
+        else:
+            normalized["provider"] = backend_name
+
+        api_key_file = cfg.get("api_key_file")
+        if isinstance(api_key_file, str) and api_key_file.strip():
+            normalized["api_key_file"] = api_key_file.strip()
+
+        api_key_env = cfg.get("api_key_env")
+        if isinstance(api_key_env, str) and api_key_env.strip():
+            normalized["api_key_env"] = api_key_env.strip()
+
+        extra_headers = cfg.get("extra_headers")
+        if isinstance(extra_headers, dict):
+            sanitized_headers: Dict[str, str] = {}
+            for key, value in extra_headers.items():
+                if isinstance(key, str) and key.strip() and isinstance(value, str):
+                    sanitized_headers[key.strip()] = value.strip()
+            if sanitized_headers:
+                normalized["extra_headers"] = sanitized_headers
+
+        return normalized
+
+    def backend_provider(self, backend_name: str) -> str | None:
+        cfg = self.backend_config(backend_name)
+        if cfg is None:
+            return None
+        provider = cfg.get("provider")
+        if isinstance(provider, str) and provider:
+            return provider
+        return None
 
     def write_log(self, event: Dict[str, Any]) -> None:
         line = json.dumps(event, ensure_ascii=True, separators=(",", ":"))
@@ -274,11 +344,17 @@ app = FastAPI(title="ollama-gate", version="0.2.0")
 
 
 def backend_unavailable_response(backend: str, model: str, detail: str) -> JSONResponse:
+    provider = backend_provider_name(backend)
     message = (
         f"backend '{backend}' is unavailable for routed model '{model}'. "
         "Enable COMPOSE_PROFILES=trt and verify 'trtllm' health before retrying."
         if backend == "trtllm"
-        else f"backend '{backend}' is unavailable for routed model '{model}'."
+        else (
+            f"backend '{backend}' is unavailable for routed model '{model}'. "
+            "Verify proxy allowlist and provider endpoint reachability."
+            if provider in ("openai", "openrouter")
+            else f"backend '{backend}' is unavailable for routed model '{model}'."
+        )
     )
     return JSONResponse(
         status_code=503,
@@ -287,6 +363,7 @@ def backend_unavailable_response(backend: str, model: str, detail: str) -> JSONR
                 "message": message,
                 "type": "backend_unavailable",
                 "backend": backend,
+                "provider": provider,
                 "model": model,
                 "detail": detail,
             }
@@ -294,28 +371,119 @@ def backend_unavailable_response(backend: str, model: str, detail: str) -> JSONR
     )
 
 
+def backend_auth_response(backend: str, provider: str | None, detail: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": {
+                "message": detail,
+                "type": "backend_auth_error",
+                "backend": backend,
+                "provider": provider,
+            }
+        },
+    )
+
+
+def read_secret_file(secret_path: str) -> str | None:
+    path = Path(secret_path)
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except Exception:
+        return None
+    if not value:
+        return None
+    return value
+
+
+def backend_provider_name(backend: str) -> str:
+    provider = state.backend_provider(backend)
+    if isinstance(provider, str) and provider:
+        return provider
+    return backend
+
+
+def resolve_backend_api_key(backend: str, cfg: Dict[str, Any]) -> str:
+    env_key_name = cfg.get("api_key_env")
+    if isinstance(env_key_name, str) and env_key_name:
+        env_value = os.getenv(env_key_name, "").strip()
+        if env_value:
+            return env_value
+
+    api_key_file = cfg.get("api_key_file")
+    if isinstance(api_key_file, str) and api_key_file:
+        file_value = read_secret_file(api_key_file)
+        if file_value:
+            return file_value
+        raise BackendAuthError(
+            f"missing API key for backend '{backend}': create non-empty file {api_key_file} (mode 600)"
+        )
+
+    raise BackendAuthError(
+        f"missing API key for backend '{backend}': configure 'api_key_env' or 'api_key_file' in model_routes.yml"
+    )
+
+
+def backend_request_headers(cfg: Dict[str, Any], api_key: str) -> Dict[str, str]:
+    headers: Dict[str, str] = {"Authorization": f"Bearer {api_key}"}
+
+    extra_headers = cfg.get("extra_headers")
+    if isinstance(extra_headers, dict):
+        for key, value in extra_headers.items():
+            if isinstance(key, str) and key.strip() and isinstance(value, str):
+                headers[key.strip()] = value.strip()
+
+    provider = cfg.get("provider")
+    if provider == "openrouter":
+        headers.setdefault("HTTP-Referer", "https://localhost/agentic")
+        headers.setdefault("X-Title", "DGX Spark Agentic Stack")
+
+    return headers
+
+
 async def fetch_backend_models(backend: str) -> list[str]:
     cfg = state.backend_config(backend)
     if cfg is None:
         return []
 
-    if cfg["protocol"] != "ollama":
-        return []
+    if cfg["protocol"] == "ollama":
+        async with httpx.AsyncClient(timeout=10, trust_env=True) as client:
+            resp = await client.get(f"{cfg['base_url']}/api/tags")
+            resp.raise_for_status()
+            payload = resp.json()
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(f"{cfg['base_url']}/api/tags")
-        resp.raise_for_status()
-        payload = resp.json()
+        models = payload.get("models", [])
+        names: list[str] = []
+        if isinstance(models, list):
+            for item in models:
+                if isinstance(item, dict):
+                    name = item.get("name")
+                    if isinstance(name, str) and name:
+                        names.append(name)
+        return names
 
-    models = payload.get("models", [])
-    names: list[str] = []
-    if isinstance(models, list):
-        for item in models:
-            if isinstance(item, dict):
-                name = item.get("name")
+    if cfg["protocol"] == "openai":
+        api_key = resolve_backend_api_key(backend, cfg)
+        headers = backend_request_headers(cfg, api_key)
+        async with httpx.AsyncClient(timeout=15, trust_env=True) as client:
+            resp = await client.get(f"{cfg['base_url']}/models", headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
+
+        names: list[str] = []
+        models = payload.get("data")
+        if isinstance(models, list):
+            for item in models:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("id")
                 if isinstance(name, str) and name:
                     names.append(name)
-    return names
+        return names
+
+    return []
 
 
 async def resolve_model(session: str, requested: str | None, allow_switch: bool) -> Tuple[str, bool]:
@@ -389,6 +557,7 @@ def event_base(
     status_code: int,
     latency_ms: int,
     backend: str | None = None,
+    provider: str | None = None,
     model_switch: bool = False,
     reason: str | None = None,
 ) -> Dict[str, Any]:
@@ -402,6 +571,7 @@ def event_base(
         "model_requested": model_requested,
         "model_served": model_served,
         "backend": backend,
+        "provider": provider,
         "model_switch": model_switch,
         "status_code": status_code,
         "reason": reason,
@@ -442,6 +612,7 @@ async def v1_models(request: Request) -> JSONResponse:
     acquired = False
     decision = "active"
     backend = state.default_backend
+    provider = backend_provider_name(backend)
     try:
         decision, acquired = await acquire_gate_slot(queue_wait_timeout_seconds)
     except asyncio.TimeoutError:
@@ -458,6 +629,7 @@ async def v1_models(request: Request) -> JSONResponse:
                 status_code=429,
                 latency_ms=latency_ms,
                 backend=backend,
+                provider=provider,
                 reason="queue_timeout",
             )
         )
@@ -468,6 +640,7 @@ async def v1_models(request: Request) -> JSONResponse:
 
     status_code = 200
     try:
+        provider = backend_provider_name(backend)
         names = await fetch_backend_models(backend)
         response = {
             "object": "list",
@@ -476,11 +649,28 @@ async def v1_models(request: Request) -> JSONResponse:
         return JSONResponse(
             status_code=200,
             content=response,
-            headers={"X-Gate-Decision": decision, "X-Gate-Backend": backend},
+            headers={
+                "X-Gate-Decision": decision,
+                "X-Gate-Backend": backend,
+                "X-Gate-Provider": provider,
+            },
         )
+    except BackendAuthError as exc:
+        status_code = 503
+        return backend_auth_response(backend, provider, str(exc))
     except Exception as exc:
         status_code = 502
-        return JSONResponse(status_code=502, content={"error": {"message": str(exc), "type": "upstream_error"}})
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": {
+                    "message": str(exc),
+                    "type": "upstream_error",
+                    "backend": backend,
+                    "provider": provider,
+                }
+            },
+        )
     finally:
         await release_gate_slot(acquired)
         await state.mark_decision("denied" if status_code == 429 else decision)
@@ -496,6 +686,7 @@ async def v1_models(request: Request) -> JSONResponse:
                 status_code=status_code,
                 latency_ms=latency_ms,
                 backend=backend,
+                provider=provider,
             )
         )
 
@@ -505,26 +696,53 @@ async def backend_chat_completion(backend: str, model: str, messages: Any) -> tu
     if cfg is None:
         raise RuntimeError(f"backend '{backend}' is not configured")
 
-    if cfg["protocol"] != "ollama":
-        raise RuntimeError(f"unsupported backend protocol '{cfg['protocol']}'")
+    protocol = cfg["protocol"]
 
-    upstream_payload = {
-        "model": model,
-        "messages": messages if isinstance(messages, list) else [],
-        "stream": False,
-    }
+    if protocol == "ollama":
+        upstream_payload = {
+            "model": model,
+            "messages": messages if isinstance(messages, list) else [],
+            "stream": False,
+        }
 
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            upstream = await client.post(f"{cfg['base_url']}/api/chat", json=upstream_payload)
-    except httpx.RequestError as exc:
-        raise ConnectionError(str(exc)) from exc
+        try:
+            async with httpx.AsyncClient(timeout=60, trust_env=True) as client:
+                upstream = await client.post(f"{cfg['base_url']}/api/chat", json=upstream_payload)
+        except httpx.RequestError as exc:
+            raise ConnectionError(str(exc)) from exc
 
-    text = upstream.text
-    if upstream.status_code >= 400:
-        return upstream.status_code, {}, text
+        text = upstream.text
+        if upstream.status_code >= 400:
+            return upstream.status_code, {}, text
 
-    return upstream.status_code, upstream.json(), text
+        return upstream.status_code, upstream.json(), text
+
+    if protocol == "openai":
+        api_key = resolve_backend_api_key(backend, cfg)
+        upstream_payload = {
+            "model": model,
+            "messages": messages if isinstance(messages, list) else [],
+            "stream": False,
+        }
+        headers = backend_request_headers(cfg, api_key)
+
+        try:
+            async with httpx.AsyncClient(timeout=75, trust_env=True) as client:
+                upstream = await client.post(
+                    f"{cfg['base_url']}/chat/completions",
+                    json=upstream_payload,
+                    headers=headers,
+                )
+        except httpx.RequestError as exc:
+            raise ConnectionError(str(exc)) from exc
+
+        text = upstream.text
+        if upstream.status_code >= 400:
+            return upstream.status_code, {}, text
+
+        return upstream.status_code, upstream.json(), text
+
+    raise RuntimeError(f"unsupported backend protocol '{protocol}'")
 
 
 async def backend_embedding(backend: str, model: str, prompt: str) -> tuple[int, dict[str, Any], str]:
@@ -532,23 +750,93 @@ async def backend_embedding(backend: str, model: str, prompt: str) -> tuple[int,
     if cfg is None:
         raise RuntimeError(f"backend '{backend}' is not configured")
 
-    if cfg["protocol"] != "ollama":
-        raise RuntimeError(f"unsupported backend protocol '{cfg['protocol']}'")
+    protocol = cfg["protocol"]
 
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            upstream = await client.post(
-                f"{cfg['base_url']}/api/embeddings",
-                json={"model": model, "prompt": prompt},
-            )
-    except httpx.RequestError as exc:
-        raise ConnectionError(str(exc)) from exc
+    if protocol == "ollama":
+        try:
+            async with httpx.AsyncClient(timeout=60, trust_env=True) as client:
+                upstream = await client.post(
+                    f"{cfg['base_url']}/api/embeddings",
+                    json={"model": model, "prompt": prompt},
+                )
+        except httpx.RequestError as exc:
+            raise ConnectionError(str(exc)) from exc
 
-    text = upstream.text
-    if upstream.status_code >= 400:
-        return upstream.status_code, {}, text
+        text = upstream.text
+        if upstream.status_code >= 400:
+            return upstream.status_code, {}, text
 
-    return upstream.status_code, upstream.json(), text
+        return upstream.status_code, upstream.json(), text
+
+    if protocol == "openai":
+        api_key = resolve_backend_api_key(backend, cfg)
+        headers = backend_request_headers(cfg, api_key)
+        try:
+            async with httpx.AsyncClient(timeout=75, trust_env=True) as client:
+                upstream = await client.post(
+                    f"{cfg['base_url']}/embeddings",
+                    json={"model": model, "input": prompt},
+                    headers=headers,
+                )
+        except httpx.RequestError as exc:
+            raise ConnectionError(str(exc)) from exc
+
+        text = upstream.text
+        if upstream.status_code >= 400:
+            return upstream.status_code, {}, text
+
+        return upstream.status_code, upstream.json(), text
+
+    raise RuntimeError(f"unsupported backend protocol '{protocol}'")
+
+
+def chat_content_from_upstream(protocol: str, payload: Dict[str, Any]) -> str:
+    if protocol == "ollama":
+        message = payload.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+        return ""
+
+    if protocol == "openai":
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return ""
+        first = choices[0]
+        if not isinstance(first, dict):
+            return ""
+        message = first.get("message")
+        if not isinstance(message, dict):
+            return ""
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        return ""
+
+    return ""
+
+
+def embedding_from_upstream(protocol: str, payload: Dict[str, Any]) -> list[float] | None:
+    if protocol == "ollama":
+        embedding = payload.get("embedding")
+        if isinstance(embedding, list) and embedding:
+            return [float(value) for value in embedding]
+        return None
+
+    if protocol == "openai":
+        data = payload.get("data")
+        if not isinstance(data, list) or not data:
+            return None
+        first = data[0]
+        if not isinstance(first, dict):
+            return None
+        embedding = first.get("embedding")
+        if not isinstance(embedding, list) or not embedding:
+            return None
+        return [float(value) for value in embedding]
+
+    return None
 
 
 @app.post("/v1/chat/completions")
@@ -577,6 +865,8 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 model_served=None,
                 status_code=429,
                 latency_ms=latency_ms,
+                backend=state.default_backend,
+                provider=backend_provider_name(state.default_backend),
                 reason="queue_timeout",
             )
         )
@@ -595,15 +885,22 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
     model_switch = False
     model_served: str | None = None
     backend = state.default_backend
+    provider = backend_provider_name(backend)
     status_code = 200
     reason = None
     try:
-        model_served, model_switch = await resolve_model(
-            session=session,
-            requested=requested_model if isinstance(requested_model, str) else None,
-            allow_switch=allow_switch,
-        )
+        try:
+            model_served, model_switch = await resolve_model(
+                session=session,
+                requested=requested_model if isinstance(requested_model, str) else None,
+                allow_switch=allow_switch,
+            )
+        except BackendAuthError as exc:
+            status_code = 503
+            reason = "backend_auth_error"
+            return backend_auth_response(backend, provider, str(exc))
         backend = state.resolve_backend(model_served)
+        provider = backend_provider_name(backend)
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
         if use_dry_run:
@@ -618,6 +915,10 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                     model_served,
                     payload.get("messages", []),
                 )
+            except BackendAuthError as exc:
+                status_code = 503
+                reason = "backend_auth_error"
+                return backend_auth_response(backend, provider, str(exc))
             except ConnectionError as exc:
                 status_code = 503
                 reason = "backend_unavailable"
@@ -632,6 +933,7 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                             "message": str(exc),
                             "type": "backend_config_error",
                             "backend": backend,
+                            "provider": provider,
                         }
                     },
                 )
@@ -655,17 +957,14 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                             "message": upstream_text,
                             "type": "upstream_error",
                             "backend": backend,
+                            "provider": provider,
                         }
                     },
                 )
 
-            content = (
-                (upstream_json.get("message") or {}).get("content")
-                if isinstance(upstream_json.get("message"), dict)
-                else ""
-            )
-            if not isinstance(content, str):
-                content = ""
+            backend_cfg = state.backend_config(backend) or {}
+            protocol = str(backend_cfg.get("protocol", ""))
+            content = chat_content_from_upstream(protocol, upstream_json)
 
         response_payload = {
             "id": f"chatcmpl-{uuid.uuid4().hex}",
@@ -687,6 +986,7 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 "X-Gate-Decision": decision,
                 "X-Model-Served": model_served,
                 "X-Gate-Backend": backend,
+                "X-Gate-Provider": provider,
             },
         )
     finally:
@@ -704,6 +1004,7 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 status_code=status_code,
                 latency_ms=latency_ms,
                 backend=backend,
+                provider=provider,
                 model_switch=model_switch,
                 reason=reason,
             )
@@ -759,6 +1060,8 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 model_served=None,
                 status_code=429,
                 latency_ms=latency_ms,
+                backend=state.default_backend,
+                provider=backend_provider_name(state.default_backend),
                 reason="queue_timeout",
             )
         )
@@ -777,15 +1080,22 @@ async def v1_embeddings(request: Request) -> JSONResponse:
     model_switch = False
     model_served: str | None = None
     backend = state.default_backend
+    provider = backend_provider_name(backend)
     status_code = 200
     reason = None
     try:
-        model_served, model_switch = await resolve_model(
-            session=session,
-            requested=requested_model,
-            allow_switch=allow_switch,
-        )
+        try:
+            model_served, model_switch = await resolve_model(
+                session=session,
+                requested=requested_model,
+                allow_switch=allow_switch,
+            )
+        except BackendAuthError as exc:
+            status_code = 503
+            reason = "backend_auth_error"
+            return backend_auth_response(backend, provider, str(exc))
         backend = state.resolve_backend(model_served)
+        provider = backend_provider_name(backend)
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
         vectors: list[list[float]] = []
@@ -800,6 +1110,10 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                         model_served,
                         item,
                     )
+                except BackendAuthError as exc:
+                    status_code = 503
+                    reason = "backend_auth_error"
+                    return backend_auth_response(backend, provider, str(exc))
                 except ConnectionError as exc:
                     status_code = 503
                     reason = "backend_unavailable"
@@ -814,6 +1128,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                                 "message": str(exc),
                                 "type": "backend_config_error",
                                 "backend": backend,
+                                "provider": provider,
                             }
                         },
                     )
@@ -837,12 +1152,15 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                                 "message": upstream_text,
                                 "type": "upstream_error",
                                 "backend": backend,
+                                "provider": provider,
                             }
                         },
                     )
 
-                embedding = upstream_json.get("embedding")
-                if not isinstance(embedding, list) or not embedding:
+                backend_cfg = state.backend_config(backend) or {}
+                protocol = str(backend_cfg.get("protocol", ""))
+                embedding = embedding_from_upstream(protocol, upstream_json)
+                if embedding is None:
                     status_code = 502
                     reason = "upstream_invalid_payload"
                     return JSONResponse(
@@ -852,10 +1170,11 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                                 "message": "upstream embeddings payload is missing vector",
                                 "type": "upstream_invalid_payload",
                                 "backend": backend,
+                                "provider": provider,
                             }
                         },
                     )
-                vectors.append([float(value) for value in embedding])
+                vectors.append(embedding)
 
         response_payload = {
             "object": "list",
@@ -873,6 +1192,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 "X-Gate-Decision": decision,
                 "X-Model-Served": model_served or "",
                 "X-Gate-Backend": backend,
+                "X-Gate-Provider": provider,
             },
         )
     finally:
@@ -890,6 +1210,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 status_code=status_code,
                 latency_ms=latency_ms,
                 backend=backend,
+                provider=provider,
                 model_switch=model_switch,
                 reason=reason,
             )
@@ -904,6 +1225,7 @@ async def admin_switch(session_id: str, request: Request) -> JSONResponse:
         return JSONResponse(status_code=400, content={"error": "model is required"})
     await state.set_sticky_model(session_id, model)
     backend = state.resolve_backend(model)
+    provider = backend_provider_name(backend)
     state.write_log(
         event_base(
             session=session_id,
@@ -915,14 +1237,28 @@ async def admin_switch(session_id: str, request: Request) -> JSONResponse:
             status_code=200,
             latency_ms=0,
             backend=backend,
+            provider=provider,
             model_switch=True,
         )
     )
-    return JSONResponse(status_code=200, content={"ok": True, "session": session_id, "model": model, "backend": backend})
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": True,
+            "session": session_id,
+            "model": model,
+            "backend": backend,
+            "provider": provider,
+        },
+    )
 
 
 @app.get("/admin/sessions/{session_id}")
 async def admin_session(session_id: str) -> JSONResponse:
     model = await state.get_sticky_model(session_id)
     backend = state.resolve_backend(model)
-    return JSONResponse(status_code=200, content={"session": session_id, "model": model, "backend": backend})
+    provider = backend_provider_name(backend)
+    return JSONResponse(
+        status_code=200,
+        content={"session": session_id, "model": model, "backend": backend, "provider": provider},
+    )

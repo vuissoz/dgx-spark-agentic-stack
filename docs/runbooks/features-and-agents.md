@@ -57,7 +57,9 @@ The source of truth for service wiring is in:
 - Why it exists:
   - centralizes concurrency/queueing behavior and gate-level logging for model calls.
   - resolves model routing policy (`model -> backend`) from `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
-  - logs backend audit fields (`backend=ollama|trtllm`) for every `/v1/*` request.
+  - supports external provider backends (`openai`, `openrouter`) with the same client API (`/v1/*`).
+  - logs backend/provider audit fields (`backend`, `provider`) for every `/v1/*` request.
+  - reads provider secrets from `${AGENTIC_ROOT}/secrets/runtime/*.api_key` (never from git).
 
 ### `trtllm` (optional `trt` profile)
 - Role: internal TRT-LLM backend used for NVFP4-routed models.

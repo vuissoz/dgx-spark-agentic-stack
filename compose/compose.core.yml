@@ -61,10 +61,17 @@ services:
       GATE_LOG_FILE: /gate/logs/gate.jsonl
       GATE_ENABLE_TEST_MODE: 1
       GATE_MAX_TEST_SLEEP_SECONDS: 15
+      GATE_OPENAI_API_KEY_FILE: /gate/secrets/openai.api_key
+      GATE_OPENROUTER_API_KEY_FILE: /gate/secrets/openrouter.api_key
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      ALL_PROXY: http://egress-proxy:3128
+      NO_PROXY: 127.0.0.1,localhost,ollama,ollama-gate,trtllm,unbound,egress-proxy
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/gate/config:/gate/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/gate/state:/gate/state
       - ${AGENTIC_ROOT:-/srv/agentic}/gate/logs:/gate/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime:/gate/secrets:ro
     healthcheck:
       test:
         - CMD-SHELL
