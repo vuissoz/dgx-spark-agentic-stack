@@ -198,6 +198,7 @@ agent update
 agent rollback all <release_id>
 agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
+agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
 agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
 agent doctor [--fix-net]
@@ -252,8 +253,11 @@ AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
 
 Runtime prerequisites:
 - request files: `${AGENTIC_ROOT}/deployments/optional/*.request`
+  - `${AGENTIC_ROOT}/deployments/optional/openclaw.request`
+  - `${AGENTIC_ROOT}/deployments/optional/mcp.request`
   - `${AGENTIC_ROOT}/deployments/optional/pi-mono.request`
   - `${AGENTIC_ROOT}/deployments/optional/goose.request`
+  - `${AGENTIC_ROOT}/deployments/optional/portainer.request`
 - secrets:
   - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
   - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
@@ -262,7 +266,7 @@ Runtime prerequisites:
 ## Validation
 
 - Global diagnostics: `./agent doctor`
-- Test campaigns: `./agent test <A..K|all>`
+- Test campaigns: `./agent test <A..L|all>`
 
 ## Detailed Documentation
 

@@ -255,14 +255,17 @@ Key implemented capabilities:
   - `agent stop <tool>`
 - compliance and tests:
   - `agent doctor [--fix-net]`
-  - `agent test <A..K|all>`
+  - `agent test <A..L|all>`
 - update and rollback:
   - `agent update`
   - `agent rollback all <release_id>`
   - `agent rollback host-net <backup_id>`
   - `agent rollback ollama-link <backup_id|latest>`
+- vm provisioning:
+  - `agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]`
 - profile and model store utilities:
   - `agent profile`
+  - `agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --output ... --non-interactive]`
   - `agent ollama-link`
   - `agent ollama-preload ...`
   - `agent ollama-models <rw|ro>`

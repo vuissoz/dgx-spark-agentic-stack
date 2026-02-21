@@ -94,7 +94,7 @@ export AGENTIC_EGRESS_NETWORK=agentic-dev-egress
 ```
 
 Notes:
-- `./agent test all` stops on first failure. For progressive diagnosis, run `./agent test A` ... `./agent test K`.
+- `./agent test all` stops on first failure. For progressive diagnosis, run `./agent test A` ... `./agent test L`.
 - In `rootless-dev`, some host-root checks are intentionally skipped/degraded (expected behavior).
 - Optional module tests (`K*`) require a green baseline doctor and module prerequisites (request files/secrets).
 
