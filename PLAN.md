@@ -343,6 +343,22 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - en mode `local`, appel d’un modèle externe est refusé explicitement.
 - dépassement quota simulé -> requêtes externes refusées, agents non plantés, logs/metrics cohérents.
 
+### D7 MCP local pour visibilité runtime (modèle actif + tokens restants)
+**Implémentation**
+- ajouter un MCP local (service interne, sans exposition host) consommable par les agents locaux.
+- exposer au minimum des outils MCP:
+  - `gate.current_model` : retourne le modèle effectivement servi derrière `ollama-gate` (backend/provider/model_served), avec contexte session/projet.
+  - `gate.quota_remaining` : retourne le quota/tokens restants pour les appels externes (global + par provider, et optionnellement par outil/projet).
+- source de vérité: état/métriques du gate (`${AGENTIC_ROOT}/gate/state/*` + endpoints internes) ; aucun secret provider ne doit être renvoyé.
+- intégrer l’endpoint MCP local dans l’environnement des conteneurs agents (variables runtime dédiées), en gardant l’isolation réseau actuelle.
+- hardening: auth locale minimale (token runtime local), rate limiting, logs d’audit.
+
+**Test** : `tests/D7_local_mcp_gate_visibility.sh`
+- depuis un conteneur agent, appel MCP `gate.current_model` -> réponse non vide avec backend/provider/model_served cohérents.
+- depuis un conteneur agent, appel MCP `gate.quota_remaining` -> réponse avec compteurs restants cohérents.
+- en mode `remote` avec `ollama`/`trtllm` arrêtés, le MCP continue de refléter correctement le provider externe actif.
+- accès non autorisé ou hors réseau interne -> refus explicite.
+
 ---
 
 ## E — Agents CLI persistants : image `agent-cli-base` + tmux + workspaces
@@ -753,6 +769,7 @@ La stack est “opérable” quand :
 - routage LLM externe via `ollama-gate` possible (OpenAI/OpenRouter) avec API client stable `/v1/*`
 - mode `agent llm mode <local|hybrid|remote>` permet d’arrêter les backends locaux (`ollama`/`trtllm`) sans interrompre l’usage agentique en mode `remote`
 - quotas tokens/coût des appels externes actifs et auditables (blocage explicite au dépassement)
+- les agents locaux peuvent interroger un MCP local pour connaître le modèle effectif servi par `ollama-gate` et le quota/tokens externes restants
 - backup incrémental “time machine” des dossiers persistants + config non-secrète, avec restauration testée
 
 Critères de clôture par profil :

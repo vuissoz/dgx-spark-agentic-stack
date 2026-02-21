@@ -90,6 +90,8 @@ Role simple:
 
 Pourquoi il existe:
 - Mieux maitriser la resolution DNS dans un schema egress contraint.
+- Ici, "egress" veut dire le trafic sortant des conteneurs vers l'exterieur (Internet): DNS, HTTP, HTTPS, etc.
+- "Contrainte" veut dire que ces sorties sont filtrees (proxy, allowlist, regles reseau) au lieu d'etre libres.
 
 Entrees/sorties:
 - Service interne (pas d'UI).
