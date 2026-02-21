@@ -772,6 +772,18 @@ Suivi Beads : `dgx-spark-agentic-stack-9kz`
 
 ---
 
+## Backlog transverse — limites, hardening uniforme, doctor
+
+Suivi Beads :
+- `dgx-spark-agentic-stack-blw` — onboarding/runtime : customisation des limites CPU/RAM pour l’ensemble des services conteneurisés.
+- `dgx-spark-agentic-stack-2oj` — étude + remédiation du hardening non uniforme (services encore root par défaut en `strict-prod`, healthchecks manquants sur services longue durée).
+- `dgx-spark-agentic-stack-dvo` — extension de `agent doctor` pour appliquer des contrôles de sécurité profonds de manière uniforme sur tous les services gérés.
+
+Objectif :
+- traiter ces trois sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).
+
+---
+
 ## Définition “terminé” (objectif final)
 La stack est “opérable” quand :
 - `agent doctor` est vert de façon stable
