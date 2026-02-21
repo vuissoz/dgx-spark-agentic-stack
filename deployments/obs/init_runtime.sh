@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/obs"
+AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
 
 log() {
   echo "INFO: $*"
@@ -14,6 +15,36 @@ log() {
 die() {
   echo "ERROR: $*" >&2
   exit 1
+}
+
+repair_rootless_obs_layout() {
+  local monitoring_root="${AGENTIC_ROOT}/monitoring"
+  local first_unwritable=""
+  local target_uid="${AGENT_RUNTIME_UID:-$(id -u)}"
+  local target_gid="${AGENT_RUNTIME_GID:-$(id -g)}"
+
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+  [[ "${EUID}" -ne 0 ]] || return 0
+  [[ -d "${monitoring_root}" ]] || return 0
+
+  if [[ ! -w "${monitoring_root}" ]] || [[ ! -x "${monitoring_root}" ]]; then
+    first_unwritable="${monitoring_root}"
+  else
+    first_unwritable="$(find "${monitoring_root}" -mindepth 0 ! -writable -print -quit 2>/dev/null || true)"
+  fi
+  [[ -n "${first_unwritable}" ]] || return 0
+
+  command -v docker >/dev/null 2>&1 \
+    || die "docker command is required to repair legacy monitoring ownership in rootless-dev (first unwritable path: ${first_unwritable})"
+
+  if ! docker run --rm \
+    -v "${monitoring_root}:/repair/monitoring" \
+    busybox:1.36.1 sh -lc \
+    "chown -R ${target_uid}:${target_gid} /repair/monitoring && chmod -R u+rwX,g+rwX,o-rwx /repair/monitoring"; then
+    die "failed to repair monitoring ownership for rootless-dev runtime (first unwritable path: ${first_unwritable}); run: sudo chown -R ${target_uid}:${target_gid} '${monitoring_root}' && sudo chmod -R u+rwX,g+rwX,o-rwx '${monitoring_root}'"
+  fi
+
+  log "repaired legacy monitoring ownership with containerized chown (uid=${target_uid} gid=${target_gid})"
 }
 
 copy_if_missing() {
@@ -43,6 +74,8 @@ promtail_path_migration() {
 }
 
 main() {
+  repair_rootless_obs_layout
+
   install -d -m 0750 "${AGENTIC_ROOT}/monitoring"
   install -d -m 0750 "${AGENTIC_ROOT}/monitoring/config"
   install -d -m 0770 "${AGENTIC_ROOT}/monitoring/prometheus"
@@ -62,13 +95,13 @@ main() {
     chown -R 472:472 "${AGENTIC_ROOT}/monitoring/grafana"
   fi
 
-  if [[ "${EUID}" -ne 0 ]]; then
+  if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] && [[ "${EUID}" -ne 0 ]]; then
     chmod 0770 "${AGENTIC_ROOT}/monitoring/prometheus" \
       "${AGENTIC_ROOT}/monitoring/grafana" \
       "${AGENTIC_ROOT}/monitoring/loki" \
       "${AGENTIC_ROOT}/monitoring/promtail" \
       "${AGENTIC_ROOT}/monitoring/promtail/positions"
-    log "non-root runtime init: relaxed monitoring dirs permissions for userns compatibility"
+    log "rootless runtime init: relaxed monitoring dirs permissions for userns compatibility"
   fi
 }
 

@@ -51,6 +51,25 @@ ls -l "${AGENTIC_ROOT:-/srv/agentic}/proxy/logs/access.log"
 - datasource: Loki
 - query: `{job="egress-proxy"}`
 
+## Rootless Ownership Drift (Strict -> Rootless)
+
+If observability services restart-loop after switching from strict/rootful runs to `rootless-dev`, run:
+
+```bash
+export AGENTIC_PROFILE=rootless-dev
+./agent up obs
+```
+
+`deployments/obs/init_runtime.sh` now auto-repairs legacy root-owned paths under `${AGENTIC_ROOT}/monitoring` in `rootless-dev` before starting services.
+
+Quick check:
+
+```bash
+find "${AGENTIC_ROOT}/monitoring" -mindepth 0 ! -writable -print -quit
+```
+
+Expected: no output.
+
 ## Immediate High-Signal Queries
 
 Use these in Grafana Explore (Loki/Prometheus) or dashboard panels.
