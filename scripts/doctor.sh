@@ -133,7 +133,7 @@ else
   warn "skip proxy enforcement check because AGENTIC_SKIP_DOCTOR_PROXY_CHECK=1"
 fi
 
-for service in ollama ollama-gate gate-mcp trtllm egress-proxy unbound toolbox openwebui openhands comfyui prometheus grafana loki qdrant optional-sentinel optional-openclaw optional-openclaw-sandbox optional-mcp-catalog optional-pi-mono optional-goose optional-portainer; do
+for service in ollama ollama-gate gate-mcp trtllm egress-proxy unbound toolbox openwebui openhands comfyui prometheus grafana loki qdrant rag-retriever rag-worker opensearch optional-sentinel optional-openclaw optional-openclaw-sandbox optional-mcp-catalog optional-pi-mono optional-goose optional-portainer; do
   cid="$(service_container_id "${service}")"
   [[ -n "${cid}" ]] || continue
 
@@ -149,6 +149,36 @@ for service in ollama ollama-gate gate-mcp trtllm egress-proxy unbound toolbox o
   fi
   ok "service '${service}' is running and healthy"
 done
+
+for service in rag-retriever rag-worker; do
+  cid="$(service_container_id "${service}")"
+  [[ -n "${cid}" ]] || continue
+
+  if ! assert_container_security "${cid}"; then
+    doctor_fail "rag service security baseline failed for '${service}'"
+  fi
+  if ! assert_no_docker_sock_mount "${cid}"; then
+    doctor_fail "docker.sock mount detected for rag service '${service}'"
+  fi
+done
+
+rag_retriever_cid="$(service_container_id rag-retriever)"
+if [[ -n "${rag_retriever_cid}" ]]; then
+  published="$(docker port "${rag_retriever_cid}" 7111/tcp 2>/dev/null || true)"
+  [[ -z "${published}" ]] || doctor_fail "rag-retriever must not publish host port 7111 (got: ${published})"
+fi
+
+rag_worker_cid="$(service_container_id rag-worker)"
+if [[ -n "${rag_worker_cid}" ]]; then
+  published="$(docker port "${rag_worker_cid}" 7112/tcp 2>/dev/null || true)"
+  [[ -z "${published}" ]] || doctor_fail "rag-worker must not publish host port 7112 (got: ${published})"
+fi
+
+opensearch_cid="$(service_container_id opensearch)"
+if [[ -n "${opensearch_cid}" ]]; then
+  published="$(docker port "${opensearch_cid}" 9200/tcp 2>/dev/null || true)"
+  [[ -z "${published}" ]] || doctor_fail "opensearch must not publish host port 9200 (got: ${published})"
+fi
 
 agents_found=0
 for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; do

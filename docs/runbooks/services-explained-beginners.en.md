@@ -354,6 +354,36 @@ Official links:
 - Qdrant docs: https://qdrant.tech/documentation/
 - Official repo: https://github.com/qdrant/qdrant
 
+### Service `rag-retriever`
+
+Simple role:
+- Internal API orchestrating hybrid retrieval:
+  - dense (vector search through Qdrant),
+  - lexical (through OpenSearch when enabled),
+  - fused ranking (`rrf`).
+
+Inputs/outputs:
+- Internal-only service (`rag-retriever:7111`), no host port.
+- State/logs: `${AGENTIC_ROOT}/rag/retriever/{state,logs}`.
+
+### Service `rag-worker`
+
+Simple role:
+- Async worker indexing local corpus content for retrieval (`/v1/index`).
+
+Inputs/outputs:
+- Internal-only service (`rag-worker:7112`), no host port.
+- State/logs: `${AGENTIC_ROOT}/rag/worker/{state,logs}`.
+
+### Service `opensearch` (`rag-lexical` profile, optional)
+
+Simple role:
+- Lexical BM25 backend complementing dense retrieval.
+
+Inputs/outputs:
+- Internal-only service (`opensearch:9200`), no host port.
+- Data/logs: `${AGENTIC_ROOT}/rag/opensearch` and `${AGENTIC_ROOT}/rag/opensearch-logs`.
+
 ## 8) `optional` Plane (opt-in modules)
 
 Important:

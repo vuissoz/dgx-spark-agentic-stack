@@ -800,6 +800,17 @@ run_compose_on_targets() {
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${profile_args[@]}" "${compose_args[@]}" "$action" "$@"
 }
 
+down_rag_compose_with_profiles() {
+  local rag_compose_file
+  rag_compose_file="$(stack_to_compose_file rag)"
+  [[ -f "${rag_compose_file}" ]] || die "Compose file not found for rag stack: ${rag_compose_file}"
+
+  require_cmd docker
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+    --profile rag-lexical \
+    -f "${rag_compose_file}" down
+}
+
 ensure_core_runtime() {
   if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
     [[ -x "${AGENT_OLLAMA_LINK_SCRIPT}" ]] || die "missing script: ${AGENT_OLLAMA_LINK_SCRIPT}"
@@ -1885,13 +1896,21 @@ case "$cmd" in
     read -r -a targets <<<"$(parse_targets "$target_arg")"
     if targets_include "optional" "${targets[@]}"; then
       non_optional_targets=()
+      rag_requested=0
       for target in "${targets[@]}"; do
         [[ "${target}" == "optional" ]] && continue
+        if [[ "${target}" == "rag" ]]; then
+          rag_requested=1
+          continue
+        fi
         non_optional_targets+=("${target}")
       done
 
       if [[ "${#non_optional_targets[@]}" -gt 0 ]]; then
         run_compose_on_targets down "$(join_targets_csv "${non_optional_targets[@]}")"
+      fi
+      if [[ "${rag_requested}" -eq 1 ]]; then
+        down_rag_compose_with_profiles
       fi
 
       require_cmd docker
@@ -1904,7 +1923,19 @@ case "$cmd" in
         --profile optional-portainer \
         -f "$(stack_to_compose_file optional)" down
     else
-      run_compose_on_targets down "$target_arg"
+      if targets_include "rag" "${targets[@]}"; then
+        non_rag_targets=()
+        for target in "${targets[@]}"; do
+          [[ "${target}" == "rag" ]] && continue
+          non_rag_targets+=("${target}")
+        done
+        if [[ "${#non_rag_targets[@]}" -gt 0 ]]; then
+          run_compose_on_targets down "$(join_targets_csv "${non_rag_targets[@]}")"
+        fi
+        down_rag_compose_with_profiles
+      else
+        run_compose_on_targets down "$target_arg"
+      fi
     fi
     ;;
   stack)

@@ -83,6 +83,7 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/rag/worker/state"
   install -d -m 0770 "${AGENTIC_ROOT}/rag/worker/logs"
   install -d -m 0770 "${AGENTIC_ROOT}/rag/opensearch"
+  install -d -m 0770 "${AGENTIC_ROOT}/rag/opensearch-logs"
 
   if [[ -d "${EXAMPLE_CORPUS_DIR}" ]]; then
     while IFS= read -r source_file; do
@@ -104,7 +105,8 @@ main() {
       "${AGENTIC_ROOT}/rag/retriever/logs" \
       "${AGENTIC_ROOT}/rag/worker/state" \
       "${AGENTIC_ROOT}/rag/worker/logs" \
-      "${AGENTIC_ROOT}/rag/opensearch"
+      "${AGENTIC_ROOT}/rag/opensearch" \
+      "${AGENTIC_ROOT}/rag/opensearch-logs"
     log "non-root runtime init: relaxed rag dirs permissions for userns compatibility"
   fi
 }

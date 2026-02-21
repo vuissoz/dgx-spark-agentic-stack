@@ -11,10 +11,10 @@ This repository provides a containerized agentic services stack for DGX Spark, w
 
 Compose files are located in `compose/`:
 - `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `trtllm` (`trt` profile), `unbound`, `egress-proxy`, `toolbox`
-- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`
+- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
-- `compose/compose.rag.yml`: `qdrant`
+- `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (`rag-lexical` profile)
 - `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-openclaw-sandbox`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
 
 ## Execution Profiles
@@ -53,7 +53,7 @@ Key persistent folders:
 - `openwebui/`
 - `openhands/{config,state,logs,workspaces}/`
 - `comfyui/{models,input,output,user}/`
-- `rag/{qdrant,qdrant-snapshots,docs,scripts}/`
+- `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode}/{state,logs,workspaces}/`
 - `optional/{openclaw,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
@@ -184,6 +184,8 @@ Notes:
 - tunnel only the ports you need;
 - host ports are configurable via environment variables (`*_HOST_PORT`);
 - `qdrant` is not published on a host port in the current configuration;
+- `rag-retriever` (`7111`) and `rag-worker` (`7112`) are never host-published;
+- `opensearch` (`rag-lexical`) remains internal-only (no host-published port);
 - `optional-openclaw` only publishes local webhook ingress (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), never `0.0.0.0`.
 
 OpenClaw upstream behavior if deploying the official gateway:

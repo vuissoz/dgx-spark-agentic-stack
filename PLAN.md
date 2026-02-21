@@ -737,22 +737,22 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - champs de provenance code/pdf présents ;
 - enum `source_type` contient au minimum `pdf` et `code`.
 
-### J4 Retrieval orchestrator hybride (skeleton)
+### J4 Retrieval orchestrator hybride (full)
 **Implémentation**
 - étendre `compose/compose.rag.yml` avec services internes (sans exposition host) :
   - `rag-retriever` (API orchestrateur dense+lexical+fusion),
   - `rag-worker` (worker async pour pipeline retrieval/indexation),
   - `opensearch` optionnel sous profile `rag-lexical` (BM25 lexical).
-- comportement skeleton attendu (non-final) :
-  - endpoint `rag-retriever` `/v1/retrieve` disponible ;
-  - contrat de réponse avec sections `dense`, `lexical`, `fusion` ;
-  - fusion par défaut annoncée en `rrf` ;
-  - audit minimal des requêtes retrieval.
+- comportement full attendu :
+  - endpoint `rag-retriever` `/v1/retrieve` exécute réellement `dense` (`qdrant`) et `lexical` (`opensearch` si activé) ;
+  - contrat de réponse conserve les sections `dense`, `lexical`, `fusion` avec résultats ;
+  - fusion effective par défaut en `rrf` ;
+  - audit minimal des requêtes retrieval et indexation.
 
 **Test** : `tests/J4_rag_hybrid_skeleton.sh`
 - `rag-retriever` et `rag-worker` démarrent et passent healthchecks ;
 - aucun port host publié pour les services retrieval ;
-- `/v1/retrieve` répond avec contrat skeleton (`status=skeleton`, `fusion.method=rrf`, `dense.backend=qdrant`) ;
+- `/v1/retrieve` répond avec contrat full (`fusion.method=rrf`, `dense.backend=qdrant`, hits non vides après indexation) ;
 - si profile `rag-lexical` activé : `opensearch` reste interne-only (pas de publish host).
 
 ---

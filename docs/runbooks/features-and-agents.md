@@ -268,7 +268,42 @@ Interactive entrypoint is through `./agent <tool> [project]`.
   - `${AGENTIC_ROOT}/rag/qdrant`
   - `${AGENTIC_ROOT}/rag/qdrant-snapshots`
 - Why it exists:
-  - persistent vector index storage for optional or future retrieval features.
+  - persistent vector index storage for hybrid retrieval features.
+
+### `rag-retriever`
+- Role: internal retrieval orchestrator (dense + lexical + fusion).
+- Access path:
+  - internal-only: `rag-retriever:7111`
+- Persistence:
+  - `${AGENTIC_ROOT}/rag/retriever/state`
+  - `${AGENTIC_ROOT}/rag/retriever/logs`
+- Why it exists:
+  - executes dense retrieval through `qdrant`,
+  - executes lexical retrieval through `opensearch` when profile `rag-lexical` is enabled,
+  - applies fusion (`rrf`) and emits retrieval audit events.
+
+### `rag-worker`
+- Role: async indexing worker for retrieval pipelines.
+- Access path:
+  - internal-only: `rag-worker:7112`
+- Persistence:
+  - `${AGENTIC_ROOT}/rag/worker/state`
+  - `${AGENTIC_ROOT}/rag/worker/logs`
+- Why it exists:
+  - processes indexing tasks (`/v1/index`) against local corpus docs,
+  - keeps retrieval/indexing flow operational without exposing RAG internals on host ports.
+
+### `opensearch` (optional `rag-lexical` profile)
+- Role: lexical BM25 backend for hybrid retrieval.
+- Activation:
+  - `COMPOSE_PROFILES=rag-lexical ./agent up rag`
+- Access path:
+  - internal-only: `opensearch:9200`
+- Persistence:
+  - `${AGENTIC_ROOT}/rag/opensearch`
+  - `${AGENTIC_ROOT}/rag/opensearch-logs`
+- Why it exists:
+  - provides lexical retrieval signals fused with dense results in `rag-retriever`.
 
 ## Optional Stack (`./agent up optional`)
 

@@ -11,10 +11,10 @@ Ce dépôt fournit une stack de services agentiques conteneurisés pour DGX Spar
 
 Les fichiers Compose sont dans `compose/`:
 - `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `trtllm` (profile `trt`), `unbound`, `egress-proxy`, `toolbox`
-- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`
+- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
-- `compose/compose.rag.yml`: `qdrant`
+- `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (profile `rag-lexical`)
 - `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-openclaw-sandbox`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
 
 ## Profils d'exécution
@@ -53,7 +53,7 @@ Dossiers persistants clés:
 - `openwebui/`
 - `openhands/{config,state,logs,workspaces}/`
 - `comfyui/{models,input,output,user}/`
-- `rag/{qdrant,qdrant-snapshots,docs,scripts}/`
+- `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode}/{state,logs,workspaces}/`
 - `optional/{openclaw,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
@@ -184,6 +184,8 @@ Notes:
 - tunneliser uniquement les ports nécessaires;
 - les ports host sont configurables via variables d'environnement (`*_HOST_PORT`) ;
 - `qdrant` n'est pas publié sur un port host dans la config actuelle.
+- `rag-retriever` (`7111`) et `rag-worker` (`7112`) ne sont pas publiés sur l'hôte.
+- `opensearch` (`rag-lexical`) reste interne uniquement (pas de port host publié).
 - `optional-openclaw` publie uniquement un ingress webhook local (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), jamais en `0.0.0.0`.
 
 Comportement OpenClaw (upstream) si vous déployez la gateway officielle:

@@ -49,9 +49,17 @@ services:
       RAG_SCHEMA_PATH: /config/document.schema.json
       RAG_RETRIEVER_STATE_DIR: /state
       RAG_RETRIEVER_LOG_DIR: /logs
+      RAG_QDRANT_URL: http://qdrant:6333
+      RAG_GATE_URL: http://ollama-gate:11435
+      RAG_OPENSEARCH_URL: http://opensearch:9200
+      RAG_COLLECTION: ${RAG_COLLECTION:-agentic_docs}
+      RAG_LEXICAL_INDEX: ${RAG_LEXICAL_INDEX:-agentic_docs}
+      RAG_EMBED_MODEL: ${RAG_EMBED_MODEL:-qwen3-embedding:0.6b}
+      RAG_GATE_DRY_RUN: ${RAG_GATE_DRY_RUN:-1}
       RAG_DENSE_BACKEND: qdrant
       RAG_LEXICAL_BACKEND: ${RAG_LEXICAL_BACKEND:-disabled}
       RAG_FUSION_METHOD: ${RAG_FUSION_METHOD:-rrf}
+      RAG_RRF_K: ${RAG_RRF_K:-60}
     volumes:
       - ../deployments/rag/retriever_api.py:/app/retriever_api.py:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/rag/config:/config:ro
@@ -92,12 +100,23 @@ services:
       RAG_WORKER_PORT: "7112"
       RAG_WORKER_STATE_DIR: /state
       RAG_WORKER_LOG_DIR: /logs
+      RAG_WORKER_DOCS_DIR: /docs
       RAG_RETRIEVER_URL: http://rag-retriever:7111
+      RAG_QDRANT_URL: http://qdrant:6333
+      RAG_GATE_URL: http://ollama-gate:11435
+      RAG_OPENSEARCH_URL: http://opensearch:9200
+      RAG_COLLECTION: ${RAG_COLLECTION:-agentic_docs}
+      RAG_LEXICAL_INDEX: ${RAG_LEXICAL_INDEX:-agentic_docs}
+      RAG_EMBED_MODEL: ${RAG_EMBED_MODEL:-qwen3-embedding:0.6b}
+      RAG_GATE_DRY_RUN: ${RAG_GATE_DRY_RUN:-1}
+      RAG_LEXICAL_BACKEND: ${RAG_LEXICAL_BACKEND:-disabled}
+      RAG_WORKER_BOOTSTRAP_INDEX: ${RAG_WORKER_BOOTSTRAP_INDEX:-1}
       RAG_WORKER_POLL_INTERVAL_SEC: "10"
     volumes:
       - ../deployments/rag/rag_worker.py:/app/rag_worker.py:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/rag/worker/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/rag/worker/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/docs:/docs:ro
     depends_on:
       rag-retriever:
         condition: service_healthy
@@ -127,10 +146,12 @@ services:
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
       OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
       bootstrap.memory_lock: "false"
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/rag/opensearch:/usr/share/opensearch/data
+      - ${AGENTIC_ROOT:-/srv/agentic}/rag/opensearch-logs:/usr/share/opensearch/logs
     healthcheck:
       test:
         - CMD-SHELL
