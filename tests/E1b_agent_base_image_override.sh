@@ -23,6 +23,8 @@ network_name="agentic-e1b-${RANDOM}"
 project_name="agentic-e1b-${RANDOM}"
 custom_image="${AGENTIC_AGENT_BASE_IMAGE_TEST_REF:-agentic/agent-cli-base:e1b-test}"
 default_image="agentic/agent-cli-base:local"
+default_dockerfile_rel="deployments/images/agent-cli-base/Dockerfile"
+default_dockerfile_abs="${REPO_ROOT}/${default_dockerfile_rel}"
 
 cleanup() {
   AGENTIC_ROOT="${runtime_root}" \
@@ -95,8 +97,10 @@ EOF
 docker compose --project-name "${project_name}" -f "${AGENTS_COMPOSE_FILE}" config >"${default_cfg}"
 grep -q "image: ${default_image}" "${default_cfg}" \
   || fail "default config must reference '${default_image}'"
-grep -q 'dockerfile: deployments/images/agent-cli-base/Dockerfile' "${default_cfg}" \
-  || fail "default config must reference the fallback agent base Dockerfile"
+if ! grep -Fq "dockerfile: ${default_dockerfile_rel}" "${default_cfg}" \
+  && ! grep -Fq "dockerfile: ${default_dockerfile_abs}" "${default_cfg}"; then
+  fail "default config must reference fallback agent base Dockerfile (${default_dockerfile_rel} or ${default_dockerfile_abs})"
+fi
 ok "default compose config uses fallback agent base image and Dockerfile"
 
 docker compose --project-name "${project_name}" -f "${AGENTS_COMPOSE_FILE}" build agentic-claude >/dev/null
