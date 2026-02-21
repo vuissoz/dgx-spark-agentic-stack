@@ -57,7 +57,7 @@ Le contenu attendu reste identique :
 - `/srv/agentic/tests/` : tests automatiques (A→K)
 - `/srv/agentic/secrets/` : secrets runtime + logs rotation
 - `/srv/agentic/{ollama,gate,proxy,dns,openwebui,openhands,comfyui,rag,monitoring}/`
-- `/srv/agentic/{claude,codex,opencode}/{state,logs,workspaces}/`
+- `/srv/agentic/{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
 - `/srv/agentic/shared-ro/` et `/srv/agentic/shared-rw/`
 
 ### 0.2 Standard “tests”
@@ -376,7 +376,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 
 ### E1b Image de base commune customisable (Dockerfile override)
 **Implémentation**
-- permettre de surcharger le Dockerfile de base des agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`) via variables runtime (ex: `AGENTIC_AGENT_BASE_DOCKERFILE`, `AGENTIC_AGENT_BASE_BUILD_CONTEXT`).
+- permettre de surcharger le Dockerfile de base des agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`) via variables runtime (ex: `AGENTIC_AGENT_BASE_DOCKERFILE`, `AGENTIC_AGENT_BASE_BUILD_CONTEXT`).
 - conserver un fallback sûr par défaut sur `deployments/images/agent-cli-base/Dockerfile` si aucun override n’est fourni.
 - option de tagging explicite de l’image commune custom (ex: `AGENTIC_AGENT_BASE_IMAGE=agentic/agent-cli-base:custom`) pour traçabilité des releases.
 - documenter clairement le contrat minimal du Dockerfile custom (user non-root, entrypoint compatible, outils de base requis).
@@ -385,10 +385,10 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 **Test** : `tests/E1b_agent_base_image_override.sh`
 - sans override: build/déploiement utilisent bien le Dockerfile par défaut.
 - avec override: build utilise le Dockerfile custom fourni et l’image/tag attendu.
-- les trois services agents démarrent avec l’image commune custom.
+- les quatre services agents démarrent avec l’image commune custom.
 - les invariants sécurité des agents restent inchangés.
 
-### E2 Déployer `agentic-claude`, `agentic-codex`, `agentic-opencode`
+### E2 Déployer `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
 **Implémentation**
 - `deployments/compose/compose.agents.yml`
 - volumes par outil :
@@ -401,9 +401,14 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `read_only: true`, `tmpfs: /tmp`
   - `cap_drop: [ALL]`
   - `security_opt: [no-new-privileges:true]`
+- service dédié `agentic-vibestral` (même baseline sécurité que `codex-agent`) avec bootstrap Vibe CLI:
+  1. `curl -LsSf https://mistral.ai/vibe/install.sh | bash`
+  2. `vibe --setup`
+- persister l’état Vibe dans `${AGENTIC_ROOT}/vibestral/state` (ou sous-répertoire explicite) pour éviter de relancer `--setup` à chaque redémarrage.
 
 **Test** : `tests/E2_agents_confinement.sh`
-- `docker exec agentic-claude tmux has-session -t claude` OK (idem codex/opencode)
+- `docker exec agentic-claude tmux has-session -t claude` OK (idem codex/opencode/vibestral)
+- `docker exec agentic-vibestral sh -lc 'command -v vibe'` OK
 - `docker inspect` prouve : non-root, readonly rootfs, cap_drop ALL, NNP
 - egress : direct KO, via proxy conforme
 - écritures : OK dans workspace/state/logs, KO ailleurs
@@ -420,11 +425,13 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `agent logs <tool>`
   - `agent stop <tool>`
   - `agent up/down` multi-compose
+- inclure `vibestral` comme tool de première classe (`agent vibestral <project>`).
 - stocker config runtime dans `/srv/agentic/deployments/runtime.env` (non committé)
 
 **Test** : `tests/F1_agent_cli.sh`
 - `agent ls` fonctionne même si aucune session (retour propre)
 - `agent claude` crée/attache une session tmux et workspace projet
+- `agent vibestral` crée/attache une session tmux et workspace projet
 
 ### F2 Snapshot par digest + rollback strict
 **Implémentation**
@@ -477,6 +484,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `claude`
   - `codex`
   - `opencode`
+  - `vibestral`
   - `comfyui`
   - `openclaw`
 - cibles recommandées en plus (cohérence opératoire) :
@@ -486,6 +494,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `claude` -> `${AGENTIC_ROOT}/claude/{state,logs,workspaces}/**`
   - `codex` -> `${AGENTIC_ROOT}/codex/{state,logs,workspaces}/**`
   - `opencode` -> `${AGENTIC_ROOT}/opencode/{state,logs,workspaces}/**`
+  - `vibestral` -> `${AGENTIC_ROOT}/vibestral/{state,logs,workspaces}/**`
   - `comfyui` -> `${AGENTIC_ROOT}/comfyui/{models,input,output,user}/**`
   - `openclaw` -> `${AGENTIC_ROOT}/optional/openclaw/{config,state,logs}/**`
 - orchestration de sécurité :
@@ -501,7 +510,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `rootless-dev` : comportement équivalent sans exiger root, sauf chemins non accessibles (erreur explicite).
 
 **Test** : `tests/F4_forget_command.sh`
-- pour chaque cible minimale (`ollama`, `claude`, `codex`, `opencode`, `comfyui`, `openclaw`) :
+  - pour chaque cible minimale (`ollama`, `claude`, `codex`, `opencode`, `vibestral`, `comfyui`, `openclaw`) :
   - créer un marqueur fichier persistant ;
   - exécuter `agent forget <target>` sans `--yes` puis Entrée vide à l’un des prompts -> refus attendu ;
   - exécuter `agent forget <target>` sans `--yes` et répondre `yes` aux deux prompts -> succès ;
@@ -825,7 +834,7 @@ La stack est “opérable” quand :
 - egress libre impossible (proxy + DOCKER-USER prouvés)
 - Ollama local-only fonctionne et est consommé via `ollama-gate` (queue+sticky+metrics)
 - si activé, backend TRT-LLM (modèles NVFP4) est routé via `ollama-gate` vers le conteneur `trtllm` sans exposition host
-- agents CLI persistants (tmux) confinés (non-root, NNP, cap_drop ALL, rootfs ro)
+- agents CLI persistants (tmux) confinés (non-root, NNP, cap_drop ALL, rootfs ro), incluant `agentic-vibestral` avec Vibe CLI initialisé.
 - UIs demandées (OpenWebUI, OpenHands, ComfyUI) bind local + auth, et ne cassent pas la posture
 - observabilité exploitable (CPU/RAM/disque/GPU, logs, erreurs proxy, drops DOCKER-USER)
 - update/rollback stricts par digest reproductibles
