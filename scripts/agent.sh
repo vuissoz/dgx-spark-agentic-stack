@@ -8,6 +8,7 @@ source "${SCRIPT_DIR}/lib/runtime.sh"
 AGENT_RUNTIME_ENV_FILE="${AGENTIC_ROOT}/deployments/runtime.env"
 AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapshot.sh"
 AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
+AGENT_BACKUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/backups/time_machine.sh"
 AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_ONBOARD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
@@ -38,6 +39,7 @@ Usage:
   agent stop container <container...>
   agent start service <service...>
   agent start container <container...>
+  agent backup <run|list|restore <snapshot_id> [--yes]>
   agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
   agent ollama-link
@@ -1318,6 +1320,26 @@ JSON
   esac
 }
 
+cmd_backup() {
+  [[ -x "${AGENT_BACKUP_SCRIPT}" ]] || die "backup script missing or not executable: ${AGENT_BACKUP_SCRIPT}"
+
+  local action="${1:-}"
+  shift || true
+
+  case "${action}" in
+    run|list)
+      "${AGENT_BACKUP_SCRIPT}" "${action}" "$@"
+      ;;
+    restore)
+      [[ $# -ge 1 ]] || die "Usage: agent backup restore <snapshot_id> [--yes]"
+      "${AGENT_BACKUP_SCRIPT}" restore "$@"
+      ;;
+    *)
+      die "Usage: agent backup <run|list|restore <snapshot_id> [--yes]>"
+      ;;
+  esac
+}
+
 cmd_net() {
   local action="${1:-}"
   case "${action}" in
@@ -1650,6 +1672,10 @@ case "$cmd" in
         die "Usage: agent start service <service...> | agent start container <container...>"
         ;;
     esac
+    ;;
+  backup)
+    shift
+    cmd_backup "$@"
     ;;
   net)
     shift

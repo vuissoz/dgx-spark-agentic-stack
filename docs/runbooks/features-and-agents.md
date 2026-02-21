@@ -31,6 +31,12 @@ The source of truth for service wiring is in:
 - `./agent update` captures release snapshots with image digests and effective config.
 - `./agent rollback all <release_id>` restores a prior recorded release deterministically.
 
+### Incremental backups (Time Machine)
+- `./agent backup run` creates a timestamped incremental snapshot of runtime persistence and non-secret config.
+- `./agent backup list` reports available snapshots with retention policy and metadata.
+- `./agent backup restore <snapshot_id> [--yes]` restores a selected snapshot (destructive opt-in).
+- Backup snapshots explicitly exclude `${AGENTIC_ROOT}/secrets/**` and private key material patterns.
+
 ### Compliance diagnostics
 - `./agent doctor` validates loopback binds, hardening posture, mounts, healthchecks, and release traceability requirements.
 

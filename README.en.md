@@ -226,6 +226,7 @@ agent stop service <service...>
 agent stop container <container...>
 agent start service <service...>
 agent start container <container...>
+agent backup <run|list|restore <snapshot_id> [--yes]>
 agent cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
@@ -250,6 +251,8 @@ Examples:
 ./agent codex my-project
 ./agent logs ollama
 ./agent stop codex
+./agent backup run
+./agent backup list
 ./agent update
 ./agent rollback all <release_id>
 ```
