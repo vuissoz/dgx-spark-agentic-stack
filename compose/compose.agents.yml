@@ -134,6 +134,51 @@ services:
     networks:
       - agentic
 
+  agentic-vibestral:
+    image: ${AGENTIC_AGENT_BASE_IMAGE:-agentic/agent-cli-base:local}
+    build:
+      context: ${AGENTIC_AGENT_BASE_BUILD_CONTEXT:-..}
+      dockerfile: ${AGENTIC_AGENT_BASE_DOCKERFILE:-deployments/images/agent-cli-base/Dockerfile}
+    restart: unless-stopped
+    init: true
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      AGENT_TOOL: vibestral
+      AGENT_SESSION: vibestral
+      AGENT_WORKSPACE: /workspace
+      AGENT_STATE_DIR: /state
+      AGENT_LOGS_DIR: /logs
+      OLLAMA_BASE_URL: http://ollama-gate:11435
+      GATE_MCP_URL: http://gate-mcp:8123
+      GATE_MCP_AUTH_TOKEN_FILE: /run/secrets/gate_mcp.token
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,gate-mcp,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/vibestral/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/vibestral/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/vibestral/workspaces:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - tmux has-session -t vibestral
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+
 networks:
   agentic:
     external: true

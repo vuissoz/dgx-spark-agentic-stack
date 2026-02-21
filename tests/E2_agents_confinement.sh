@@ -86,18 +86,25 @@ assert_cmd docker
 claude_cid="$(require_service_container agentic-claude)" || exit 1
 codex_cid="$(require_service_container agentic-codex)" || exit 1
 opencode_cid="$(require_service_container agentic-opencode)" || exit 1
+vibestral_cid="$(require_service_container agentic-vibestral)" || exit 1
 proxy_cid="$(require_service_container egress-proxy)" || exit 1
 
 wait_for_container_ready "${claude_cid}" 60 || fail "agentic-claude is not ready"
 wait_for_container_ready "${codex_cid}" 60 || fail "agentic-codex is not ready"
 wait_for_container_ready "${opencode_cid}" 60 || fail "agentic-opencode is not ready"
+wait_for_container_ready "${vibestral_cid}" 60 || fail "agentic-vibestral is not ready"
 wait_for_container_ready "${proxy_cid}" 60 || fail "egress-proxy is not ready"
 
 assert_tmux_session "${claude_cid}" "claude"
 assert_tmux_session "${codex_cid}" "codex"
 assert_tmux_session "${opencode_cid}" "opencode"
+assert_tmux_session "${vibestral_cid}" "vibestral"
 
-for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}"; do
+timeout 20 docker exec "${vibestral_cid}" sh -lc 'command -v vibe >/dev/null' \
+  || fail "${vibestral_cid}: vibe command is missing"
+ok "${vibestral_cid}: vibe command is available"
+
+for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}"; do
   assert_container_security "${cid}"
   assert_proxy_enforced "${cid}"
   assert_egress_profile "${cid}"
@@ -114,6 +121,9 @@ assert_mount_source "${codex_cid}" "/workspace" "${agentic_root}/codex/workspace
 assert_mount_source "${opencode_cid}" "/state" "${agentic_root}/opencode/state"
 assert_mount_source "${opencode_cid}" "/logs" "${agentic_root}/opencode/logs"
 assert_mount_source "${opencode_cid}" "/workspace" "${agentic_root}/opencode/workspaces"
+assert_mount_source "${vibestral_cid}" "/state" "${agentic_root}/vibestral/state"
+assert_mount_source "${vibestral_cid}" "/logs" "${agentic_root}/vibestral/logs"
+assert_mount_source "${vibestral_cid}" "/workspace" "${agentic_root}/vibestral/workspaces"
 ok "agents volumes map to ${agentic_root}/<tool>/{state,logs,workspaces}"
 
 ok "E2_agents_confinement passed"

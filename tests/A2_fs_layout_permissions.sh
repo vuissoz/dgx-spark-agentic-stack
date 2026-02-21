@@ -59,6 +59,9 @@ required_dirs=(
   "${AGENTIC_ROOT}/opencode/state"
   "${AGENTIC_ROOT}/opencode/logs"
   "${AGENTIC_ROOT}/opencode/workspaces"
+  "${AGENTIC_ROOT}/vibestral/state"
+  "${AGENTIC_ROOT}/vibestral/logs"
+  "${AGENTIC_ROOT}/vibestral/workspaces"
   "${AGENTIC_ROOT}/shared-ro"
   "${AGENTIC_ROOT}/shared-rw"
 )

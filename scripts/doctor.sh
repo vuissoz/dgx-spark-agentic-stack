@@ -151,7 +151,7 @@ for service in ollama ollama-gate gate-mcp trtllm egress-proxy unbound toolbox o
 done
 
 agents_found=0
-for service in agentic-claude agentic-codex agentic-opencode; do
+for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; do
   cid="$(service_container_id "${service}")"
   [[ -n "${cid}" ]] || continue
   agents_found=1

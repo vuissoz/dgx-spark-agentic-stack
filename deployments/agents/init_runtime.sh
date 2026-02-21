@@ -43,6 +43,7 @@ main() {
     "${AGENTIC_ROOT}/claude"
     "${AGENTIC_ROOT}/codex"
     "${AGENTIC_ROOT}/opencode"
+    "${AGENTIC_ROOT}/vibestral"
     "${AGENTIC_ROOT}/shared-ro"
   )
 
@@ -56,6 +57,9 @@ main() {
     "${AGENTIC_ROOT}/opencode/state"
     "${AGENTIC_ROOT}/opencode/logs"
     "${AGENTIC_ROOT}/opencode/workspaces"
+    "${AGENTIC_ROOT}/vibestral/state"
+    "${AGENTIC_ROOT}/vibestral/logs"
+    "${AGENTIC_ROOT}/vibestral/workspaces"
     "${AGENTIC_ROOT}/shared-rw"
   )
 

@@ -17,8 +17,9 @@ AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
-AGENT_TOOLS=(claude codex opencode)
+AGENT_TOOLS=(claude codex opencode vibestral)
 OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
+FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
 STACK_STOP_ORDER=(optional rag obs ui agents core)
 
@@ -29,7 +30,7 @@ Usage:
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-  agent <claude|codex|opencode> [project]
+  agent <claude|codex|opencode|vibestral> [project]
   agent ls
   agent ps
   agent llm mode [local|hybrid|remote]
@@ -40,6 +41,7 @@ Usage:
   agent start service <service...>
   agent start container <container...>
   agent backup <run|list|restore <snapshot_id> [--yes]>
+  agent forget <target> [--yes] [--no-backup]
   agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
   agent ollama-link
@@ -83,6 +85,7 @@ tool_to_service() {
     claude) echo "agentic-claude" ;;
     codex) echo "agentic-codex" ;;
     opencode) echo "agentic-opencode" ;;
+    vibestral) echo "agentic-vibestral" ;;
     *) return 1 ;;
   esac
 }
@@ -1093,6 +1096,299 @@ cmd_stack() {
   done
 }
 
+forget_target_paths() {
+  local target="$1"
+  case "${target}" in
+    ollama)
+      printf '%s\n' "${AGENTIC_ROOT}/ollama"
+      ;;
+    claude|codex|opencode|vibestral)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/${target}/state" \
+        "${AGENTIC_ROOT}/${target}/logs" \
+        "${AGENTIC_ROOT}/${target}/workspaces"
+      ;;
+    comfyui)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/comfyui/models" \
+        "${AGENTIC_ROOT}/comfyui/input" \
+        "${AGENTIC_ROOT}/comfyui/output" \
+        "${AGENTIC_ROOT}/comfyui/user"
+      ;;
+    openclaw)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/optional/openclaw/config" \
+        "${AGENTIC_ROOT}/optional/openclaw/state" \
+        "${AGENTIC_ROOT}/optional/openclaw/logs" \
+        "${AGENTIC_ROOT}/optional/openclaw/sandbox/state"
+      ;;
+    openhands)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/openhands/state" \
+        "${AGENTIC_ROOT}/openhands/logs" \
+        "${AGENTIC_ROOT}/openhands/workspaces"
+      ;;
+    openwebui)
+      printf '%s\n' "${AGENTIC_ROOT}/openwebui/data"
+      ;;
+    qdrant)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/rag/qdrant" \
+        "${AGENTIC_ROOT}/rag/qdrant-snapshots"
+      ;;
+    obs)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/monitoring/prometheus" \
+        "${AGENTIC_ROOT}/monitoring/grafana" \
+        "${AGENTIC_ROOT}/monitoring/loki" \
+        "${AGENTIC_ROOT}/monitoring/promtail/positions"
+      ;;
+    all)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/ollama" \
+        "${AGENTIC_ROOT}/claude" \
+        "${AGENTIC_ROOT}/codex" \
+        "${AGENTIC_ROOT}/opencode" \
+        "${AGENTIC_ROOT}/vibestral" \
+        "${AGENTIC_ROOT}/comfyui" \
+        "${AGENTIC_ROOT}/optional/openclaw" \
+        "${AGENTIC_ROOT}/openhands" \
+        "${AGENTIC_ROOT}/openwebui" \
+        "${AGENTIC_ROOT}/rag/qdrant" \
+        "${AGENTIC_ROOT}/rag/qdrant-snapshots" \
+        "${AGENTIC_ROOT}/monitoring/prometheus" \
+        "${AGENTIC_ROOT}/monitoring/grafana" \
+        "${AGENTIC_ROOT}/monitoring/loki" \
+        "${AGENTIC_ROOT}/monitoring/promtail/positions"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+forget_target_services() {
+  local target="$1"
+  case "${target}" in
+    ollama) printf '%s\n' ollama ollama-gate gate-mcp trtllm ;;
+    claude) printf '%s\n' agentic-claude ;;
+    codex) printf '%s\n' agentic-codex ;;
+    opencode) printf '%s\n' agentic-opencode ;;
+    vibestral) printf '%s\n' agentic-vibestral ;;
+    comfyui) printf '%s\n' comfyui comfyui-loopback ;;
+    openclaw) printf '%s\n' optional-openclaw optional-openclaw-sandbox ;;
+    openhands) printf '%s\n' openhands ;;
+    openwebui) printf '%s\n' openwebui ;;
+    qdrant) printf '%s\n' qdrant rag-retriever rag-worker opensearch ;;
+    obs) printf '%s\n' prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter ;;
+    all)
+      printf '%s\n' \
+        optional-openclaw optional-openclaw-sandbox \
+        qdrant rag-retriever rag-worker opensearch \
+        prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter \
+        openwebui openhands comfyui comfyui-loopback \
+        agentic-claude agentic-codex agentic-opencode agentic-vibestral \
+        ollama ollama-gate gate-mcp trtllm
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+forget_target_init_scripts() {
+  local target="$1"
+  case "${target}" in
+    ollama)
+      printf '%s\n' "${AGENTIC_REPO_ROOT}/deployments/core/init_runtime.sh"
+      ;;
+    claude|codex|opencode|vibestral)
+      printf '%s\n' "${AGENTIC_REPO_ROOT}/deployments/agents/init_runtime.sh"
+      ;;
+    comfyui|openhands|openwebui)
+      printf '%s\n' "${AGENTIC_REPO_ROOT}/deployments/ui/init_runtime.sh"
+      ;;
+    openclaw)
+      printf '%s\n' "${AGENTIC_REPO_ROOT}/deployments/optional/init_runtime.sh"
+      ;;
+    qdrant)
+      printf '%s\n' "${AGENTIC_REPO_ROOT}/deployments/rag/init_runtime.sh"
+      ;;
+    obs)
+      printf '%s\n' "${AGENTIC_REPO_ROOT}/deployments/obs/init_runtime.sh"
+      ;;
+    all)
+      printf '%s\n' \
+        "${AGENTIC_REPO_ROOT}/deployments/bootstrap/init_fs.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/core/init_runtime.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/agents/init_runtime.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/ui/init_runtime.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/rag/init_runtime.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/obs/init_runtime.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/init_runtime.sh"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+stop_forget_services_best_effort() {
+  local -a services=("$@")
+  local service
+  local container_id
+
+  command -v docker >/dev/null 2>&1 || return 0
+  docker info >/dev/null 2>&1 || return 0
+
+  for service in "${services[@]}"; do
+    container_id="$(docker ps \
+      --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
+      --filter "label=com.docker.compose.service=${service}" \
+      --format '{{.ID}}' | head -n 1)"
+    [[ -n "${container_id}" ]] || continue
+    if ! docker stop "${container_id}" >/dev/null 2>&1; then
+      warn "forget: unable to stop service '${service}' (container=${container_id}); continuing"
+    fi
+  done
+}
+
+purge_directory_contents() {
+  local path="$1"
+  [[ -n "${path}" ]] || return 0
+  [[ "${path}" == "${AGENTIC_ROOT}"* ]] || die "refusing to purge path outside AGENTIC_ROOT: ${path}"
+
+  if [[ -d "${path}" ]]; then
+    find "${path}" -mindepth 1 -depth -exec rm -rf -- {} +
+  else
+    install -d -m 0750 "${path}"
+  fi
+}
+
+create_forget_backup() {
+  local target="$1"
+  shift
+  local -a candidate_paths=("$@")
+  local -a rel_paths=()
+  local path rel
+  local ts backup_dir backup_path
+
+  ts="$(date -u +"%Y%m%dT%H%M%SZ")"
+  backup_dir="${AGENTIC_ROOT}/deployments/forget-backups"
+  backup_path="${backup_dir}/${ts}-${target}.tar.gz"
+  install -d -m 0750 "${backup_dir}"
+
+  for path in "${candidate_paths[@]}"; do
+    [[ -d "${path}" ]] || continue
+    rel="${path#${AGENTIC_ROOT}/}"
+    if [[ "${rel}" == "${path}" ]]; then
+      continue
+    fi
+    rel_paths+=("${rel}")
+  done
+
+  if [[ "${#rel_paths[@]}" -eq 0 ]]; then
+    tar -czf "${backup_path}" --files-from /dev/null
+  else
+    tar -C "${AGENTIC_ROOT}" -czf "${backup_path}" "${rel_paths[@]}"
+  fi
+
+  printf '%s\n' "${backup_path}"
+}
+
+cmd_forget() {
+  local target="${1:-}"
+  local force=0
+  local backup_enabled=1
+  local answer confirmation
+  local actor="${SUDO_USER:-${USER:-unknown}}"
+  local changes_log="${AGENTIC_ROOT}/deployments/changes.log"
+  local -a paths=()
+  local -a services=()
+  local -a init_scripts=()
+  local path
+  local script_path
+  local backup_path=""
+
+  [[ -n "${target}" ]] || die "Usage: agent forget <target> [--yes] [--no-backup]"
+  shift || true
+
+  case "${target}" in
+    ollama|claude|codex|opencode|vibestral|comfyui|openclaw|openhands|openwebui|qdrant|obs|all)
+      ;;
+    *)
+      die "Unknown forget target '${target}'. Expected one of: ${FORGET_TARGETS[*]}"
+      ;;
+  esac
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --yes)
+        force=1
+        shift
+        ;;
+      --no-backup)
+        backup_enabled=0
+        shift
+        ;;
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent forget <target> [--yes] [--no-backup]
+
+Targets:
+  ${FORGET_TARGETS[*]}
+USAGE
+        return 0
+        ;;
+      *)
+        die "Unknown forget argument: $1"
+        ;;
+    esac
+  done
+
+  if [[ "${force}" != "1" ]]; then
+    printf "Forget target '%s' will delete persistent data. Continue? [y/N]: " "${target}"
+    IFS= read -r answer || die "forget aborted: unable to read confirmation"
+    case "${answer}" in
+      y|Y|yes|YES) ;;
+      *) die "forget aborted: confirmation denied" ;;
+    esac
+
+    printf "Type 'yes' to confirm forget target '%s' (default: No): " "${target}"
+    IFS= read -r confirmation || die "forget aborted: unable to read final confirmation"
+    [[ "${confirmation}" == "yes" ]] || die "forget aborted: final confirmation denied"
+  fi
+
+  mapfile -t paths < <(forget_target_paths "${target}")
+  mapfile -t services < <(forget_target_services "${target}")
+  mapfile -t init_scripts < <(forget_target_init_scripts "${target}")
+
+  if [[ "${backup_enabled}" == "1" ]]; then
+    backup_path="$(create_forget_backup "${target}" "${paths[@]}")"
+  fi
+
+  stop_forget_services_best_effort "${services[@]}"
+
+  for path in "${paths[@]}"; do
+    purge_directory_contents "${path}"
+  done
+
+  for script_path in "${init_scripts[@]}"; do
+    [[ -x "${script_path}" ]] || die "forget init script missing or not executable: ${script_path}"
+    "${script_path}"
+  done
+
+  install -d -m 0750 "${AGENTIC_ROOT}/deployments"
+  touch "${changes_log}"
+  chmod 0640 "${changes_log}" || true
+  printf '%s forget actor=%s target=%s backup=%s result=ok\n' \
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "${actor}" "${target}" "${backup_path:-none}" \
+    >>"${changes_log}"
+
+  printf 'forget completed target=%s backup=%s\n' "${target}" "${backup_path:-none}"
+}
+
 cmd_cleanup() {
   local force="${AGENTIC_CLEANUP_FORCE:-0}"
   local backup_mode="ask"
@@ -1466,7 +1762,7 @@ cmd_rollback() {
 normalize_logs_target() {
   local target="$1"
   case "${target}" in
-    claude|codex|opencode) tool_to_service "${target}" ;;
+    claude|codex|opencode|vibestral) tool_to_service "${target}" ;;
     *) printf '%s\n' "${target}" ;;
   esac
 }
@@ -1615,7 +1911,7 @@ case "$cmd" in
     [[ $# -ge 2 ]] || die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
     cmd_stack "$2" "${3:-all}"
     ;;
-  claude|codex|opencode)
+  claude|codex|opencode|vibestral)
     shift
     cmd_tool_attach "${cmd}" "${1:-}"
     ;;
@@ -1676,6 +1972,10 @@ case "$cmd" in
   backup)
     shift
     cmd_backup "$@"
+    ;;
+  forget)
+    shift
+    cmd_forget "$@"
     ;;
   net)
     shift

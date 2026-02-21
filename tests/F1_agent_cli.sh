@@ -17,11 +17,14 @@ agent_bin="${REPO_ROOT}/agent"
 assert_cmd docker
 
 claude_cid="$(require_service_container agentic-claude)" || exit 1
+vibestral_cid="$(require_service_container agentic-vibestral)" || exit 1
 wait_for_container_ready "${claude_cid}" 60 || fail "agentic-claude is not ready"
+wait_for_container_ready "${vibestral_cid}" 60 || fail "agentic-vibestral is not ready"
 
 ls_output="$("${agent_bin}" ls)"
 printf '%s\n' "${ls_output}" | grep -q '^tool' || fail "agent ls output is missing header"
 printf '%s\n' "${ls_output}" | grep -q '^claude' || fail "agent ls output is missing claude row"
+printf '%s\n' "${ls_output}" | grep -q '^vibestral' || fail "agent ls output is missing vibestral row"
 ok "agent ls returns a structured output"
 
 project_name="f1-${USER:-agent}-$$"
@@ -32,5 +35,16 @@ timeout 20 docker exec "${claude_cid}" tmux has-session -t claude \
 timeout 20 docker exec "${claude_cid}" sh -lc "test -d '/workspace/${project_name}'" \
   || fail "agent claude did not create project workspace /workspace/${project_name}"
 ok "agent claude prepares tmux session and project workspace"
+
+vibestral_project="f1-vibestral-${USER:-agent}-$$"
+AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${vibestral_project}" "${agent_bin}" vibestral >/tmp/agent-f1-vibestral.out
+
+timeout 20 docker exec "${vibestral_cid}" tmux has-session -t vibestral \
+  || fail "agent vibestral did not create/keep tmux session"
+timeout 20 docker exec "${vibestral_cid}" sh -lc "test -d '/workspace/${vibestral_project}'" \
+  || fail "agent vibestral did not create project workspace /workspace/${vibestral_project}"
+timeout 20 docker exec "${vibestral_cid}" sh -lc 'command -v vibe >/dev/null' \
+  || fail "agent vibestral runtime is missing vibe CLI"
+ok "agent vibestral prepares tmux session, workspace, and vibe CLI runtime"
 
 ok "F1_agent_cli passed"

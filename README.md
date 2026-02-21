@@ -216,7 +216,7 @@ agent profile
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
 agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-agent <claude|codex|opencode> [project]
+agent <claude|codex|opencode|vibestral> [project]
 agent ls
 agent ps
 agent llm mode [local|hybrid|remote]
@@ -227,6 +227,7 @@ agent stop container <container...>
 agent start service <service...>
 agent start container <container...>
 agent backup <run|list|restore <snapshot_id> [--yes]>
+agent forget <target> [--yes] [--no-backup]
 agent cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
@@ -258,7 +259,7 @@ Exemples:
 ```
 
 Notes:
-- `agent stop` ne gère que les tools `claude|codex|opencode`.
+- `agent stop` gère les tools `claude|codex|opencode|vibestral`.
 - `agent rollback all` exige un `release_id`.
 
 ## Ollama: preload et lien de modèles
