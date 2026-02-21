@@ -374,6 +374,20 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - `docker image inspect agent-cli-base:<tag>` OK
 - `.Config.User` non-root
 
+### E1b Image de base commune customisable (Dockerfile override)
+**Implémentation**
+- permettre de surcharger le Dockerfile de base des agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`) via variables runtime (ex: `AGENTIC_AGENT_BASE_DOCKERFILE`, `AGENTIC_AGENT_BASE_BUILD_CONTEXT`).
+- conserver un fallback sûr par défaut sur `deployments/images/agent-cli-base/Dockerfile` si aucun override n’est fourni.
+- option de tagging explicite de l’image commune custom (ex: `AGENTIC_AGENT_BASE_IMAGE=agentic/agent-cli-base:custom`) pour traçabilité des releases.
+- documenter clairement le contrat minimal du Dockerfile custom (user non-root, entrypoint compatible, outils de base requis).
+- le mécanisme custom ne doit pas casser le durcissement conteneur existant (`read_only`, `cap_drop=ALL`, `no-new-privileges`, pas de `docker.sock`).
+
+**Test** : `tests/E1b_agent_base_image_override.sh`
+- sans override: build/déploiement utilisent bien le Dockerfile par défaut.
+- avec override: build utilise le Dockerfile custom fourni et l’image/tag attendu.
+- les trois services agents démarrent avec l’image commune custom.
+- les invariants sécurité des agents restent inchangés.
+
 ### E2 Déployer `agentic-claude`, `agentic-codex`, `agentic-opencode`
 **Implémentation**
 - `deployments/compose/compose.agents.yml`
