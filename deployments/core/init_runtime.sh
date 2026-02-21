@@ -6,6 +6,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/core"
+AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
+AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
 
 log() {
   echo "INFO: $*"
@@ -87,16 +89,23 @@ set_gate_runtime_permissions() {
   local gate_dir="${AGENTIC_ROOT}/gate"
   local gate_state_dir="${AGENTIC_ROOT}/gate/state"
   local gate_logs_dir="${AGENTIC_ROOT}/gate/logs"
+  local gate_mcp_dir="${AGENTIC_ROOT}/gate/mcp"
+  local gate_mcp_state_dir="${AGENTIC_ROOT}/gate/mcp/state"
+  local gate_mcp_logs_dir="${AGENTIC_ROOT}/gate/mcp/logs"
+  local gate_mcp_token="${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token"
 
   if [[ "${EUID}" -eq 0 ]]; then
     chmod 0750 "${gate_dir}"
-    chmod 0770 "${gate_state_dir}" "${gate_logs_dir}"
+    chmod 0750 "${gate_mcp_dir}"
+    chmod 0770 "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}"
+    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" "${gate_mcp_token}" || true
     return 0
   fi
 
   # Non-root local runs can include userns-remapped containers; relax only runtime test paths.
   chmod 0755 "${gate_dir}"
-  chmod 0770 "${gate_state_dir}" "${gate_logs_dir}"
+  chmod 0755 "${gate_mcp_dir}"
+  chmod 0770 "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}"
   log "non-root runtime init: relaxed gate dir permissions for userns compatibility"
 }
 
@@ -132,6 +141,25 @@ JSON
   log "created runtime file: ${quotas_file}"
 }
 
+ensure_gate_mcp_token() {
+  local token_file="${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token"
+  local token
+  if [[ -s "${token_file}" ]]; then
+    chmod 0600 "${token_file}" || true
+    return 0
+  fi
+
+  if command -v openssl >/dev/null 2>&1; then
+    token="$(openssl rand -hex 24)"
+  else
+    token="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
+
+  printf '%s\n' "${token}" >"${token_file}"
+  chmod 0600 "${token_file}"
+  log "created runtime file: ${token_file}"
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/ollama"
   install -d -m 0770 "${AGENTIC_ROOT}/ollama/models"
@@ -139,6 +167,9 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/gate/config"
   install -d -m 0770 "${AGENTIC_ROOT}/gate/state"
   install -d -m 0770 "${AGENTIC_ROOT}/gate/logs"
+  install -d -m 0750 "${AGENTIC_ROOT}/gate/mcp"
+  install -d -m 0770 "${AGENTIC_ROOT}/gate/mcp/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/gate/mcp/logs"
   install -d -m 0750 "${AGENTIC_ROOT}/trtllm"
   install -d -m 0770 "${AGENTIC_ROOT}/trtllm/models"
   install -d -m 0770 "${AGENTIC_ROOT}/trtllm/state"
@@ -160,6 +191,7 @@ main() {
   chmod 0644 "${AGENTIC_ROOT}/proxy/allowlist.txt"
   ensure_gate_mode_file
   ensure_gate_quotas_file
+  ensure_gate_mcp_token
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key"
   set_gate_runtime_permissions

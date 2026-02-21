@@ -83,6 +83,9 @@ main() {
     "${AGENTIC_ROOT}/gate/config"
     "${AGENTIC_ROOT}/gate/state"
     "${AGENTIC_ROOT}/gate/logs"
+    "${AGENTIC_ROOT}/gate/mcp"
+    "${AGENTIC_ROOT}/gate/mcp/state"
+    "${AGENTIC_ROOT}/gate/mcp/logs"
     "${AGENTIC_ROOT}/trtllm"
     "${AGENTIC_ROOT}/trtllm/models"
     "${AGENTIC_ROOT}/trtllm/state"
@@ -150,6 +153,8 @@ main() {
   local -a writable_dirs=(
     "${AGENTIC_ROOT}/gate/state"
     "${AGENTIC_ROOT}/gate/logs"
+    "${AGENTIC_ROOT}/gate/mcp/state"
+    "${AGENTIC_ROOT}/gate/mcp/logs"
     "${AGENTIC_ROOT}/trtllm/models"
     "${AGENTIC_ROOT}/trtllm/state"
     "${AGENTIC_ROOT}/trtllm/logs"

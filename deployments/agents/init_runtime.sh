@@ -16,6 +16,28 @@ ensure_dir() {
   chmod "${mode}" "${path}"
 }
 
+ensure_gate_mcp_token() {
+  local token_file="${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token"
+  local token
+
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
+
+  if [[ ! -s "${token_file}" ]]; then
+    if command -v openssl >/dev/null 2>&1; then
+      token="$(openssl rand -hex 24)"
+    else
+      token="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    fi
+    printf '%s\n' "${token}" >"${token_file}"
+  fi
+
+  chmod 0600 "${token_file}"
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${token_file}" || true
+  fi
+}
+
 main() {
   local -a readonly_dirs=(
     "${AGENTIC_ROOT}/claude"
@@ -45,6 +67,8 @@ main() {
   for dir in "${writable_dirs[@]}"; do
     ensure_dir "${dir}" 0770
   done
+
+  ensure_gate_mcp_token
 
   if [[ "${EUID}" -eq 0 ]]; then
     for dir in "${readonly_dirs[@]}"; do

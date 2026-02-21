@@ -10,7 +10,7 @@ This repository provides a containerized agentic services stack for DGX Spark, w
 ## Compose Stacks
 
 Compose files are located in `compose/`:
-- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `trtllm` (`trt` profile), `unbound`, `egress-proxy`, `toolbox`
+- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `trtllm` (`trt` profile), `unbound`, `egress-proxy`, `toolbox`
 - `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
@@ -46,7 +46,7 @@ Runtime root:
 
 Key persistent folders:
 - `ollama/`
-- `gate/{config,state,logs}/`
+- `gate/{config,state,logs,mcp/{state,logs}}/`
 - `trtllm/{models,state,logs}/`
 - `proxy/{config,logs}/`
 - `dns/`
@@ -283,6 +283,23 @@ Runtime state:
 - mode: `${AGENTIC_ROOT}/gate/state/llm_mode.json`
 - quota counters: `${AGENTIC_ROOT}/gate/state/quotas_state.json`
 - metrics: `external_requests_total`, `external_tokens_total`, `external_quota_remaining`
+
+## Local MCP `gate-mcp` (D7)
+
+`gate-mcp` is part of the `core` stack and remains internal-only (no host-published port).  
+It exposes `/v1/tools/execute` with:
+- `gate.current_model`
+- `gate.quota_remaining`
+- `gate.switch_model`
+
+D7 hardening:
+- required local auth (`Authorization: Bearer ...`) via `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token`
+- minimal service-side rate limiting
+- JSONL audit trail: `${AGENTIC_ROOT}/gate/mcp/logs/audit.jsonl`
+
+Injected into agent containers:
+- `GATE_MCP_URL=http://gate-mcp:8123`
+- `GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token`
 
 ## Optional Modules
 

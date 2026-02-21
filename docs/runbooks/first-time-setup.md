@@ -118,6 +118,7 @@ If the allowlist is too strict, agents/UI that need external APIs will fail outb
 ### 2.3 Optional module secrets (only if you plan to enable optionals)
 
 Required files:
+- `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (auto-generated for D7 local `gate-mcp`)
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`

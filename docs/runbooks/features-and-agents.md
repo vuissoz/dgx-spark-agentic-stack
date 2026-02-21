@@ -61,6 +61,21 @@ The source of truth for service wiring is in:
   - logs backend/provider audit fields (`backend`, `provider`) for every `/v1/*` request.
   - reads provider secrets from `${AGENTIC_ROOT}/secrets/runtime/*.api_key` (never from git).
 
+### `gate-mcp`
+- Role: internal MCP gateway for runtime visibility/control around `ollama-gate`.
+- Access path:
+  - internal only: `gate-mcp:8123`
+- Persistence:
+  - `${AGENTIC_ROOT}/gate/mcp/state`
+  - `${AGENTIC_ROOT}/gate/mcp/logs`
+- Why it exists:
+  - exposes local MCP tools for agents:
+    - `gate.current_model`
+    - `gate.quota_remaining`
+    - `gate.switch_model`
+  - enforces local token auth with `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token`.
+  - keeps audit traces for MCP calls without exposing provider secrets.
+
 ### `trtllm` (optional `trt` profile)
 - Role: internal TRT-LLM backend used for NVFP4-routed models.
 - Activation:
@@ -136,6 +151,12 @@ Interactive entrypoint is through `./agent <tool> [project]`.
 - `${AGENTIC_ROOT}/shared-rw` mounted read-write into agent containers.
 - Why they exist:
   - simplify controlled file exchange between isolated agent runtimes.
+
+### Agent MCP wiring (D7)
+- `GATE_MCP_URL=http://gate-mcp:8123`
+- `GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token`
+- Why it exists:
+  - allows agents to consume D7 runtime MCP tools over the internal network only.
 
 ## UI Stack (`./agent up ui`)
 

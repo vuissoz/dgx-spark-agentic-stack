@@ -10,7 +10,7 @@ Ce dépôt fournit une stack de services agentiques conteneurisés pour DGX Spar
 ## Stacks Compose
 
 Les fichiers Compose sont dans `compose/`:
-- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `trtllm` (profile `trt`), `unbound`, `egress-proxy`, `toolbox`
+- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `trtllm` (profile `trt`), `unbound`, `egress-proxy`, `toolbox`
 - `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
@@ -46,7 +46,7 @@ Racine runtime:
 
 Dossiers persistants clés:
 - `ollama/`
-- `gate/{config,state,logs}/`
+- `gate/{config,state,logs,mcp/{state,logs}}/`
 - `trtllm/{models,state,logs}/`
 - `proxy/{config,logs}/`
 - `dns/`
@@ -283,6 +283,23 @@ State runtime:
 - mode: `${AGENTIC_ROOT}/gate/state/llm_mode.json`
 - compteurs quotas: `${AGENTIC_ROOT}/gate/state/quotas_state.json`
 - métriques: `external_requests_total`, `external_tokens_total`, `external_quota_remaining`
+
+## MCP local `gate-mcp` (D7)
+
+Le service `gate-mcp` est inclus dans `core` et reste interne (aucun port hôte publié).  
+Il expose `/v1/tools/execute` avec:
+- `gate.current_model`
+- `gate.quota_remaining`
+- `gate.switch_model`
+
+Durcissement D7:
+- auth locale obligatoire (`Authorization: Bearer ...`) via `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token`
+- rate limiting minimal côté service
+- audit JSONL: `${AGENTIC_ROOT}/gate/mcp/logs/audit.jsonl`
+
+Variables injectées dans les conteneurs agents:
+- `GATE_MCP_URL=http://gate-mcp:8123`
+- `GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token`
 
 ## Modules optionnels
 

@@ -133,7 +133,7 @@ else
   warn "skip proxy enforcement check because AGENTIC_SKIP_DOCTOR_PROXY_CHECK=1"
 fi
 
-for service in ollama ollama-gate trtllm egress-proxy unbound toolbox openwebui openhands comfyui prometheus grafana loki qdrant optional-sentinel optional-openclaw optional-openclaw-sandbox optional-mcp-catalog optional-pi-mono optional-goose optional-portainer; do
+for service in ollama ollama-gate gate-mcp trtllm egress-proxy unbound toolbox openwebui openhands comfyui prometheus grafana loki qdrant optional-sentinel optional-openclaw optional-openclaw-sandbox optional-mcp-catalog optional-pi-mono optional-goose optional-portainer; do
   cid="$(service_container_id "${service}")"
   [[ -n "${cid}" ]] || continue
 
@@ -161,6 +161,19 @@ for service in agentic-claude agentic-codex agentic-opencode; do
   fi
   if ! assert_proxy_enforced "${cid}"; then
     doctor_fail "proxy env baseline failed for '${service}'"
+  fi
+
+  env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+  if ! echo "${env_dump}" | grep -q '^GATE_MCP_URL=http://gate-mcp:8123$'; then
+    doctor_fail "agent '${service}' missing GATE_MCP_URL=http://gate-mcp:8123"
+  fi
+  if ! echo "${env_dump}" | grep -q '^GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token$'; then
+    doctor_fail "agent '${service}' missing GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token"
+  fi
+
+  mount_dests="$(docker inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "${cid}" 2>/dev/null || true)"
+  if ! echo "${mount_dests}" | grep -q '^/run/secrets/gate_mcp.token$'; then
+    doctor_fail "agent '${service}' must mount /run/secrets/gate_mcp.token read-only"
   fi
 done
 
