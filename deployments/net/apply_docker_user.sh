@@ -131,10 +131,11 @@ append_unique() {
 
 collect_service_ips() {
   local service="$1"
-  local -n ips_ref="$2"
+  local target_var="$2"
   shift 2
   local -a networks=("$@")
   local container_id network_name ip
+  local -n target_ref="${target_var}"
 
   container_id="$(service_container_id "${service}")"
   if [[ -z "${container_id}" ]]; then
@@ -144,10 +145,33 @@ collect_service_ips() {
   for network_name in "${networks[@]}"; do
     ip="$(container_ip_on_network "${container_id}" "${network_name}")"
     [[ -n "${ip}" ]] || continue
-    append_unique ips_ref "${ip}"
+    append_unique "${target_var}" "${ip}"
   done
 
-  [[ "${#ips_ref[@]}" -gt 0 ]]
+  [[ "${#target_ref[@]}" -gt 0 ]]
+}
+
+collect_service_ips_with_retry() {
+  local service="$1"
+  local target_var="$2"
+  shift 2
+  local -a networks=("$@")
+  local attempts="${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20}"
+  local sleep_seconds="${AGENTIC_SERVICE_IP_RESOLVE_SLEEP_SECONDS:-1}"
+  local attempt
+  local -n target_ref="${target_var}"
+
+  for ((attempt=1; attempt<=attempts; attempt++)); do
+    target_ref=()
+    if collect_service_ips "${service}" "${target_var}" "${networks[@]}"; then
+      return 0
+    fi
+    if (( attempt < attempts )); then
+      sleep "${sleep_seconds}"
+    fi
+  done
+
+  return 1
 }
 
 main() {
@@ -183,11 +207,11 @@ main() {
     append_unique source_subnets "${subnet}"
   done
 
-  collect_service_ips "${AGENTIC_PROXY_SERVICE}" proxy_ips "${source_networks[@]}" \
-    || die "cannot resolve IPs for '${AGENTIC_PROXY_SERVICE}' on ${source_networks[*]}"
-  collect_service_ips "${AGENTIC_UNBOUND_SERVICE}" unbound_ips "${source_networks[@]}" \
-    || die "cannot resolve IPs for '${AGENTIC_UNBOUND_SERVICE}' on ${source_networks[*]}"
-  collect_service_ips "${AGENTIC_GATE_SERVICE}" gate_ips "${source_networks[@]}" || true
+  collect_service_ips_with_retry "${AGENTIC_PROXY_SERVICE}" proxy_ips "${source_networks[@]}" \
+    || die "cannot resolve IPs for '${AGENTIC_PROXY_SERVICE}' on ${source_networks[*]} after ${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20} attempts"
+  collect_service_ips_with_retry "${AGENTIC_UNBOUND_SERVICE}" unbound_ips "${source_networks[@]}" \
+    || die "cannot resolve IPs for '${AGENTIC_UNBOUND_SERVICE}' on ${source_networks[*]} after ${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20} attempts"
+  collect_service_ips_with_retry "${AGENTIC_GATE_SERVICE}" gate_ips "${source_networks[@]}" || true
 
   backup_id="$(create_host_net_backup)"
 
