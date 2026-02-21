@@ -9,7 +9,8 @@ Step 0 defines the runtime filesystem contract used by all later deployment step
 - `/srv/agentic/tests/`
 - `/srv/agentic/secrets/`
 - `/srv/agentic/ollama/`
-- `/srv/agentic/gate/{state,logs}/`
+- `/srv/agentic/gate/{config,state,logs}/`
+- `/srv/agentic/trtllm/{models,state,logs}/` (when `COMPOSE_PROFILES=trt` is enabled)
 - `/srv/agentic/proxy/`
 - `/srv/agentic/dns/`
 - `/srv/agentic/openwebui/`

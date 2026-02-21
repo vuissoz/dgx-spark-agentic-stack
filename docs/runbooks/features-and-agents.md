@@ -51,10 +51,27 @@ The source of truth for service wiring is in:
 - Access path:
   - internal only: `ollama-gate:11435`
 - Persistence:
+  - `${AGENTIC_ROOT}/gate/config`
   - `${AGENTIC_ROOT}/gate/state`
   - `${AGENTIC_ROOT}/gate/logs`
 - Why it exists:
   - centralizes concurrency/queueing behavior and gate-level logging for model calls.
+  - resolves model routing policy (`model -> backend`) from `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
+  - logs backend audit fields (`backend=ollama|trtllm`) for every `/v1/*` request.
+
+### `trtllm` (optional `trt` profile)
+- Role: internal TRT-LLM backend used for NVFP4-routed models.
+- Activation:
+  - `COMPOSE_PROFILES=trt ./agent up core`
+- Access path:
+  - internal-only on dedicated `agentic-llm` network (no host-published ports).
+  - reachable from `ollama-gate`; not reachable from generic internal tooling (`toolbox`).
+- Persistence:
+  - `${AGENTIC_ROOT}/trtllm/models`
+  - `${AGENTIC_ROOT}/trtllm/state`
+  - `${AGENTIC_ROOT}/trtllm/logs`
+- Why it exists:
+  - enables backend separation where standard models stay on `ollama` while NVFP4 model patterns route to `trtllm`.
 
 ### `unbound`
 - Role: DNS resolver used by the stack egress path.

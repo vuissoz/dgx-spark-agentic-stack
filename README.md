@@ -10,7 +10,7 @@ Ce dépôt fournit une stack de services agentiques conteneurisés pour DGX Spar
 ## Stacks Compose
 
 Les fichiers Compose sont dans `compose/`:
-- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `unbound`, `egress-proxy`, `toolbox`
+- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `trtllm` (profile `trt`), `unbound`, `egress-proxy`, `toolbox`
 - `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
@@ -29,6 +29,15 @@ Vérification:
 ./agent profile
 ```
 
+Activation optionnelle du backend TRT-LLM (interne uniquement):
+
+```bash
+export COMPOSE_PROFILES=trt
+./agent up core
+```
+
+Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
+
 ## Arborescence runtime (résumé)
 
 Racine runtime:
@@ -37,7 +46,8 @@ Racine runtime:
 
 Dossiers persistants clés:
 - `ollama/`
-- `gate/{state,logs}/`
+- `gate/{config,state,logs}/`
+- `trtllm/{models,state,logs}/`
 - `proxy/{config,logs}/`
 - `dns/`
 - `openwebui/`

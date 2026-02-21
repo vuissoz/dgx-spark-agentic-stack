@@ -10,7 +10,7 @@ This repository provides a containerized agentic services stack for DGX Spark, w
 ## Compose Stacks
 
 Compose files are located in `compose/`:
-- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `unbound`, `egress-proxy`, `toolbox`
+- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `trtllm` (`trt` profile), `unbound`, `egress-proxy`, `toolbox`
 - `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
@@ -29,6 +29,15 @@ Check with:
 ./agent profile
 ```
 
+Optional TRT-LLM backend activation (internal-only):
+
+```bash
+export COMPOSE_PROFILES=trt
+./agent up core
+```
+
+Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
+
 ## Runtime Layout (summary)
 
 Runtime root:
@@ -37,7 +46,8 @@ Runtime root:
 
 Key persistent folders:
 - `ollama/`
-- `gate/{state,logs}/`
+- `gate/{config,state,logs}/`
+- `trtllm/{models,state,logs}/`
 - `proxy/{config,logs}/`
 - `dns/`
 - `openwebui/`

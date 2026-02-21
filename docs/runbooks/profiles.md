@@ -98,6 +98,25 @@ Notes:
 - In `rootless-dev`, some host-root checks are intentionally skipped/degraded (expected behavior).
 - Optional module tests (`K*`) require a green baseline doctor and module prerequisites (request files/secrets).
 
+### Optional Compose Profiles
+The stack also exposes optional Compose profiles for specific backends/features.
+
+`trt` profile:
+- enables the internal `trtllm` backend used by `ollama-gate` model routing,
+- keeps `trtllm` internal-only (no host-published port),
+- persists runtime data under `${AGENTIC_ROOT}/trtllm/{models,state,logs}`.
+
+Activation example:
+
+```bash
+export COMPOSE_PROFILES=trt
+./agent up core
+./agent test C
+./agent test D
+```
+
+If `COMPOSE_PROFILES=trt` is not set, `trtllm` is not started and C3/D4 tests skip by design.
+
 ### Common pitfalls
 - Running `strict-prod` commands without sufficient privileges can create partial host state.
 - Assuming a successful `rootless-dev` doctor run implies full CDC conformance is incorrect; host-level controls still need strict validation.
