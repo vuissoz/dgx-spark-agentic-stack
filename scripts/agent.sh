@@ -71,6 +71,11 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
+canonicalize_path() {
+  local path="$1"
+  readlink -f "${path}" 2>/dev/null || printf '%s\n' "${path}"
+}
+
 tool_to_service() {
   case "$1" in
     claude) echo "agentic-claude" ;;
@@ -474,6 +479,110 @@ build_core_local_images() {
   done
 }
 
+resolve_agent_base_build_services() {
+  local agents_compose_file="$1"
+  local -a available_services=()
+  local -a candidate_services=(agentic-claude agentic-codex agentic-opencode agentic-vibestral)
+  local -A available_lookup=()
+  local service
+
+  mapfile -t available_services < <(
+    docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+      -f "${agents_compose_file}" config --services
+  )
+  for service in "${available_services[@]}"; do
+    available_lookup["${service}"]=1
+  done
+
+  for service in "${candidate_services[@]}"; do
+    if [[ -n "${available_lookup[${service}]:-}" ]]; then
+      printf '%s\n' "${service}"
+    fi
+  done
+}
+
+agent_base_build_fingerprint() {
+  local context_dir="${AGENTIC_AGENT_BASE_BUILD_CONTEXT}"
+  local dockerfile_path="${AGENTIC_AGENT_BASE_DOCKERFILE}"
+  local default_dockerfile="${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/Dockerfile"
+  local default_entrypoint="${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/entrypoint.sh"
+  local context_real dockerfile_real default_dockerfile_real
+
+  require_cmd sha256sum
+
+  [[ -d "${context_dir}" ]] || die "agent base build context must exist and be a directory: ${context_dir}"
+  [[ -f "${dockerfile_path}" ]] || die "agent base Dockerfile does not exist: ${dockerfile_path}"
+
+  context_real="$(canonicalize_path "${context_dir}")"
+  dockerfile_real="$(canonicalize_path "${dockerfile_path}")"
+  default_dockerfile_real="$(canonicalize_path "${default_dockerfile}")"
+
+  {
+    printf 'image=%s\n' "${AGENTIC_AGENT_BASE_IMAGE}"
+    printf 'context=%s\n' "${context_real}"
+    printf 'dockerfile=%s\n' "${dockerfile_real}"
+    sha256sum "${dockerfile_real}"
+    if [[ "${dockerfile_real}" == "${default_dockerfile_real}" ]]; then
+      [[ -f "${default_entrypoint}" ]] || die "default agent entrypoint missing: ${default_entrypoint}"
+      sha256sum "${default_entrypoint}"
+    fi
+  } | sha256sum | awk '{print $1}'
+}
+
+assert_agent_base_image_contract() {
+  local image_ref="$1"
+  local image_user
+  local entrypoint_json
+
+  image_user="$(docker image inspect --format '{{.Config.User}}' "${image_ref}" 2>/dev/null || true)"
+  [[ -n "${image_user}" && "${image_user}" != "root" && "${image_user}" != "0" ]] \
+    || die "agent base image must use a non-root user: ${image_ref} (user='${image_user:-<empty>}')"
+
+  entrypoint_json="$(docker image inspect --format '{{json .Config.Entrypoint}}' "${image_ref}" 2>/dev/null || true)"
+  [[ -n "${entrypoint_json}" && "${entrypoint_json}" != "null" && "${entrypoint_json}" != "[]" ]] \
+    || die "agent base image must define an entrypoint compatible with persistent tmux sessions: ${image_ref}"
+
+  timeout 30 docker run --rm --entrypoint sh "${image_ref}" -lc 'command -v bash tmux git curl >/dev/null' \
+    || die "agent base image must include bash/tmux/git/curl: ${image_ref}"
+}
+
+build_agents_local_images() {
+  local agents_compose_file="$1"
+  local image_ref="${AGENTIC_AGENT_BASE_IMAGE}"
+  local stamp_dir
+  local stamp_path
+  local stamp_value
+  local fingerprint
+  local -a build_services=()
+
+  [[ "${AGENTIC_SKIP_AGENT_IMAGE_BUILD:-0}" == "1" ]] && {
+    warn "skipping agent base image build because AGENTIC_SKIP_AGENT_IMAGE_BUILD=1"
+    return 0
+  }
+
+  stamp_dir="${AGENTIC_ROOT}/deployments/image-build-stamps"
+  install -d -m 0750 "${stamp_dir}"
+  stamp_path="${stamp_dir}/agent-cli-base.sha256"
+  stamp_value="$(cat "${stamp_path}" 2>/dev/null || true)"
+
+  require_cmd docker
+  fingerprint="$(agent_base_build_fingerprint)"
+
+  if ! docker image inspect "${image_ref}" >/dev/null 2>&1 \
+    || [[ -z "${stamp_value}" ]] \
+    || [[ "${stamp_value}" != "${fingerprint}" ]]; then
+    mapfile -t build_services < <(resolve_agent_base_build_services "${agents_compose_file}")
+    [[ "${#build_services[@]}" -gt 0 ]] || return 0
+
+    docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+      -f "${agents_compose_file}" build "${build_services[@]}"
+    printf '%s\n' "${fingerprint}" >"${stamp_path}"
+    chmod 0640 "${stamp_path}" || true
+  fi
+
+  assert_agent_base_image_contract "${image_ref}"
+}
+
 service_container_id() {
   local service="$1"
   docker ps \
@@ -513,13 +622,22 @@ load_runtime_env() {
           export "${key}=${value}"
         fi
         ;;
-      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH)
+      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE)
         export "${key}=${value}"
         ;;
       *)
         ;;
     esac
   done < "${AGENT_RUNTIME_ENV_FILE}"
+
+  if [[ "${AGENTIC_AGENT_BASE_BUILD_CONTEXT}" != /* ]]; then
+    AGENTIC_AGENT_BASE_BUILD_CONTEXT="${AGENTIC_REPO_ROOT}/${AGENTIC_AGENT_BASE_BUILD_CONTEXT}"
+    export AGENTIC_AGENT_BASE_BUILD_CONTEXT
+  fi
+  if [[ "${AGENTIC_AGENT_BASE_DOCKERFILE}" != /* ]]; then
+    AGENTIC_AGENT_BASE_DOCKERFILE="${AGENTIC_REPO_ROOT}/${AGENTIC_AGENT_BASE_DOCKERFILE}"
+    export AGENTIC_AGENT_BASE_DOCKERFILE
+  fi
 }
 
 set_runtime_env_value() {
@@ -548,6 +666,9 @@ ensure_runtime_env() {
     "AGENTIC_COMPOSE_PROJECT=${AGENTIC_COMPOSE_PROJECT}"
     "AGENTIC_NETWORK=${AGENTIC_NETWORK}"
     "AGENTIC_LLM_NETWORK=${AGENTIC_LLM_NETWORK}"
+    "AGENTIC_AGENT_BASE_BUILD_CONTEXT=${AGENTIC_AGENT_BASE_BUILD_CONTEXT}"
+    "AGENTIC_AGENT_BASE_DOCKERFILE=${AGENTIC_AGENT_BASE_DOCKERFILE}"
+    "AGENTIC_AGENT_BASE_IMAGE=${AGENTIC_AGENT_BASE_IMAGE}"
     "AGENTIC_LLM_MODE=${AGENTIC_LLM_MODE}"
     "AGENTIC_OPENAI_DAILY_TOKENS=${AGENTIC_OPENAI_DAILY_TOKENS}"
     "AGENTIC_OPENAI_MONTHLY_TOKENS=${AGENTIC_OPENAI_MONTHLY_TOKENS}"
@@ -604,6 +725,9 @@ cmd_profile() {
   printf 'compose_project=%s\n' "${AGENTIC_COMPOSE_PROJECT}"
   printf 'network=%s\n' "${AGENTIC_NETWORK}"
   printf 'llm_network=%s\n' "${AGENTIC_LLM_NETWORK}"
+  printf 'agent_base_build_context=%s\n' "${AGENTIC_AGENT_BASE_BUILD_CONTEXT}"
+  printf 'agent_base_dockerfile=%s\n' "${AGENTIC_AGENT_BASE_DOCKERFILE}"
+  printf 'agent_base_image=%s\n' "${AGENTIC_AGENT_BASE_IMAGE}"
   printf 'llm_mode=%s\n' "${AGENTIC_LLM_MODE}"
   printf 'egress_network=%s\n' "${AGENTIC_EGRESS_NETWORK}"
   printf 'openai_daily_tokens=%s\n' "${AGENTIC_OPENAI_DAILY_TOKENS}"
@@ -1276,6 +1400,9 @@ cmd_update() {
   if [[ -f "$(stack_to_compose_file core)" ]]; then
     build_core_local_images "$(stack_to_compose_file core)"
   fi
+  if [[ -f "$(stack_to_compose_file agents)" ]]; then
+    build_agents_local_images "$(stack_to_compose_file agents)"
+  fi
 
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" pull --ignore-pull-failures
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" up -d --remove-orphans
@@ -1329,12 +1456,12 @@ run_tests() {
   if [[ "$selector" == "all" ]]; then
     mapfile -t tests < <(
       find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -regextype posix-extended \
-        -regex '.*/([0-9]+|[A-Z][0-9]*)_.*\.sh' | sort
+        -regex '.*/([0-9]+|[A-Z]([0-9]+[a-z]?)?)_.*\.sh' | sort
     )
   elif [[ "$selector" =~ ^[A-LV]$ ]]; then
     mapfile -t tests < <(
       find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -regextype posix-extended \
-        -regex ".*/${selector}([0-9]+)?_.*\\.sh" | sort
+        -regex ".*/${selector}([0-9]+[a-z]?)?_.*\\.sh" | sort
     )
   else
     die "Invalid test selector '$selector'. Expected one of A..L, V, or all."
@@ -1376,6 +1503,7 @@ case "$cmd" in
     fi
     if targets_include "agents" "${targets[@]}"; then
       ensure_agents_runtime
+      build_agents_local_images "$(stack_to_compose_file agents)"
     fi
     if targets_include "obs" "${targets[@]}"; then
       ensure_obs_runtime

@@ -1,9 +1,9 @@
 services:
   agentic-claude:
-    image: agentic/agent-cli-base:local
+    image: ${AGENTIC_AGENT_BASE_IMAGE:-agentic/agent-cli-base:local}
     build:
-      context: ..
-      dockerfile: deployments/images/agent-cli-base/Dockerfile
+      context: ${AGENTIC_AGENT_BASE_BUILD_CONTEXT:-..}
+      dockerfile: ${AGENTIC_AGENT_BASE_DOCKERFILE:-deployments/images/agent-cli-base/Dockerfile}
     restart: unless-stopped
     init: true
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
@@ -45,10 +45,10 @@ services:
       - agentic
 
   agentic-codex:
-    image: agentic/agent-cli-base:local
+    image: ${AGENTIC_AGENT_BASE_IMAGE:-agentic/agent-cli-base:local}
     build:
-      context: ..
-      dockerfile: deployments/images/agent-cli-base/Dockerfile
+      context: ${AGENTIC_AGENT_BASE_BUILD_CONTEXT:-..}
+      dockerfile: ${AGENTIC_AGENT_BASE_DOCKERFILE:-deployments/images/agent-cli-base/Dockerfile}
     restart: unless-stopped
     init: true
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
@@ -90,10 +90,10 @@ services:
       - agentic
 
   agentic-opencode:
-    image: agentic/agent-cli-base:local
+    image: ${AGENTIC_AGENT_BASE_IMAGE:-agentic/agent-cli-base:local}
     build:
-      context: ..
-      dockerfile: deployments/images/agent-cli-base/Dockerfile
+      context: ${AGENTIC_AGENT_BASE_BUILD_CONTEXT:-..}
+      dockerfile: ${AGENTIC_AGENT_BASE_DOCKERFILE:-deployments/images/agent-cli-base/Dockerfile}
     restart: unless-stopped
     init: true
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"

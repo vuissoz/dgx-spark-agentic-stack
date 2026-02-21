@@ -140,7 +140,7 @@ Liens officiels:
 ## 4) Plan `agents` (execution agentique)
 
 Les 3 services ci-dessous partagent la meme logique:
-- ils tournent dans une image locale `agentic/agent-cli-base:local`,
+- par defaut ils tournent avec `agentic/agent-cli-base:local` (override possible via `AGENTIC_AGENT_BASE_*`),
 - ils utilisent `tmux` pour garder des sessions longues,
 - ils ont chacun leurs dossiers `state/logs/workspaces` separes.
 

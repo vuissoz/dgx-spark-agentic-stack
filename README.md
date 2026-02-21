@@ -86,6 +86,31 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 `./agent profile` affiche les valeurs effectives utilisées.
 
+## Override de l'image de base des agents (E1b)
+
+Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`) partagent une image commune configurable à runtime.
+
+Variables supportées:
+- `AGENTIC_AGENT_BASE_IMAGE` (défaut: `agentic/agent-cli-base:local`)
+- `AGENTIC_AGENT_BASE_BUILD_CONTEXT` (défaut: racine du repo)
+- `AGENTIC_AGENT_BASE_DOCKERFILE` (défaut: `deployments/images/agent-cli-base/Dockerfile`)
+
+Contrat minimal du Dockerfile custom:
+- utilisateur par défaut non-root,
+- `ENTRYPOINT` présent et compatible session tmux persistante,
+- outils de base disponibles: `bash`, `tmux`, `git`, `curl`.
+
+Exemple:
+
+```bash
+export AGENTIC_AGENT_BASE_IMAGE=agentic/agent-cli-base:custom
+export AGENTIC_AGENT_BASE_BUILD_CONTEXT=/opt/agent-images/custom-base
+export AGENTIC_AGENT_BASE_DOCKERFILE=/opt/agent-images/custom-base/Dockerfile
+./agent up agents
+```
+
+Les valeurs effectives sont visibles via `./agent profile` et persistées dans `${AGENTIC_ROOT}/deployments/runtime.env`.
+
 ## Prérequis
 
 - Linux + Docker Engine
