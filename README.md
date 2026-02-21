@@ -271,6 +271,15 @@ Préconditions (runtime):
   - `docs/runbooks/first-time-setup.md`
 - Catalogue des fonctionnalités et des agents implémentés:
   - `docs/runbooks/features-and-agents.md`
+- Guide pédagogique service par service (niveau débutant):
+  - `docs/runbooks/services-expliques-debutants.md`
+- Guide service par service en anglais (version beginner):
+  - `docs/runbooks/services-explained-beginners.en.md`
+- Onboarding ultra-simplifié non-tech (FR/EN/DE/IT):
+  - `docs/runbooks/onboarding-ultra-simple.fr.md`
+  - `docs/runbooks/onboarding-ultra-simple.en.md`
+  - `docs/runbooks/onboarding-ultra-simple.de.md`
+  - `docs/runbooks/onboarding-ultra-simple.it.md`
 - Profils d'exécution:
   - `docs/runbooks/profiles.md`
 - Modules optionnels:

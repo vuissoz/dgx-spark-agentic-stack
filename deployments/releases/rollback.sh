@@ -51,16 +51,18 @@ main() {
     compose_args+=("-f" "${compose_file}")
   done
 
-  local override_file
+  local override_file services_file
   override_file="$(mktemp)"
-  trap 'if [[ -n "${override_file:-}" ]]; then rm -f "${override_file}"; fi' EXIT
+  services_file="$(mktemp)"
+  trap 'if [[ -n "${override_file:-}" ]]; then rm -f "${override_file}"; fi; if [[ -n "${services_file:-}" ]]; then rm -f "${services_file}"; fi' EXIT
 
-  python3 - "${release_dir}/images.json" "${override_file}" <<'PY'
+  python3 - "${release_dir}/images.json" "${override_file}" "${services_file}" <<'PY'
 import json
 import sys
 
 images_path = sys.argv[1]
 override_path = sys.argv[2]
+services_path = sys.argv[3]
 
 with open(images_path, "r", encoding="utf-8") as fh:
     images = json.load(fh)
@@ -79,13 +81,22 @@ with open(override_path, "w", encoding="utf-8") as fh:
     for service in sorted(services):
         fh.write(f"  {service}:\n")
         fh.write(f"    image: {services[service]}\n")
+
+with open(services_path, "w", encoding="utf-8") as fh:
+    for service in sorted(services):
+        fh.write(f"{service}\n")
 PY
+
+  local -a target_services=()
+  mapfile -t target_services < <(grep -Ev '^\s*$' "${services_file}")
+  [[ "${#target_services[@]}" -gt 0 ]] || die "release ${release_id} contains no rollback targets"
 
   docker compose \
     --project-name "${AGENTIC_COMPOSE_PROJECT}" \
     "${compose_args[@]}" \
     -f "${override_file}" \
-    up -d --remove-orphans --no-build
+    up -d --remove-orphans --no-build \
+    "${target_services[@]}"
 
   local changes_log="${AGENTIC_ROOT}/deployments/changes.log"
   install -d -m 0750 "$(dirname "${changes_log}")"

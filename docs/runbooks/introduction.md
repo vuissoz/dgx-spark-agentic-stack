@@ -174,10 +174,13 @@ The stack intentionally favors early, visible failure over silent drift.
 
 Suggested order:
 1. this introduction (`introduction.md`),
-2. `profiles.md` (execution semantics),
-3. `first-time-setup.md` (day-0 bootstrap),
-4. `features-and-agents.md` (component capabilities),
-5. specialized runbooks (`optional-modules.md`, `observability-triage.md`, etc.).
+2. `onboarding-ultra-simple.fr.md` / `.en.md` / `.de.md` / `.it.md` (non-technical quickstart),
+3. `profiles.md` (execution semantics),
+4. `first-time-setup.md` (day-0 bootstrap),
+5. `features-and-agents.md` (component capabilities),
+6. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
+7. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
+8. specialized runbooks (`optional-modules.md`, `observability-triage.md`, etc.).
 
 When troubleshooting:
 - always capture active profile and effective runtime values first (`./agent profile`),
