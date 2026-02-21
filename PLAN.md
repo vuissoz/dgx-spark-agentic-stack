@@ -745,6 +745,9 @@ Suivi Beads : `dgx-spark-agentic-stack-9kz`
 ### V1 Campagne de validation complète en VM
 **Implémentation**
 - provisionner une VM Linux dédiée (Ubuntu LTS recommandé) avec privilèges root ;
+- ajouter une commande opérateur de nettoyage VM :
+  - `agent vm cleanup --name <vm-name>`
+  - comportement attendu : stop propre de la VM puis suppression de la VM (sans toucher d’autres VMs) ;
 - exécuter strictement le profil :
   - `export AGENTIC_PROFILE=strict-prod`
   - `sudo ./deployments/bootstrap/init_fs.sh`
