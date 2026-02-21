@@ -33,6 +33,8 @@ Un troisième chemin d’exécution est autorisé pour les tests d’intégratio
 - créer une **VM dédiée** (où l’opérateur a les droits root) ;
 - exécuter le profil `strict-prod` dans la VM ;
 - garder les mêmes garde-fous (`/srv/agentic`, `DOCKER-USER`, bind loopback, doctor strict).
+- la VM doit avoir un **accès GPU** (passthrough/équivalent selon hyperviseur) validé par `nvidia-smi` dans la VM ;
+- la **taille mémoire de la VM** doit être **paramétrable** (variable/flag explicite dans le provisionnement, pas une valeur figée en dur).
 
 Contrainte mémoire (Ollama) :
 
@@ -73,7 +75,9 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - `agent down <…>`
 - `agent ps`
 - `agent logs <service>`
+- `agent llm mode <local|hybrid|remote>` (pilotage backend LLM sans casser les agents)
 - `agent forget <target> --yes` (reset destructif ciblé d’un domaine persistant)
+- `agent backup <run|list|restore <snapshot_id>>` (snapshots incrémentaux des données persistantes + config non-secrète)
 - `agent test <A|B|…|K>` (exécute le(s) script(s) correspondants)
 - `agent doctor` (agrégat de conformité “doit rester vert”)
 - `agent profile` (affiche le profil effectif + chemins/réseaux)
@@ -308,6 +312,37 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - requête avec modèle NVFP4 -> backend `trtllm` (preuve logs/headers gate).
 - si `trtllm` indisponible pour un modèle NVFP4 routé: erreur explicite et actionnable (pas de fallback silencieux non maîtrisé).
 
+### D5 Backends LLM externes via `ollama-gate` (OpenAI/OpenRouter)
+**Implémentation**
+- ajouter un routage provider externe (au minimum `openai`, `openrouter`) dans `ollama-gate`, piloté par config versionnée `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
+- garder l’API client inchangée (`/v1/*`) : les agents/UIs appellent toujours uniquement `ollama-gate`.
+- stocker les credentials providers hors git, fichiers root-only (ex: `${AGENTIC_ROOT}/secrets/runtime/openai.api_key`, `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key`).
+- egress minimal : allowlist explicite des endpoints providers activés (pas d’ouverture générale).
+- journaux gate enrichis : `backend`, `provider`, `model_requested`, `model_served`, sans fuite de secrets/tokens.
+
+**Test** : `tests/D5_gate_external_providers.sh`
+- modèle routé `openai` -> appel sortant via proxy vers endpoint OpenAI autorisé, réponse exploitable.
+- modèle routé `openrouter` -> appel sortant via proxy vers endpoint OpenRouter autorisé, réponse exploitable.
+- aucun secret provider dans logs gate/proxy.
+- sans clé API valide : erreur explicite/actionnable (pas de fallback implicite non maîtrisé).
+
+### D6 Mode “ressources locales” + quotas de tokens des appels externes
+**Implémentation**
+- ajouter un mode opératoire explicite : `agent llm mode <local|hybrid|remote>`.
+- `local` : backends locaux seulement (Ollama/TRT-LLM), appels externes refusés.
+- `hybrid` : local prioritaire + externe selon routage/politiques.
+- `remote` : providers externes autorisés ; possibilité d’arrêter `ollama` et/ou `trtllm` pour libérer GPU/RAM tout en gardant les agents opérationnels via `ollama-gate`.
+- implémenter des quotas de tokens/cout côté gate pour les providers externes :
+  - budget journalier/mensuel par provider (et optionnellement par outil/projet) ;
+  - compteurs persistants `${AGENTIC_ROOT}/gate/state/quotas.*` ;
+  - refus explicite quand quota dépassé (erreur dédiée + logs d’audit).
+- exposer métriques de coût/usage (`external_tokens_total`, `external_requests_total`, `external_quota_remaining`, etc.) pour alerting.
+
+**Test** : `tests/D6_gate_quota_and_local_pause.sh`
+- en mode `remote`, après arrêt `ollama`/`trtllm`, une requête agent passe encore via provider externe.
+- en mode `local`, appel d’un modèle externe est refusé explicitement.
+- dépassement quota simulé -> requêtes externes refusées, agents non plantés, logs/metrics cohérents.
+
 ---
 
 ## E — Agents CLI persistants : image `agent-cli-base` + tmux + workspaces
@@ -495,6 +530,28 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - couvre le flux interactif (`backup + confirmation`) ;
 - vérifie qu’une archive d’export est produite si demandée ;
 - vérifie que `${AGENTIC_ROOT}` est vidé et que les services ciblés sont arrêtés.
+
+### F8 Backup incrémental “Time Machine” (persistant + config non-secrète)
+**Implémentation**
+- ajouter une commande dédiée :
+  - `agent backup run` : snapshot incrémental horodaté ;
+  - `agent backup list` : liste snapshots + taille + date + policy retention ;
+  - `agent backup restore <snapshot_id>` : restauration déterministe d’un snapshot (opt-in destructif).
+- couvrir les dossiers persistants `${AGENTIC_ROOT}` (états, logs, workspaces, releases), plus une copie de configuration système utile à l’exploitation (ex: règles réseau/compose effectif), **sans secrets**.
+- exclure explicitement :
+  - `${AGENTIC_ROOT}/secrets/**`,
+  - clés/tokens/certs privés,
+  - toute variable/fichier marqué secret.
+- stratégie incrémentale “time machine” :
+  - snapshots fréquents, déduplication/blocs ou hardlinks selon outil choisi ;
+  - politique de rétention configurable (ex: hourly/daily/weekly).
+- journaliser run/restore dans `${AGENTIC_ROOT}/deployments/changes.log` avec acteur, UTC, snapshot_id, résultat.
+
+**Test** : `tests/F8_backup_incremental.sh`
+- deux runs successifs sans changement -> second snapshot quasi nul (incrémental).
+- après modification ciblée d’un dossier persistant -> snapshot suivant contient uniquement le delta attendu.
+- `restore <snapshot_id>` restaure les fichiers persistants ciblés.
+- vérification stricte : aucun fichier secret inclus dans snapshot/manifest.
 
 ---
 
@@ -693,6 +750,10 @@ La stack est “opérable” quand :
 - observabilité exploitable (CPU/RAM/disque/GPU, logs, erreurs proxy, drops DOCKER-USER)
 - update/rollback stricts par digest reproductibles
 - rollback hôte disponible pour les modifications nécessitant `sudo` (au minimum DOCKER-USER), testé et journalisé
+- routage LLM externe via `ollama-gate` possible (OpenAI/OpenRouter) avec API client stable `/v1/*`
+- mode `agent llm mode <local|hybrid|remote>` permet d’arrêter les backends locaux (`ollama`/`trtllm`) sans interrompre l’usage agentique en mode `remote`
+- quotas tokens/coût des appels externes actifs et auditables (blocage explicite au dépassement)
+- backup incrémental “time machine” des dossiers persistants + config non-secrète, avec restauration testée
 
 Critères de clôture par profil :
 - `strict-prod` : tous les points ci-dessus sont obligatoires et bloquants.

@@ -100,6 +100,41 @@ Verify effective values with:
 ./agent profile
 ```
 
+### 2.5 GitHub Git access must be non-interactive (SSH recommended)
+
+For automation (`git pull --rebase`, `git push`, `bd sync`), Git auth must not require interactive password prompts.
+
+Recommended path:
+
+1. Ensure SSH key-based auth is configured and loaded in `ssh-agent`.
+2. Validate non-interactive access:
+
+```bash
+GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=10' \
+  git ls-remote origin -h refs/heads/master
+```
+
+Expected result: command returns `0` and prints the remote ref hash without prompting.
+
+3. Optional direct SSH check:
+
+```bash
+ssh -o BatchMode=yes -o ConnectTimeout=10 -T git@github.com
+```
+
+Expected result: authentication success message (GitHub shell access remains disabled by design).
+
+If SSH is not ready yet:
+
+- Load the key into the agent for the current session:
+
+```bash
+ssh-add ~/.ssh/id_ed25519
+ssh-add -l
+```
+
+- Fallback option: switch remote to HTTPS + PAT with a credential helper, then re-run the non-interactive check with `git ls-remote origin`.
+
 ## 3. Bootstrap Host Runtime Tree
 
 ### `strict-prod`
