@@ -651,6 +651,37 @@ Principe : **désactivé par défaut**. Un module n’est activé que si :
 
 ---
 
+## Validation complémentaire — VM dédiée `strict-prod` (prod-like)
+
+Suivi Beads : `dgx-spark-agentic-stack-9kz`
+
+### V1 Campagne de validation complète en VM
+**Implémentation**
+- provisionner une VM Linux dédiée (Ubuntu LTS recommandé) avec privilèges root ;
+- exécuter strictement le profil :
+  - `export AGENTIC_PROFILE=strict-prod`
+  - `sudo ./deployments/bootstrap/init_fs.sh`
+  - `sudo ./agent up core`
+  - `sudo ./agent up agents,ui,obs,rag`
+  - `sudo ./agent doctor`
+  - `sudo ./agent update`
+  - `sudo ./agent rollback all <release_id>`
+  - `sudo ./agent test all`
+- capturer les preuves dans `${AGENTIC_ROOT}/deployments/validation/vm-strict-prod/<ts>/` :
+  - sortie `agent doctor`,
+  - rapport des tests,
+  - identifiants de release update/rollback,
+  - état final `agent ps`.
+- si la VM n’a pas de GPU passthrough : documenter explicitement les tests GPU en `skip/blocked` avec justification (pas de contournement sécurité).
+
+**Test** : `tests/V1_vm_strict_prod_validation.sh`
+- vérifie que le script de campagne retourne `0` quand la VM satisfait les prérequis ;
+- vérifie la présence des artefacts de preuve ;
+- échoue si `doctor` strict est non vert hors exceptions explicitement marquées ;
+- échoue si update/rollback ne laissent pas la stack dans un état `healthy`.
+
+---
+
 ## Définition “terminé” (objectif final)
 La stack est “opérable” quand :
 - `agent doctor` est vert de façon stable
@@ -672,6 +703,9 @@ Critères de clôture par profil :
 
 ## Ordre d’exécution imposé (chemin critique)
 A → B → C → D → E → F → G → H → I → J → K
+
+Validation complémentaire recommandée après chemin critique :
+- V1 (VM dédiée `strict-prod` prod-like)
 
 Stop condition générale : si une étape exige des privilèges élevés non compensés (root + caps + accès host), elle reste désactivée, et on documente le refus dans `deployments/changes.log`.
 
