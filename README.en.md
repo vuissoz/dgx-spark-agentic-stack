@@ -194,6 +194,7 @@ agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
 agent <claude|codex|opencode> [project]
 agent ls
 agent ps
+agent llm mode [local|hybrid|remote]
 agent logs <service>
 agent stop <tool>
 agent stop service <service...>
@@ -264,6 +265,24 @@ Runtime prerequisites:
   - `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key`
 - explicit egress allowlist:
   - `${AGENTIC_ROOT}/proxy/allowlist.txt` must include `api.openai.com` and `openrouter.ai`
+
+## LLM Modes + External Quotas (D6)
+
+- `./agent llm mode local`: explicitly blocks external providers.
+- `./agent llm mode hybrid`: local-first with external providers allowed by routing policy.
+- `./agent llm mode remote`: external providers allowed, with the option to stop `ollama`/`trtllm` to free GPU/RAM.
+
+Example `remote` mode with local pause:
+
+```bash
+./agent llm mode remote
+./agent stop service ollama trtllm
+```
+
+Runtime state:
+- mode: `${AGENTIC_ROOT}/gate/state/llm_mode.json`
+- quota counters: `${AGENTIC_ROOT}/gate/state/quotas_state.json`
+- metrics: `external_requests_total`, `external_tokens_total`, `external_quota_remaining`
 
 ## Optional Modules
 

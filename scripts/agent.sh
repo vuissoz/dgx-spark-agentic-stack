@@ -31,6 +31,7 @@ Usage:
   agent <claude|codex|opencode> [project]
   agent ls
   agent ps
+  agent llm mode [local|hybrid|remote]
   agent logs <service>
   agent stop <tool>
   agent stop service <service...>
@@ -505,7 +506,7 @@ load_runtime_env() {
           export "${key}=${value}"
         fi
         ;;
-      AGENTIC_LLM_NETWORK|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH)
+      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH)
         export "${key}=${value}"
         ;;
       *)
@@ -540,6 +541,15 @@ ensure_runtime_env() {
     "AGENTIC_COMPOSE_PROJECT=${AGENTIC_COMPOSE_PROJECT}"
     "AGENTIC_NETWORK=${AGENTIC_NETWORK}"
     "AGENTIC_LLM_NETWORK=${AGENTIC_LLM_NETWORK}"
+    "AGENTIC_LLM_MODE=${AGENTIC_LLM_MODE}"
+    "AGENTIC_OPENAI_DAILY_TOKENS=${AGENTIC_OPENAI_DAILY_TOKENS}"
+    "AGENTIC_OPENAI_MONTHLY_TOKENS=${AGENTIC_OPENAI_MONTHLY_TOKENS}"
+    "AGENTIC_OPENAI_DAILY_REQUESTS=${AGENTIC_OPENAI_DAILY_REQUESTS}"
+    "AGENTIC_OPENAI_MONTHLY_REQUESTS=${AGENTIC_OPENAI_MONTHLY_REQUESTS}"
+    "AGENTIC_OPENROUTER_DAILY_TOKENS=${AGENTIC_OPENROUTER_DAILY_TOKENS}"
+    "AGENTIC_OPENROUTER_MONTHLY_TOKENS=${AGENTIC_OPENROUTER_MONTHLY_TOKENS}"
+    "AGENTIC_OPENROUTER_DAILY_REQUESTS=${AGENTIC_OPENROUTER_DAILY_REQUESTS}"
+    "AGENTIC_OPENROUTER_MONTHLY_REQUESTS=${AGENTIC_OPENROUTER_MONTHLY_REQUESTS}"
     "AGENTIC_EGRESS_NETWORK=${AGENTIC_EGRESS_NETWORK}"
     "AGENTIC_OLLAMA_MODELS_LINK=${AGENTIC_OLLAMA_MODELS_LINK}"
     "AGENTIC_OLLAMA_MODELS_TARGET_DIR=${AGENTIC_OLLAMA_MODELS_TARGET_DIR:-}"
@@ -584,7 +594,16 @@ cmd_profile() {
   printf 'compose_project=%s\n' "${AGENTIC_COMPOSE_PROJECT}"
   printf 'network=%s\n' "${AGENTIC_NETWORK}"
   printf 'llm_network=%s\n' "${AGENTIC_LLM_NETWORK}"
+  printf 'llm_mode=%s\n' "${AGENTIC_LLM_MODE}"
   printf 'egress_network=%s\n' "${AGENTIC_EGRESS_NETWORK}"
+  printf 'openai_daily_tokens=%s\n' "${AGENTIC_OPENAI_DAILY_TOKENS}"
+  printf 'openai_monthly_tokens=%s\n' "${AGENTIC_OPENAI_MONTHLY_TOKENS}"
+  printf 'openai_daily_requests=%s\n' "${AGENTIC_OPENAI_DAILY_REQUESTS}"
+  printf 'openai_monthly_requests=%s\n' "${AGENTIC_OPENAI_MONTHLY_REQUESTS}"
+  printf 'openrouter_daily_tokens=%s\n' "${AGENTIC_OPENROUTER_DAILY_TOKENS}"
+  printf 'openrouter_monthly_tokens=%s\n' "${AGENTIC_OPENROUTER_MONTHLY_TOKENS}"
+  printf 'openrouter_daily_requests=%s\n' "${AGENTIC_OPENROUTER_DAILY_REQUESTS}"
+  printf 'openrouter_monthly_requests=%s\n' "${AGENTIC_OPENROUTER_MONTHLY_REQUESTS}"
   printf 'ollama_models_dir=%s\n' "${OLLAMA_MODELS_DIR}"
   printf 'ollama_models_link=%s\n' "${AGENTIC_OLLAMA_MODELS_LINK}"
   printf 'ollama_models_target_dir=%s\n' "${AGENTIC_OLLAMA_MODELS_TARGET_DIR:-}"
@@ -1094,6 +1113,74 @@ cmd_vm() {
   esac
 }
 
+cmd_llm() {
+  local action="${1:-}"
+  shift || true
+
+  case "${action}" in
+    mode)
+      local mode="${1:-}"
+      local mode_file="${AGENTIC_ROOT}/gate/state/llm_mode.json"
+      local actor="${SUDO_USER:-${USER:-unknown}}"
+      local current_mode
+
+      if [[ -z "${mode}" ]]; then
+        if [[ -f "${mode_file}" ]]; then
+          current_mode="$(python3 - "${mode_file}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    print("hybrid")
+    raise SystemExit(0)
+
+if isinstance(data, dict):
+    mode = data.get("mode")
+else:
+    mode = data
+if isinstance(mode, str) and mode.strip():
+    print(mode.strip().lower())
+else:
+    print("hybrid")
+PY
+)"
+          printf 'llm mode=%s\n' "${current_mode}"
+        else
+          printf 'llm mode=%s\n' "${AGENTIC_LLM_MODE:-hybrid}"
+        fi
+        return 0
+      fi
+
+      case "${mode}" in
+        local|hybrid|remote) ;;
+        *) die "Usage: agent llm mode [local|hybrid|remote]" ;;
+      esac
+
+      ensure_runtime_env
+      set_runtime_env_value "AGENTIC_LLM_MODE" "${mode}"
+      export AGENTIC_LLM_MODE="${mode}"
+
+      install -d -m 0770 "${AGENTIC_ROOT}/gate/state"
+      cat >"${mode_file}" <<JSON
+{"mode":"${mode}","updated_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","updated_by":"${actor}"}
+JSON
+      chmod 0640 "${mode_file}" || true
+
+      printf 'llm mode set to %s (state=%s)\n' "${mode}" "${mode_file}"
+      if [[ "${mode}" == "remote" ]]; then
+        printf 'tip: to free local GPU/RAM, run: agent stop service ollama trtllm\n'
+      fi
+      ;;
+    *)
+      die "Usage: agent llm mode [local|hybrid|remote]"
+      ;;
+  esac
+}
+
 cmd_net() {
   local action="${1:-}"
   case "${action}" in
@@ -1377,6 +1464,10 @@ case "$cmd" in
     docker ps \
       --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
       --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+    ;;
+  llm)
+    shift
+    cmd_llm "$@"
     ;;
   logs)
     [[ $# -ge 2 ]] || die "Usage: agent logs <service>"

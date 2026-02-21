@@ -3,6 +3,22 @@ version: 1
 defaults:
   backend: ollama
 
+llm:
+  default_mode: hybrid
+
+quotas:
+  providers:
+    openai:
+      daily_tokens: 2000000
+      monthly_tokens: 30000000
+      daily_requests: 5000
+      monthly_requests: 100000
+    openrouter:
+      daily_tokens: 2000000
+      monthly_tokens: 30000000
+      daily_requests: 5000
+      monthly_requests: 100000
+
 backends:
   ollama:
     protocol: ollama

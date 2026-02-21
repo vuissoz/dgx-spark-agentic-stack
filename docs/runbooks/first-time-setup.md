@@ -278,6 +278,21 @@ $EDITOR "${HOME}/.local/share/agentic/openhands/config/openhands.env"
 
 If you use a custom `AGENTIC_ROOT`, edit `${ROOT}/openwebui/config/openwebui.env` and `${ROOT}/openhands/config/openhands.env`.
 
+Optional: set gate LLM operating mode (`hybrid` default):
+
+```bash
+./agent llm mode hybrid
+# or:
+# ./agent llm mode local
+# ./agent llm mode remote
+```
+
+In `remote` mode, you can free local GPU/RAM while keeping gate API stable:
+
+```bash
+./agent stop service ollama trtllm
+```
+
 ## 7. Create First Tracked Release Snapshot
 
 `agent up` now creates an automatic bootstrap snapshot when no active release exists yet.

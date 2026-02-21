@@ -68,6 +68,35 @@ class BackendAuthError(RuntimeError):
     pass
 
 
+ALLOWED_LLM_MODES = {"local", "hybrid", "remote"}
+
+
+def normalize_llm_mode(raw: str | None, default: str = "hybrid") -> str:
+    if isinstance(raw, str):
+        candidate = raw.strip().lower()
+        if candidate in ALLOWED_LLM_MODES:
+            return candidate
+    if default in ALLOWED_LLM_MODES:
+        return default
+    return "hybrid"
+
+
+def parse_positive_int(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def utc_day_key() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def utc_month_key() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
 class GateState:
     def __init__(self) -> None:
         self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
@@ -77,6 +106,7 @@ class GateState:
         self.openrouter_api_key_file = os.getenv(
             "GATE_OPENROUTER_API_KEY_FILE", "/gate/secrets/openrouter.api_key"
         )
+        self.state_dir = Path(os.getenv("GATE_STATE_DIR", "/gate/state"))
 
         self.concurrency = max(1, env_int("GATE_CONCURRENCY", 1))
         self.default_queue_wait_timeout_seconds = max(
@@ -86,8 +116,13 @@ class GateState:
         self.max_test_sleep_seconds = max(0, env_int("GATE_MAX_TEST_SLEEP_SECONDS", 15))
         self.log_file = Path(os.getenv("GATE_LOG_FILE", "/gate/logs/gate.jsonl"))
         self.sticky_file = Path(
-            os.getenv("GATE_STICKY_FILE", os.getenv("GATE_STATE_DIR", "/gate/state") + "/sticky_sessions.json")
+            os.getenv("GATE_STICKY_FILE", str(self.state_dir / "sticky_sessions.json"))
         )
+        self.mode_file = Path(os.getenv("GATE_MODE_FILE", str(self.state_dir / "llm_mode.json")))
+        self.quotas_file = Path(os.getenv("GATE_QUOTAS_FILE", str(self.state_dir / "quotas_state.json")))
+        self.default_llm_mode = normalize_llm_mode(os.getenv("GATE_LLM_MODE", "hybrid"))
+        self.llm_mode = self.default_llm_mode
+        self._llm_mode_mtime = 0.0
 
         self.sem = asyncio.Semaphore(self.concurrency)
         self.lock = asyncio.Lock()
@@ -101,12 +136,20 @@ class GateState:
         self.default_backend = "ollama"
         self.backends: Dict[str, Dict[str, Any]] = {}
         self.model_routes: list[Tuple[str, str]] = []
+        self.provider_quota_limits: Dict[str, Dict[str, int]] = {}
+        self.quotas: Dict[str, Any] = {"version": 1, "providers": {}}
+        self._quotas_dirty = False
 
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
+        self.state_dir.mkdir(parents=True, exist_ok=True)
         self.sticky_file.parent.mkdir(parents=True, exist_ok=True)
+        self.mode_file.parent.mkdir(parents=True, exist_ok=True)
+        self.quotas_file.parent.mkdir(parents=True, exist_ok=True)
 
         self._load_sticky()
         self._load_model_routes()
+        self._load_mode()
+        self._load_quotas()
 
     def _load_sticky(self) -> None:
         if not self.sticky_file.exists():
@@ -127,6 +170,22 @@ class GateState:
         tmp.write_text(json.dumps(self.sticky_models, sort_keys=True), encoding="utf-8")
         os.replace(tmp, self.sticky_file)
 
+    def _initial_quota_limits(self) -> Dict[str, Dict[str, int]]:
+        return {
+            "openai": {
+                "daily_tokens": parse_positive_int(os.getenv("GATE_EXTERNAL_OPENAI_DAILY_TOKENS", "0")),
+                "monthly_tokens": parse_positive_int(os.getenv("GATE_EXTERNAL_OPENAI_MONTHLY_TOKENS", "0")),
+                "daily_requests": parse_positive_int(os.getenv("GATE_EXTERNAL_OPENAI_DAILY_REQUESTS", "0")),
+                "monthly_requests": parse_positive_int(os.getenv("GATE_EXTERNAL_OPENAI_MONTHLY_REQUESTS", "0")),
+            },
+            "openrouter": {
+                "daily_tokens": parse_positive_int(os.getenv("GATE_EXTERNAL_OPENROUTER_DAILY_TOKENS", "0")),
+                "monthly_tokens": parse_positive_int(os.getenv("GATE_EXTERNAL_OPENROUTER_MONTHLY_TOKENS", "0")),
+                "daily_requests": parse_positive_int(os.getenv("GATE_EXTERNAL_OPENROUTER_DAILY_REQUESTS", "0")),
+                "monthly_requests": parse_positive_int(os.getenv("GATE_EXTERNAL_OPENROUTER_MONTHLY_REQUESTS", "0")),
+            },
+        }
+
     def _load_model_routes(self) -> None:
         backends: Dict[str, Dict[str, Any]] = {
             "ollama": {"protocol": "ollama", "provider": "local", "base_url": self.ollama_base_url},
@@ -146,6 +205,8 @@ class GateState:
         }
         default_backend = "ollama"
         model_routes: list[Tuple[str, str]] = []
+        provider_quota_limits = self._initial_quota_limits()
+        configured_default_mode = self.default_llm_mode
 
         raw: Any = {}
         if self.model_routes_file.exists():
@@ -161,6 +222,31 @@ class GateState:
             configured_default = defaults.get("backend")
             if isinstance(configured_default, str) and configured_default.strip():
                 default_backend = configured_default.strip()
+
+        llm_cfg = raw.get("llm") if isinstance(raw, dict) else None
+        if isinstance(llm_cfg, dict):
+            configured_default_mode = normalize_llm_mode(
+                llm_cfg.get("default_mode"), default=configured_default_mode
+            )
+
+        quotas_cfg = raw.get("quotas") if isinstance(raw, dict) else None
+        provider_cfg = quotas_cfg.get("providers") if isinstance(quotas_cfg, dict) else None
+        if isinstance(provider_cfg, dict):
+            for provider_name, provider_limits in provider_cfg.items():
+                if not isinstance(provider_name, str) or not provider_name.strip():
+                    continue
+                if not isinstance(provider_limits, dict):
+                    continue
+
+                normalized_provider = provider_name.strip().lower()
+                existing_limits = dict(provider_quota_limits.get(normalized_provider, {}))
+                for field in ("daily_tokens", "monthly_tokens", "daily_requests", "monthly_requests"):
+                    value = parse_positive_int(provider_limits.get(field))
+                    if value > 0:
+                        existing_limits[field] = value
+                    elif field not in existing_limits:
+                        existing_limits[field] = 0
+                provider_quota_limits[normalized_provider] = existing_limits
 
         configured_backends = raw.get("backends") if isinstance(raw, dict) else None
         if isinstance(configured_backends, dict):
@@ -218,6 +304,297 @@ class GateState:
         self.default_backend = default_backend
         self.backends = backends
         self.model_routes = model_routes
+        self.provider_quota_limits = provider_quota_limits
+        self.default_llm_mode = configured_default_mode
+
+    def _read_mode_file(self) -> str:
+        if not self.mode_file.exists():
+            return self.default_llm_mode
+        try:
+            raw = json.loads(self.mode_file.read_text(encoding="utf-8"))
+        except Exception:
+            return self.default_llm_mode
+
+        if isinstance(raw, dict):
+            return normalize_llm_mode(raw.get("mode"), default=self.default_llm_mode)
+        if isinstance(raw, str):
+            return normalize_llm_mode(raw, default=self.default_llm_mode)
+        return self.default_llm_mode
+
+    def _load_mode(self) -> None:
+        self.llm_mode = self._read_mode_file()
+        try:
+            self._llm_mode_mtime = self.mode_file.stat().st_mtime
+        except FileNotFoundError:
+            self._llm_mode_mtime = 0.0
+
+    def refresh_mode_if_needed(self) -> None:
+        try:
+            mode_mtime = self.mode_file.stat().st_mtime
+        except FileNotFoundError:
+            mode_mtime = 0.0
+
+        if mode_mtime == self._llm_mode_mtime:
+            return
+        self._load_mode()
+
+    def get_llm_mode(self) -> str:
+        self.refresh_mode_if_needed()
+        return self.llm_mode
+
+    def persist_llm_mode(self, mode: str, actor: str) -> str:
+        normalized = normalize_llm_mode(mode, default=self.default_llm_mode)
+        payload = {
+            "mode": normalized,
+            "updated_at": now_iso(),
+            "updated_by": actor if isinstance(actor, str) and actor.strip() else "api",
+        }
+        tmp = self.mode_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, self.mode_file)
+        self._load_mode()
+        return self.llm_mode
+
+    def _blank_window(self, period: str) -> Dict[str, Any]:
+        return {"period": period, "requests": 0, "tokens": 0}
+
+    def _ensure_provider_quota(self, provider: str) -> Dict[str, Any]:
+        providers = self.quotas.setdefault("providers", {})
+        entry = providers.get(provider)
+        if not isinstance(entry, dict):
+            entry = {}
+            providers[provider] = entry
+
+        totals = entry.get("totals")
+        if not isinstance(totals, dict):
+            totals = {"requests": 0, "tokens": 0, "denied": 0}
+            entry["totals"] = totals
+        for field in ("requests", "tokens", "denied"):
+            totals[field] = parse_positive_int(totals.get(field, 0))
+
+        daily = entry.get("daily")
+        if not isinstance(daily, dict):
+            daily = self._blank_window(utc_day_key())
+            entry["daily"] = daily
+        else:
+            daily["period"] = str(daily.get("period", utc_day_key()))
+            daily["requests"] = parse_positive_int(daily.get("requests", 0))
+            daily["tokens"] = parse_positive_int(daily.get("tokens", 0))
+
+        monthly = entry.get("monthly")
+        if not isinstance(monthly, dict):
+            monthly = self._blank_window(utc_month_key())
+            entry["monthly"] = monthly
+        else:
+            monthly["period"] = str(monthly.get("period", utc_month_key()))
+            monthly["requests"] = parse_positive_int(monthly.get("requests", 0))
+            monthly["tokens"] = parse_positive_int(monthly.get("tokens", 0))
+
+        projects = entry.get("projects")
+        if not isinstance(projects, dict):
+            projects = {}
+            entry["projects"] = projects
+
+        return entry
+
+    def _ensure_project_quota(self, provider_entry: Dict[str, Any], project: str) -> Dict[str, Any]:
+        projects = provider_entry.setdefault("projects", {})
+        project_entry = projects.get(project)
+        if not isinstance(project_entry, dict):
+            project_entry = {
+                "totals": {"requests": 0, "tokens": 0},
+                "daily": self._blank_window(utc_day_key()),
+                "monthly": self._blank_window(utc_month_key()),
+            }
+            projects[project] = project_entry
+
+        totals = project_entry.setdefault("totals", {})
+        totals["requests"] = parse_positive_int(totals.get("requests", 0))
+        totals["tokens"] = parse_positive_int(totals.get("tokens", 0))
+
+        for window_name, period in (("daily", utc_day_key()), ("monthly", utc_month_key())):
+            window = project_entry.get(window_name)
+            if not isinstance(window, dict):
+                window = self._blank_window(period)
+                project_entry[window_name] = window
+            if str(window.get("period")) != period:
+                window["period"] = period
+                window["requests"] = 0
+                window["tokens"] = 0
+            window["requests"] = parse_positive_int(window.get("requests", 0))
+            window["tokens"] = parse_positive_int(window.get("tokens", 0))
+
+        return project_entry
+
+    def _rollover_quota_windows(self, provider_entry: Dict[str, Any]) -> bool:
+        changed = False
+        current_day = utc_day_key()
+        current_month = utc_month_key()
+
+        daily = provider_entry.get("daily")
+        if not isinstance(daily, dict):
+            provider_entry["daily"] = self._blank_window(current_day)
+            changed = True
+        elif str(daily.get("period")) != current_day:
+            provider_entry["daily"] = self._blank_window(current_day)
+            changed = True
+
+        monthly = provider_entry.get("monthly")
+        if not isinstance(monthly, dict):
+            provider_entry["monthly"] = self._blank_window(current_month)
+            changed = True
+        elif str(monthly.get("period")) != current_month:
+            provider_entry["monthly"] = self._blank_window(current_month)
+            changed = True
+
+        projects = provider_entry.get("projects")
+        if isinstance(projects, dict):
+            for project_entry in projects.values():
+                if not isinstance(project_entry, dict):
+                    continue
+                for window_name, period in (("daily", current_day), ("monthly", current_month)):
+                    window = project_entry.get(window_name)
+                    if not isinstance(window, dict) or str(window.get("period")) != period:
+                        project_entry[window_name] = self._blank_window(period)
+                        changed = True
+                        continue
+                    requests_count = parse_positive_int(window.get("requests", 0))
+                    tokens_count = parse_positive_int(window.get("tokens", 0))
+                    if requests_count != window.get("requests") or tokens_count != window.get("tokens"):
+                        changed = True
+                    window["requests"] = requests_count
+                    window["tokens"] = tokens_count
+
+        return changed
+
+    def _load_quotas(self) -> None:
+        if not self.quotas_file.exists():
+            self.quotas = {"version": 1, "providers": {}}
+            return
+        try:
+            raw = json.loads(self.quotas_file.read_text(encoding="utf-8"))
+        except Exception:
+            self.quotas = {"version": 1, "providers": {}}
+            return
+        if isinstance(raw, dict):
+            self.quotas = raw
+        else:
+            self.quotas = {"version": 1, "providers": {}}
+
+    def _save_quotas(self) -> None:
+        tmp = self.quotas_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.quotas, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, self.quotas_file)
+
+    async def flush_quotas_if_dirty(self) -> None:
+        async with self.lock:
+            if not self._quotas_dirty:
+                return
+            self._quotas_dirty = False
+        self._save_quotas()
+
+    async def external_quota_precheck(
+        self, provider: str, project: str, estimated_tokens: int
+    ) -> tuple[bool, Dict[str, Any]]:
+        provider_norm = provider.strip().lower()
+        limits = dict(self.provider_quota_limits.get(provider_norm, {}))
+        if not any(parse_positive_int(value) > 0 for value in limits.values()):
+            return True, {"remaining": {}}
+
+        estimated = max(0, estimated_tokens)
+        detail: Dict[str, Any] = {}
+        should_flush = False
+        async with self.lock:
+            provider_entry = self._ensure_provider_quota(provider_norm)
+            project_key = project if isinstance(project, str) and project.strip() else "-"
+            self._ensure_project_quota(provider_entry, project_key)
+            if self._rollover_quota_windows(provider_entry):
+                self._quotas_dirty = True
+                should_flush = True
+
+            daily = provider_entry["daily"]
+            monthly = provider_entry["monthly"]
+            denied_reason = ""
+
+            if parse_positive_int(limits.get("daily_requests", 0)) > 0 and (
+                daily["requests"] + 1 > parse_positive_int(limits["daily_requests"])
+            ):
+                denied_reason = "daily_requests_quota_exceeded"
+            elif parse_positive_int(limits.get("monthly_requests", 0)) > 0 and (
+                monthly["requests"] + 1 > parse_positive_int(limits["monthly_requests"])
+            ):
+                denied_reason = "monthly_requests_quota_exceeded"
+            elif estimated > 0 and parse_positive_int(limits.get("daily_tokens", 0)) > 0 and (
+                daily["tokens"] + estimated > parse_positive_int(limits["daily_tokens"])
+            ):
+                denied_reason = "daily_tokens_quota_exceeded"
+            elif estimated > 0 and parse_positive_int(limits.get("monthly_tokens", 0)) > 0 and (
+                monthly["tokens"] + estimated > parse_positive_int(limits["monthly_tokens"])
+            ):
+                denied_reason = "monthly_tokens_quota_exceeded"
+
+            remaining = {
+                "daily_tokens": (
+                    parse_positive_int(limits["daily_tokens"]) - daily["tokens"]
+                    if parse_positive_int(limits.get("daily_tokens", 0)) > 0
+                    else -1
+                ),
+                "monthly_tokens": (
+                    parse_positive_int(limits["monthly_tokens"]) - monthly["tokens"]
+                    if parse_positive_int(limits.get("monthly_tokens", 0)) > 0
+                    else -1
+                ),
+                "daily_requests": (
+                    parse_positive_int(limits["daily_requests"]) - daily["requests"]
+                    if parse_positive_int(limits.get("daily_requests", 0)) > 0
+                    else -1
+                ),
+                "monthly_requests": (
+                    parse_positive_int(limits["monthly_requests"]) - monthly["requests"]
+                    if parse_positive_int(limits.get("monthly_requests", 0)) > 0
+                    else -1
+                ),
+            }
+
+            if denied_reason:
+                provider_entry["totals"]["denied"] = parse_positive_int(provider_entry["totals"].get("denied", 0)) + 1
+                self._quotas_dirty = True
+                should_flush = True
+                detail = {"reason": denied_reason, "remaining": remaining, "limits": limits}
+                allowed = False
+            else:
+                detail = {"remaining": remaining, "limits": limits}
+                allowed = True
+
+        if should_flush:
+            await self.flush_quotas_if_dirty()
+        return allowed, detail
+
+    async def external_quota_record(self, provider: str, project: str, tokens: int) -> None:
+        provider_norm = provider.strip().lower()
+        token_count = max(0, tokens)
+        async with self.lock:
+            provider_entry = self._ensure_provider_quota(provider_norm)
+            project_key = project if isinstance(project, str) and project.strip() else "-"
+            project_entry = self._ensure_project_quota(provider_entry, project_key)
+            self._rollover_quota_windows(provider_entry)
+
+            provider_entry["totals"]["requests"] = parse_positive_int(provider_entry["totals"].get("requests", 0)) + 1
+            provider_entry["totals"]["tokens"] = parse_positive_int(provider_entry["totals"].get("tokens", 0)) + token_count
+            provider_entry["daily"]["requests"] = parse_positive_int(provider_entry["daily"].get("requests", 0)) + 1
+            provider_entry["daily"]["tokens"] = parse_positive_int(provider_entry["daily"].get("tokens", 0)) + token_count
+            provider_entry["monthly"]["requests"] = parse_positive_int(provider_entry["monthly"].get("requests", 0)) + 1
+            provider_entry["monthly"]["tokens"] = parse_positive_int(provider_entry["monthly"].get("tokens", 0)) + token_count
+
+            project_entry["totals"]["requests"] = parse_positive_int(project_entry["totals"].get("requests", 0)) + 1
+            project_entry["totals"]["tokens"] = parse_positive_int(project_entry["totals"].get("tokens", 0)) + token_count
+            project_entry["daily"]["requests"] = parse_positive_int(project_entry["daily"].get("requests", 0)) + 1
+            project_entry["daily"]["tokens"] = parse_positive_int(project_entry["daily"].get("tokens", 0)) + token_count
+            project_entry["monthly"]["requests"] = parse_positive_int(project_entry["monthly"].get("requests", 0)) + 1
+            project_entry["monthly"]["tokens"] = parse_positive_int(project_entry["monthly"].get("tokens", 0)) + token_count
+
+            self._quotas_dirty = True
+        await self.flush_quotas_if_dirty()
 
     async def flush_sticky_if_dirty(self) -> None:
         async with self.lock:
@@ -267,6 +644,61 @@ class GateState:
                 "decisions_queued_total": self.decisions_total.get("queued", 0),
                 "decisions_denied_total": self.decisions_total.get("denied", 0),
             }
+
+    async def snapshot_external_metrics(self) -> Dict[str, Dict[str, int]]:
+        snapshot: Dict[str, Dict[str, int]] = {}
+        should_flush = False
+        async with self.lock:
+            providers_raw = self.quotas.get("providers", {})
+            known_providers = set(self.provider_quota_limits.keys())
+            if isinstance(providers_raw, dict):
+                known_providers.update(str(provider) for provider in providers_raw.keys())
+
+            for provider in sorted(item.strip().lower() for item in known_providers if str(item).strip()):
+                provider_entry = self._ensure_provider_quota(provider)
+                if self._rollover_quota_windows(provider_entry):
+                    self._quotas_dirty = True
+                    should_flush = True
+
+                limits = dict(self.provider_quota_limits.get(provider, {}))
+                daily = provider_entry["daily"]
+                monthly = provider_entry["monthly"]
+                totals = provider_entry["totals"]
+
+                daily_tokens_limit = parse_positive_int(limits.get("daily_tokens", 0))
+                monthly_tokens_limit = parse_positive_int(limits.get("monthly_tokens", 0))
+                daily_requests_limit = parse_positive_int(limits.get("daily_requests", 0))
+                monthly_requests_limit = parse_positive_int(limits.get("monthly_requests", 0))
+
+                snapshot[provider] = {
+                    "requests_total": parse_positive_int(totals.get("requests", 0)),
+                    "tokens_total": parse_positive_int(totals.get("tokens", 0)),
+                    "denied_total": parse_positive_int(totals.get("denied", 0)),
+                    "remaining_daily_tokens": (
+                        daily_tokens_limit - parse_positive_int(daily.get("tokens", 0))
+                        if daily_tokens_limit > 0
+                        else -1
+                    ),
+                    "remaining_monthly_tokens": (
+                        monthly_tokens_limit - parse_positive_int(monthly.get("tokens", 0))
+                        if monthly_tokens_limit > 0
+                        else -1
+                    ),
+                    "remaining_daily_requests": (
+                        daily_requests_limit - parse_positive_int(daily.get("requests", 0))
+                        if daily_requests_limit > 0
+                        else -1
+                    ),
+                    "remaining_monthly_requests": (
+                        monthly_requests_limit - parse_positive_int(monthly.get("requests", 0))
+                        if monthly_requests_limit > 0
+                        else -1
+                    ),
+                }
+
+        if should_flush:
+            await self.flush_quotas_if_dirty()
+        return snapshot
 
     def resolve_backend(self, model_name: str | None) -> str:
         if not isinstance(model_name, str) or not model_name:
@@ -403,6 +835,71 @@ def backend_provider_name(backend: str) -> str:
     if isinstance(provider, str) and provider:
         return provider
     return backend
+
+
+def provider_is_external(provider: str | None) -> bool:
+    if not isinstance(provider, str):
+        return False
+    return provider.strip().lower() not in ("", "local")
+
+
+def extract_test_tokens(request: Request) -> int:
+    raw = request.headers.get("X-Gate-Test-Tokens", "0")
+    try:
+        value = int(raw)
+    except ValueError:
+        return 0
+    return max(0, value)
+
+
+def extract_total_tokens(payload: Dict[str, Any]) -> int:
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return 0
+    value = usage.get("total_tokens")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
+
+
+def llm_mode_block_response(provider: str, endpoint: str, llm_mode: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": {
+                "message": (
+                    f"provider '{provider}' is disabled while gate is in llm_mode='{llm_mode}'. "
+                    "Switch to 'hybrid' or 'remote' to allow external providers."
+                ),
+                "type": "external_provider_disabled",
+                "provider": provider,
+                "endpoint": endpoint,
+                "llm_mode": llm_mode,
+            }
+        },
+    )
+
+
+def quota_exceeded_response(provider: str, detail: Dict[str, Any]) -> JSONResponse:
+    reason = str(detail.get("reason", "external_quota_exceeded"))
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": {
+                "message": (
+                    f"external provider quota exceeded for '{provider}' "
+                    f"(reason={reason}); adjust gate quotas or wait for window reset."
+                ),
+                "type": "external_quota_exceeded",
+                "provider": provider,
+                "reason": reason,
+                "remaining": detail.get("remaining", {}),
+                "limits": detail.get("limits", {}),
+            }
+        },
+    )
 
 
 def resolve_backend_api_key(backend: str, cfg: Dict[str, Any]) -> str:
@@ -560,6 +1057,8 @@ def event_base(
     provider: str | None = None,
     model_switch: bool = False,
     reason: str | None = None,
+    llm_mode: str | None = None,
+    external_tokens: int | None = None,
 ) -> Dict[str, Any]:
     return {
         "ts": now_iso(),
@@ -575,6 +1074,8 @@ def event_base(
         "model_switch": model_switch,
         "status_code": status_code,
         "reason": reason,
+        "llm_mode": llm_mode,
+        "external_tokens": external_tokens,
     }
 
 
@@ -586,6 +1087,8 @@ async def healthz() -> Dict[str, str]:
 @app.get("/metrics")
 async def metrics() -> PlainTextResponse:
     m = await state.snapshot_metrics()
+    llm_mode = state.get_llm_mode()
+    external = await state.snapshot_external_metrics()
     lines = [
         "# TYPE queue_depth gauge",
         f"queue_depth {m['queue_depth']}",
@@ -599,7 +1102,37 @@ async def metrics() -> PlainTextResponse:
         f"gate_decision_queued_total {m['decisions_queued_total']}",
         "# TYPE gate_decision_denied_total counter",
         f"gate_decision_denied_total {m['decisions_denied_total']}",
+        "# TYPE gate_llm_mode gauge",
+        f"gate_llm_mode{{mode=\"{llm_mode}\"}} 1",
     ]
+    for provider, stats in external.items():
+        lines.extend(
+            [
+                "# TYPE external_requests_total counter",
+                f"external_requests_total{{provider=\"{provider}\"}} {stats['requests_total']}",
+                "# TYPE external_tokens_total counter",
+                f"external_tokens_total{{provider=\"{provider}\"}} {stats['tokens_total']}",
+                "# TYPE external_quota_denied_total counter",
+                f"external_quota_denied_total{{provider=\"{provider}\"}} {stats['denied_total']}",
+                "# TYPE external_quota_remaining gauge",
+                (
+                    f"external_quota_remaining{{provider=\"{provider}\",window=\"daily_tokens\"}} "
+                    f"{stats['remaining_daily_tokens']}"
+                ),
+                (
+                    f"external_quota_remaining{{provider=\"{provider}\",window=\"monthly_tokens\"}} "
+                    f"{stats['remaining_monthly_tokens']}"
+                ),
+                (
+                    f"external_quota_remaining{{provider=\"{provider}\",window=\"daily_requests\"}} "
+                    f"{stats['remaining_daily_requests']}"
+                ),
+                (
+                    f"external_quota_remaining{{provider=\"{provider}\",window=\"monthly_requests\"}} "
+                    f"{stats['remaining_monthly_requests']}"
+                ),
+            ]
+        )
     return PlainTextResponse("\n".join(lines) + "\n")
 
 
@@ -608,6 +1141,7 @@ async def v1_models(request: Request) -> JSONResponse:
     queue_wait_timeout_seconds = extract_queue_timeout_seconds(request)
     session = request.headers.get("X-Agent-Session", "models-list")
     project = request.headers.get("X-Agent-Project", "-")
+    llm_mode = state.get_llm_mode()
     started = time.monotonic()
     acquired = False
     decision = "active"
@@ -631,6 +1165,7 @@ async def v1_models(request: Request) -> JSONResponse:
                 backend=backend,
                 provider=provider,
                 reason="queue_timeout",
+                llm_mode=llm_mode,
             )
         )
         return JSONResponse(
@@ -639,8 +1174,13 @@ async def v1_models(request: Request) -> JSONResponse:
         )
 
     status_code = 200
+    reason = None
     try:
         provider = backend_provider_name(backend)
+        if llm_mode == "local" and provider_is_external(provider):
+            status_code = 403
+            reason = "external_provider_disabled"
+            return llm_mode_block_response(provider, "/v1/models", llm_mode)
         names = await fetch_backend_models(backend)
         response = {
             "object": "list",
@@ -653,13 +1193,16 @@ async def v1_models(request: Request) -> JSONResponse:
                 "X-Gate-Decision": decision,
                 "X-Gate-Backend": backend,
                 "X-Gate-Provider": provider,
+                "X-Gate-LLM-Mode": llm_mode,
             },
         )
     except BackendAuthError as exc:
         status_code = 503
+        reason = "backend_auth_error"
         return backend_auth_response(backend, provider, str(exc))
     except Exception as exc:
         status_code = 502
+        reason = "upstream_error"
         return JSONResponse(
             status_code=502,
             content={
@@ -687,6 +1230,8 @@ async def v1_models(request: Request) -> JSONResponse:
                 latency_ms=latency_ms,
                 backend=backend,
                 provider=provider,
+                reason=reason,
+                llm_mode=llm_mode,
             )
         )
 
@@ -846,6 +1391,7 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
     session = request.headers.get("X-Agent-Session") or payload.get("user") or "anonymous"
     project = request.headers.get("X-Agent-Project", "-")
     allow_switch = header_bool(request.headers.get("X-Model-Switch"))
+    llm_mode = state.get_llm_mode()
     queue_wait_timeout_seconds = extract_queue_timeout_seconds(request)
     started = time.monotonic()
     acquired = False
@@ -868,6 +1414,7 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 backend=state.default_backend,
                 provider=backend_provider_name(state.default_backend),
                 reason="queue_timeout",
+                llm_mode=llm_mode,
             )
         )
         return JSONResponse(
@@ -888,6 +1435,9 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
     provider = backend_provider_name(backend)
     status_code = 200
     reason = None
+    is_external_provider = False
+    external_tokens_used = 0
+    quota_detail: Dict[str, Any] = {}
     try:
         try:
             model_served, model_switch = await resolve_model(
@@ -901,13 +1451,30 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
             return backend_auth_response(backend, provider, str(exc))
         backend = state.resolve_backend(model_served)
         provider = backend_provider_name(backend)
+        is_external_provider = provider_is_external(provider)
+        llm_mode = state.get_llm_mode()
+
+        if llm_mode == "local" and is_external_provider:
+            status_code = 403
+            reason = "external_provider_disabled"
+            return llm_mode_block_response(provider, "/v1/chat/completions", llm_mode)
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
+        if is_external_provider:
+            estimated_tokens = extract_test_tokens(request) if use_dry_run else 0
+            allowed, quota_detail = await state.external_quota_precheck(provider, project, estimated_tokens)
+            if not allowed:
+                status_code = 429
+                reason = "external_quota_exceeded"
+                return quota_exceeded_response(provider, quota_detail)
+
         if use_dry_run:
             sleep_seconds = extract_test_sleep_seconds(request)
             if sleep_seconds > 0:
                 await asyncio.sleep(sleep_seconds)
             content = f"gate dry-run response for session={session} model={model_served} backend={backend}"
+            if is_external_provider:
+                external_tokens_used = extract_test_tokens(request)
         else:
             try:
                 upstream_status, upstream_json, upstream_text = await backend_chat_completion(
@@ -965,6 +1532,11 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
             backend_cfg = state.backend_config(backend) or {}
             protocol = str(backend_cfg.get("protocol", ""))
             content = chat_content_from_upstream(protocol, upstream_json)
+            if is_external_provider:
+                external_tokens_used = extract_total_tokens(upstream_json)
+
+        if is_external_provider:
+            await state.external_quota_record(provider, project, external_tokens_used)
 
         response_payload = {
             "id": f"chatcmpl-{uuid.uuid4().hex}",
@@ -987,6 +1559,7 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 "X-Model-Served": model_served,
                 "X-Gate-Backend": backend,
                 "X-Gate-Provider": provider,
+                "X-Gate-LLM-Mode": llm_mode,
             },
         )
     finally:
@@ -1007,6 +1580,8 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 provider=provider,
                 model_switch=model_switch,
                 reason=reason,
+                llm_mode=llm_mode,
+                external_tokens=external_tokens_used if is_external_provider else None,
             )
         )
 
@@ -1041,6 +1616,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
     session = request.headers.get("X-Agent-Session", "embeddings")
     project = request.headers.get("X-Agent-Project", "-")
     allow_switch = header_bool(request.headers.get("X-Model-Switch"))
+    llm_mode = state.get_llm_mode()
     queue_wait_timeout_seconds = extract_queue_timeout_seconds(request)
     started = time.monotonic()
     acquired = False
@@ -1063,6 +1639,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 backend=state.default_backend,
                 provider=backend_provider_name(state.default_backend),
                 reason="queue_timeout",
+                llm_mode=llm_mode,
             )
         )
         return JSONResponse(
@@ -1083,6 +1660,9 @@ async def v1_embeddings(request: Request) -> JSONResponse:
     provider = backend_provider_name(backend)
     status_code = 200
     reason = None
+    is_external_provider = False
+    external_tokens_used = 0
+    quota_detail: Dict[str, Any] = {}
     try:
         try:
             model_served, model_switch = await resolve_model(
@@ -1096,12 +1676,29 @@ async def v1_embeddings(request: Request) -> JSONResponse:
             return backend_auth_response(backend, provider, str(exc))
         backend = state.resolve_backend(model_served)
         provider = backend_provider_name(backend)
+        is_external_provider = provider_is_external(provider)
+        llm_mode = state.get_llm_mode()
+
+        if llm_mode == "local" and is_external_provider:
+            status_code = 403
+            reason = "external_provider_disabled"
+            return llm_mode_block_response(provider, "/v1/embeddings", llm_mode)
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
+        if is_external_provider:
+            estimated_tokens = extract_test_tokens(request) if use_dry_run else 0
+            allowed, quota_detail = await state.external_quota_precheck(provider, project, estimated_tokens)
+            if not allowed:
+                status_code = 429
+                reason = "external_quota_exceeded"
+                return quota_exceeded_response(provider, quota_detail)
+
         vectors: list[list[float]] = []
         if use_dry_run:
             for item in inputs:
                 vectors.append(deterministic_embedding_vector(f"{model_served}:{item}:{backend}"))
+            if is_external_provider:
+                external_tokens_used = extract_test_tokens(request)
         else:
             for item in inputs:
                 try:
@@ -1175,6 +1772,11 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                         },
                     )
                 vectors.append(embedding)
+                if is_external_provider:
+                    external_tokens_used += extract_total_tokens(upstream_json)
+
+        if is_external_provider:
+            await state.external_quota_record(provider, project, external_tokens_used)
 
         response_payload = {
             "object": "list",
@@ -1193,6 +1795,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 "X-Model-Served": model_served or "",
                 "X-Gate-Backend": backend,
                 "X-Gate-Provider": provider,
+                "X-Gate-LLM-Mode": llm_mode,
             },
         )
     finally:
@@ -1213,6 +1816,8 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 provider=provider,
                 model_switch=model_switch,
                 reason=reason,
+                llm_mode=llm_mode,
+                external_tokens=external_tokens_used if is_external_provider else None,
             )
         )
 
@@ -1261,4 +1866,57 @@ async def admin_session(session_id: str) -> JSONResponse:
     return JSONResponse(
         status_code=200,
         content={"session": session_id, "model": model, "backend": backend, "provider": provider},
+    )
+
+
+@app.get("/admin/llm-mode")
+async def admin_llm_mode() -> JSONResponse:
+    llm_mode = state.get_llm_mode()
+    external = await state.snapshot_external_metrics()
+    return JSONResponse(
+        status_code=200,
+        content={
+            "llm_mode": llm_mode,
+            "default_llm_mode": state.default_llm_mode,
+            "mode_file": str(state.mode_file),
+            "quotas_file": str(state.quotas_file),
+            "external": external,
+        },
+    )
+
+
+@app.put("/admin/llm-mode")
+async def admin_set_llm_mode(request: Request) -> JSONResponse:
+    payload = await request.json()
+    mode = payload.get("mode")
+    if not isinstance(mode, str) or mode.strip().lower() not in ALLOWED_LLM_MODES:
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"message": "mode must be one of: local, hybrid, remote", "type": "invalid_mode"}},
+        )
+
+    updated_mode = state.persist_llm_mode(mode, request.headers.get("X-Agent-Actor", "api"))
+    state.write_log(
+        event_base(
+            session="admin",
+            project=request.headers.get("X-Agent-Project", "-"),
+            endpoint="/admin/llm-mode",
+            decision="admin_mode_set",
+            model_requested=None,
+            model_served=None,
+            status_code=200,
+            latency_ms=0,
+            reason="admin_mode_set",
+            llm_mode=updated_mode,
+        )
+    )
+    return JSONResponse(status_code=200, content={"ok": True, "llm_mode": updated_mode})
+
+
+@app.get("/admin/quotas")
+async def admin_quotas() -> JSONResponse:
+    external = await state.snapshot_external_metrics()
+    return JSONResponse(
+        status_code=200,
+        content={"providers": external, "limits": state.provider_quota_limits},
     )

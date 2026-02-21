@@ -100,6 +100,38 @@ set_gate_runtime_permissions() {
   log "non-root runtime init: relaxed gate dir permissions for userns compatibility"
 }
 
+ensure_gate_mode_file() {
+  local mode_file="${AGENTIC_ROOT}/gate/state/llm_mode.json"
+  local default_mode="${AGENTIC_LLM_MODE:-hybrid}"
+
+  case "${default_mode}" in
+    local|hybrid|remote) ;;
+    *) default_mode="hybrid" ;;
+  esac
+
+  if [[ -f "${mode_file}" ]]; then
+    return 0
+  fi
+
+  cat >"${mode_file}" <<JSON
+{"mode":"${default_mode}","updated_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","updated_by":"init_runtime"}
+JSON
+  chmod 0640 "${mode_file}"
+  log "created runtime file: ${mode_file}"
+}
+
+ensure_gate_quotas_file() {
+  local quotas_file="${AGENTIC_ROOT}/gate/state/quotas_state.json"
+  if [[ -f "${quotas_file}" ]]; then
+    return 0
+  fi
+  cat >"${quotas_file}" <<JSON
+{"version":1,"providers":{}}
+JSON
+  chmod 0640 "${quotas_file}"
+  log "created runtime file: ${quotas_file}"
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/ollama"
   install -d -m 0770 "${AGENTIC_ROOT}/ollama/models"
@@ -126,6 +158,8 @@ main() {
   chmod 0644 "${AGENTIC_ROOT}/dns/unbound.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/config/squid.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/allowlist.txt"
+  ensure_gate_mode_file
+  ensure_gate_quotas_file
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key"
   set_gate_runtime_permissions
