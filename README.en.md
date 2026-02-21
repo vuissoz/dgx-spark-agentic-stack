@@ -1,0 +1,297 @@
+# DGX Spark Agentic Stack
+
+This repository provides a containerized agentic services stack for DGX Spark, with:
+- local-only exposure (`127.0.0.1` binds),
+- egress control (proxy + DOCKER-USER in `strict-prod`),
+- baseline hardening (`read_only`, `cap_drop: ALL`, `no-new-privileges`),
+- release snapshots + rollback,
+- orchestration through a single command: `./agent`.
+
+## Compose Stacks
+
+Compose files are located in `compose/`:
+- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `unbound`, `egress-proxy`, `toolbox`
+- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`
+- `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
+- `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
+- `compose/compose.rag.yml`: `qdrant`
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-openclaw-sandbox`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
+
+## Execution Profiles
+
+The profile is controlled by `AGENTIC_PROFILE`:
+- `strict-prod` (default): runtime under `/srv/agentic`, host `DOCKER-USER` checks enabled.
+- `rootless-dev`: runtime under `${HOME}/.local/share/agentic`, root-only host checks degraded.
+
+Check with:
+
+```bash
+./agent profile
+```
+
+## Runtime Layout (summary)
+
+Runtime root:
+- `strict-prod`: `/srv/agentic`
+- `rootless-dev`: `${HOME}/.local/share/agentic`
+
+Key persistent folders:
+- `ollama/`
+- `gate/{state,logs}/`
+- `proxy/{config,logs}/`
+- `dns/`
+- `openwebui/`
+- `openhands/{config,state,logs,workspaces}/`
+- `comfyui/{models,input,output,user}/`
+- `rag/{qdrant,qdrant-snapshots,docs,scripts}/`
+- `{claude,codex,opencode}/{state,logs,workspaces}/`
+- `optional/{openclaw,mcp,pi-mono,goose,portainer}/...`
+- `deployments/{releases,current}/`
+- `secrets/`
+- `shared-ro/`, `shared-rw/`
+
+## Host Path Variables (mounts)
+
+Host mounts used by the stack are configurable through environment variables.
+Application persistent paths remain under `${AGENTIC_ROOT}`.
+
+For observability (host telemetry mounts), available variables are:
+- `PROMTAIL_DOCKER_CONTAINERS_HOST_PATH` (default: `/var/lib/docker/containers`)
+- `PROMTAIL_HOST_LOG_PATH` (default: `/var/log`)
+- `NODE_EXPORTER_HOST_ROOT_PATH` (default: `/`)
+- `CADVISOR_HOST_ROOT_PATH` (default: `/`)
+- `CADVISOR_DOCKER_LIB_HOST_PATH` (default: `/var/lib/docker`)
+- `CADVISOR_SYS_HOST_PATH` (default: `/sys`)
+- `CADVISOR_DEV_DISK_HOST_PATH` (default: `/dev/disk`)
+
+Override example before startup:
+
+```bash
+export AGENTIC_PROFILE=rootless-dev
+export PROMTAIL_HOST_LOG_PATH=/var/log
+export NODE_EXPORTER_HOST_ROOT_PATH=/
+./agent profile
+./agent up obs
+```
+
+`./agent profile` shows the effective values in use.
+
+## Prerequisites
+
+- Linux + Docker Engine
+- Docker Compose v2 (`docker compose`)
+- NVIDIA Container Toolkit (for GPU services)
+- `iptables` available (in `strict-prod` for `DOCKER-USER`)
+- `acl` / `setfacl` recommended in `rootless-dev` (Squid log ACLs)
+
+## Quick Start
+
+### `strict-prod`
+
+```bash
+export AGENTIC_PROFILE=strict-prod
+sudo ./deployments/bootstrap/init_fs.sh
+sudo ./agent up core
+sudo ./agent up agents,ui,obs,rag
+sudo ./agent doctor
+```
+
+### `rootless-dev`
+
+```bash
+export AGENTIC_PROFILE=rootless-dev
+./deployments/bootstrap/init_fs.sh
+./agent ollama-link
+./agent up core
+./agent up agents,ui,obs,rag
+./agent doctor
+```
+
+## Remote Access (Tailscale + SSH tunnel)
+
+Services are bound on `127.0.0.1` on the host.
+Consequence: from another machine (even on the same Tailscale network), `http://<tailscale-host-ip>:8080` will not work directly.
+
+The expected access mode is an SSH tunnel from client to DGX host:
+
+```bash
+ssh -N \
+  -L 8080:127.0.0.1:8080 \
+  -L 3000:127.0.0.1:3000 \
+  -L 8188:127.0.0.1:8188 \
+  -L 13000:127.0.0.1:13000 \
+  -L 19090:127.0.0.1:19090 \
+  -L 13100:127.0.0.1:13100 \
+  <user>@<tailscale-hostname-or-ip>
+```
+
+Then, on the client machine, open:
+- `http://127.0.0.1:8080` (OpenWebUI)
+- `http://127.0.0.1:3000` (OpenHands)
+- `http://127.0.0.1:8188` (ComfyUI)
+- `http://127.0.0.1:13000` (Grafana)
+- `http://127.0.0.1:19090` (Prometheus)
+- `http://127.0.0.1:13100` (Loki)
+
+Useful ports to tunnel (depending on enabled modules):
+- `11434` -> Ollama API (`http://127.0.0.1:11434`)
+- `8080` -> OpenWebUI (`http://127.0.0.1:8080`)
+- `3000` -> OpenHands (`http://127.0.0.1:3000`)
+- `8188` -> ComfyUI (`http://127.0.0.1:8188`)
+- `13000` -> Grafana (`http://127.0.0.1:13000`)
+- `19090` -> Prometheus (`http://127.0.0.1:19090`)
+- `13100` -> Loki (`http://127.0.0.1:13100`)
+- `9001` -> optional Portainer (`http://127.0.0.1:9001`)
+- `18111` -> optional OpenClaw webhook ingress (`http://127.0.0.1:18111`)
+
+Notes:
+- tunnel only the ports you need;
+- host ports are configurable via environment variables (`*_HOST_PORT`);
+- `qdrant` is not published on a host port in the current configuration;
+- `optional-openclaw` only publishes local webhook ingress (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), never `0.0.0.0`.
+
+OpenClaw upstream behavior if deploying the official gateway:
+- gateway: `18789` (control plane + HTTP APIs + Control UI + WebSocket RPC on one port),
+- browser control service: `18791` (`gateway.port + 2`),
+- relay: `18792` (`gateway.port + 3`),
+- local CDP (managed browser profiles): `18800-18899` by default.
+
+Common point of confusion:
+- a node (`openclaw node run`) connects outbound to the gateway (WebSocket) and does not require a new inbound gateway port.
+
+Quick check (Linux/macOS host):
+
+```bash
+lsof -nP -iTCP -sTCP:LISTEN | egrep ':(18789|18791|18792|188[0-9]{2})'
+ss -lntp | egrep ':(18789|18791|18792|188[0-9]{2})'
+```
+
+### iPhone
+
+Yes, this is possible with an iOS SSH app that supports local port forwarding (for example: Termius, Blink Shell, Prompt).
+Same principle: create a local tunnel to host `127.0.0.1:<port>`, then open `http://127.0.0.1:<port>` from iPhone (Safari or the app browser).
+
+## `agent` Commands
+
+Supported commands:
+
+```text
+agent profile
+agent up <core|agents|ui|obs|rag|optional>
+agent down <core|agents|ui|obs|rag|optional>
+agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
+agent <claude|codex|opencode> [project]
+agent ls
+agent ps
+agent logs <service>
+agent stop <tool>
+agent stop service <service...>
+agent stop container <container...>
+agent start service <service...>
+agent start container <container...>
+agent cleanup [--yes] [--backup|--no-backup]
+agent net apply
+agent ollama-link
+agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
+agent ollama-models <rw|ro>
+agent update
+agent rollback all <release_id>
+agent rollback host-net <backup_id>
+agent rollback ollama-link <backup_id|latest>
+agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
+agent doctor [--fix-net]
+```
+
+Examples:
+
+```bash
+./agent up core
+./agent up agents,ui
+./agent codex my-project
+./agent logs ollama
+./agent stop codex
+./agent update
+./agent rollback all <release_id>
+```
+
+Notes:
+- `agent stop` handles only `claude|codex|opencode` tools.
+- `agent rollback all` requires a `release_id`.
+
+## Ollama: preload and model link
+
+In `rootless-dev`, the local model symlink is managed via:
+
+```bash
+./agent ollama-link
+```
+
+Preload then switch to read-only for smoke tests:
+
+```bash
+./agent ollama-preload
+./agent ollama-models ro
+./agent ollama-models rw
+```
+
+Model link rollback:
+
+```bash
+./agent rollback ollama-link <backup_id|latest>
+```
+
+## Optional Modules
+
+Explicit activation:
+
+```bash
+AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
+AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
+```
+
+Runtime prerequisites:
+- request files: `${AGENTIC_ROOT}/deployments/optional/*.request`
+  - `${AGENTIC_ROOT}/deployments/optional/pi-mono.request`
+  - `${AGENTIC_ROOT}/deployments/optional/goose.request`
+- secrets:
+  - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
+  - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
+  - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
+
+## Validation
+
+- Global diagnostics: `./agent doctor`
+- Test campaigns: `./agent test <A..K|all>`
+
+## Detailed Documentation
+
+- Introduction (stack philosophy and operating model):
+  - `docs/runbooks/introduction.md`
+- Step-by-step guide (full first deployment):
+  - `docs/runbooks/first-time-setup.md`
+- Feature and implemented agent catalog:
+  - `docs/runbooks/features-and-agents.md`
+- Beginner service-by-service guide (French):
+  - `docs/runbooks/services-expliques-debutants.md`
+- Beginner service-by-service guide (English):
+  - `docs/runbooks/services-explained-beginners.en.md`
+- Ultra-simplified non-technical onboarding (FR/EN/DE/IT):
+  - `docs/runbooks/onboarding-ultra-simple.fr.md`
+  - `docs/runbooks/onboarding-ultra-simple.en.md`
+  - `docs/runbooks/onboarding-ultra-simple.de.md`
+  - `docs/runbooks/onboarding-ultra-simple.it.md`
+- Execution profiles:
+  - `docs/runbooks/profiles.md`
+- Optional modules:
+  - `docs/runbooks/optional-modules.md`
+- Observability triage (latency, egress errors, restarts, OOM):
+  - `docs/runbooks/observability-triage.md`
+- OpenClaw security model (sandbox + controlled egress, no `docker.sock`):
+  - `docs/security/openclaw-sandbox-egress.md`
+
+## Internal References
+
+- `AGENTS.md`
+- `PLAN.md`
+- `docs/runbooks/*.md`
+- `docs/decisions/*.md`
