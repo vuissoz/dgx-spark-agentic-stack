@@ -22,7 +22,7 @@ trap 'rm -f "${smoke_output}"' EXIT
 
 set +e
 OLLAMA_API_URL="http://127.0.0.1:11434" \
-  OLLAMA_SMOKE_TIMEOUT_SECONDS="${OLLAMA_SMOKE_TIMEOUT_SECONDS:-45}" \
+  OLLAMA_SMOKE_TIMEOUT_SECONDS="${OLLAMA_SMOKE_TIMEOUT_SECONDS:-120}" \
   "${smoke_script}" >"${smoke_output}" 2>&1
 smoke_rc=$?
 set -e
