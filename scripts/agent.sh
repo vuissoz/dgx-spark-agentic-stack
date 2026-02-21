@@ -14,6 +14,7 @@ AGENT_ONBOARD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/bootstrap/onboarding_env.
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
+AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_TOOLS=(claude codex opencode)
 OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
 STACK_START_ORDER=(core agents ui obs rag optional)
@@ -45,6 +46,7 @@ Usage:
   agent rollback host-net <backup_id>
   agent rollback ollama-link <backup_id|latest>
   agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --output ... --non-interactive]
+  agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
   agent doctor [--fix-net]
 
@@ -1067,6 +1069,21 @@ cmd_onboard() {
   "${AGENT_ONBOARD_SCRIPT}" "$@"
 }
 
+cmd_vm() {
+  local action="${1:-}"
+  shift || true
+
+  case "${action}" in
+    create)
+      [[ -x "${AGENT_VM_CREATE_SCRIPT}" ]] || die "VM create script missing or not executable: ${AGENT_VM_CREATE_SCRIPT}"
+      "${AGENT_VM_CREATE_SCRIPT}" "$@"
+      ;;
+    *)
+      die "Usage: agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]"
+      ;;
+  esac
+}
+
 cmd_net() {
   local action="${1:-}"
   case "${action}" in
@@ -1415,6 +1432,10 @@ case "$cmd" in
   onboard)
     shift
     cmd_onboard "$@"
+    ;;
+  vm)
+    shift
+    cmd_vm "$@"
     ;;
   test)
     [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|all>"

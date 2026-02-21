@@ -198,6 +198,7 @@ agent update
 agent rollback all <release_id>
 agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
+agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
 agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
 agent doctor [--fix-net]
 ```
@@ -269,6 +270,8 @@ Runtime prerequisites:
   - `docs/runbooks/introduction.md`
 - Step-by-step guide (full first deployment):
   - `docs/runbooks/first-time-setup.md`
+- Dedicated `strict-prod` VM (prod-like validation):
+  - `docs/runbooks/strict-prod-vm.md`
 - Feature and implemented agent catalog:
   - `docs/runbooks/features-and-agents.md`
 - Beginner service-by-service guide (French):

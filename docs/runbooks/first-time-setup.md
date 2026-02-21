@@ -42,6 +42,23 @@ ROOT="$(./agent profile | sed -n 's/^root=//p')"
 echo "${ROOT}"
 ```
 
+### Optional: create a dedicated VM for `strict-prod`
+
+If you want a prod-like validation environment isolated from your main host:
+
+```bash
+./agent vm create --name agentic-strict-prod --cpus 12 --memory 48G --disk 200G --require-gpu
+```
+
+Then connect with:
+
+```bash
+multipass shell agentic-strict-prod
+```
+
+Detailed guide:
+- `docs/runbooks/strict-prod-vm.md`
+
 ## 2. Define Required Configuration Before First Start
 
 Define or review these items before running the full stack.
