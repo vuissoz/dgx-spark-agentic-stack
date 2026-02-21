@@ -349,6 +349,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - exposer au minimum des outils MCP:
   - `gate.current_model` : retourne le modèle effectivement servi derrière `ollama-gate` (backend/provider/model_served), avec contexte session/projet.
   - `gate.quota_remaining` : retourne le quota/tokens restants pour les appels externes (global + par provider, et optionnellement par outil/projet).
+  - `gate.switch_model` : demande un changement explicite de modèle pour une session (appel contrôlé vers `ollama-gate` `/admin/sessions/{session_id}/switch`), avec validation du modèle cible et traçabilité d’audit.
 - source de vérité: état/métriques du gate (`${AGENTIC_ROOT}/gate/state/*` + endpoints internes) ; aucun secret provider ne doit être renvoyé.
 - intégrer l’endpoint MCP local dans l’environnement des conteneurs agents (variables runtime dédiées), en gardant l’isolation réseau actuelle.
 - hardening: auth locale minimale (token runtime local), rate limiting, logs d’audit.
@@ -356,11 +357,46 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 **Test** : `tests/D7_local_mcp_gate_visibility.sh`
 - depuis un conteneur agent, appel MCP `gate.current_model` -> réponse non vide avec backend/provider/model_served cohérents.
 - depuis un conteneur agent, appel MCP `gate.quota_remaining` -> réponse avec compteurs restants cohérents.
+- depuis un conteneur agent, appel MCP `gate.switch_model` (session existante) -> modèle sticky mis à jour et visible via `gate.current_model`; trace `model_switch:true` côté logs gate.
 - en mode `remote` avec `ollama`/`trtllm` arrêtés, le MCP continue de refléter correctement le provider externe actif.
 - accès non autorisé ou hors réseau interne -> refus explicite.
 
----
+### D8 Ordonnancement par “époques de modèle” (mémoire limitée, un modèle actif)
+**Implémentation**
+- implémenter dans `ollama-gate` une politique explicite “single active model epoch” :
+  - un seul modèle actif à la fois (aligné avec la contrainte RAM du DGX Spark) ;
+  - `GATE_CONCURRENCY=1` conservé, et file globale pilotée par classes de priorité.
+- définir des classes de requêtes (au minimum) :
+  - `interactive` (UI/chat opérateur) priorité haute ;
+  - `agent` (sessions codex/claude/opencode) priorité moyenne ;
+  - `batch` (ingest RAG/embeddings massifs) priorité basse.
+- utiliser une file pondérée (WFQ/WRR) avec bornes :
+  - taille max par classe ;
+  - timeout d’attente par classe ;
+  - refus explicite (`429` avec raison) quand saturation.
+- introduire des “époques de modèle” pour limiter le thrashing :
+  - traiter un lot de requêtes du modèle actif (`max_requests_per_epoch` ou `max_epoch_seconds`) ;
+  - ne changer de modèle que si conditions de switch remplies (`queue_active_model` vide ou `oldest_wait_other_model > switch_force_after_seconds`) ;
+  - appliquer hystérésis (`min_dwell_seconds`) + cooldown (`switch_cooldown_seconds`) entre deux switches.
+- conserver la compatibilité sticky session :
+  - sticky reste la source de vérité session -> modèle ;
+  - changement implicite interdit sans signal explicite (`X-Model-Switch` ou MCP `gate.switch_model`).
+- enrichir les métriques/logs gate :
+  - `epoch_id`, `active_model`, `epoch_switch_total`, `switch_reason`, `queue_wait_ms`, `queue_class`, `model_queue_depth`.
 
+**Test** : `tests/D8_gate_model_epoch_scheduler.sh`
+- charge mixte simulée (`interactive`, `agent`, `batch`) avec deux modèles concurrents :
+  - p95 d’attente `interactive` < p95 `batch` ;
+  - aucune famine complète des classes non prioritaires (au moins N requêtes servies par fenêtre).
+- sous rafale de demandes alternant deux modèles, le nombre de switches reste borné (anti-thrashing effectif).
+- sticky respecté :
+  - même session sans switch explicite -> `model_served` stable ;
+  - switch explicite -> changement effectif puis stabilité dans l’époque suivante.
+- en saturation de file, réponses `429` explicites avec `reason` actionnable ; aucun crash du gate.
+- logs/metrics contiennent `epoch_id`, `switch_reason`, et les profondeurs de file par modèle/classe.
+
+---
+ 
 ## E — Agents CLI persistants : image `agent-cli-base` + tmux + workspaces
 
 ### E1 Construire `agent-cli-base`
