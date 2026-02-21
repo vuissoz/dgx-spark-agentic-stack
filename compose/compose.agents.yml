@@ -5,6 +5,8 @@ services:
       context: ${AGENTIC_AGENT_BASE_BUILD_CONTEXT:-..}
       dockerfile: ${AGENTIC_AGENT_BASE_DOCKERFILE:-deployments/images/agent-cli-base/Dockerfile}
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_AGENTIC_CLAUDE_CPUS:-${AGENTIC_LIMIT_AGENTS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_AGENTIC_CLAUDE_MEM:-${AGENTIC_LIMIT_AGENTS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     init: true
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
@@ -50,6 +52,8 @@ services:
       context: ${AGENTIC_AGENT_BASE_BUILD_CONTEXT:-..}
       dockerfile: ${AGENTIC_AGENT_BASE_DOCKERFILE:-deployments/images/agent-cli-base/Dockerfile}
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_AGENTIC_CODEX_CPUS:-${AGENTIC_LIMIT_AGENTS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_AGENTIC_CODEX_MEM:-${AGENTIC_LIMIT_AGENTS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     init: true
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
@@ -95,6 +99,8 @@ services:
       context: ${AGENTIC_AGENT_BASE_BUILD_CONTEXT:-..}
       dockerfile: ${AGENTIC_AGENT_BASE_DOCKERFILE:-deployments/images/agent-cli-base/Dockerfile}
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_AGENTIC_OPENCODE_CPUS:-${AGENTIC_LIMIT_AGENTS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_AGENTIC_OPENCODE_MEM:-${AGENTIC_LIMIT_AGENTS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     init: true
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
@@ -140,6 +146,8 @@ services:
       context: ${AGENTIC_AGENT_BASE_BUILD_CONTEXT:-..}
       dockerfile: ${AGENTIC_AGENT_BASE_DOCKERFILE:-deployments/images/agent-cli-base/Dockerfile}
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_AGENTIC_VIBESTRAL_CPUS:-${AGENTIC_LIMIT_AGENTS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_AGENTIC_VIBESTRAL_MEM:-${AGENTIC_LIMIT_AGENTS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     init: true
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true

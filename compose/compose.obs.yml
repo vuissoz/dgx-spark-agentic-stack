@@ -2,6 +2,8 @@ services:
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_PROMETHEUS_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_PROMETHEUS_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${PROMETHEUS_CONTAINER_USER:-0:0}"
     read_only: true
     tmpfs:
@@ -35,6 +37,8 @@ services:
   grafana:
     image: grafana/grafana:latest
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_GRAFANA_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_GRAFANA_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${GRAFANA_CONTAINER_USER:-472:472}"
     read_only: true
     tmpfs:
@@ -68,6 +72,8 @@ services:
   loki:
     image: grafana/loki:latest
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_LOKI_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_LOKI_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${LOKI_CONTAINER_USER:-0:0}"
     read_only: true
     tmpfs:
@@ -99,6 +105,8 @@ services:
   promtail:
     image: grafana/promtail:latest
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_PROMTAIL_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_PROMTAIL_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${PROMTAIL_CONTAINER_USER:-0:0}"
     read_only: true
     tmpfs:
@@ -130,6 +138,8 @@ services:
   node-exporter:
     image: prom/node-exporter:latest
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_NODE_EXPORTER_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_NODE_EXPORTER_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     read_only: true
     cap_drop:
       - ALL
@@ -145,6 +155,8 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_CADVISOR_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_CADVISOR_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     read_only: true
     cap_drop:
       - ALL
@@ -164,6 +176,8 @@ services:
   dcgm-exporter:
     image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_DCGM_EXPORTER_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_DCGM_EXPORTER_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     gpus: all
     read_only: true
     cap_drop:

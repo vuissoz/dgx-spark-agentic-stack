@@ -144,7 +144,32 @@ Verify effective values with:
 ./agent profile
 ```
 
-### 2.5 GitHub Git access must be non-interactive (SSH recommended)
+### 2.5 Container CPU/RAM limits (new onboarding defaults)
+
+The onboarding wizard now also writes resource caps:
+- global fallback:
+  - `AGENTIC_LIMIT_DEFAULT_CPUS`
+  - `AGENTIC_LIMIT_DEFAULT_MEM`
+- stack defaults:
+  - `AGENTIC_LIMIT_CORE_{CPUS|MEM}`
+  - `AGENTIC_LIMIT_AGENTS_{CPUS|MEM}`
+  - `AGENTIC_LIMIT_UI_{CPUS|MEM}`
+  - `AGENTIC_LIMIT_OBS_{CPUS|MEM}`
+  - `AGENTIC_LIMIT_RAG_{CPUS|MEM}`
+  - `AGENTIC_LIMIT_OPTIONAL_{CPUS|MEM}`
+
+Every service can still be overridden individually with:
+- `AGENTIC_LIMIT_<SERVICE_NAME>_CPUS`
+- `AGENTIC_LIMIT_<SERVICE_NAME>_MEM`
+
+Examples:
+- `AGENTIC_LIMIT_OLLAMA_MEM=6g`
+- `AGENTIC_LIMIT_OPENWEBUI_CPUS=0.60`
+- `AGENTIC_LIMIT_OPTIONAL_OPENCLAW_MEM=768m`
+
+Supported memory format: `512m`, `1g`, `2G`, etc.
+
+### 2.6 GitHub Git access must be non-interactive (SSH recommended)
 
 For automation (`git pull --rebase`, `git push`, `bd sync`), Git auth must not require interactive password prompts.
 

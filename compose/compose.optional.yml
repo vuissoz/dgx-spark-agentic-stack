@@ -8,6 +8,8 @@ services:
       - -lc
       - sleep infinity
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_SENTINEL_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_SENTINEL_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     read_only: true
     tmpfs:
       - /tmp
@@ -36,6 +38,8 @@ services:
     command:
       - openclaw
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_OPENCLAW_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_OPENCLAW_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:
@@ -93,6 +97,8 @@ services:
     command:
       - openclaw-sandbox
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_OPENCLAW_SANDBOX_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_OPENCLAW_SANDBOX_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:
@@ -138,6 +144,8 @@ services:
     command:
       - mcp
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_MCP_CATALOG_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_MCP_CATALOG_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:
@@ -181,6 +189,8 @@ services:
     profiles:
       - optional-pi-mono
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_PI_MONO_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_PI_MONO_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     init: true
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
@@ -229,6 +239,8 @@ services:
         mkdir -p /workspace /logs /home/goose/.config/goose
         sleep infinity
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_GOOSE_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_GOOSE_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     read_only: true
     tmpfs:
       - /tmp
@@ -266,6 +278,8 @@ services:
       - --bind
       - ":9000"
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_PORTAINER_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_PORTAINER_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:

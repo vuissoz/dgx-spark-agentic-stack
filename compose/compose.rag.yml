@@ -2,6 +2,8 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_QDRANT_CPUS:-${AGENTIC_LIMIT_RAG_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_QDRANT_MEM:-${AGENTIC_LIMIT_RAG_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${QDRANT_CONTAINER_USER:-0:0}"
     environment:
       QDRANT_INIT_FILE_PATH: /qdrant/storage/.qdrant-initialized
@@ -32,6 +34,8 @@ services:
   rag-retriever:
     image: python:3.12-alpine
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_RAG_RETRIEVER_CPUS:-${AGENTIC_LIMIT_RAG_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_RAG_RETRIEVER_MEM:-${AGENTIC_LIMIT_RAG_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:
@@ -84,6 +88,8 @@ services:
   rag-worker:
     image: python:3.12-alpine
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_RAG_WORKER_CPUS:-${AGENTIC_LIMIT_RAG_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_RAG_WORKER_MEM:-${AGENTIC_LIMIT_RAG_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:
@@ -136,6 +142,8 @@ services:
   opensearch:
     image: opensearchproject/opensearch:latest
     restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPENSEARCH_CPUS:-${AGENTIC_LIMIT_RAG_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPENSEARCH_MEM:-${AGENTIC_LIMIT_RAG_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     profiles:
       - rag-lexical
     user: "1000:1000"

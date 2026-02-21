@@ -20,7 +20,7 @@ trap 'rm -rf "${work_dir}"' EXIT
 mkdir -p "${work_dir}"
 
 run_default_answers() {
-  if ! printf '\n\n\n\n\n\n' \
+  if ! printf '\n%.0s' {1..20} \
     | AGENTIC_PROFILE=strict-prod "${wizard_script}" --output "${default_env_file}" >"${default_log}" 2>&1; then
     cat "${default_log}" >&2 || true
     fail "wizard failed with default Enter answers"
@@ -41,6 +41,20 @@ ${custom_compose}
 ${custom_network}
 ${custom_egress_network}
 ${custom_models}
+0.55
+640m
+
+
+
+
+
+
+
+
+
+
+
+
 EOF
   then
     cat "${override_log}" >&2 || true
@@ -84,6 +98,14 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-egress'$" "${default_env_file}"
   || fail "default AGENTIC_EGRESS_NETWORK is not agentic-egress"
 grep -q "^export OLLAMA_MODELS_DIR='/srv/agentic/ollama/models'$" "${default_env_file}" \
   || fail "default OLLAMA_MODELS_DIR is not /srv/agentic/ollama/models"
+grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='1.00'$" "${default_env_file}" \
+  || fail "default AGENTIC_LIMIT_DEFAULT_CPUS is not 1.00"
+grep -q "^export AGENTIC_LIMIT_DEFAULT_MEM='1g'$" "${default_env_file}" \
+  || fail "default AGENTIC_LIMIT_DEFAULT_MEM is not 1g"
+grep -q "^export AGENTIC_LIMIT_CORE_CPUS='1.50'$" "${default_env_file}" \
+  || fail "default AGENTIC_LIMIT_CORE_CPUS is not 1.50"
+grep -q "^export AGENTIC_LIMIT_CORE_MEM='3g'$" "${default_env_file}" \
+  || fail "default AGENTIC_LIMIT_CORE_MEM is not 3g"
 
 assert_git_ignored "${default_env_file}"
 ok "wizard default Enter flow generates expected defaults"
@@ -103,6 +125,14 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-ci-egress'$" "${override_env_fi
   || fail "override AGENTIC_EGRESS_NETWORK is not applied"
 grep -q "^export OLLAMA_MODELS_DIR='${work_dir}/custom-ollama-models'$" "${override_env_file}" \
   || fail "override OLLAMA_MODELS_DIR is not applied"
+grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.55'$" "${override_env_file}" \
+  || fail "override AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
+grep -q "^export AGENTIC_LIMIT_DEFAULT_MEM='640m'$" "${override_env_file}" \
+  || fail "override AGENTIC_LIMIT_DEFAULT_MEM is not applied"
+grep -q "^export AGENTIC_LIMIT_OBS_CPUS='0.50'$" "${override_env_file}" \
+  || fail "rootless default AGENTIC_LIMIT_OBS_CPUS is not applied"
+grep -q "^export AGENTIC_LIMIT_OBS_MEM='512m'$" "${override_env_file}" \
+  || fail "rootless default AGENTIC_LIMIT_OBS_MEM is not applied"
 
 assert_git_ignored "${override_env_file}"
 ok "wizard override flow writes custom values"
@@ -115,10 +145,28 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --network agentic-ni-net \
   --egress-network agentic-ni-egress \
   --ollama-models-dir "${work_dir}/ni-models" \
+  --limits-default-cpus 0.60 \
+  --limits-default-mem 768m \
+  --limits-core-cpus 1.20 \
+  --limits-core-mem 2g \
+  --limits-agents-cpus 0.70 \
+  --limits-agents-mem 1g \
+  --limits-ui-cpus 0.80 \
+  --limits-ui-mem 1g \
+  --limits-obs-cpus 0.55 \
+  --limits-obs-mem 768m \
+  --limits-rag-cpus 0.90 \
+  --limits-rag-mem 1g \
+  --limits-optional-cpus 0.40 \
+  --limits-optional-mem 512m \
   --output "${non_interactive_env_file}" >/dev/null 2>&1; then
   fail "wizard non-interactive flag mode failed"
 fi
 assert_generated_file_baseline "${non_interactive_env_file}"
+grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.60'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
+grep -q "^export AGENTIC_LIMIT_OPTIONAL_MEM='512m'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_LIMIT_OPTIONAL_MEM is not applied"
 assert_git_ignored "${non_interactive_env_file}"
 ok "wizard non-interactive flags mode works"
 
