@@ -15,6 +15,7 @@ AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
+AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_TOOLS=(claude codex opencode)
 OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
 STACK_START_ORDER=(core agents ui obs rag optional)
@@ -47,7 +48,8 @@ Usage:
   agent rollback ollama-link <backup_id|latest>
   agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --output ... --non-interactive]
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
-  agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
+  agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]
+  agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all>
   agent doctor [--fix-net]
 
 Optional modules (disabled by default):
@@ -1078,8 +1080,12 @@ cmd_vm() {
       [[ -x "${AGENT_VM_CREATE_SCRIPT}" ]] || die "VM create script missing or not executable: ${AGENT_VM_CREATE_SCRIPT}"
       "${AGENT_VM_CREATE_SCRIPT}" "$@"
       ;;
+    test)
+      [[ -x "${AGENT_VM_TEST_SCRIPT}" ]] || die "VM test script missing or not executable: ${AGENT_VM_TEST_SCRIPT}"
+      "${AGENT_VM_TEST_SCRIPT}" "$@"
+      ;;
     *)
-      die "Usage: agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]"
+      die "Usage: agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run] | agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]"
       ;;
   esac
 }
@@ -1219,13 +1225,13 @@ run_tests() {
       find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -regextype posix-extended \
         -regex '.*/([0-9]+|[A-Z][0-9]*)_.*\.sh' | sort
     )
-  elif [[ "$selector" =~ ^[A-L]$ ]]; then
+  elif [[ "$selector" =~ ^[A-LV]$ ]]; then
     mapfile -t tests < <(
       find "${AGENTIC_TEST_DIR}" -maxdepth 1 -type f -regextype posix-extended \
         -regex ".*/${selector}([0-9]+)?_.*\\.sh" | sort
     )
   else
-    die "Invalid test selector '$selector'. Expected one of A..L or all."
+    die "Invalid test selector '$selector'. Expected one of A..L, V, or all."
   fi
 
   [[ "${#tests[@]}" -gt 0 ]] || die "No test scripts found for selector '$selector'."
@@ -1438,7 +1444,7 @@ case "$cmd" in
     cmd_vm "$@"
     ;;
   test)
-    [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|all>"
+    [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|V|all>"
     run_tests "$2"
     ;;
   cleanup)

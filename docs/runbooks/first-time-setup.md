@@ -56,6 +56,18 @@ Then connect with:
 multipass shell agentic-strict-prod
 ```
 
+Then run the full validation campaign from the host:
+
+```bash
+./agent vm test --name agentic-strict-prod
+```
+
+If this VM has no GPU passthrough but you still want a documented degraded run:
+
+```bash
+./agent vm test --name agentic-strict-prod --allow-no-gpu
+```
+
 Detailed guide:
 - `docs/runbooks/strict-prod-vm.md`
 

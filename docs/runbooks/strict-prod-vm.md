@@ -54,7 +54,67 @@ The repo is mounted by default at:
 
 - `/home/ubuntu/dgx-spark-agentic-stack`
 
-## 4. Bootstrap `strict-prod` inside the VM
+## 4. Run the full validation campaign from the host
+
+```bash
+./agent vm test --name agentic-strict-prod
+```
+
+What this campaign does inside the VM:
+- `strict-prod` bootstrap (`init_fs.sh`)
+- `agent up core`
+- `agent up agents,ui,obs,rag` (or degraded no-UI path if GPU is missing and allowed)
+- `agent doctor`
+- `agent update`
+- `agent rollback all <release_id>`
+- test selectors (default: `A,B,C,D,E,F,G,H,I,J,K`)
+- final `agent doctor` + `agent ps`
+- evidence capture under `/srv/agentic/deployments/validation/vm-strict-prod/<timestamp>/`
+
+Useful flags:
+
+- Require GPU and fail otherwise:
+
+```bash
+./agent vm test --name agentic-strict-prod --require-gpu
+```
+
+- Allow degraded run without GPU passthrough (explicit blocked markers are written in `gpu-status.txt`):
+
+```bash
+./agent vm test --name agentic-strict-prod --allow-no-gpu
+```
+
+- Restrict test selectors:
+
+```bash
+./agent vm test --name agentic-strict-prod --test-selectors A,B,C,F,G,J,K
+```
+
+- Preview only:
+
+```bash
+./agent vm test --name agentic-strict-prod --dry-run
+```
+
+## 5. Inspect generated evidence
+
+From the host:
+
+```bash
+multipass exec agentic-strict-prod -- sudo ls -1 /srv/agentic/deployments/validation/vm-strict-prod
+```
+
+Inside the VM:
+
+```bash
+sudo ls -lah /srv/agentic/deployments/validation/vm-strict-prod/<timestamp>/
+sudo cat /srv/agentic/deployments/validation/vm-strict-prod/<timestamp>/campaign.meta
+```
+
+## 6. Manual troubleshooting mode (optional)
+
+If you want to run commands manually instead of `agent vm test`:
 
 ```bash
 export AGENTIC_PROFILE=strict-prod
@@ -64,15 +124,3 @@ sudo ./agent up core
 sudo ./agent up agents,ui,obs,rag
 sudo ./agent doctor
 ```
-
-## 5. GPU check
-
-Inside the VM:
-
-```bash
-nvidia-smi
-```
-
-If GPU is missing and you need strict GPU validation:
-- stop and reconfigure passthrough in your hypervisor,
-- rerun VM creation with `--require-gpu` to enforce the check.

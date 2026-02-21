@@ -200,7 +200,8 @@ agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
 agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
-agent test <A|B|C|D|E|F|G|H|I|J|K|L|all>
+agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]
+agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all>
 agent doctor [--fix-net]
 ```
 
@@ -266,7 +267,8 @@ Préconditions (runtime):
 ## Validation
 
 - Diagnostic global: `./agent doctor`
-- Campagnes de tests: `./agent test <A..L|all>`
+- Campagnes de tests: `./agent test <A..L|V|all>`
+- Campagne VM `strict-prod` (preuves + update/rollback + tests): `./agent vm test --name agentic-strict-prod`
 
 ## Documentation détaillée
 
