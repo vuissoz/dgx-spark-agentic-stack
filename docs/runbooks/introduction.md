@@ -183,7 +183,8 @@ Suggested order:
 8. `features-and-agents.md` (component capabilities),
 9. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
 10. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
-11. specialized runbooks (`optional-modules.md`, `observability-triage.md`, etc.).
+11. `codex-debutant.md` (beginner step-by-step usage of `agentic-codex`),
+12. specialized runbooks (`optional-modules.md`, `observability-triage.md`, etc.).
 
 When troubleshooting:
 - always capture active profile and effective runtime values first (`./agent profile`),
