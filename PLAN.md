@@ -121,6 +121,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 ### A1 Pré-requis Docker/Compose/NVIDIA
 **Implémentation**
 - documenter dans `deployments/README-host.md` les commandes de diag minimales
+- note backlog : ajouter une commande simple `scripts/check_prereqs.sh` (ou alias `./agent prereqs`) qui vérifie la présence des prérequis opérateur (`docker`, `docker compose`, `multipass`, `nvidia-smi`, `iptables`, `setfacl`) et renvoie une sortie actionnable (OK/FAIL par dépendance).
 - aucun compose à ce stade
 
 **Test** : `tests/A1_host_prereqs.sh`
