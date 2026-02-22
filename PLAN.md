@@ -402,13 +402,22 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 ### E1 Construire `agent-cli-base`
 **Implémentation**
 - `deployments/images/agent-cli-base/Dockerfile`
-  - bash, tmux, git, curl, ca-certs
-  - user non-root
+  - base NVIDIA CUDA **devel** compatible DGX Spark (ARM64), version explicitement épinglée
+  - socle CLI/runtime : bash, tmux, git, git-lfs, curl, ca-certificates, openssh-client, rsync
+  - socle dev général : build-essential, cmake, ninja-build, pkg-config, python3+venv+pip, nodejs+npm, golang-go, rustc+cargo
+  - outillage productivité/qualité : ripgrep, fd-find, jq, shellcheck, shfmt, direnv
+  - socle C/C++ pro : gdb, gdbserver, valgrind, clang, clangd, lld, lldb, clang-format, clang-tidy, cppcheck, ccache, bear, meson, autoconf, automake, libtool
+  - dépendances build natives communes : libc6-dev, libssl-dev, zlib1g-dev, libffi-dev, libbz2-dev, libreadline-dev, libsqlite3-dev
+  - conserver user non-root + entrypoint tmux compatible
 - pas de docker.sock, pas de privilèges
 
 **Test** : `tests/E1_image_build.sh`
 - `docker image inspect agent-cli-base:<tag>` OK
 - `.Config.User` non-root
+- `docker run --rm ... sh -lc 'command -v gcc g++ cmake ninja clang python3 pip node npm go rustc cargo nvcc'` OK
+- smoke C/C++ : compilation simple (`gcc` + `g++`) OK
+- smoke CUDA : `nvcc --version` OK (et test compile minimal CUDA si GPU/toolkit dispo)
+- invariants sécurité conservés (`read_only`, `cap_drop=ALL`, `no-new-privileges`, pas de `docker.sock`)
 
 ### E1b Image de base commune customisable (Dockerfile override)
 **Implémentation**
