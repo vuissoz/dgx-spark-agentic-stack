@@ -382,6 +382,8 @@ Préconditions (runtime):
   - `docs/runbooks/configuration-expliquee-debutants.md`
 - Beginner configuration reference (variables, values, storage, secrets):
   - `docs/runbooks/configuration-explained-beginners.en.md`
+- Images de developpement (build local, overrides, stamps, update/rollback):
+  - `docs/runbooks/images-developpement.md`
 - Onboarding ultra-simplifié non-tech (FR/EN/DE/IT):
   - `docs/runbooks/onboarding-ultra-simple.fr.md`
   - `docs/runbooks/onboarding-ultra-simple.en.md`

@@ -382,6 +382,8 @@ Runtime prerequisites:
   - `docs/runbooks/configuration-expliquee-debutants.md`
 - Beginner configuration reference (English):
   - `docs/runbooks/configuration-explained-beginners.en.md`
+- Development images runbook (French, local builds/overrides/stamps/update/rollback):
+  - `docs/runbooks/images-developpement.md`
 - Ultra-simplified non-technical onboarding (FR/EN/DE/IT):
   - `docs/runbooks/onboarding-ultra-simple.fr.md`
   - `docs/runbooks/onboarding-ultra-simple.en.md`
