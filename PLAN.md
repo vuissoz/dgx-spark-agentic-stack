@@ -425,12 +425,14 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - conserver un fallback sûr par défaut sur `deployments/images/agent-cli-base/Dockerfile` si aucun override n’est fourni.
 - option de tagging explicite de l’image commune custom (ex: `AGENTIC_AGENT_BASE_IMAGE=agentic/agent-cli-base:custom`) pour traçabilité des releases.
 - documenter clairement le contrat minimal du Dockerfile custom (user non-root, entrypoint compatible, outils de base requis).
+- documenter dans un **nouveau runbook débutant** (`docs/runbooks/`) l’environnement de travail des agents (image de base, volumes, contraintes sécurité) et la procédure de personnalisation de l’image (variables `AGENTIC_AGENT_BASE_*`, exemple socle dev pro avec CUDA, rollback).
 - le mécanisme custom ne doit pas casser le durcissement conteneur existant (`read_only`, `cap_drop=ALL`, `no-new-privileges`, pas de `docker.sock`).
 
 **Test** : `tests/E1b_agent_base_image_override.sh`
 - sans override: build/déploiement utilisent bien le Dockerfile par défaut.
 - avec override: build utilise le Dockerfile custom fourni et l’image/tag attendu.
 - les quatre services agents démarrent avec l’image commune custom.
+- le nouveau runbook débutant existe et est référencé depuis la documentation d’introduction/runbooks.
 - les invariants sécurité des agents restent inchangés.
 
 ### E2 Déployer `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
