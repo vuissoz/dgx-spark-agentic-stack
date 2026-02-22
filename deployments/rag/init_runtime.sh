@@ -8,6 +8,8 @@ AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
 EXAMPLE_CORPUS_DIR="${REPO_ROOT}/examples/rag/corpus"
 DEPLOYMENT_SCRIPT_DIR="${REPO_ROOT}/deployments/rag"
 RAG_SCHEMA_TEMPLATE="${DEPLOYMENT_SCRIPT_DIR}/document.schema.json"
+AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
+AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
 
 log() {
   echo "INFO: $*"
@@ -95,6 +97,14 @@ main() {
   copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/ingest.sh" "${AGENTIC_ROOT}/rag/scripts/ingest.sh" 0750
   copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/query_smoke.sh" "${AGENTIC_ROOT}/rag/scripts/query_smoke.sh" 0750
   copy_if_missing "${RAG_SCHEMA_TEMPLATE}" "${AGENTIC_ROOT}/rag/config/document.schema.json" 0640
+
+  if [[ "${EUID}" -eq 0 ]]; then
+    install -d -m 0770 "${AGENTIC_ROOT}/rag/qdrant/aliases"
+    install -d -m 0770 "${AGENTIC_ROOT}/rag/qdrant/collections"
+    chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
+      "${AGENTIC_ROOT}/rag/qdrant" \
+      "${AGENTIC_ROOT}/rag/qdrant-snapshots"
+  fi
 
   if [[ "${EUID}" -ne 0 ]]; then
     repair_rootless_qdrant_layout

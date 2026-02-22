@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_PROMETHEUS_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_PROMETHEUS_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
-    user: "${PROMETHEUS_CONTAINER_USER:-0:0}"
+    user: "${PROMETHEUS_CONTAINER_USER:-${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}}"
     read_only: true
     tmpfs:
       - /tmp
@@ -74,7 +74,7 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_LOKI_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_LOKI_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
-    user: "${LOKI_CONTAINER_USER:-0:0}"
+    user: "${LOKI_CONTAINER_USER:-${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}}"
     read_only: true
     tmpfs:
       - /tmp
@@ -140,6 +140,7 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_NODE_EXPORTER_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_NODE_EXPORTER_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     cap_drop:
       - ALL
@@ -149,6 +150,15 @@ services:
       - --path.rootfs=/host
     volumes:
       - ${NODE_EXPORTER_HOST_ROOT_PATH:-/}:/host:ro,rslave
+    healthcheck:
+      test:
+        - CMD
+        - /bin/node_exporter
+        - --version
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
     networks:
       - agentic
 
@@ -157,6 +167,8 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_CADVISOR_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_CADVISOR_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    # Explicit root exception: host-level cgroup/fs metrics require root privileges.
+    user: "0:0"
     read_only: true
     cap_drop:
       - ALL
@@ -170,6 +182,15 @@ services:
       - ${CADVISOR_DOCKER_LIB_HOST_PATH:-/var/lib/docker}:/var/lib/docker:ro
       - ${CADVISOR_SYS_HOST_PATH:-/sys}:/sys:ro
       - ${CADVISOR_DEV_DISK_HOST_PATH:-/dev/disk}:/dev/disk:ro
+    healthcheck:
+      test:
+        - CMD
+        - /usr/bin/cadvisor
+        - --version
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
     networks:
       - agentic
 
@@ -179,11 +200,22 @@ services:
     cpus: ${AGENTIC_LIMIT_DCGM_EXPORTER_CPUS:-${AGENTIC_LIMIT_OBS_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_DCGM_EXPORTER_MEM:-${AGENTIC_LIMIT_OBS_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     gpus: all
+    # Explicit root exception: NVIDIA device and driver telemetry access.
+    user: "0:0"
     read_only: true
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - /usr/bin/dcgm-exporter
+        - --version
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
     networks:
       - agentic
 

@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_QDRANT_CPUS:-${AGENTIC_LIMIT_RAG_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_QDRANT_MEM:-${AGENTIC_LIMIT_RAG_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
-    user: "${QDRANT_CONTAINER_USER:-0:0}"
+    user: "${QDRANT_CONTAINER_USER:-${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}}"
     environment:
       QDRANT_INIT_FILE_PATH: /qdrant/storage/.qdrant-initialized
     read_only: true

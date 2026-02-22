@@ -7,6 +7,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/obs"
 AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
+AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
+AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
 
 log() {
   echo "INFO: $*"
@@ -93,6 +95,9 @@ main() {
   if [[ "${EUID}" -eq 0 ]]; then
     # Grafana official container runs as uid 472.
     chown -R 472:472 "${AGENTIC_ROOT}/monitoring/grafana"
+    chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
+      "${AGENTIC_ROOT}/monitoring/prometheus" \
+      "${AGENTIC_ROOT}/monitoring/loki"
   fi
 
   if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] && [[ "${EUID}" -ne 0 ]]; then

@@ -42,7 +42,7 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_OLLAMA_GATE_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_OLLAMA_GATE_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
-    user: "${GATE_CONTAINER_USER:-0:0}"
+    user: "${GATE_CONTAINER_USER:-${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}}"
     read_only: true
     tmpfs:
       - /tmp
@@ -154,7 +154,7 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_TRTLLM_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_TRTLLM_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
-    user: "${TRTLLM_CONTAINER_USER:-0:0}"
+    user: "${TRTLLM_CONTAINER_USER:-${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}}"
     read_only: true
     tmpfs:
       - /tmp
@@ -194,6 +194,7 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_TOOLBOX_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_TOOLBOX_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:
       - /tmp
@@ -207,6 +208,14 @@ services:
       - unbound
       - egress-proxy
       - ollama-gate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -r /etc/os-release
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
 
   unbound:
     image: klutchell/unbound:latest
@@ -217,6 +226,8 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_UNBOUND_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_UNBOUND_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    # Explicit root exception: DNS service binds privileged port 53 and drops privileges internally.
+    user: "0:0"
     read_only: true
     tmpfs:
       - /tmp
@@ -231,6 +242,15 @@ services:
       - no-new-privileges:true
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/dns/unbound.conf:/etc/unbound/unbound.conf:ro
+    healthcheck:
+      test:
+        - CMD
+        - unbound-checkconf
+        - /etc/unbound/unbound.conf
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
     networks:
       agentic:
         priority: 100
@@ -242,6 +262,8 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_EGRESS_PROXY_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_EGRESS_PROXY_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    # Explicit root exception: squid starts as root before dropping to uid/gid proxy.
+    user: "0:0"
     cap_drop:
       - ALL
     cap_add:

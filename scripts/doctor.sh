@@ -45,6 +45,42 @@ fi
 portainer_host_port="${PORTAINER_HOST_PORT:-9001}"
 openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 
+service_requires_proxy_env() {
+  local service="$1"
+  case "${service}" in
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|optional-openclaw|optional-openclaw-sandbox|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+service_allows_root_user() {
+  local service="$1"
+  case "${service}" in
+    ollama|unbound|egress-proxy|promtail|cadvisor|dcgm-exporter)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+service_allows_readwrite_rootfs() {
+  local service="$1"
+  case "${service}" in
+    ollama|egress-proxy|opensearch)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fix-net)
@@ -133,32 +169,59 @@ else
   warn "skip proxy enforcement check because AGENTIC_SKIP_DOCTOR_PROXY_CHECK=1"
 fi
 
-for service in ollama ollama-gate gate-mcp trtllm egress-proxy unbound toolbox openwebui openhands comfyui prometheus grafana loki qdrant rag-retriever rag-worker opensearch optional-sentinel optional-openclaw optional-openclaw-sandbox optional-mcp-catalog optional-pi-mono optional-goose optional-portainer; do
-  cid="$(service_container_id "${service}")"
-  [[ -n "${cid}" ]] || continue
+mapfile -t running_services < <(
+  docker ps \
+    --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
+    --format '{{.ID}}|{{.Label "com.docker.compose.service"}}' | sort -t'|' -k2,2
+)
+
+for row in "${running_services[@]}"; do
+  cid="${row%%|*}"
+  service="${row#*|}"
+  [[ -n "${cid}" && -n "${service}" ]] || continue
 
   state="$(docker inspect --format '{{.State.Status}}' "${cid}" 2>/dev/null || true)"
+  healthcheck_cfg="$(docker inspect --format '{{if .Config.Healthcheck}}present{{else}}missing{{end}}' "${cid}" 2>/dev/null || true)"
   health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${cid}" 2>/dev/null || true)"
+
   if [[ "${state}" != "running" ]]; then
     doctor_fail "service '${service}' is not running (state=${state})"
     continue
   fi
-  if [[ "${health}" != "none" && "${health}" != "healthy" ]]; then
-    doctor_fail "service '${service}' health is not healthy (health=${health})"
+  if [[ "${healthcheck_cfg}" != "present" ]]; then
+    doctor_fail_or_warn "service '${service}' is missing a healthcheck"
+    continue
+  fi
+  if [[ "${health}" != "healthy" ]]; then
+    doctor_fail_or_warn "service '${service}' health is not healthy (health=${health})"
     continue
   fi
   ok "service '${service}' is running and healthy"
-done
 
-for service in rag-retriever rag-worker; do
-  cid="$(service_container_id "${service}")"
-  [[ -n "${cid}" ]] || continue
-
-  if ! assert_container_security "${cid}"; then
-    doctor_fail "rag service security baseline failed for '${service}'"
-  fi
   if ! assert_no_docker_sock_mount "${cid}"; then
-    doctor_fail "docker.sock mount detected for rag service '${service}'"
+    doctor_fail_or_warn "docker.sock mount detected for service '${service}'"
+  fi
+
+  if service_allows_readwrite_rootfs "${service}"; then
+    if ! assert_container_runtime_restrictions "${cid}"; then
+      doctor_fail_or_warn "service '${service}' runtime restriction baseline failed"
+    fi
+  else
+    if ! assert_container_hardening "${cid}"; then
+      doctor_fail_or_warn "service '${service}' hardening baseline failed"
+    fi
+  fi
+
+  if ! service_allows_root_user "${service}"; then
+    if ! assert_container_non_root_user "${cid}"; then
+      doctor_fail_or_warn "service '${service}' must run as non-root"
+    fi
+  fi
+
+  if service_requires_proxy_env "${service}"; then
+    if ! assert_proxy_enforced "${cid}"; then
+      doctor_fail_or_warn "proxy env baseline failed for service '${service}'"
+    fi
   fi
 done
 
@@ -186,13 +249,6 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
   [[ -n "${cid}" ]] || continue
   agents_found=1
 
-  if ! assert_container_security "${cid}"; then
-    doctor_fail "agent container security baseline failed for '${service}'"
-  fi
-  if ! assert_proxy_enforced "${cid}"; then
-    doctor_fail "proxy env baseline failed for '${service}'"
-  fi
-
   env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
   if ! echo "${env_dump}" | grep -q '^GATE_MCP_URL=http://gate-mcp:8123$'; then
     doctor_fail "agent '${service}' missing GATE_MCP_URL=http://gate-mcp:8123"
@@ -211,21 +267,6 @@ if [[ "${agents_found}" -eq 0 ]]; then
   warn "no agent containers running; skipped agent confinement checks"
 fi
 
-for service in optional-openclaw optional-openclaw-sandbox optional-mcp-catalog optional-pi-mono optional-goose; do
-  cid="$(service_container_id "${service}")"
-  [[ -n "${cid}" ]] || continue
-
-  if ! assert_container_security "${cid}"; then
-    doctor_fail "optional module security baseline failed for '${service}'"
-  fi
-  if ! assert_proxy_enforced "${cid}"; then
-    doctor_fail "proxy env baseline failed for optional module '${service}'"
-  fi
-  if ! assert_no_docker_sock_mount "${cid}"; then
-    doctor_fail "docker.sock mount detected for optional module '${service}'"
-  fi
-done
-
 optional_openclaw_cid="$(service_container_id optional-openclaw)"
 if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
@@ -235,12 +276,6 @@ fi
 
 optional_portainer_cid="$(service_container_id optional-portainer)"
 if [[ -n "${optional_portainer_cid}" ]]; then
-  if ! assert_container_security "${optional_portainer_cid}"; then
-    doctor_fail "optional module security baseline failed for 'optional-portainer'"
-  fi
-  if ! assert_no_docker_sock_mount "${optional_portainer_cid}"; then
-    doctor_fail "docker.sock mount detected for optional module 'optional-portainer'"
-  fi
   if ! assert_no_public_bind "${portainer_host_port}"; then
     doctor_fail "optional portainer host bind must stay loopback-only on port ${portainer_host_port}"
   fi

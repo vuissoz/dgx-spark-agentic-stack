@@ -50,22 +50,31 @@ assert_container_security() {
   local status=0
   assert_cmd docker
 
+  assert_container_hardening "${container}" || status=1
+  assert_container_non_root_user "${container}" || status=1
+
+  [[ "${status}" -eq 0 ]] || return 1
+  ok "container security baseline is satisfied for ${container}"
+}
+
+inspect_container_security_fields() {
+  local container="$1"
+  docker inspect --format '{{.Config.User}}|{{.HostConfig.ReadonlyRootfs}}|{{join .HostConfig.CapDrop ","}}|{{json .HostConfig.SecurityOpt}}' "$container" 2>/dev/null
+}
+
+assert_container_runtime_restrictions() {
+  local container="$1"
+  local status=0
+  assert_cmd docker
+
   local inspect_out
-  inspect_out="$(docker inspect --format '{{.Config.User}}|{{.HostConfig.ReadonlyRootfs}}|{{join .HostConfig.CapDrop ","}}|{{json .HostConfig.SecurityOpt}}' "$container" 2>/dev/null)" \
+  inspect_out="$(inspect_container_security_fields "$container")" \
     || fail "cannot inspect container ${container}"
   [[ -n "${inspect_out}" ]] || return 1
 
-  local user readonly cap_drop security_opt
-  IFS='|' read -r user readonly cap_drop security_opt <<<"$inspect_out"
+  local _user _readonly cap_drop security_opt
+  IFS='|' read -r _user _readonly cap_drop security_opt <<<"$inspect_out"
 
-  [[ -n "$user" && "$user" != "0" && "$user" != "root" ]] || {
-    fail "${container}: container user is root or empty"
-    status=1
-  }
-  [[ "$readonly" == "true" ]] || {
-    fail "${container}: readonly rootfs is not enabled"
-    status=1
-  }
   [[ ",$cap_drop," == *",ALL,"* ]] || {
     fail "${container}: cap_drop does not include ALL"
     status=1
@@ -76,8 +85,62 @@ assert_container_security() {
   }
 
   [[ "${status}" -eq 0 ]] || return 1
+  ok "container runtime restrictions are satisfied for ${container}"
+}
 
-  ok "container security baseline is satisfied for ${container}"
+assert_container_hardening() {
+  local container="$1"
+  local status=0
+  assert_cmd docker
+
+  local inspect_out
+  inspect_out="$(inspect_container_security_fields "$container")" \
+    || fail "cannot inspect container ${container}"
+  [[ -n "${inspect_out}" ]] || return 1
+
+  local _user readonly _cap_drop _security_opt
+  IFS='|' read -r _user readonly _cap_drop _security_opt <<<"$inspect_out"
+
+  [[ "$readonly" == "true" ]] || {
+    fail "${container}: readonly rootfs is not enabled"
+    status=1
+  }
+  assert_container_runtime_restrictions "${container}" || status=1
+
+  [[ "${status}" -eq 0 ]] || return 1
+  ok "container hardening baseline is satisfied for ${container}"
+}
+
+assert_container_non_root_user() {
+  local container="$1"
+  assert_cmd docker
+
+  local inspect_out
+  inspect_out="$(inspect_container_security_fields "$container")" \
+    || fail "cannot inspect container ${container}"
+  [[ -n "${inspect_out}" ]] || return 1
+
+  local user _readonly _cap_drop _security_opt
+  IFS='|' read -r user _readonly _cap_drop _security_opt <<<"$inspect_out"
+
+  [[ -n "$user" && "$user" != "0" && "$user" != "root" ]] || {
+    fail "${container}: container user is root or empty"
+    return 1
+  }
+
+  ok "container user is non-root for ${container}"
+}
+
+assert_container_security_with_root_exception() {
+  local container="$1"
+  local status=0
+  assert_cmd docker
+
+  assert_container_hardening "${container}" || status=1
+
+  [[ "${status}" -eq 0 ]] || return 1
+
+  ok "container security baseline (root exception allowed) is satisfied for ${container}"
 }
 
 assert_proxy_enforced() {

@@ -93,12 +93,23 @@ set_gate_runtime_permissions() {
   local gate_mcp_state_dir="${AGENTIC_ROOT}/gate/mcp/state"
   local gate_mcp_logs_dir="${AGENTIC_ROOT}/gate/mcp/logs"
   local gate_mcp_token="${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token"
+  local openai_key="${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
+  local openrouter_key="${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key"
+  local trtllm_models_dir="${AGENTIC_ROOT}/trtllm/models"
+  local trtllm_state_dir="${AGENTIC_ROOT}/trtllm/state"
+  local trtllm_logs_dir="${AGENTIC_ROOT}/trtllm/logs"
 
   if [[ "${EUID}" -eq 0 ]]; then
     chmod 0750 "${gate_dir}"
     chmod 0750 "${gate_mcp_dir}"
     chmod 0770 "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}"
-    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" "${gate_mcp_token}" || true
+    chmod 0770 "${trtllm_models_dir}" "${trtllm_state_dir}" "${trtllm_logs_dir}"
+    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
+      "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" \
+      "${trtllm_models_dir}" "${trtllm_state_dir}" "${trtllm_logs_dir}" || true
+    [[ -f "${gate_mcp_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${gate_mcp_token}" || true
+    [[ -f "${openai_key}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openai_key}" || true
+    [[ -f "${openrouter_key}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openrouter_key}" || true
     return 0
   fi
 

@@ -293,6 +293,15 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/portainer/data:/data
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/portainer/logs:/logs
+    healthcheck:
+      test:
+        - CMD
+        - /portainer
+        - --version
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
     networks:
       - agentic
       - agentic-egress
