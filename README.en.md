@@ -90,6 +90,8 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 Agent services (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`) share a common runtime-configurable base image.
 
+By default, `deployments/images/agent-cli-base/Dockerfile` builds a CUDA-based (NVIDIA) development image with a multi-language toolchain (C/C++, Python, Node, Go, Rust).
+
 Supported variables:
 - `AGENTIC_AGENT_BASE_IMAGE` (default: `agentic/agent-cli-base:local`)
 - `AGENTIC_AGENT_BASE_BUILD_CONTEXT` (default: repository root)
@@ -99,6 +101,8 @@ Minimal custom Dockerfile contract:
 - non-root default user,
 - explicit `ENTRYPOINT` compatible with persistent tmux sessions,
 - baseline tools available: `bash`, `tmux`, `git`, `curl`.
+
+The default Dockerfile also accepts an `AGENT_BASE_IMAGE` build arg to change the CUDA base (tag/digest) while keeping the rest of the toolchain setup.
 
 Example:
 

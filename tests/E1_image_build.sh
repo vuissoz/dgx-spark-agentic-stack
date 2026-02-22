@@ -29,4 +29,34 @@ timeout 20 docker run --rm --entrypoint bash "${image_ref}" -lc 'command -v tmux
   || fail "agent-cli-base image is missing one of: tmux, git, curl"
 ok "agent-cli-base image includes tmux/git/curl"
 
+timeout 60 docker run --rm --entrypoint bash "${image_ref}" -lc '
+  command -v gcc g++ cmake ninja clang python3 pip3 node npm go rustc cargo nvcc >/dev/null
+  nvcc --version >/dev/null
+' || fail "agent-cli-base image is missing one of: gcc g++ cmake ninja clang python3 pip3 node npm go rustc cargo nvcc"
+ok "agent-cli-base image includes C/C++ + CUDA + multi-language toolchain"
+
+timeout 60 docker run --rm --entrypoint bash "${image_ref}" -lc '
+  cat > /tmp/e1-smoke.c <<'"'"'EOF'"'"'
+#include <stdio.h>
+int main(void) { puts("ok-c"); return 0; }
+EOF
+  gcc /tmp/e1-smoke.c -o /tmp/e1-smoke-c
+  /tmp/e1-smoke-c | grep -q "ok-c"
+
+  cat > /tmp/e1-smoke.cpp <<'"'"'EOF'"'"'
+#include <iostream>
+int main() { std::cout << "ok-cpp" << std::endl; return 0; }
+EOF
+  g++ /tmp/e1-smoke.cpp -o /tmp/e1-smoke-cpp
+  /tmp/e1-smoke-cpp | grep -q "ok-cpp"
+
+  cat > /tmp/e1-smoke.cu <<'"'"'EOF'"'"'
+#include <cuda_runtime.h>
+__global__ void noop() {}
+int main() { noop<<<1,1>>>(); return 0; }
+EOF
+  nvcc /tmp/e1-smoke.cu -o /tmp/e1-smoke-cuda
+' || fail "agent-cli-base smoke builds failed for C/C++/CUDA toolchains"
+ok "agent-cli-base smoke builds succeeded for C/C++/CUDA"
+
 ok "E1_image_build passed"
