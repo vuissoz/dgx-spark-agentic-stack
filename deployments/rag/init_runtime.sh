@@ -71,6 +71,23 @@ copy_if_missing() {
   log "created runtime file: ${dst}"
 }
 
+sync_managed_file() {
+  local src="$1"
+  local dst="$2"
+  local mode="$3"
+
+  [[ -f "${src}" ]] || die "template not found: ${src}"
+
+  if [[ -f "${dst}" ]] && cmp -s "${src}" "${dst}"; then
+    chmod "${mode}" "${dst}" || true
+    log "runtime file up-to-date: ${dst}"
+    return 0
+  fi
+
+  install -D -m "${mode}" "${src}" "${dst}"
+  log "updated managed runtime file: ${dst}"
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/rag"
   install -d -m 0750 "${AGENTIC_ROOT}/rag/config"
@@ -94,8 +111,8 @@ main() {
     done < <(find "${EXAMPLE_CORPUS_DIR}" -maxdepth 1 -type f -name '*.txt' | sort)
   fi
 
-  copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/ingest.sh" "${AGENTIC_ROOT}/rag/scripts/ingest.sh" 0750
-  copy_if_missing "${DEPLOYMENT_SCRIPT_DIR}/query_smoke.sh" "${AGENTIC_ROOT}/rag/scripts/query_smoke.sh" 0750
+  sync_managed_file "${DEPLOYMENT_SCRIPT_DIR}/ingest.sh" "${AGENTIC_ROOT}/rag/scripts/ingest.sh" 0750
+  sync_managed_file "${DEPLOYMENT_SCRIPT_DIR}/query_smoke.sh" "${AGENTIC_ROOT}/rag/scripts/query_smoke.sh" 0750
   copy_if_missing "${RAG_SCHEMA_TEMPLATE}" "${AGENTIC_ROOT}/rag/config/document.schema.json" 0640
 
   if [[ "${EUID}" -eq 0 ]]; then
