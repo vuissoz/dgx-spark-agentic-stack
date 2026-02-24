@@ -1896,6 +1896,7 @@ run_tests() {
   local selector="$1"
   local previous_test_mode
   local restore_test_mode=0
+  local gate_cid=""
   local -a tests=()
 
   if [[ "$selector" == "all" ]]; then
@@ -1914,8 +1915,9 @@ run_tests() {
 
   [[ "${#tests[@]}" -gt 0 ]] || die "No test scripts found for selector '$selector'."
 
+  gate_cid="$(service_container_id "ollama-gate" || true)"
   previous_test_mode="$(normalize_gate_test_mode_value "${GATE_ENABLE_TEST_MODE:-0}")"
-  if [[ "${previous_test_mode}" != "1" ]]; then
+  if [[ -n "${gate_cid}" && "${previous_test_mode}" != "1" ]]; then
     printf 'INFO: enabling llm test-mode=on for agent test run\n'
     set_gate_test_mode_value "1" "1"
     restore_test_mode=1
