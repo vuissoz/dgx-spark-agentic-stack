@@ -1550,7 +1550,7 @@ cmd_cleanup() {
   local force="${AGENTIC_CLEANUP_FORCE:-0}"
   local backup_mode="ask"
   local backup_enabled=0
-  local answer confirmation
+  local answer confirmation confirmation_remove
   local export_dir="${AGENTIC_CLEANUP_EXPORT_DIR:-${AGENTIC_REPO_ROOT}/.runtime/cleanup-exports}"
   local backup_path=""
   local ts target
@@ -1617,6 +1617,10 @@ USAGE
     printf 'Cleanup will remove all runtime files under %s . Type CLEAN to continue: ' "${AGENTIC_ROOT}"
     IFS= read -r confirmation || die "cleanup aborted: confirmation not provided"
     [[ "${confirmation}" == "CLEAN" ]] || die "cleanup aborted: confirmation token mismatch"
+
+    printf "Type remove-every-thing to confirm permanent cleanup of %s: " "${AGENTIC_ROOT}"
+    IFS= read -r confirmation_remove || die "cleanup aborted: second confirmation not provided"
+    [[ "${confirmation_remove}" == "remove-every-thing" ]] || die "cleanup aborted: second confirmation token mismatch"
   fi
 
   read -r -a selected_targets <<<"$(stack_all_targets)"

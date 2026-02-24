@@ -76,7 +76,7 @@ mkdir -p "$(dirname "${outside_marker}")"
 printf 'keep-me\n' >"${outside_marker}"
 ln -s "${outside_root}" "${symlink_path}"
 
-printf 'y\nCLEAN\n' | "${agent_bin}" rootless-dev cleanup >/tmp/agent-l3-cleanup.out \
+printf 'y\nCLEAN\nremove-every-thing\n' | "${agent_bin}" rootless-dev cleanup >/tmp/agent-l3-cleanup.out \
   || fail "agent rootless-dev cleanup interactive flow failed"
 
 grep -q 'cleanup completed root=' /tmp/agent-l3-cleanup.out \
