@@ -250,11 +250,19 @@ assert_network_internal() {
 
 assert_docker_user_policy() {
   assert_cmd iptables
+  assert_cmd docker
   local status=0
 
   local chain="${AGENTIC_DOCKER_USER_CHAIN:-AGENTIC-DOCKER-USER}"
+  local source_networks_raw="${AGENTIC_DOCKER_USER_SOURCE_NETWORKS:-${AGENTIC_NETWORK:-agentic},${AGENTIC_EGRESS_NETWORK:-agentic-egress}}"
   local docker_user_rules
   local chain_rules
+  local raw_network
+  local network_name
+  local subnet
+  local src_subnet
+  local -a source_subnets=()
+  declare -A seen_source_networks=()
 
   docker_user_rules="$(iptables -S DOCKER-USER 2>/dev/null)" || {
     fail "iptables chain DOCKER-USER is missing"
@@ -286,7 +294,36 @@ assert_docker_user_policy() {
     status=1
   }
 
+  for raw_network in ${source_networks_raw//,/ }; do
+    network_name="${raw_network// /}"
+    [[ -n "${network_name}" ]] || continue
+    if [[ -n "${seen_source_networks[${network_name}]:-}" ]]; then
+      continue
+    fi
+    seen_source_networks["${network_name}"]=1
+
+    subnet="$(docker network inspect "${network_name}" --format '{{(index .IPAM.Config 0).Subnet}}' 2>/dev/null || true)"
+    if [[ -z "${subnet}" ]]; then
+      fail "${chain}: unable to resolve subnet for source network '${network_name}'"
+      status=1
+      continue
+    fi
+    source_subnets+=("${subnet}")
+  done
+
+  if [[ "${#source_subnets[@]}" -eq 0 ]]; then
+    fail "${chain}: no source subnets resolved from AGENTIC_DOCKER_USER_SOURCE_NETWORKS='${source_networks_raw}'"
+    status=1
+  fi
+
+  for src_subnet in "${source_subnets[@]}"; do
+    echo "$chain_rules" | grep -Fq -- "-s ${src_subnet} -j DROP" || {
+      fail "${chain}: DROP rule missing for source subnet ${src_subnet}"
+      status=1
+    }
+  done
+
   [[ "${status}" -eq 0 ]] || return 1
 
-  ok "DOCKER-USER enforcement chain '${chain}' is present"
+  ok "DOCKER-USER enforcement chain '${chain}' is present for source subnets ${source_subnets[*]}"
 }
