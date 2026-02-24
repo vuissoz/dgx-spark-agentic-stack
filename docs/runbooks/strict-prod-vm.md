@@ -163,3 +163,12 @@ Useful flags:
 ```bash
 ./agent vm cleanup --name agentic-strict-prod --dry-run
 ```
+
+After `agent vm cleanup`, you can inspect deleted VM entries and reclaim disk:
+
+```bash
+multipass list --all
+multipass purge
+```
+
+Note: `multipass purge` removes all VMs currently in `Deleted` state.
