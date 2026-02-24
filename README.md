@@ -119,7 +119,7 @@ Les valeurs effectives sont visibles via `./agent profile` et persistées dans `
 
 - Linux + Docker Engine
 - Docker Compose v2 (`docker compose`)
-- Multipass (`multipass`) pour les commandes VM (`agent vm create`, `agent vm test`)
+- Multipass (`multipass`) pour les commandes VM (`agent vm create`, `agent vm test`, `agent vm cleanup`)
 - NVIDIA Container Toolkit (pour services GPU)
 - `iptables` disponible (en `strict-prod` pour `DOCKER-USER`)
 - `acl` / `setfacl` recommandé en `rootless-dev` (ACL des logs Squid)
@@ -255,6 +255,7 @@ agent rollback ollama-link <backup_id|latest>
 agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
 agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]
+agent vm cleanup [--name ... --yes --dry-run]
 agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all>
 agent doctor [--fix-net]
 ```
@@ -372,6 +373,7 @@ Préconditions (runtime):
 - Campagnes de tests: `./agent test <A..L|V|all>`
 - Campagne VM `strict-prod` (preuves + update/rollback + tests): `./agent vm test --name agentic-strict-prod`
 - Vérifier l'état de la VM: `multipass list` puis `multipass info <vm-name>` (`State: Running` attendu)
+- Nettoyer la VM dédiée après campagne: `./agent vm cleanup --name agentic-strict-prod`
 
 ## Documentation détaillée
 

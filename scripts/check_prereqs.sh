@@ -96,7 +96,7 @@ else
   fail "command 'nvidia-smi' is missing (install NVIDIA driver/toolkit)"
 fi
 
-check_cmd "multipass" "0" "install Multipass if you use 'agent vm create' or 'agent vm test'"
+check_cmd "multipass" "0" "install Multipass if you use 'agent vm create', 'agent vm test', or 'agent vm cleanup'"
 
 if [[ "${AGENTIC_PROFILE}" == "strict-prod" ]]; then
   check_cmd "iptables" "1" "install iptables/nftables compat package for DOCKER-USER rules"

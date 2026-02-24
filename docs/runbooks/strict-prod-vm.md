@@ -10,7 +10,7 @@ This runbook creates a dedicated VM for prod-like validation (`PLAN.md`, V1).
 
 What is Multipass:
 - Multipass is a lightweight VM manager (by Canonical) that lets you create and run Ubuntu VMs from the CLI.
-- In this repo, `agent vm create` and `agent vm test` use Multipass as the VM provider.
+- In this repo, `agent vm create`, `agent vm test`, and `agent vm cleanup` use Multipass as the VM provider.
 
 ## 2. Create the VM
 
@@ -140,4 +140,26 @@ sudo ./deployments/bootstrap/init_fs.sh
 sudo ./agent up core
 sudo ./agent up agents,ui,obs,rag
 sudo ./agent doctor
+```
+
+## 7. Cleanup the dedicated VM
+
+When the validation campaign is done, stop and delete only the target VM:
+
+```bash
+./agent vm cleanup --name agentic-strict-prod
+```
+
+Useful flags:
+
+- Non-interactive mode:
+
+```bash
+./agent vm cleanup --name agentic-strict-prod --yes
+```
+
+- Preview only:
+
+```bash
+./agent vm cleanup --name agentic-strict-prod --dry-run
 ```

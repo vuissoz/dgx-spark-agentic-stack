@@ -77,6 +77,12 @@ If this VM has no GPU passthrough but you still want a documented degraded run:
 ./agent vm test --name agentic-strict-prod --allow-no-gpu
 ```
 
+When you are done with this dedicated VM:
+
+```bash
+./agent vm cleanup --name agentic-strict-prod
+```
+
 Detailed guide:
 - `docs/runbooks/strict-prod-vm.md`
 

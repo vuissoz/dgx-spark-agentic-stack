@@ -18,6 +18,7 @@ AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
+AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_TOOLS=(claude codex opencode vibestral)
 OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
@@ -56,6 +57,7 @@ Usage:
   agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]
+  agent vm cleanup [--name ... --yes --dry-run]
   agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all>
   agent doctor [--fix-net]
 
@@ -1588,8 +1590,12 @@ cmd_vm() {
       [[ -x "${AGENT_VM_TEST_SCRIPT}" ]] || die "VM test script missing or not executable: ${AGENT_VM_TEST_SCRIPT}"
       "${AGENT_VM_TEST_SCRIPT}" "$@"
       ;;
+    cleanup)
+      [[ -x "${AGENT_VM_CLEANUP_SCRIPT}" ]] || die "VM cleanup script missing or not executable: ${AGENT_VM_CLEANUP_SCRIPT}"
+      "${AGENT_VM_CLEANUP_SCRIPT}" "$@"
+      ;;
     *)
-      die "Usage: agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run] | agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]"
+      die "Usage: agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run] | agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run] | agent vm cleanup [--name ... --yes --dry-run]"
       ;;
   esac
 }

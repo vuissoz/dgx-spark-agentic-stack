@@ -119,7 +119,7 @@ Effective values are shown by `./agent profile` and persisted into `${AGENTIC_RO
 
 - Linux + Docker Engine
 - Docker Compose v2 (`docker compose`)
-- Multipass (`multipass`) for VM commands (`agent vm create`, `agent vm test`)
+- Multipass (`multipass`) for VM commands (`agent vm create`, `agent vm test`, `agent vm cleanup`)
 - NVIDIA Container Toolkit (for GPU services)
 - `iptables` available (in `strict-prod` for `DOCKER-USER`)
 - `acl` / `setfacl` recommended in `rootless-dev` (Squid log ACLs)
@@ -255,6 +255,7 @@ agent rollback ollama-link <backup_id|latest>
 agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
 agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]
+agent vm cleanup [--name ... --yes --dry-run]
 agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all>
 agent doctor [--fix-net]
 ```
@@ -372,6 +373,7 @@ Runtime prerequisites:
 - Test campaigns: `./agent test <A..L|V|all>`
 - VM `strict-prod` campaign (evidence + update/rollback + tests): `./agent vm test --name agentic-strict-prod`
 - Check VM state: `multipass list` then `multipass info <vm-name>` (`State: Running` expected)
+- Cleanup dedicated VM after campaign: `./agent vm cleanup --name agentic-strict-prod`
 
 ## Detailed Documentation
 
