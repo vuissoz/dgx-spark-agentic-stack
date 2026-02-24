@@ -156,6 +156,14 @@ sudo ./agent up agents,ui,obs,rag
 sudo ./agent doctor
 ```
 
+Nettoyage du runtime `strict-prod` (retour état "fresh"):
+
+```bash
+sudo ./agent strict-prod cleanup
+# ou sans interaction:
+sudo ./agent strict-prod cleanup --yes --no-backup
+```
+
 ### `rootless-dev`
 
 ```bash
