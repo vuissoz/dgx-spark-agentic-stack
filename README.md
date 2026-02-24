@@ -228,6 +228,17 @@ Notes:
 - `opensearch` (`rag-lexical`) reste interne uniquement (pas de port host publié).
 - `optional-openclaw` publie uniquement un ingress webhook local (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), jamais en `0.0.0.0`.
 
+Exemple Windows PowerShell (API Loki):
+
+```powershell
+$url = "http://127.0.0.1:13100/loki/api/v1/query_range?query=%7Bjob%3D%22egress-proxy%22%7D&limit=20"
+(Invoke-RestMethod -Uri $url -Method Get).data.result
+```
+
+Notes Loki:
+- `http://127.0.0.1:13100/` peut renvoyer `404 page not found` (normal).
+- Utiliser Grafana (`http://127.0.0.1:13000`) pour l'UI, et Loki (`13100`) pour l'API.
+
 Comportement OpenClaw (upstream) si vous déployez la gateway officielle:
 - gateway: `18789` (control plane + HTTP APIs + Control UI + WebSocket RPC sur un seul port),
 - browser control service: `18791` (`gateway.port + 2`),
