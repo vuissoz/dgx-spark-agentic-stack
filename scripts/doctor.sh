@@ -81,6 +81,22 @@ service_allows_readwrite_rootfs() {
   esac
 }
 
+mount_destination_present() {
+  local cid="$1"
+  local destination="$2"
+  local mounts
+  mounts="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%v\n" .Destination .RW}}{{end}}' "${cid}" 2>/dev/null || true)"
+  awk -F'|' -v d="${destination}" '$1 == d { found=1 } END { exit(found ? 0 : 1) }' <<<"${mounts}"
+}
+
+mount_destination_read_only() {
+  local cid="$1"
+  local destination="$2"
+  local mounts
+  mounts="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%v\n" .Destination .RW}}{{end}}' "${cid}" 2>/dev/null || true)"
+  awk -F'|' -v d="${destination}" '$1 == d && $2 == "false" { found=1 } END { exit(found ? 0 : 1) }' <<<"${mounts}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fix-net)
@@ -223,6 +239,29 @@ for row in "${running_services[@]}"; do
       doctor_fail_or_warn "proxy env baseline failed for service '${service}'"
     fi
   fi
+
+  if [[ "${service}" == "gate-mcp" ]]; then
+    published="$(docker port "${cid}" 8123/tcp 2>/dev/null || true)"
+    [[ -z "${published}" ]] || doctor_fail "gate-mcp must not publish host port 8123 (got: ${published})"
+
+    env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    if ! echo "${env_dump}" | grep -q '^GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token$'; then
+      doctor_fail "gate-mcp missing GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token"
+    fi
+    if ! echo "${env_dump}" | grep -q '^GATE_MCP_AUDIT_LOG=/logs/audit.jsonl$'; then
+      doctor_fail "gate-mcp missing GATE_MCP_AUDIT_LOG=/logs/audit.jsonl"
+    fi
+
+    if ! mount_destination_present "${cid}" "/run/secrets/gate_mcp.token"; then
+      doctor_fail "gate-mcp must mount /run/secrets/gate_mcp.token"
+    elif ! mount_destination_read_only "${cid}" "/run/secrets/gate_mcp.token"; then
+      doctor_fail "gate-mcp must mount /run/secrets/gate_mcp.token read-only"
+    fi
+
+    if ! mount_destination_present "${cid}" "/logs"; then
+      doctor_fail "gate-mcp must mount /logs for audit persistence"
+    fi
+  fi
 done
 
 rag_retriever_cid="$(service_container_id rag-retriever)"
@@ -257,14 +296,29 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
     doctor_fail "agent '${service}' missing GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token"
   fi
 
-  mount_dests="$(docker inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "${cid}" 2>/dev/null || true)"
-  if ! echo "${mount_dests}" | grep -q '^/run/secrets/gate_mcp.token$'; then
+  if ! mount_destination_present "${cid}" "/run/secrets/gate_mcp.token"; then
+    doctor_fail "agent '${service}' must mount /run/secrets/gate_mcp.token read-only"
+  elif ! mount_destination_read_only "${cid}" "/run/secrets/gate_mcp.token"; then
     doctor_fail "agent '${service}' must mount /run/secrets/gate_mcp.token read-only"
   fi
 done
 
 if [[ "${agents_found}" -eq 0 ]]; then
   warn "no agent containers running; skipped agent confinement checks"
+fi
+
+gate_mcp_token_file="${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token"
+if [[ ! -s "${gate_mcp_token_file}" ]]; then
+  doctor_fail "gate MCP token is missing or empty: ${gate_mcp_token_file}"
+else
+  token_mode="$(stat -c '%a' "${gate_mcp_token_file}" 2>/dev/null || true)"
+  if [[ "${token_mode}" != "600" && "${token_mode}" != "640" ]]; then
+    doctor_fail "gate MCP token permissions must be 600/640: ${gate_mcp_token_file} (mode=${token_mode:-unknown})"
+  fi
+fi
+
+if [[ ! -d "${AGENTIC_ROOT}/gate/mcp/logs" ]]; then
+  doctor_fail "gate MCP audit log directory is missing: ${AGENTIC_ROOT}/gate/mcp/logs"
 fi
 
 optional_openclaw_cid="$(service_container_id optional-openclaw)"

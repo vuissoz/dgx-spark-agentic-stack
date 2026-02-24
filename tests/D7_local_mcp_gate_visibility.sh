@@ -21,6 +21,7 @@ model_routes_file="${agentic_root}/gate/config/model_routes.yml"
 mode_file="${agentic_root}/gate/state/llm_mode.json"
 quota_file="${agentic_root}/gate/state/quotas_state.json"
 gate_log="${agentic_root}/gate/logs/gate.jsonl"
+mcp_audit_log="${agentic_root}/gate/mcp/logs/audit.jsonl"
 openai_key_file="${agentic_root}/secrets/runtime/openai.api_key"
 
 [[ -f "${model_routes_file}" ]] || fail "model routes file missing: ${model_routes_file}"
@@ -188,6 +189,11 @@ call_mcp_from_agent() {
     'token=$(cat "${GATE_MCP_AUTH_TOKEN_FILE:-/run/secrets/gate_mcp.token}"); curl -sS -H "Content-Type: application/json" -H "Authorization: Bearer ${token}" -d "${MCP_PAYLOAD}" "${GATE_MCP_URL:-http://gate-mcp:8123}/v1/tools/execute" -w "\n%{http_code}"'
 }
 
+call_mcp_tools_list_from_agent() {
+  timeout 20 docker exec "${agent_cid}" sh -lc \
+    'token=$(cat "${GATE_MCP_AUTH_TOKEN_FILE:-/run/secrets/gate_mcp.token}"); curl -sS -H "Authorization: Bearer ${token}" "${GATE_MCP_URL:-http://gate-mcp:8123}/v1/tools/list" -w "\n%{http_code}"'
+}
+
 extract_code() {
   printf '%s\n' "$1" | tail -n 1 | tr -d '\r'
 }
@@ -249,6 +255,18 @@ current_provider="$(json_read "${body_current}" "provider")"
 [[ -n "${current_backend}" && -n "${current_provider}" ]] \
   || fail "MCP current_model must include backend and provider"
 ok "MCP gate.current_model returns served model/backend/provider from agent container"
+
+resp_tools_list="$(call_mcp_tools_list_from_agent)"
+code_tools_list="$(extract_code "${resp_tools_list}")"
+body_tools_list="$(extract_body "${resp_tools_list}")"
+[[ "${code_tools_list}" == "200" ]] || fail "MCP tools list endpoint must return 200"
+echo "${body_tools_list}" | grep -q '"name":"gate.current_model"' \
+  || fail "MCP tools list must include gate.current_model"
+echo "${body_tools_list}" | grep -q '"name":"gate.quota_remaining"' \
+  || fail "MCP tools list must include gate.quota_remaining"
+echo "${body_tools_list}" | grep -q '"name":"gate.switch_model"' \
+  || fail "MCP tools list must include gate.switch_model"
+ok "MCP tools list advertises all D7 gate tools"
 
 payload_quota='{"tool":"gate.quota_remaining","args":{"project":"d7"}}'
 resp_quota="$(call_mcp_from_agent "${payload_quota}")"
@@ -322,5 +340,40 @@ unauth_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/d7-mcp-un
 [[ "${unauth_status}" == "401" ]] || fail "gate-mcp must reject unauthorized access"
 assert_no_public_bind 8123 || fail "gate-mcp must not be exposed on a host non-loopback listener"
 ok "gate-mcp denies unauthorized calls and remains internal-only"
+
+[[ -s "${mcp_audit_log}" ]] || fail "MCP audit log must exist and be non-empty: ${mcp_audit_log}"
+audit_check="$(python3 - "${mcp_audit_log}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+has_allow = False
+has_unauthorized = False
+
+with open(path, "r", encoding="utf-8") as handle:
+    for line in handle:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            row.get("module") == "gate-mcp"
+            and row.get("action") == "execute_tool"
+            and row.get("tool") == "gate.current_model"
+            and row.get("decision") == "allow"
+        ):
+            has_allow = True
+        if row.get("module") == "gate-mcp" and row.get("reason") == "unauthorized":
+            has_unauthorized = True
+
+print("ok" if (has_allow and has_unauthorized) else "missing")
+PY
+)"
+[[ "${audit_check}" == "ok" ]] \
+  || fail "MCP audit log must contain both allow traces and unauthorized deny traces"
+ok "MCP audit log captures allowed and unauthorized requests"
 
 ok "D7_local_mcp_gate_visibility passed"
