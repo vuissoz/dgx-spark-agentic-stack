@@ -6,11 +6,36 @@ session="${AGENT_SESSION:-${tool}}"
 workspace="${AGENT_WORKSPACE:-/workspace}"
 state_dir="${AGENT_STATE_DIR:-/state}"
 logs_dir="${AGENT_LOGS_DIR:-/logs}"
+agent_defaults_file="${AGENT_DEFAULTS_FILE:-${state_dir}/bootstrap/ollama-gate-defaults.env}"
 
 mkdir -p "${workspace}" "${state_dir}" "${logs_dir}"
 
 log() {
   printf '%s\n' "$*"
+}
+
+bootstrap_ollama_gate_defaults() {
+  local defaults_dir
+  defaults_dir="$(dirname "${agent_defaults_file}")"
+  mkdir -p "${defaults_dir}"
+
+  if [[ ! -f "${agent_defaults_file}" ]]; then
+    cat >"${agent_defaults_file}" <<'EOF'
+# Generated on first run by agent-entrypoint to keep agent defaults persistent.
+export AGENTIC_OLLAMA_GATE_BASE_URL="${AGENTIC_OLLAMA_GATE_BASE_URL:-http://ollama-gate:11435}"
+export AGENTIC_OLLAMA_GATE_V1_URL="${AGENTIC_OLLAMA_GATE_V1_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL%/}/v1}"
+export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL}}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}"
+export OPENAI_API_BASE_URL="${OPENAI_API_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}"
+export OPENAI_API_BASE="${OPENAI_API_BASE:-${AGENTIC_OLLAMA_GATE_V1_URL}}"
+EOF
+    chmod 0600 "${agent_defaults_file}" || true
+    log "INFO: created first-run defaults file (${agent_defaults_file})"
+  fi
+
+  # Keep runtime environment aligned with persisted defaults for tmux sessions.
+  # shellcheck disable=SC1090
+  source "${agent_defaults_file}" || true
 }
 
 maybe_setup_vibestral() {
@@ -58,10 +83,12 @@ report_primary_cli() {
 }
 
 start_session() {
-  tmux new-session -d -s "${session}" -c "${workspace}" "bash -lc 'exec bash -l'"
+  tmux new-session -d -s "${session}" -c "${workspace}" \
+    "bash -lc 'if [ -f \"${agent_defaults_file}\" ]; then source \"${agent_defaults_file}\"; fi; exec bash -l'"
 }
 
 report_primary_cli
+bootstrap_ollama_gate_defaults
 maybe_setup_vibestral
 
 if ! tmux has-session -t "${session}" 2>/dev/null; then

@@ -447,6 +447,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `OLLAMA_BASE_URL=http://ollama-gate:<port>`
   - `HTTP(S)_PROXY=http://egress-proxy:3128`
   - `NO_PROXY=ollama-gate,unbound,egress-proxy,localhost,127.0.0.1`
+- bootstrap first-run des agents : matérialiser un fichier persistant de defaults LLM dans `/srv/agentic/<tool>/state/bootstrap/ollama-gate-defaults.env` (ou `${AGENTIC_ROOT}` équivalent) pour forcer par défaut les endpoints `OLLAMA_BASE_URL` + `OPENAI_*_BASE_URL` vers `ollama-gate`, sans écraser un override explicite.
 - sécurité conteneur :
   - `read_only: true`, `tmpfs: /tmp`
   - `cap_drop: [ALL]`
@@ -460,6 +461,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 **Test** : `tests/E2_agents_confinement.sh`
 - `docker exec agentic-claude tmux has-session -t claude` OK (idem codex/opencode/vibestral)
 - `docker exec agentic-claude sh -lc 'command -v claude'` OK (idem codex/opencode/vibe)
+- `docker exec agentic-claude sh -lc 'test -f /state/bootstrap/ollama-gate-defaults.env'` OK (idem codex/opencode/vibestral) + variables résolues vers `http://ollama-gate:11435(/v1)`
 - `docker inspect` prouve : non-root, readonly rootfs, cap_drop ALL, NNP
 - egress : direct KO, via proxy conforme
 - écritures : OK dans workspace/state/logs, KO ailleurs

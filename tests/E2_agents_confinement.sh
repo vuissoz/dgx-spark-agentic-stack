@@ -41,6 +41,24 @@ assert_primary_cli() {
   ok "${container_id}: primary CLI '${cli}' is available"
 }
 
+assert_ollama_gate_defaults() {
+  local container_id="$1"
+  local defaults_file="/state/bootstrap/ollama-gate-defaults.env"
+
+  timeout 20 docker exec "${container_id}" sh -lc "test -f '${defaults_file}'" \
+    || fail "${container_id}: missing first-run defaults file ${defaults_file}"
+
+  timeout 20 docker exec "${container_id}" sh -lc \
+    ". '${defaults_file}'; \
+      test \"\${OLLAMA_BASE_URL}\" = 'http://ollama-gate:11435'; \
+      test \"\${OPENAI_BASE_URL}\" = 'http://ollama-gate:11435/v1'; \
+      test \"\${OPENAI_API_BASE_URL}\" = 'http://ollama-gate:11435/v1'; \
+      test \"\${OPENAI_API_BASE}\" = 'http://ollama-gate:11435/v1'" \
+    || fail "${container_id}: defaults file does not resolve to ollama-gate endpoint"
+
+  ok "${container_id}: first-run LLM defaults target ollama-gate"
+}
+
 assert_write_boundaries() {
   local container_id="$1"
 
@@ -117,6 +135,7 @@ for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}"; 
   assert_container_security "${cid}"
   assert_proxy_enforced "${cid}"
   assert_egress_profile "${cid}"
+  assert_ollama_gate_defaults "${cid}"
   assert_write_boundaries "${cid}"
 done
 

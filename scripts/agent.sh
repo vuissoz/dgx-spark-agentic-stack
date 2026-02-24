@@ -959,17 +959,19 @@ detect_project_name() {
 prepare_tool_session() {
   local tool="$1"
   local project="$2"
-  local service container_id workspace
+  local service container_id workspace defaults_file
 
   service="$(tool_to_service "${tool}")" || die "Unknown tool '${tool}'"
   container_id="$(service_container_id "${service}")"
   [[ -n "${container_id}" ]] || die "Service '${service}' is not running. Start it with: agent up agents"
 
   workspace="/workspace/${project}"
+  defaults_file="/state/bootstrap/ollama-gate-defaults.env"
   docker exec "${container_id}" sh -lc "mkdir -p '${workspace}'"
 
   if ! docker exec "${container_id}" tmux has-session -t "${tool}" >/dev/null 2>&1; then
-    docker exec "${container_id}" tmux new-session -d -s "${tool}" -c "${workspace}" "bash -lc 'exec bash -l'"
+    docker exec "${container_id}" tmux new-session -d -s "${tool}" -c "${workspace}" \
+      "bash -lc 'if [ -f \"${defaults_file}\" ]; then source \"${defaults_file}\"; fi; exec bash -l'"
   fi
   docker exec "${container_id}" sh -lc "tmux send-keys -t '${tool}' C-c 'cd \"${workspace}\"' C-m"
 }
