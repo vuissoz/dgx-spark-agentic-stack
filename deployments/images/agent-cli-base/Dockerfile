@@ -3,6 +3,17 @@ FROM ${AGENT_BASE_IMAGE}
 
 ARG AGENT_UID=10001
 ARG AGENT_GID=10001
+ARG AGENT_CLI_INSTALL_MODE=best-effort
+ARG AGENT_NPM_PREFIX=/opt/agentic/npm-global
+ARG AGENT_CLI_INSTALL_HOME=/opt/agentic/install-home
+ARG OPENCLAW_PREFIX=/opt/agentic/openclaw
+ARG CODEX_CLI_NPM_SPEC=@openai/codex@latest
+ARG CLAUDE_CODE_NPM_SPEC=@anthropic-ai/claude-code@latest
+ARG OPENCODE_NPM_SPEC=opencode-ai@latest
+ARG OPENHANDS_INSTALL_SCRIPT=https://install.openhands.dev/install.sh
+ARG OPENCLAW_INSTALL_CLI_SCRIPT=https://openclaw.ai/install-cli.sh
+ARG OPENCLAW_INSTALL_VERSION=latest
+ARG VIBE_INSTALL_SCRIPT=https://mistral.ai/vibe/install.sh
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -63,27 +74,32 @@ RUN apt-get update \
     zlib1g-dev \
   && rm -rf /var/lib/apt/lists/*
 
-RUN set -eux; \
-  install -d -m 0755 /etc/agentic; \
-  real_vibe=""; \
-  if curl -LsSf https://mistral.ai/vibe/install.sh | bash; then \
-    :; \
-  else \
-    echo "WARN: unable to install official Vibe CLI during image build; fallback wrapper will stay active" >&2; \
-  fi; \
-  if [ -x "/root/.local/bin/vibe" ]; then \
-    real_vibe="/root/.local/bin/vibe"; \
-  elif command -v vibe >/dev/null 2>&1; then \
-    real_vibe="$(command -v vibe)"; \
-  fi; \
-  printf '%s\n' "${real_vibe}" > /etc/agentic/vibe-real-path
-
 RUN groupadd --gid "${AGENT_GID}" agent \
   && useradd --uid "${AGENT_UID}" --gid "${AGENT_GID}" --create-home --shell /bin/bash agent
 
+COPY deployments/images/agent-cli-base/install-agent-clis.sh /usr/local/bin/install-agent-clis
 COPY deployments/images/agent-cli-base/entrypoint.sh /usr/local/bin/agent-entrypoint
+COPY deployments/images/agent-cli-base/agent-cli-wrapper.sh /usr/local/bin/agent-cli-wrapper
+RUN chmod 0755 /usr/local/bin/install-agent-clis /usr/local/bin/agent-entrypoint /usr/local/bin/agent-cli-wrapper \
+  && AGENT_CLI_INSTALL_MODE="${AGENT_CLI_INSTALL_MODE}" \
+    AGENT_NPM_PREFIX="${AGENT_NPM_PREFIX}" \
+    AGENT_CLI_INSTALL_HOME="${AGENT_CLI_INSTALL_HOME}" \
+    OPENCLAW_PREFIX="${OPENCLAW_PREFIX}" \
+    CODEX_CLI_NPM_SPEC="${CODEX_CLI_NPM_SPEC}" \
+    CLAUDE_CODE_NPM_SPEC="${CLAUDE_CODE_NPM_SPEC}" \
+    OPENCODE_NPM_SPEC="${OPENCODE_NPM_SPEC}" \
+    OPENHANDS_INSTALL_SCRIPT="${OPENHANDS_INSTALL_SCRIPT}" \
+    OPENCLAW_INSTALL_CLI_SCRIPT="${OPENCLAW_INSTALL_CLI_SCRIPT}" \
+    OPENCLAW_INSTALL_VERSION="${OPENCLAW_INSTALL_VERSION}" \
+    VIBE_INSTALL_SCRIPT="${VIBE_INSTALL_SCRIPT}" \
+    /usr/local/bin/install-agent-clis
 COPY deployments/images/agent-cli-base/vibe-wrapper.sh /usr/local/bin/vibe
-RUN chmod 0755 /usr/local/bin/agent-entrypoint /usr/local/bin/vibe
+RUN chmod 0755 /usr/local/bin/vibe \
+  && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/codex \
+  && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/claude \
+  && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/opencode \
+  && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/openhands \
+  && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/openclaw
 
 ENV HOME=/home/agent
 WORKDIR /workspace

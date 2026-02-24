@@ -36,6 +36,15 @@ timeout 60 docker run --rm --entrypoint bash "${image_ref}" -lc '
 ok "agent-cli-base image includes C/C++ + CUDA + multi-language toolchain"
 
 timeout 60 docker run --rm --entrypoint bash "${image_ref}" -lc '
+  command -v codex claude opencode vibe openhands openclaw >/dev/null
+  for cli in codex claude opencode vibe openhands openclaw; do
+    test -f "/etc/agentic/${cli}-real-path"
+    "${cli}" --version >/dev/null 2>&1 || true
+  done
+' || fail "agent-cli-base image is missing one of: codex claude opencode vibe openhands openclaw wrappers"
+ok "agent-cli-base image exposes codex/claude/opencode/vibe/openhands/openclaw commands"
+
+timeout 60 docker run --rm --entrypoint bash "${image_ref}" -lc '
   cat > /tmp/e1-smoke.c <<'"'"'EOF'"'"'
 #include <stdio.h>
 int main(void) { puts("ok-c"); return 0; }

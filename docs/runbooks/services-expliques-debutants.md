@@ -144,6 +144,7 @@ Les 4 services ci-dessous partagent la meme logique:
 - par defaut ils tournent avec `agentic/agent-cli-base:local` (override possible via `AGENTIC_AGENT_BASE_*`),
 - ils utilisent `tmux` pour garder des sessions longues,
 - ils ont chacun leurs dossiers `state/logs/workspaces` separes.
+- l'image commune embarque les CLIs `codex`, `claude`, `opencode`, `vibe` (et aussi `openhands`, `openclaw` pour usages CLI transverses).
 
 ### Service `agentic-claude`
 

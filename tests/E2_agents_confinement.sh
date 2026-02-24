@@ -33,6 +33,14 @@ assert_tmux_session() {
   ok "${container_id}: tmux session '${session_name}' is active"
 }
 
+assert_primary_cli() {
+  local container_id="$1"
+  local cli="$2"
+  timeout 20 docker exec "${container_id}" sh -lc "command -v ${cli} >/dev/null" \
+    || fail "${container_id}: primary CLI '${cli}' is missing"
+  ok "${container_id}: primary CLI '${cli}' is available"
+}
+
 assert_write_boundaries() {
   local container_id="$1"
 
@@ -100,9 +108,10 @@ assert_tmux_session "${codex_cid}" "codex"
 assert_tmux_session "${opencode_cid}" "opencode"
 assert_tmux_session "${vibestral_cid}" "vibestral"
 
-timeout 20 docker exec "${vibestral_cid}" sh -lc 'command -v vibe >/dev/null' \
-  || fail "${vibestral_cid}: vibe command is missing"
-ok "${vibestral_cid}: vibe command is available"
+assert_primary_cli "${claude_cid}" "claude"
+assert_primary_cli "${codex_cid}" "codex"
+assert_primary_cli "${opencode_cid}" "opencode"
+assert_primary_cli "${vibestral_cid}" "vibe"
 
 for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}"; do
   assert_container_security "${cid}"

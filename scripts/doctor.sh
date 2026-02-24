@@ -301,6 +301,15 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
   elif ! mount_destination_read_only "${cid}" "/run/secrets/gate_mcp.token"; then
     doctor_fail "agent '${service}' must mount /run/secrets/gate_mcp.token read-only"
   fi
+
+  primary_cli="$(printf '%s\n' "${env_dump}" | awk -F= '/^AGENT_PRIMARY_CLI=/{print $2; exit}')"
+  if [[ -z "${primary_cli}" ]]; then
+    doctor_fail "agent '${service}' missing AGENT_PRIMARY_CLI"
+  else
+    if ! timeout 15 docker exec "${cid}" sh -lc "command -v ${primary_cli} >/dev/null"; then
+      doctor_fail "agent '${service}' primary CLI '${primary_cli}' is missing"
+    fi
+  fi
 done
 
 if [[ "${agents_found}" -eq 0 ]]; then

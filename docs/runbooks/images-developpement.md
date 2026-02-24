@@ -43,6 +43,17 @@ Apres build, un contrat minimum est verifie:
 - `ENTRYPOINT` defini,
 - `bash`, `tmux`, `git`, `curl` presents.
 
+Le Dockerfile agents fournit aussi une matrice de CLIs:
+- `codex`, `claude`, `opencode`, `vibe`, `openhands`, `openclaw`.
+
+Mode d'installation des CLIs:
+- `AGENT_CLI_INSTALL_MODE=best-effort` (defaut): build resilient, wrappers explicites en fallback.
+- `AGENT_CLI_INSTALL_MODE=required`: build en echec si un install CLI ne peut pas etre resolu.
+
+Trace d'installation dans l'image:
+- `/etc/agentic/cli-install-status.tsv`
+- `/etc/agentic/<cli>-real-path`
+
 Variable de contournement:
 - `AGENTIC_SKIP_AGENT_IMAGE_BUILD=1`
 
@@ -188,3 +199,4 @@ Tests utilises par le repo:
 - `deployments/releases/snapshot.sh`
 - `docs/decisions/ADR-0026-stepE1b-agent-base-image-override.md`
 - `docs/decisions/ADR-0032-stepE1-agent-base-cuda-dev-toolchain.md`
+- `docs/decisions/ADR-0035-stepE1c-agent-cli-matrix.md`

@@ -92,10 +92,21 @@ Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `age
 
 Par défaut, `deployments/images/agent-cli-base/Dockerfile` construit une image de développement basée sur CUDA (NVIDIA) avec une toolchain multi-langages (C/C++, Python, Node, Go, Rust).
 
+Cette image commune installe aussi les CLIs agents suivants: `codex`, `claude`, `opencode`, `vibe`, `openhands`, `openclaw`.
+- mode par défaut: `AGENT_CLI_INSTALL_MODE=best-effort` (wrappers explicites si un install échoue),
+- mode strict: `AGENT_CLI_INSTALL_MODE=required` (build en échec si un CLI manque).
+
+Traçabilité build:
+- `/etc/agentic/cli-install-status.tsv`
+- `/etc/agentic/<cli>-real-path`
+
 Variables supportées:
 - `AGENTIC_AGENT_BASE_IMAGE` (défaut: `agentic/agent-cli-base:local`)
 - `AGENTIC_AGENT_BASE_BUILD_CONTEXT` (défaut: racine du repo)
 - `AGENTIC_AGENT_BASE_DOCKERFILE` (défaut: `deployments/images/agent-cli-base/Dockerfile`)
+- `AGENTIC_AGENT_CLI_INSTALL_MODE` (`best-effort` par défaut, `required` pour un build strict)
+- `AGENTIC_CODEX_CLI_NPM_SPEC`, `AGENTIC_CLAUDE_CODE_NPM_SPEC`, `AGENTIC_OPENCODE_NPM_SPEC`
+- `AGENTIC_OPENHANDS_INSTALL_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_VERSION`, `AGENTIC_VIBE_INSTALL_SCRIPT`
 
 Contrat minimal du Dockerfile custom:
 - utilisateur par défaut non-root,

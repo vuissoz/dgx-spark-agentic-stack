@@ -126,6 +126,12 @@ For configuration variables, accepted values, storage locations, and secrets han
 The baseline agent services are tmux-backed CLI environments in hardened containers.  
 Interactive entrypoint is through `./agent <tool> [project]`.
 
+Primary CLI contract per baseline service:
+- `agentic-claude` -> `claude`
+- `agentic-codex` -> `codex`
+- `agentic-opencode` -> `opencode`
+- `agentic-vibestral` -> `vibe`
+
 ### `agentic-claude`
 - `./agent claude <project>`
 - Role: Claude-oriented agent workspace runtime.

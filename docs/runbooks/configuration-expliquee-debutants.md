@@ -210,6 +210,14 @@ Options avancees firewall/egress:
 | `AGENTIC_AGENT_BASE_IMAGE` | reference image Docker | `agentic/agent-cli-base:local` | shell, `runtime.env` |
 | `AGENTIC_AGENT_BASE_BUILD_CONTEXT` | chemin absolu ou relatif au repo | racine du repo | shell, `runtime.env` |
 | `AGENTIC_AGENT_BASE_DOCKERFILE` | chemin absolu ou relatif au repo | `deployments/images/agent-cli-base/Dockerfile` | shell, `runtime.env` |
+| `AGENTIC_AGENT_CLI_INSTALL_MODE` | `best-effort` ou `required` | `best-effort` | shell, `runtime.env` |
+| `AGENTIC_CODEX_CLI_NPM_SPEC` | spec npm | `@openai/codex@latest` | shell, `runtime.env` |
+| `AGENTIC_CLAUDE_CODE_NPM_SPEC` | spec npm | `@anthropic-ai/claude-code@latest` | shell, `runtime.env` |
+| `AGENTIC_OPENCODE_NPM_SPEC` | spec npm | `opencode-ai@latest` | shell, `runtime.env` |
+| `AGENTIC_OPENHANDS_INSTALL_SCRIPT` | URL script install | `https://install.openhands.dev/install.sh` | shell, `runtime.env` |
+| `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT` | URL script install | `https://openclaw.ai/install-cli.sh` | shell, `runtime.env` |
+| `AGENTIC_OPENCLAW_INSTALL_VERSION` | version OpenClaw CLI | `latest` | shell, `runtime.env` |
+| `AGENTIC_VIBE_INSTALL_SCRIPT` | URL script install | `https://mistral.ai/vibe/install.sh` | shell, `runtime.env` |
 | `GRAFANA_ADMIN_USER` | chaine non vide | `admin` | shell/secret manager |
 | `GRAFANA_ADMIN_PASSWORD` | chaine non vide | `change-me` | shell/secret manager |
 

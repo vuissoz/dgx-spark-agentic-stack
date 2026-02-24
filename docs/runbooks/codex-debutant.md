@@ -117,7 +117,7 @@ pwd
 ls -la
 ```
 
-Si ton image agent contient la commande `codex`, lance-la depuis ce shell.
+La commande `codex` est incluse dans l'image agent par defaut; lance-la depuis ce shell.
 
 ## 7) Utilisation depuis un poste externe (Tailscale)
 

@@ -409,6 +409,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - outillage productivité/qualité : ripgrep, fd-find, jq, shellcheck, shfmt, direnv
   - socle C/C++ pro : gdb, gdbserver, valgrind, clang, clangd, lld, lldb, clang-format, clang-tidy, cppcheck, ccache, bear, meson, autoconf, automake, libtool
   - dépendances build natives communes : libc6-dev, libssl-dev, zlib1g-dev, libffi-dev, libbz2-dev, libreadline-dev, libsqlite3-dev
+  - installer les CLIs agents officiels dans l'image commune (codex, claude code, opencode, vibe, openhands CLI, openclaw CLI) avec traçabilité de l'état d'installation (`/etc/agentic/*-real-path`) et wrappers de fallback explicites en cas d'échec egress
   - conserver user non-root + entrypoint tmux compatible
 - pas de docker.sock, pas de privilèges
 
@@ -416,6 +417,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - `docker image inspect agent-cli-base:<tag>` OK
 - `.Config.User` non-root
 - `docker run --rm ... sh -lc 'command -v gcc g++ cmake ninja clang python3 pip node npm go rustc cargo nvcc'` OK
+- `docker run --rm ... sh -lc 'command -v codex claude opencode vibe openhands openclaw'` OK
 - smoke C/C++ : compilation simple (`gcc` + `g++`) OK
 - smoke CUDA : `nvcc --version` OK (et test compile minimal CUDA si GPU/toolkit dispo)
 - invariants sécurité conservés (`read_only`, `cap_drop=ALL`, `no-new-privileges`, pas de `docker.sock`)
@@ -453,10 +455,11 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   1. `curl -LsSf https://mistral.ai/vibe/install.sh | bash`
   2. `vibe --setup`
 - persister l’état Vibe dans `${AGENTIC_ROOT}/vibestral/state` (ou sous-répertoire explicite) pour éviter de relancer `--setup` à chaque redémarrage.
+- expliciter pour chaque service son binaire CLI principal (`AGENT_PRIMARY_CLI`) et vérifier sa présence via `doctor` et tests E2.
 
 **Test** : `tests/E2_agents_confinement.sh`
 - `docker exec agentic-claude tmux has-session -t claude` OK (idem codex/opencode/vibestral)
-- `docker exec agentic-vibestral sh -lc 'command -v vibe'` OK
+- `docker exec agentic-claude sh -lc 'command -v claude'` OK (idem codex/opencode/vibe)
 - `docker inspect` prouve : non-root, readonly rootfs, cap_drop ALL, NNP
 - egress : direct KO, via proxy conforme
 - écritures : OK dans workspace/state/logs, KO ailleurs

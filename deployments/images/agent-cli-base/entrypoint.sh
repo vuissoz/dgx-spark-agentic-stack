@@ -46,10 +46,22 @@ maybe_setup_vibestral() {
   fi
 }
 
+report_primary_cli() {
+  local primary_cli="${AGENT_PRIMARY_CLI:-}"
+  [[ -n "${primary_cli}" ]] || return 0
+
+  if command -v "${primary_cli}" >/dev/null 2>&1; then
+    log "INFO: primary CLI '${primary_cli}' is available"
+  else
+    log "WARN: primary CLI '${primary_cli}' is missing from PATH"
+  fi
+}
+
 start_session() {
   tmux new-session -d -s "${session}" -c "${workspace}" "bash -lc 'exec bash -l'"
 }
 
+report_primary_cli
 maybe_setup_vibestral
 
 if ! tmux has-session -t "${session}" 2>/dev/null; then

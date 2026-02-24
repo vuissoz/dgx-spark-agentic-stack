@@ -278,7 +278,10 @@ optional_module_build_inputs() {
     optional-pi-mono)
       printf '%s\n' \
         "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/Dockerfile" \
-        "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/entrypoint.sh"
+        "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/entrypoint.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/install-agent-clis.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/agent-cli-wrapper.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/vibe-wrapper.sh"
       ;;
     *)
       return 1
@@ -516,6 +519,9 @@ agent_base_build_fingerprint() {
   local dockerfile_path="${AGENTIC_AGENT_BASE_DOCKERFILE}"
   local default_dockerfile="${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/Dockerfile"
   local default_entrypoint="${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/entrypoint.sh"
+  local default_install_script="${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/install-agent-clis.sh"
+  local default_cli_wrapper="${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/agent-cli-wrapper.sh"
+  local default_vibe_wrapper="${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/vibe-wrapper.sh"
   local context_real dockerfile_real default_dockerfile_real
 
   require_cmd sha256sum
@@ -534,7 +540,13 @@ agent_base_build_fingerprint() {
     sha256sum "${dockerfile_real}"
     if [[ "${dockerfile_real}" == "${default_dockerfile_real}" ]]; then
       [[ -f "${default_entrypoint}" ]] || die "default agent entrypoint missing: ${default_entrypoint}"
+      [[ -f "${default_install_script}" ]] || die "default agent install script missing: ${default_install_script}"
+      [[ -f "${default_cli_wrapper}" ]] || die "default agent CLI wrapper missing: ${default_cli_wrapper}"
+      [[ -f "${default_vibe_wrapper}" ]] || die "default vibe wrapper missing: ${default_vibe_wrapper}"
       sha256sum "${default_entrypoint}"
+      sha256sum "${default_install_script}"
+      sha256sum "${default_cli_wrapper}"
+      sha256sum "${default_vibe_wrapper}"
     fi
   } | sha256sum | awk '{print $1}'
 }
@@ -554,6 +566,13 @@ assert_agent_base_image_contract() {
 
   timeout 30 docker run --rm --entrypoint sh "${image_ref}" -lc 'command -v bash tmux git curl >/dev/null' \
     || die "agent base image must include bash/tmux/git/curl: ${image_ref}"
+
+  timeout 45 docker run --rm --entrypoint sh "${image_ref}" -lc '
+    command -v codex claude opencode vibe openhands openclaw >/dev/null
+    for cli in codex claude opencode vibe openhands openclaw; do
+      test -f "/etc/agentic/${cli}-real-path"
+    done
+  ' || die "agent base image must expose codex/claude/opencode/vibe/openhands/openclaw command contract: ${image_ref}"
 }
 
 build_agents_local_images() {
@@ -632,7 +651,7 @@ load_runtime_env() {
           export "${key}=${value}"
         fi
         ;;
-      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
+      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
         export "${key}=${value}"
         ;;
       *)
@@ -679,6 +698,14 @@ ensure_runtime_env() {
     "AGENTIC_AGENT_BASE_BUILD_CONTEXT=${AGENTIC_AGENT_BASE_BUILD_CONTEXT}"
     "AGENTIC_AGENT_BASE_DOCKERFILE=${AGENTIC_AGENT_BASE_DOCKERFILE}"
     "AGENTIC_AGENT_BASE_IMAGE=${AGENTIC_AGENT_BASE_IMAGE}"
+    "AGENTIC_AGENT_CLI_INSTALL_MODE=${AGENTIC_AGENT_CLI_INSTALL_MODE}"
+    "AGENTIC_CODEX_CLI_NPM_SPEC=${AGENTIC_CODEX_CLI_NPM_SPEC}"
+    "AGENTIC_CLAUDE_CODE_NPM_SPEC=${AGENTIC_CLAUDE_CODE_NPM_SPEC}"
+    "AGENTIC_OPENCODE_NPM_SPEC=${AGENTIC_OPENCODE_NPM_SPEC}"
+    "AGENTIC_OPENHANDS_INSTALL_SCRIPT=${AGENTIC_OPENHANDS_INSTALL_SCRIPT}"
+    "AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT=${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT}"
+    "AGENTIC_OPENCLAW_INSTALL_VERSION=${AGENTIC_OPENCLAW_INSTALL_VERSION}"
+    "AGENTIC_VIBE_INSTALL_SCRIPT=${AGENTIC_VIBE_INSTALL_SCRIPT}"
     "AGENTIC_LLM_MODE=${AGENTIC_LLM_MODE}"
     "GATE_ENABLE_TEST_MODE=${GATE_ENABLE_TEST_MODE:-0}"
     "AGENTIC_OPENAI_DAILY_TOKENS=${AGENTIC_OPENAI_DAILY_TOKENS}"
@@ -754,6 +781,14 @@ cmd_profile() {
   printf 'agent_base_build_context=%s\n' "${AGENTIC_AGENT_BASE_BUILD_CONTEXT}"
   printf 'agent_base_dockerfile=%s\n' "${AGENTIC_AGENT_BASE_DOCKERFILE}"
   printf 'agent_base_image=%s\n' "${AGENTIC_AGENT_BASE_IMAGE}"
+  printf 'agent_cli_install_mode=%s\n' "${AGENTIC_AGENT_CLI_INSTALL_MODE}"
+  printf 'codex_cli_npm_spec=%s\n' "${AGENTIC_CODEX_CLI_NPM_SPEC}"
+  printf 'claude_code_npm_spec=%s\n' "${AGENTIC_CLAUDE_CODE_NPM_SPEC}"
+  printf 'opencode_npm_spec=%s\n' "${AGENTIC_OPENCODE_NPM_SPEC}"
+  printf 'openhands_install_script=%s\n' "${AGENTIC_OPENHANDS_INSTALL_SCRIPT}"
+  printf 'openclaw_install_cli_script=%s\n' "${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT}"
+  printf 'openclaw_install_version=%s\n' "${AGENTIC_OPENCLAW_INSTALL_VERSION}"
+  printf 'vibe_install_script=%s\n' "${AGENTIC_VIBE_INSTALL_SCRIPT}"
   printf 'llm_mode=%s\n' "${AGENTIC_LLM_MODE}"
   printf 'gate_test_mode=%s\n' "${GATE_ENABLE_TEST_MODE:-0}"
   printf 'egress_network=%s\n' "${AGENTIC_EGRESS_NETWORK}"
