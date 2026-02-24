@@ -50,7 +50,9 @@ main() {
   python3 - "${RAG_DOCS_DIR}" "${qdrant_url}" "${gate_url}" "${RAG_COLLECTION}" "${RAG_EMBED_MODEL}" "${RAG_GATE_DRY_RUN}" "${RAG_GATE_TIMEOUT_SECONDS}" <<'PY'
 import hashlib
 import json
+import math
 import pathlib
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -62,6 +64,7 @@ collection = sys.argv[4]
 model = sys.argv[5]
 dry_run = sys.argv[6] in ("1", "true", "True", "yes", "on")
 timeout_seconds = float(sys.argv[7])
+dry_run_vector_size = 32
 
 doc_paths = sorted([p for p in docs_dir.glob("*.txt") if p.is_file()])
 if not doc_paths:
@@ -90,6 +93,27 @@ def request_json(
         raise SystemExit(f"ERROR: HTTP {exc.code} on {url}: {detail}") from exc
 
 
+def deterministic_dry_run_embedding(text: str, vector_size: int | None = None) -> list[float]:
+    size = max(16, int(vector_size or dry_run_vector_size))
+    normalized = text.strip().lower()
+    tokens = re.findall(r"[a-z0-9_]+", normalized)
+    if not tokens:
+        tokens = [normalized or "empty"]
+
+    vector = [0.0] * size
+    for idx, token in enumerate(tokens):
+        digest = hashlib.sha256(f"{idx}:{token}".encode("utf-8")).digest()
+        bucket = int.from_bytes(digest[:2], "big") % size
+        sign = -1.0 if (digest[2] & 1) else 1.0
+        weight = 1.0 / float(1 + (idx // 4))
+        vector[bucket] += sign * weight
+
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm == 0:
+        return [0.0] * size
+    return [value / norm for value in vector]
+
+
 def collection_exists() -> bool:
     req = urllib.request.Request(
         f"{qdrant_url}/collections/{collection}",
@@ -106,19 +130,51 @@ def collection_exists() -> bool:
         raise SystemExit(f"ERROR: HTTP {exc.code} on {qdrant_url}/collections/{collection}: {detail}") from exc
 
 
-def embedding_for_text(text: str) -> list[float]:
+def collection_vector_size() -> int | None:
+    req = urllib.request.Request(
+        f"{qdrant_url}/collections/{collection}",
+        headers={"Content-Type": "application/json"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"ERROR: HTTP {exc.code} on {qdrant_url}/collections/{collection}: {detail}") from exc
+    result = payload.get("result", {})
+    config = result.get("config", {}) if isinstance(result, dict) else {}
+    params = config.get("params", {}) if isinstance(config, dict) else {}
+    vectors = params.get("vectors", {}) if isinstance(params, dict) else {}
+    if isinstance(vectors, dict):
+        size = vectors.get("size")
+        if isinstance(size, int) and size > 0:
+            return size
+    return None
+
+
+def embedding_for_text(text: str, expected_size: int | None = None) -> list[float]:
     payload = {"model": model, "input": text}
     headers = {"X-Agent-Session": "rag-ingest", "X-Agent-Project": "rag"}
     if dry_run:
         headers["X-Gate-Dry-Run"] = "1"
-    response = request_json(f"{gate_url}/v1/embeddings", payload=payload, headers=headers)
-    data = response.get("data", [])
-    if not data or not isinstance(data[0], dict):
-        raise SystemExit("ERROR: invalid embedding response from gate")
-    vector = data[0].get("embedding")
-    if not isinstance(vector, list) or not vector:
-        raise SystemExit("ERROR: missing embedding vector in gate response")
-    return [float(x) for x in vector]
+    try:
+        response = request_json(f"{gate_url}/v1/embeddings", payload=payload, headers=headers)
+        data = response.get("data", [])
+        if not data or not isinstance(data[0], dict):
+            raise SystemExit("ERROR: invalid embedding response from gate")
+        vector = data[0].get("embedding")
+        if not isinstance(vector, list) or not vector:
+            raise SystemExit("ERROR: missing embedding vector in gate response")
+        return [float(x) for x in vector]
+    except BaseException:
+        if dry_run:
+            if isinstance(expected_size, int) and expected_size > 0:
+                return deterministic_dry_run_embedding(text, expected_size)
+            return deterministic_dry_run_embedding(text)
+        raise
 
 
 def stable_point_id(path: pathlib.Path, content: str) -> int:
@@ -127,11 +183,20 @@ def stable_point_id(path: pathlib.Path, content: str) -> int:
 
 
 vectors: list[tuple[pathlib.Path, list[float], str]] = []
+existing_vector_size = collection_vector_size()
 for doc_path in doc_paths:
     content = doc_path.read_text(encoding="utf-8").strip()
     if not content:
         continue
-    vectors.append((doc_path, embedding_for_text(content), content))
+    vector = embedding_for_text(content, existing_vector_size)
+    if existing_vector_size and len(vector) != existing_vector_size:
+        if dry_run:
+            vector = deterministic_dry_run_embedding(content, existing_vector_size)
+        else:
+            raise SystemExit(
+                f"ERROR: embedding vector size mismatch (expected={existing_vector_size}, got={len(vector)})"
+            )
+    vectors.append((doc_path, vector, content))
 
 if not vectors:
     raise SystemExit("ERROR: all candidate docs are empty")

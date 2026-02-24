@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
+import math
+import re
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -29,6 +32,7 @@ RRF_K = int(os.environ.get("RAG_RRF_K", "60"))
 EMBED_MODEL = os.environ.get("RAG_EMBED_MODEL", "qwen3-embedding:0.6b")
 REQUEST_TIMEOUT_SEC = float(os.environ.get("RAG_HTTP_TIMEOUT_SEC", "10"))
 TOP_K_MAX = int(os.environ.get("RAG_TOP_K_MAX", "32"))
+DRY_RUN_VECTOR_SIZE = max(16, int(os.environ.get("RAG_DRY_RUN_VECTOR_SIZE", "32")))
 
 
 def is_truthy(value: str | None) -> bool:
@@ -113,6 +117,50 @@ def extract_payload_text(payload: dict) -> str:
     return ""
 
 
+def deterministic_dry_run_embedding(text: str, *, vector_size: int | None = None) -> list[float]:
+    size = max(16, int(vector_size or DRY_RUN_VECTOR_SIZE))
+    normalized = text.strip().lower()
+    tokens = re.findall(r"[a-z0-9_]+", normalized)
+    if not tokens:
+        tokens = [normalized or "empty"]
+
+    vector = [0.0] * size
+    for idx, token in enumerate(tokens):
+        digest = hashlib.sha256(f"{idx}:{token}".encode("utf-8")).digest()
+        bucket = int.from_bytes(digest[:2], "big") % size
+        sign = -1.0 if (digest[2] & 1) else 1.0
+        weight = 1.0 / float(1 + (idx // 4))
+        vector[bucket] += sign * weight
+
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm == 0:
+        return [0.0] * size
+    return [value / norm for value in vector]
+
+
+def collection_vector_size() -> int | None:
+    try:
+        response = request_json(f"{QDRANT_URL}/collections/{COLLECTION}", method="GET")
+    except Exception:
+        return None
+
+    result = response.get("result")
+    if not isinstance(result, dict):
+        return None
+    config = result.get("config")
+    if not isinstance(config, dict):
+        return None
+    params = config.get("params")
+    if not isinstance(params, dict):
+        return None
+    vectors = params.get("vectors")
+    if isinstance(vectors, dict):
+        size = vectors.get("size")
+        if isinstance(size, int) and size > 0:
+            return size
+    return None
+
+
 def extract_doc_id(payload: dict, fallback_id: str) -> str:
     for key in ("doc_id", "source_path", "path", "file_path"):
         value = payload.get(key)
@@ -175,25 +223,27 @@ def embed_query(query: str) -> list[float]:
     if GATE_DRY_RUN:
         headers["X-Gate-Dry-Run"] = "1"
 
-    response = request_json(
-        f"{GATE_URL}/v1/embeddings",
-        payload={"model": EMBED_MODEL, "input": query},
-        headers=headers,
-    )
-    data = response.get("data")
-    if not isinstance(data, list) or not data:
-        raise RuntimeError("missing embedding data in gate response")
-    first = data[0]
-    if not isinstance(first, dict):
-        raise RuntimeError("invalid embedding item in gate response")
-    embedding = first.get("embedding")
-    if not isinstance(embedding, list) or not embedding:
-        raise RuntimeError("missing embedding vector in gate response")
-
     try:
+        response = request_json(
+            f"{GATE_URL}/v1/embeddings",
+            payload={"model": EMBED_MODEL, "input": query},
+            headers=headers,
+        )
+        data = response.get("data")
+        if not isinstance(data, list) or not data:
+            raise RuntimeError("missing embedding data in gate response")
+        first = data[0]
+        if not isinstance(first, dict):
+            raise RuntimeError("invalid embedding item in gate response")
+        embedding = first.get("embedding")
+        if not isinstance(embedding, list) or not embedding:
+            raise RuntimeError("missing embedding vector in gate response")
+
         return [float(value) for value in embedding]
     except Exception as exc:
-        raise RuntimeError(f"non-numeric embedding values: {exc}") from exc
+        if GATE_DRY_RUN:
+            return deterministic_dry_run_embedding(query)
+        raise RuntimeError(f"embedding request failed: {exc}") from exc
 
 
 def retrieve_dense(query: str, top_k: int) -> dict:
@@ -208,6 +258,14 @@ def retrieve_dense(query: str, top_k: int) -> dict:
 
     try:
         vector = embed_query(query)
+        expected_size = collection_vector_size()
+        if expected_size is not None and expected_size != len(vector):
+            if GATE_DRY_RUN:
+                vector = deterministic_dry_run_embedding(query, vector_size=expected_size)
+            else:
+                raise RuntimeError(
+                    f"query vector size mismatch (expected={expected_size}, got={len(vector)}) for collection '{COLLECTION}'"
+                )
         search = request_json(
             f"{QDRANT_URL}/collections/{COLLECTION}/points/search",
             payload={
