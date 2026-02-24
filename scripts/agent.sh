@@ -28,6 +28,7 @@ STACK_STOP_ORDER=(optional rag obs ui agents core)
 usage() {
   cat <<USAGE
 Usage:
+  agent [strict-prod|rootless-dev] <command ...>
   agent profile
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
@@ -1341,11 +1342,84 @@ purge_directory_contents() {
   [[ -n "${path}" ]] || return 0
   [[ "${path}" == "${AGENTIC_ROOT}"* ]] || die "refusing to purge path outside AGENTIC_ROOT: ${path}"
 
+  if [[ -L "${path}" ]]; then
+    rm -f -- "${path}"
+    install -d -m 0750 "${path}"
+    return 0
+  fi
+
   if [[ -d "${path}" ]]; then
-    find "${path}" -mindepth 1 -depth -exec rm -rf -- {} +
+    find -P "${path}" -mindepth 1 -maxdepth 1 -exec rm -rf --one-file-system -- {} +
   else
     install -d -m 0750 "${path}"
   fi
+}
+
+purge_runtime_root_symlink_safe() {
+  local root="$1"
+  [[ -n "${root}" && "${root}" != "/" ]] || die "Refusing cleanup: invalid runtime root '${root}'"
+  [[ -e "${root}" ]] || return 0
+  [[ -L "${root}" ]] && die "Refusing cleanup: AGENTIC_ROOT is a symlink: ${root}"
+  [[ -d "${root}" ]] || die "Refusing cleanup: AGENTIC_ROOT is not a directory: ${root}"
+
+  find -P "${root}" -mindepth 1 -maxdepth 1 -exec rm -rf --one-file-system -- {} +
+}
+
+collect_cleanup_image_refs() {
+  local -a compose_files=()
+  local -a compose_args=()
+  local compose_file
+
+  command -v docker >/dev/null 2>&1 || return 0
+  docker info >/dev/null 2>&1 || return 0
+
+  mapfile -t compose_files < <(existing_compose_files)
+  if [[ "${#compose_files[@]}" -gt 0 ]]; then
+    for compose_file in "${compose_files[@]}"; do
+      compose_args+=("-f" "${compose_file}")
+    done
+    docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+      --profile rag-lexical \
+      --profile optional \
+      --profile optional-openclaw \
+      --profile optional-mcp \
+      --profile optional-pi-mono \
+      --profile optional-goose \
+      --profile optional-portainer \
+      "${compose_args[@]}" config --images 2>/dev/null || true
+  fi
+
+  docker ps -a \
+    --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
+    --format '{{.Image}}' 2>/dev/null || true
+
+  printf '%s\n' \
+    "${AGENTIC_AGENT_BASE_IMAGE}" \
+    "agentic/ollama-gate:local" \
+    "agentic/gate-mcp:local" \
+    "agentic/optional-modules:local" \
+    "agentic/trtllm-runtime:local" \
+    "agentic/comfyui:local"
+}
+
+remove_cleanup_images_best_effort() {
+  local -a image_refs=("$@")
+  local image_ref
+
+  command -v docker >/dev/null 2>&1 || return 0
+  docker info >/dev/null 2>&1 || return 0
+
+  for image_ref in "${image_refs[@]}"; do
+    [[ -n "${image_ref}" ]] || continue
+    if ! docker image inspect "${image_ref}" >/dev/null 2>&1; then
+      continue
+    fi
+    if docker image rm -f "${image_ref}" >/dev/null 2>&1; then
+      printf 'cleanup image removed=%s\n' "${image_ref}"
+    else
+      warn "cleanup: unable to remove image '${image_ref}' (still in use or protected)"
+    fi
+  done
 }
 
 create_forget_backup() {
@@ -1481,6 +1555,7 @@ cmd_cleanup() {
   local backup_path=""
   local ts target
   local -a selected_targets=()
+  local -a cleanup_images=()
   local tmp_log
 
   while [[ $# -gt 0 ]]; do
@@ -1501,10 +1576,13 @@ cmd_cleanup() {
         cat <<USAGE
 Usage:
   agent cleanup [--yes] [--backup|--no-backup]
+  agent strict-prod cleanup [--yes] [--backup|--no-backup]
+  agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 
 Description:
   Stop the stack stepwise, optionally export a backup archive, then purge AGENTIC_ROOT
-  to bring runtime state back to a fresh/brand-new state.
+  to bring runtime state back to a fresh/brand-new state. Cleanup also removes local
+  docker images associated with the stack.
 USAGE
         return 0
         ;;
@@ -1515,6 +1593,11 @@ USAGE
   done
 
   [[ -n "${AGENTIC_ROOT}" && "${AGENTIC_ROOT}" != "/" ]] || die "Refusing cleanup: invalid AGENTIC_ROOT='${AGENTIC_ROOT}'"
+  if [[ -L "${AGENTIC_ROOT}" ]]; then
+    die "Refusing cleanup: AGENTIC_ROOT is a symlink: ${AGENTIC_ROOT}"
+  fi
+
+  mapfile -t cleanup_images < <(collect_cleanup_image_refs | awk 'NF {print $0}' | sort -u)
 
   if [[ "${backup_mode}" == "yes" ]]; then
     backup_enabled=1
@@ -1561,10 +1644,8 @@ USAGE
     fi
   fi
 
-  if [[ -d "${AGENTIC_ROOT}" ]]; then
-    find "${AGENTIC_ROOT}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete
-    find "${AGENTIC_ROOT}" -mindepth 1 -depth -type d -empty -delete
-  fi
+  purge_runtime_root_symlink_safe "${AGENTIC_ROOT}"
+  remove_cleanup_images_best_effort "${cleanup_images[@]}"
   install -d -m 0750 "${AGENTIC_ROOT}"
 
   printf 'cleanup completed root=%s\n' "${AGENTIC_ROOT}"

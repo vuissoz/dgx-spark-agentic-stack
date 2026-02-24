@@ -238,6 +238,7 @@ Same principle: create a local tunnel to host `127.0.0.1:<port>`, then open `htt
 Supported commands:
 
 ```text
+agent [strict-prod|rootless-dev] <command ...>
 agent profile
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
@@ -256,6 +257,8 @@ agent start container <container...>
 agent backup <run|list|restore <snapshot_id> [--yes]>
 agent forget <target> [--yes] [--no-backup]
 agent cleanup [--yes] [--backup|--no-backup]
+agent strict-prod cleanup [--yes] [--backup|--no-backup]
+agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
 agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
@@ -289,6 +292,7 @@ Examples:
 Notes:
 - `agent stop` handles `claude|codex|opencode|vibestral` tools.
 - `agent rollback all` requires a `release_id`.
+- `agent cleanup` also removes local stack Docker images and purges state without following symlinks.
 
 ## Ollama: preload and model link
 

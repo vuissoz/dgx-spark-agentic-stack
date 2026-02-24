@@ -2,4 +2,16 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    strict-prod|rootless-dev)
+      export AGENTIC_PROFILE="$1"
+      shift
+      ;;
+    *)
+      ;;
+  esac
+fi
+
 exec "${REPO_ROOT}/scripts/agent.sh" "$@"

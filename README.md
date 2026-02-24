@@ -238,6 +238,7 @@ Principe identique: créer un tunnel local vers `127.0.0.1:<port>` de l'hôte, p
 Commandes supportées:
 
 ```text
+agent [strict-prod|rootless-dev] <commande ...>
 agent profile
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
@@ -256,6 +257,8 @@ agent start container <container...>
 agent backup <run|list|restore <snapshot_id> [--yes]>
 agent forget <target> [--yes] [--no-backup]
 agent cleanup [--yes] [--backup|--no-backup]
+agent strict-prod cleanup [--yes] [--backup|--no-backup]
+agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
 agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
@@ -289,6 +292,7 @@ Exemples:
 Notes:
 - `agent stop` gère les tools `claude|codex|opencode|vibestral`.
 - `agent rollback all` exige un `release_id`.
+- `agent cleanup` supprime aussi les images Docker locales de la stack et purge l'état sans suivre les symlinks.
 
 ## Ollama: preload et lien de modèles
 

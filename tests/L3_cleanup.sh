@@ -23,6 +23,11 @@ export AGENTIC_NETWORK="agentic-${suffix}"
 export AGENTIC_EGRESS_NETWORK="agentic-${suffix}-egress"
 export AGENTIC_STACK_ALL_TARGETS="optional"
 export AGENTIC_CLEANUP_EXPORT_DIR="${REPO_ROOT}/.runtime/${suffix}-exports"
+export AGENTIC_AGENT_BASE_IMAGE="agentic/l3-cleanup-${suffix}:local"
+
+outside_root="${REPO_ROOT}/.runtime/${suffix}-outside"
+outside_marker="${outside_root}/keep/me.txt"
+symlink_path="${AGENTIC_ROOT}/symlink-outside"
 
 cleanup() {
   AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" down optional >/tmp/agent-l3-down.out 2>&1 || true
@@ -38,11 +43,24 @@ cleanup() {
     find "${AGENTIC_CLEANUP_EXPORT_DIR}" -mindepth 1 -depth -type d -empty -delete || true
     rmdir "${AGENTIC_CLEANUP_EXPORT_DIR}" >/dev/null 2>&1 || true
   fi
+  if [[ -d "${outside_root}" ]]; then
+    find "${outside_root}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete || true
+    find "${outside_root}" -mindepth 1 -depth -type d -empty -delete || true
+    rmdir "${outside_root}" >/dev/null 2>&1 || true
+  fi
+  docker image rm -f "${AGENTIC_AGENT_BASE_IMAGE}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 docker network create --driver bridge --internal "${AGENTIC_NETWORK}" >/dev/null
 docker network create --driver bridge "${AGENTIC_EGRESS_NETWORK}" >/dev/null
+
+docker build -t "${AGENTIC_AGENT_BASE_IMAGE}" - <<'EOF' >/tmp/agent-l3-image-build.out
+FROM busybox:1.36
+RUN true
+EOF
+docker image inspect "${AGENTIC_AGENT_BASE_IMAGE}" >/dev/null \
+  || fail "failed to build cleanup image fixture ${AGENTIC_AGENT_BASE_IMAGE}"
 
 "${REPO_ROOT}/deployments/bootstrap/init_fs.sh"
 AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" up optional >/tmp/agent-l3-up.out \
@@ -54,9 +72,12 @@ wait_for_container_ready "${sentinel_cid}" 60 || fail "optional-sentinel did not
 touch "${AGENTIC_ROOT}/cleanup-marker.txt"
 mkdir -p "${AGENTIC_ROOT}/nested/state"
 touch "${AGENTIC_ROOT}/nested/state/value.txt"
+mkdir -p "$(dirname "${outside_marker}")"
+printf 'keep-me\n' >"${outside_marker}"
+ln -s "${outside_root}" "${symlink_path}"
 
-printf 'y\nCLEAN\n' | "${agent_bin}" cleanup >/tmp/agent-l3-cleanup.out \
-  || fail "agent cleanup interactive flow failed"
+printf 'y\nCLEAN\n' | "${agent_bin}" rootless-dev cleanup >/tmp/agent-l3-cleanup.out \
+  || fail "agent rootless-dev cleanup interactive flow failed"
 
 grep -q 'cleanup completed root=' /tmp/agent-l3-cleanup.out \
   || fail "cleanup output must include completion marker"
@@ -65,10 +86,15 @@ grep -q 'cleanup completed root=' /tmp/agent-l3-cleanup.out \
 if find "${AGENTIC_ROOT}" -mindepth 1 -print -quit | grep -q .; then
   fail "cleanup must remove all files under runtime root"
 fi
+[[ -f "${outside_marker}" ]] || fail "cleanup must not follow symlink target outside runtime root"
+[[ ! -e "${symlink_path}" ]] || fail "cleanup must remove symlink entry under runtime root"
 
 backup_count="$(find "${AGENTIC_CLEANUP_EXPORT_DIR}" -maxdepth 1 -type f -name '*.tar.gz' | wc -l | tr -d ' ')"
 [[ "${backup_count}" -ge 1 ]] || fail "cleanup must export a backup archive when backup is requested"
 
 [[ -z "$(service_container_id optional-sentinel)" ]] || fail "optional-sentinel must be stopped by cleanup"
+if docker image inspect "${AGENTIC_AGENT_BASE_IMAGE}" >/dev/null 2>&1; then
+  fail "cleanup must remove local docker images linked to the stack"
+fi
 
 ok "L3_cleanup passed"

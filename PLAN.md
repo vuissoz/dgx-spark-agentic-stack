@@ -606,20 +606,32 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - vérifie que les services ciblés sont bien up/down en fin d’opération.
 
 ### F7 Cleanup global “brand new” avec export/backup optionnel
+Suivi Beads : `dgx-spark-agentic-stack-49e`
+
 **Implémentation**
 - ajouter une commande destructive explicite :
   - `agent cleanup [--yes] [--backup|--no-backup]`
+  - `agent strict-prod cleanup [--yes] [--backup|--no-backup]`
+  - `agent rootless-dev cleanup [--yes] [--backup|--no-backup]`
 - comportement attendu :
+  - exécuter la purge sur la racine runtime du profil actif :
+    - `strict-prod` -> `/srv/agentic`
+    - `rootless-dev` -> `${HOME}/.local/share/agentic` (ou override `AGENTIC_ROOT`) ;
   - demande interactive si un backup/export est souhaité (par défaut `yes`) ;
   - confirmation explicite obligatoire avant purge (ou `--yes`) ;
   - stop stepwise de la stack ;
   - export archive si demandé ;
-  - purge complète de `${AGENTIC_ROOT}` pour revenir à un état “fresh/brand new”.
+  - purge complète de `${AGENTIC_ROOT}` pour revenir à un état “fresh/brand new” ;
+  - suppression des images Docker locales de la stack ;
+  - la suppression de fichiers/répertoires ne doit jamais suivre les liens symboliques (symlink-safe).
 
 **Test** : `tests/L3_cleanup.sh`
 - couvre le flux interactif (`backup + confirmation`) ;
 - vérifie qu’une archive d’export est produite si demandée ;
-- vérifie que `${AGENTIC_ROOT}` est vidé et que les services ciblés sont arrêtés.
+- vérifie que `${AGENTIC_ROOT}` est vidé et que les services ciblés sont arrêtés ;
+- vérifie que la commande profilée (`agent rootless-dev cleanup`) fonctionne ;
+- vérifie qu’un symlink sous `${AGENTIC_ROOT}` est supprimé sans supprimer sa cible ;
+- vérifie que les images Docker locales de la stack sont supprimées.
 
 ### F8 Backup incrémental “Time Machine” (persistant + config non-secrète)
 **Implémentation**
