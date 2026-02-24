@@ -167,6 +167,14 @@ export AGENTIC_PROFILE=rootless-dev
 ./agent doctor
 ```
 
+Cleanup for `rootless-dev` runtime (back to a "fresh" state):
+
+```bash
+./agent rootless-dev cleanup
+# or non-interactive:
+./agent rootless-dev cleanup --yes --no-backup
+```
+
 ## Remote Access (Tailscale + SSH tunnel)
 
 Services are bound on `127.0.0.1` on the host.
