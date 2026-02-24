@@ -58,9 +58,9 @@ Usage:
   agent prereqs
   agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
-  agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]
+  agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
   agent vm cleanup [--name ... --yes --dry-run]
-  agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all>
+  agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all> [--skip-d5-tests]
   agent doctor [--fix-net]
 
 Optional modules (disabled by default):
@@ -1744,7 +1744,7 @@ cmd_vm() {
       "${AGENT_VM_CLEANUP_SCRIPT}" "$@"
       ;;
     *)
-      die "Usage: agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run] | agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run] | agent vm cleanup [--name ... --yes --dry-run]"
+      die "Usage: agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run] | agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run] | agent vm cleanup [--name ... --yes --dry-run]"
       ;;
   esac
 }
@@ -1778,6 +1778,9 @@ set_gate_test_mode_value() {
   if [[ "${restart_if_running}" == "1" ]]; then
     gate_cid="$(service_container_id "ollama-gate" || true)"
     if [[ -n "${gate_cid}" ]]; then
+      # Refresh runtime ownership before gate recreation to avoid non-root
+      # read failures on bind-mounted state/config files.
+      ensure_core_runtime
       run_compose_on_targets up core -d --no-deps --force-recreate ollama-gate >/dev/null
     fi
   fi
@@ -1835,10 +1838,14 @@ PY
       export AGENTIC_LLM_MODE="${mode}"
 
       install -d -m 0770 "${AGENTIC_ROOT}/gate/state"
+      if [[ "${EUID}" -eq 0 ]]; then
+        chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${AGENTIC_ROOT}/gate/state" || true
+      fi
       cat >"${mode_file}" <<JSON
 {"mode":"${mode}","updated_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","updated_by":"${actor}"}
 JSON
       chmod 0640 "${mode_file}" || true
+      chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${mode_file}" || true
 
       printf 'llm mode set to %s (state=%s)\n' "${mode}" "${mode_file}"
       if [[ "${mode}" == "remote" ]]; then
@@ -2043,6 +2050,8 @@ run_tests() {
   local previous_test_mode
   local restore_test_mode=0
   local gate_cid=""
+  local rag_retriever_cid=""
+  local rag_worker_cid=""
   local -a tests=()
 
   if [[ "$selector" == "all" ]]; then
@@ -2062,6 +2071,16 @@ run_tests() {
   [[ "${#tests[@]}" -gt 0 ]] || die "No test scripts found for selector '$selector'."
 
   gate_cid="$(service_container_id "ollama-gate" || true)"
+  if [[ -n "${gate_cid}" ]]; then
+    # Keep gate bind-mounted state/config readable for non-root gate before any selector.
+    ensure_core_runtime
+  fi
+  rag_retriever_cid="$(service_container_id "rag-retriever" || true)"
+  rag_worker_cid="$(service_container_id "rag-worker" || true)"
+  if [[ -n "${rag_retriever_cid}" || -n "${rag_worker_cid}" ]]; then
+    # Keep rag runtime dirs traversable for non-root retriever/worker containers.
+    ensure_rag_runtime
+  fi
   previous_test_mode="$(normalize_gate_test_mode_value "${GATE_ENABLE_TEST_MODE:-0}")"
   if [[ -n "${gate_cid}" && "${previous_test_mode}" != "1" ]]; then
     printf 'INFO: enabling llm test-mode=on for agent test run\n'
@@ -2328,8 +2347,22 @@ case "$cmd" in
     cmd_vm "$@"
     ;;
   test)
-    [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|V|all>"
-    run_tests "$2"
+    [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|V|all> [--skip-d5-tests]"
+    selector="$2"
+    shift 2
+    skip_d5_tests="${AGENTIC_SKIP_D5_TESTS:-0}"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --skip-d5-tests)
+          skip_d5_tests=1
+          shift
+          ;;
+        *)
+          die "Usage: agent test <A|B|...|L|V|all> [--skip-d5-tests]"
+          ;;
+      esac
+    done
+    AGENTIC_SKIP_D5_TESTS="${skip_d5_tests}" run_tests "${selector}"
     ;;
   cleanup)
     shift

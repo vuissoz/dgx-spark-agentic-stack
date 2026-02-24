@@ -42,6 +42,7 @@ def is_truthy(value: str | None) -> bool:
 
 
 GATE_DRY_RUN = is_truthy(os.environ.get("RAG_GATE_DRY_RUN", "1"))
+STATE_WRITE_WARNED: set[str] = set()
 
 
 def utc_now() -> str:
@@ -62,8 +63,14 @@ SCHEMA_INFO = load_schema()
 
 
 def write_state(name: str, value: str) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    (STATE_DIR / name).write_text(value + "\n", encoding="utf-8")
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        (STATE_DIR / name).write_text(value + "\n", encoding="utf-8")
+    except OSError as exc:
+        # State tracking is best-effort; do not fail request handlers on disk permission drift.
+        if name not in STATE_WRITE_WARNED:
+            print(f"WARN: unable to write retriever state '{name}': {exc}", flush=True)
+            STATE_WRITE_WARNED.add(name)
 
 
 def append_audit(event: dict) -> None:

@@ -10,6 +10,13 @@ if [[ "${AGENTIC_SKIP_D_TESTS:-0}" == "1" ]]; then
   exit 0
 fi
 
+case "${AGENTIC_SKIP_D5_TESTS:-0}" in
+  1|true|TRUE|yes|YES|on|ON)
+    warn "D5 skipped because AGENTIC_SKIP_D5_TESTS=1 (no external API access mode)"
+    exit 0
+    ;;
+esac
+
 assert_cmd python3
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"

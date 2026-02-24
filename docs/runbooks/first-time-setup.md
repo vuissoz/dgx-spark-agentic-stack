@@ -77,6 +77,12 @@ If this VM has no GPU passthrough but you still want a documented degraded run:
 ./agent vm test --name agentic-strict-prod --allow-no-gpu
 ```
 
+If external API access is not available, skip only D5 with a warning:
+
+```bash
+./agent vm test --name agentic-strict-prod --allow-no-gpu --skip-d5-tests
+```
+
 When you are done with this dedicated VM:
 
 ```bash

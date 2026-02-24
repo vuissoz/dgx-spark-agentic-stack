@@ -46,6 +46,7 @@ def is_truthy(value: str | None) -> bool:
 
 GATE_DRY_RUN = is_truthy(os.environ.get("RAG_GATE_DRY_RUN", "1"))
 BOOTSTRAP_INDEX = is_truthy(os.environ.get("RAG_WORKER_BOOTSTRAP_INDEX", "1"))
+STATE_WRITE_WARNED: set[str] = set()
 
 TASK_QUEUE: queue.Queue[str] = queue.Queue()
 TASKS: dict[str, dict] = {}
@@ -57,8 +58,14 @@ def utc_now() -> str:
 
 
 def write_state(name: str, value: str) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    (STATE_DIR / name).write_text(value + "\n", encoding="utf-8")
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        (STATE_DIR / name).write_text(value + "\n", encoding="utf-8")
+    except OSError as exc:
+        # State tracking is best-effort; keep worker loops alive on transient fs permission issues.
+        if name not in STATE_WRITE_WARNED:
+            print(f"WARN: unable to write worker state '{name}': {exc}", flush=True)
+            STATE_WRITE_WARNED.add(name)
 
 
 def append_log(event: dict) -> None:

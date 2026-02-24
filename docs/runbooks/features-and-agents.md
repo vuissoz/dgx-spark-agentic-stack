@@ -357,7 +357,7 @@ Key implemented capabilities:
   - `agent stop <tool>`
 - compliance and tests:
   - `agent doctor [--fix-net]`
-  - `agent test <A..L|V|all>`
+  - `agent test <A..L|V|all> [--skip-d5-tests]`
 - update and rollback:
   - `agent update`
   - `agent rollback all <release_id>`
@@ -365,7 +365,7 @@ Key implemented capabilities:
   - `agent rollback ollama-link <backup_id|latest>`
 - vm provisioning:
   - `agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]`
-  - `agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]`
+  - `agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]`
   - `agent vm cleanup [--name ... --yes --dry-run]`
 - profile and model store utilities:
   - `agent profile`

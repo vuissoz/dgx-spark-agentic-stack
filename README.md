@@ -296,9 +296,9 @@ agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
 agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
-agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]
+agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
 agent vm cleanup [--name ... --yes --dry-run]
-agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all>
+agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all> [--skip-d5-tests]
 agent doctor [--fix-net]
 ```
 
@@ -314,11 +314,14 @@ Exemples:
 ./agent backup list
 ./agent update
 ./agent rollback all <release_id>
+./agent test all --skip-d5-tests
+./agent vm test --name agentic-strict-prod --allow-no-gpu --skip-d5-tests
 ```
 
 Notes:
 - `agent stop` gère les tools `claude|codex|opencode|vibestral`.
 - `agent rollback all` exige un `release_id`.
+- Utiliser `--skip-d5-tests` (ou `AGENTIC_SKIP_D5_TESTS=1`) pour ignorer uniquement `D5_gate_external_providers.sh` avec un warning si l'accès API externe n'est pas disponible.
 - `agent cleanup` supprime aussi les images Docker locales de la stack et purge l'état sans suivre les symlinks.
 
 ## Ollama: preload et lien de modèles

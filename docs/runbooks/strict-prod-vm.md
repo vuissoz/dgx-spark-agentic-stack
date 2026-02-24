@@ -102,6 +102,12 @@ Useful flags:
 ./agent vm test --name agentic-strict-prod --allow-no-gpu
 ```
 
+- Skip only `D5_gate_external_providers.sh` when external API access is unavailable (warning-only skip):
+
+```bash
+./agent vm test --name agentic-strict-prod --skip-d5-tests
+```
+
 - Restrict test selectors:
 
 ```bash

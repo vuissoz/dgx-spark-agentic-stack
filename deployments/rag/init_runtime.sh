@@ -118,9 +118,28 @@ main() {
   if [[ "${EUID}" -eq 0 ]]; then
     install -d -m 0770 "${AGENTIC_ROOT}/rag/qdrant/aliases"
     install -d -m 0770 "${AGENTIC_ROOT}/rag/qdrant/collections"
+    chmod 0750 "${AGENTIC_ROOT}/rag/config" "${AGENTIC_ROOT}/rag/scripts"
+    [[ -f "${AGENTIC_ROOT}/rag/config/document.schema.json" ]] && chmod 0640 "${AGENTIC_ROOT}/rag/config/document.schema.json" || true
     chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
+      "${AGENTIC_ROOT}/rag/config" \
+      "${AGENTIC_ROOT}/rag/docs" \
+      "${AGENTIC_ROOT}/rag/scripts" \
+      "${AGENTIC_ROOT}/rag/retriever" \
+      "${AGENTIC_ROOT}/rag/retriever/state" \
+      "${AGENTIC_ROOT}/rag/retriever/logs" \
+      "${AGENTIC_ROOT}/rag/worker" \
+      "${AGENTIC_ROOT}/rag/worker/state" \
+      "${AGENTIC_ROOT}/rag/worker/logs" \
+      "${AGENTIC_ROOT}/rag/opensearch" \
+      "${AGENTIC_ROOT}/rag/opensearch-logs" \
       "${AGENTIC_ROOT}/rag/qdrant" \
       "${AGENTIC_ROOT}/rag/qdrant-snapshots"
+    chmod -R u+rwX,g+rwX,o-rwx \
+      "${AGENTIC_ROOT}/rag/docs" \
+      "${AGENTIC_ROOT}/rag/retriever" \
+      "${AGENTIC_ROOT}/rag/worker" \
+      "${AGENTIC_ROOT}/rag/opensearch" \
+      "${AGENTIC_ROOT}/rag/opensearch-logs" || true
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then

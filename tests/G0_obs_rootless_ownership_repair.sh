@@ -15,13 +15,15 @@ assert_cmd docker
 
 suffix="g0-obs-$RANDOM-$$"
 export AGENTIC_PROFILE=rootless-dev
-export AGENTIC_ROOT="${REPO_ROOT}/.runtime/${suffix}-root"
+runtime_base="${AGENTIC_TEST_RUNTIME_BASE:-/tmp/agentic-tests}"
+install -d -m 0750 "${runtime_base}"
+export AGENTIC_ROOT="${runtime_base}/${suffix}-root"
 export AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-$(id -u)}"
 export AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-$(id -g)}"
 
 cleanup() {
   if [[ -d "${AGENTIC_ROOT}" ]]; then
-    docker run --rm -v "${REPO_ROOT}/.runtime:/cleanup" busybox:1.36.1 \
+    docker run --rm -v "${runtime_base}:/cleanup" busybox:1.36.1 \
       sh -lc "rm -rf '/cleanup/${suffix}-root'" >/dev/null 2>&1 || true
     rm -rf "${AGENTIC_ROOT}" >/dev/null 2>&1 || true
   fi

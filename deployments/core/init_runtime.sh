@@ -87,6 +87,8 @@ set_proxy_runtime_permissions() {
 
 set_gate_runtime_permissions() {
   local gate_dir="${AGENTIC_ROOT}/gate"
+  local gate_config_dir="${AGENTIC_ROOT}/gate/config"
+  local gate_model_routes_file="${gate_config_dir}/model_routes.yml"
   local gate_state_dir="${AGENTIC_ROOT}/gate/state"
   local gate_logs_dir="${AGENTIC_ROOT}/gate/logs"
   local gate_mcp_dir="${AGENTIC_ROOT}/gate/mcp"
@@ -100,13 +102,21 @@ set_gate_runtime_permissions() {
   local trtllm_logs_dir="${AGENTIC_ROOT}/trtllm/logs"
 
   if [[ "${EUID}" -eq 0 ]]; then
-    chmod 0750 "${gate_dir}"
+    chmod 0750 "${gate_dir}" "${gate_config_dir}"
     chmod 0750 "${gate_mcp_dir}"
+    [[ -f "${gate_model_routes_file}" ]] && chmod 0640 "${gate_model_routes_file}" || true
     chmod 0770 "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}"
     chmod 0770 "${trtllm_models_dir}" "${trtllm_state_dir}" "${trtllm_logs_dir}"
     chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
+      "${gate_config_dir}" \
       "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" \
       "${trtllm_models_dir}" "${trtllm_state_dir}" "${trtllm_logs_dir}" || true
+    [[ -f "${gate_model_routes_file}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${gate_model_routes_file}" || true
+    # Normalize historical root-owned runtime files to avoid non-root startup failures.
+    chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
+      "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" || true
+    chmod -R u+rwX,g+rwX,o-rwx \
+      "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" || true
     [[ -f "${gate_mcp_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${gate_mcp_token}" || true
     [[ -f "${openai_key}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openai_key}" || true
     [[ -f "${openrouter_key}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openrouter_key}" || true
@@ -114,7 +124,7 @@ set_gate_runtime_permissions() {
   fi
 
   # Non-root local runs can include userns-remapped containers; relax only runtime test paths.
-  chmod 0755 "${gate_dir}"
+  chmod 0755 "${gate_dir}" "${gate_config_dir}"
   chmod 0755 "${gate_mcp_dir}"
   chmod 0770 "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}"
   log "non-root runtime init: relaxed gate dir permissions for userns compatibility"

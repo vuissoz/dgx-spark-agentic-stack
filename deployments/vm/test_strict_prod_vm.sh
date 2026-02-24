@@ -7,6 +7,7 @@ TEST_SELECTORS_RAW="${AGENTIC_VM_TEST_SELECTORS:-A,B,C,D,E,F,G,H,I,J,K}"
 VALIDATION_ROOT="/srv/agentic/deployments/validation/vm-strict-prod"
 REQUIRE_GPU=1
 DRY_RUN=0
+SKIP_D5_TESTS="${AGENTIC_SKIP_D5_TESTS:-0}"
 
 usage() {
   cat <<'USAGE'
@@ -19,6 +20,7 @@ Options:
   --test-selectors <csv>       Campaign selectors (A..L or all, default: A,B,C,D,E,F,G,H,I,J,K)
   --require-gpu                Fail if nvidia-smi is unavailable in VM (default)
   --allow-no-gpu               Continue with degraded checks and explicit blocked markers
+  --skip-d5-tests              Skip D5 external provider routing test with warning-only pass
   --dry-run                    Print planned actions only
   -h, --help
 
@@ -126,6 +128,7 @@ name=${VM_NAME}
 workspace_path=${VM_WORKSPACE_PATH}
 test_selectors=${TEST_SELECTORS_CANONICAL}
 require_gpu=${REQUIRE_GPU}
+skip_d5_tests=${SKIP_D5_TESTS}
 validation_root=${VALIDATION_ROOT}
 planned_steps=bootstrap,up_core,up_stacks,doctor,update,rollback,tests,doctor_final,ps_final
 EOF
@@ -136,7 +139,8 @@ run_remote_validation() {
     "${VM_WORKSPACE_PATH}" \
     "${TEST_SELECTORS_CANONICAL}" \
     "${REQUIRE_GPU}" \
-    "${VALIDATION_ROOT}" <<'REMOTE'
+    "${VALIDATION_ROOT}" \
+    "${SKIP_D5_TESTS}" <<'REMOTE'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -144,6 +148,7 @@ vm_workspace_path="$1"
 test_selectors="$2"
 require_gpu="$3"
 validation_root="$4"
+skip_d5_tests="$5"
 
 die() {
   echo "ERROR: $*" >&2
@@ -262,6 +267,7 @@ run_test_selector_with_retry() {
       AGENTIC_SKIP_E_TESTS="${skip_e_tests}" \
       AGENTIC_SKIP_F_TESTS="${skip_f_tests}" \
       AGENTIC_SKIP_K_TESTS="${skip_k_tests}" \
+      AGENTIC_SKIP_D5_TESTS="${skip_d5_tests}" \
       ./agent test "${selector}"; then
       sudo cp "${attempt_log}" "${proof_dir}/agent-test-${selector}.log"
       return 0
@@ -353,6 +359,7 @@ meta_tmp="$(mktemp)"
   printf 'stack_targets=%s\n' "${stack_targets}"
   printf 'test_selectors=%s\n' "${test_selectors}"
   printf 'require_gpu=%s\n' "${require_gpu}"
+  printf 'skip_d5_tests=%s\n' "${skip_d5_tests}"
   printf 'gpu_available=%s\n' "${gpu_available}"
   printf 'compose_mode=%s\n' "${compose_mode}"
   printf 'release_update=%s\n' "${release_id}"
@@ -409,6 +416,10 @@ while [[ $# -gt 0 ]]; do
       REQUIRE_GPU=0
       shift
       ;;
+    --skip-d5-tests)
+      SKIP_D5_TESTS=1
+      shift
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -425,6 +436,11 @@ done
 
 [[ -n "${VM_NAME}" ]] || die "name cannot be empty"
 [[ "${VM_WORKSPACE_PATH}" == /* ]] || die "workspace path must be absolute: ${VM_WORKSPACE_PATH}"
+case "${SKIP_D5_TESTS}" in
+  1|true|TRUE|yes|YES|on|ON) SKIP_D5_TESTS=1 ;;
+  0|false|FALSE|no|NO|off|OFF|"") SKIP_D5_TESTS=0 ;;
+  *) die "invalid AGENTIC_SKIP_D5_TESTS='${SKIP_D5_TESTS}' (expected 0/1)" ;;
+esac
 
 selectors_output="$(normalize_selectors "${TEST_SELECTORS_RAW}")"
 mapfile -t TEST_SELECTORS_ARRAY <<<"${selectors_output}"
