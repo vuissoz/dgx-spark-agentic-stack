@@ -272,9 +272,8 @@ Baseline files (created by runtime init scripts):
 - `${AGENTIC_ROOT}/deployments/optional/<module>.request`
 
 `openwebui.env` keys (sensitive file, mode `600`):
-- `OPENWEBUI_ADMIN_EMAIL`
-- `OPENWEBUI_ADMIN_PASSWORD`
-- `OPENWEBUI_OPENAI_API_KEY`
+- `WEBUI_ADMIN_EMAIL`
+- `WEBUI_ADMIN_PASSWORD`
 - `OPENAI_API_KEY`
 - `WEBUI_SECRET_KEY`
 

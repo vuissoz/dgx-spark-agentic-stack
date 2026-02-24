@@ -29,6 +29,7 @@ services:
       NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openwebui/data:/app/backend/data
+      - ${AGENTIC_ROOT:-/srv/agentic}/openwebui/static:/app/backend/open_webui/static
     healthcheck:
       test:
         - CMD-SHELL

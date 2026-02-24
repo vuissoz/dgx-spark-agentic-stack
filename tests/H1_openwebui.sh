@@ -23,6 +23,11 @@ wait_for_container_ready "${gate_cid}" 90 || fail "ollama-gate is not ready"
 assert_no_public_bind "${openwebui_port}" || fail "openwebui host bind is not loopback-only"
 ok "openwebui host bind is loopback-only"
 
+onboarding_payload="$(curl -fsS --max-time 10 "http://127.0.0.1:${openwebui_port}/api/config" | tr -d '[:space:]' || true)"
+[[ "${onboarding_payload}" != *"\"onboarding\":true"* ]] \
+  || fail "openwebui onboarding is still enabled; verify WEBUI_ADMIN_EMAIL/WEBUI_ADMIN_PASSWORD in openwebui.env"
+ok "openwebui onboarding is disabled after admin bootstrap"
+
 auth_ok=0
 for endpoint in \
   "/api/v1/users/user/info" \

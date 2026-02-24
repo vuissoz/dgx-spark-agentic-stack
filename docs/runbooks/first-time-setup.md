@@ -105,9 +105,8 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 2. OpenWebUI admin credentials (`openwebui.env`, created during `ui` init):
 - file: `${AGENTIC_ROOT}/openwebui/config/openwebui.env`
 - keys:
-  - `OPENWEBUI_ADMIN_EMAIL`
-  - `OPENWEBUI_ADMIN_PASSWORD`
-  - `OPENWEBUI_OPENAI_API_KEY`
+  - `WEBUI_ADMIN_EMAIL`
+  - `WEBUI_ADMIN_PASSWORD`
   - `OPENAI_API_KEY`
   - `WEBUI_SECRET_KEY`
 

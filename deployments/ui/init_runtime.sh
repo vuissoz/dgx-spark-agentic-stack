@@ -45,10 +45,29 @@ ensure_env_key() {
   fi
 }
 
+migrate_env_key() {
+  local env_file="$1"
+  local legacy_key="$2"
+  local target_key="$3"
+  local legacy_value
+
+  [[ -f "${env_file}" ]] || return 0
+  if grep -Eq "^${target_key}=" "${env_file}"; then
+    return 0
+  fi
+
+  legacy_value="$(sed -n "s/^${legacy_key}=//p" "${env_file}" | head -n1)"
+  if [[ -n "${legacy_value}" ]]; then
+    printf '%s=%s\n' "${target_key}" "${legacy_value}" >> "${env_file}"
+    log "migrated ${legacy_key} -> ${target_key} in ${env_file}"
+  fi
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui"
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui/config"
   install -d -m 0770 "${AGENTIC_ROOT}/openwebui/data"
+  install -d -m 0770 "${AGENTIC_ROOT}/openwebui/static"
 
   install -d -m 0750 "${AGENTIC_ROOT}/openhands"
   install -d -m 0750 "${AGENTIC_ROOT}/openhands/config"
@@ -64,6 +83,11 @@ main() {
 
   copy_if_missing "${TEMPLATE_DIR}/openwebui.env" "${AGENTIC_ROOT}/openwebui/config/openwebui.env" 0600
   copy_if_missing "${TEMPLATE_DIR}/openhands.env" "${AGENTIC_ROOT}/openhands/config/openhands.env" 0600
+  migrate_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "OPENWEBUI_ADMIN_EMAIL" "WEBUI_ADMIN_EMAIL"
+  migrate_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "OPENWEBUI_ADMIN_PASSWORD" "WEBUI_ADMIN_PASSWORD"
+  migrate_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "OPENWEBUI_OPENAI_API_KEY" "OPENAI_API_KEY"
+  ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "WEBUI_ADMIN_EMAIL" "admin@local"
+  ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "WEBUI_ADMIN_PASSWORD" "change-me"
   ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "OPENAI_API_KEY" "none"
   ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "WEBUI_SECRET_KEY" "change-me-openwebui-secret"
 
@@ -72,6 +96,7 @@ main() {
   if [[ "${EUID}" -eq 0 ]]; then
     chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
       "${AGENTIC_ROOT}/openwebui/data" \
+      "${AGENTIC_ROOT}/openwebui/static" \
       "${AGENTIC_ROOT}/openhands/state" \
       "${AGENTIC_ROOT}/openhands/logs" \
       "${AGENTIC_ROOT}/openhands/workspaces" \
@@ -83,6 +108,7 @@ main() {
 
   if [[ "${EUID}" -ne 0 ]]; then
     chmod 0770 "${AGENTIC_ROOT}/openwebui/data" \
+      "${AGENTIC_ROOT}/openwebui/static" \
       "${AGENTIC_ROOT}/openhands/state" \
       "${AGENTIC_ROOT}/openhands/logs" \
       "${AGENTIC_ROOT}/openhands/workspaces" \

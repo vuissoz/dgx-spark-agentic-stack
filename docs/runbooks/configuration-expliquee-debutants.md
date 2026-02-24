@@ -268,9 +268,8 @@ Fichiers de base crees par les scripts d'init:
 - `${AGENTIC_ROOT}/deployments/optional/<module>.request`
 
 Cles `openwebui.env` (fichier sensible en `600`):
-- `OPENWEBUI_ADMIN_EMAIL`
-- `OPENWEBUI_ADMIN_PASSWORD`
-- `OPENWEBUI_OPENAI_API_KEY`
+- `WEBUI_ADMIN_EMAIL`
+- `WEBUI_ADMIN_PASSWORD`
 - `OPENAI_API_KEY`
 - `WEBUI_SECRET_KEY`
 
