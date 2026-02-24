@@ -885,9 +885,11 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-blw` — onboarding/runtime : customisation des limites CPU/RAM pour l’ensemble des services conteneurisés.
 - `dgx-spark-agentic-stack-2oj` — étude + remédiation du hardening non uniforme (services encore root par défaut en `strict-prod`, healthchecks manquants sur services longue durée).
 - `dgx-spark-agentic-stack-dvo` — extension de `agent doctor` pour appliquer des contrôles de sécurité profonds de manière uniforme sur tous les services gérés.
+- `dgx-spark-agentic-stack-0li` — accès `sudo` pour les agents dans leur propre conteneur uniquement (sans élévation hôte, sans `docker.sock`), avec cadrage conformité/sécurité.
 
 Objectif :
-- traiter ces trois sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).
+- traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).
+- définir une politique explicite d’élévation intra-conteneur pour les agents (`sudo` local au conteneur uniquement), documenter l’écart éventuel avec le hardening (`no-new-privileges`, `cap_drop`) et ajouter les contrôles associés dans `agent doctor`.
 
 ---
 
