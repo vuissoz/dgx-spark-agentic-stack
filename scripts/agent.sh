@@ -11,6 +11,7 @@ AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollbac
 AGENT_BACKUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/backups/time_machine.sh"
 AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
+AGENT_PREREQS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/check_prereqs.sh"
 AGENT_ONBOARD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
@@ -51,6 +52,7 @@ Usage:
   agent rollback all <release_id>
   agent rollback host-net <backup_id>
   agent rollback ollama-link <backup_id|latest>
+  agent prereqs
   agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --dry-run]
@@ -1568,6 +1570,11 @@ cmd_onboard() {
   "${AGENT_ONBOARD_SCRIPT}" "$@"
 }
 
+cmd_prereqs() {
+  [[ -x "${AGENT_PREREQS_SCRIPT}" ]] || die "prereqs script missing or not executable: ${AGENT_PREREQS_SCRIPT}"
+  "${AGENT_PREREQS_SCRIPT}" "$@"
+}
+
 cmd_vm() {
   local action="${1:-}"
   shift || true
@@ -2061,6 +2068,10 @@ case "$cmd" in
   onboard)
     shift
     cmd_onboard "$@"
+    ;;
+  prereqs)
+    shift
+    cmd_prereqs "$@"
     ;;
   vm)
     shift

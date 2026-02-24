@@ -44,6 +44,29 @@ check_cmd() {
   fi
 }
 
+check_nvidia_docker_support() {
+  local runtimes_json cdi_dirs_json
+  local smoke_image="${AGENTIC_NVIDIA_SMOKE_IMAGE:-nvidia/cuda:12.2.0-base-ubuntu22.04}"
+
+  runtimes_json="$(docker info --format '{{json .Runtimes}}' 2>/dev/null || true)"
+  if printf '%s\n' "${runtimes_json}" | grep -q '"nvidia"'; then
+    ok "nvidia runtime is registered in Docker (NVIDIA Container Toolkit)"
+    return 0
+  fi
+
+  if docker run --rm --gpus all "${smoke_image}" nvidia-smi >/dev/null 2>&1; then
+    ok "GPU container smoke test works via '--gpus all' (runtime/CDI path)"
+    return 0
+  fi
+
+  cdi_dirs_json="$(docker info --format '{{json .CDISpecDirs}}' 2>/dev/null || true)"
+  if [[ -n "${cdi_dirs_json}" && "${cdi_dirs_json}" != "null" && "${cdi_dirs_json}" != "[]" ]]; then
+    fail "nvidia runtime not listed and GPU smoke test failed (CDI dirs: ${cdi_dirs_json}); verify NVIDIA Container Toolkit/CDI wiring"
+  else
+    fail "nvidia Docker support not detected and GPU smoke test failed (install/configure NVIDIA Container Toolkit)"
+  fi
+}
+
 echo "Checking prerequisites (profile=${AGENTIC_PROFILE})"
 
 check_cmd "docker" "1" "install Docker Engine"
@@ -60,11 +83,7 @@ if command -v docker >/dev/null 2>&1; then
     fail "docker compose v2 is missing (install Docker Compose plugin)"
   fi
 
-  if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
-    ok "nvidia runtime is registered in Docker (NVIDIA Container Toolkit)"
-  else
-    fail "nvidia Docker runtime not detected (install/configure NVIDIA Container Toolkit)"
-  fi
+  check_nvidia_docker_support
 fi
 
 if command -v nvidia-smi >/dev/null 2>&1; then

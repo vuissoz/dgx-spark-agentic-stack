@@ -124,6 +124,15 @@ Les valeurs effectives sont visibles via `./agent profile` et persistées dans `
 - `iptables` disponible (en `strict-prod` pour `DOCKER-USER`)
 - `acl` / `setfacl` recommandé en `rootless-dev` (ACL des logs Squid)
 
+Validation rapide des prérequis:
+
+```bash
+./agent prereqs
+```
+
+Note GPU: si votre environnement utilise un chemin CDI/driver spécifique, vous pouvez ajuster l'image de smoke test:
+- `AGENTIC_NVIDIA_SMOKE_IMAGE` (défaut: `nvidia/cuda:12.2.0-base-ubuntu22.04`)
+
 ## Démarrage rapide
 
 ### `strict-prod`

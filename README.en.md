@@ -124,6 +124,15 @@ Effective values are shown by `./agent profile` and persisted into `${AGENTIC_RO
 - `iptables` available (in `strict-prod` for `DOCKER-USER`)
 - `acl` / `setfacl` recommended in `rootless-dev` (Squid log ACLs)
 
+Quick prerequisite validation:
+
+```bash
+./agent prereqs
+```
+
+GPU note: if your environment uses a specific CDI/driver path, you can override the smoke-test image:
+- `AGENTIC_NVIDIA_SMOKE_IMAGE` (default: `nvidia/cuda:12.2.0-base-ubuntu22.04`)
+
 ## Quick Start
 
 ### `strict-prod`
