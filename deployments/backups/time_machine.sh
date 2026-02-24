@@ -299,6 +299,15 @@ backup_run() {
   local previous_snapshot_id previous_data_dir
   local changed_entries
 
+  cleanup_failed_snapshot() {
+    local reason="$1"
+    rm -f "${exclude_file:-}"
+    if [[ -n "${snapshot_dir:-}" && -d "${snapshot_dir}" ]]; then
+      rm -rf -- "${snapshot_dir}"
+    fi
+    write_changes_log "backup-run" "${snapshot_id}" "failed" "reason=${reason}"
+  }
+
   snapshot_id="$(date -u +%Y%m%dT%H%M%SZ)"
   snapshot_dir="${SNAPSHOTS_DIR}/${snapshot_id}"
 
@@ -326,12 +335,12 @@ backup_run() {
 /deployments/backups/**
 /deployments/cleanup-exports/
 /deployments/cleanup-exports/**
-**/*.pem
-**/*.key
-**/*.p12
-**/*.pfx
-**/id_rsa
-**/id_ed25519
+**/*.[Pp][Ee][Mm]
+**/*.[Kk][Ee][Yy]
+**/*.[Pp]12
+**/*.[Pp][Ff][Xx]
+**/[Ii][Dd]_[Rr][Ss][Aa]
+**/[Ii][Dd]_[Ee][Dd]25519
 EXCLUDES
 
   local -a rsync_args=(
@@ -347,24 +356,33 @@ EXCLUDES
     rsync_args+=(--link-dest "${previous_data_dir}")
   fi
 
-  rsync "${rsync_args[@]}" "${AGENTIC_ROOT}/" "${data_dir}/" >"${metadata_dir}/rsync.changes"
+  if ! rsync "${rsync_args[@]}" "${AGENTIC_ROOT}/" "${data_dir}/" >"${metadata_dir}/rsync.changes"; then
+    cleanup_failed_snapshot "rsync_failed"
+    die "backup snapshot failed during rsync"
+  fi
   rm -f "${exclude_file}"
 
   find "${data_dir}" -mindepth 1 -printf '%P\n' | sort >"${metadata_dir}/files.list"
 
   if grep -Eq '^secrets(/|$)' "${metadata_dir}/files.list"; then
-    write_changes_log "backup-run" "${snapshot_id}" "failed" "reason=secret_path_included"
+    cleanup_failed_snapshot "secret_path_included"
     die "backup snapshot unexpectedly contains secrets/ path"
   fi
 
   if grep -Eqi '(^|/)(id_rsa|id_ed25519|.+\.(pem|key|p12|pfx))$' "${metadata_dir}/files.list"; then
-    write_changes_log "backup-run" "${snapshot_id}" "failed" "reason=sensitive_key_material_detected"
+    cleanup_failed_snapshot "sensitive_key_material_detected"
     die "backup snapshot unexpectedly contains key/certificate material"
   fi
 
   changed_entries="$(awk 'NF{count+=1} END{print count+0}' "${metadata_dir}/rsync.changes")"
-  capture_system_metadata "${snapshot_dir}"
-  write_backup_metadata_json "${snapshot_id}" "${snapshot_dir}" "${previous_snapshot_id}" "${changed_entries}"
+  if ! capture_system_metadata "${snapshot_dir}"; then
+    cleanup_failed_snapshot "metadata_capture_failed"
+    die "backup snapshot failed during metadata capture"
+  fi
+  if ! write_backup_metadata_json "${snapshot_id}" "${snapshot_dir}" "${previous_snapshot_id}" "${changed_entries}"; then
+    cleanup_failed_snapshot "metadata_write_failed"
+    die "backup snapshot failed while writing metadata"
+  fi
 
   ln -sfn "${snapshot_dir}" "${LATEST_LINK}"
 

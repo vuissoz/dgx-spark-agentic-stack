@@ -63,6 +63,7 @@ ok "second backup snapshot is incremental (changed_entries=${changed2})"
 
 printf 'version-two\n' >"${AGENTIC_ROOT}/codex/workspaces/demo/readme.txt"
 printf 'marker-two\n' >"${AGENTIC_ROOT}/claude/state/marker.txt"
+printf 'private-key-material\n' >"${AGENTIC_ROOT}/codex/workspaces/demo/key.PEM"
 
 sleep 1
 run3_output="$("${agent_bin}" backup run)"
@@ -86,6 +87,8 @@ grep -q '^version-two$' "${AGENTIC_ROOT}/codex/workspaces/demo/readme.txt" \
   || fail "backup restore did not restore codex workspace file content"
 grep -q '^marker-two$' "${AGENTIC_ROOT}/claude/state/marker.txt" \
   || fail "backup restore did not restore claude state file"
+[[ ! -f "${AGENTIC_ROOT}/codex/workspaces/demo/key.PEM" ]] \
+  || fail "backup restore should remove excluded key material patterns"
 ok "backup restore restored targeted persistent files"
 
 list_output="$("${agent_bin}" backup list)"
