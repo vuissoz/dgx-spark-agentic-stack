@@ -36,6 +36,7 @@ Usage:
   agent ls
   agent ps
   agent llm mode [local|hybrid|remote]
+  agent llm test-mode [on|off]
   agent logs <service>
   agent stop <tool>
   agent stop service <service...>
@@ -631,7 +632,7 @@ load_runtime_env() {
           export "${key}=${value}"
         fi
         ;;
-      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
+      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
         export "${key}=${value}"
         ;;
       *)
@@ -679,6 +680,7 @@ ensure_runtime_env() {
     "AGENTIC_AGENT_BASE_DOCKERFILE=${AGENTIC_AGENT_BASE_DOCKERFILE}"
     "AGENTIC_AGENT_BASE_IMAGE=${AGENTIC_AGENT_BASE_IMAGE}"
     "AGENTIC_LLM_MODE=${AGENTIC_LLM_MODE}"
+    "GATE_ENABLE_TEST_MODE=${GATE_ENABLE_TEST_MODE:-0}"
     "AGENTIC_OPENAI_DAILY_TOKENS=${AGENTIC_OPENAI_DAILY_TOKENS}"
     "AGENTIC_OPENAI_MONTHLY_TOKENS=${AGENTIC_OPENAI_MONTHLY_TOKENS}"
     "AGENTIC_OPENAI_DAILY_REQUESTS=${AGENTIC_OPENAI_DAILY_REQUESTS}"
@@ -752,6 +754,7 @@ cmd_profile() {
   printf 'agent_base_dockerfile=%s\n' "${AGENTIC_AGENT_BASE_DOCKERFILE}"
   printf 'agent_base_image=%s\n' "${AGENTIC_AGENT_BASE_IMAGE}"
   printf 'llm_mode=%s\n' "${AGENTIC_LLM_MODE}"
+  printf 'gate_test_mode=%s\n' "${GATE_ENABLE_TEST_MODE:-0}"
   printf 'egress_network=%s\n' "${AGENTIC_EGRESS_NETWORK}"
   printf 'openai_daily_tokens=%s\n' "${AGENTIC_OPENAI_DAILY_TOKENS}"
   printf 'openai_monthly_tokens=%s\n' "${AGENTIC_OPENAI_MONTHLY_TOKENS}"
@@ -1600,6 +1603,40 @@ cmd_vm() {
   esac
 }
 
+normalize_gate_test_mode_value() {
+  local raw="${1:-0}"
+  case "${raw}" in
+    1|true|TRUE|yes|YES|on|ON) printf '1\n' ;;
+    0|false|FALSE|no|NO|off|OFF|"") printf '0\n' ;;
+    *)
+      warn "invalid GATE_ENABLE_TEST_MODE='${raw}', treating as disabled"
+      printf '0\n'
+      ;;
+  esac
+}
+
+set_gate_test_mode_value() {
+  local enabled="$1"
+  local restart_if_running="${2:-1}"
+  local gate_cid=""
+
+  case "${enabled}" in
+    0|1) ;;
+    *) die "internal error: unsupported gate test mode value '${enabled}'" ;;
+  esac
+
+  ensure_runtime_env
+  set_runtime_env_value "GATE_ENABLE_TEST_MODE" "${enabled}"
+  export GATE_ENABLE_TEST_MODE="${enabled}"
+
+  if [[ "${restart_if_running}" == "1" ]]; then
+    gate_cid="$(service_container_id "ollama-gate" || true)"
+    if [[ -n "${gate_cid}" ]]; then
+      run_compose_on_targets up core -d --no-deps --force-recreate ollama-gate >/dev/null
+    fi
+  fi
+}
+
 cmd_llm() {
   local action="${1:-}"
   shift || true
@@ -1662,8 +1699,44 @@ JSON
         printf 'tip: to free local GPU/RAM, run: agent stop service ollama trtllm\n'
       fi
       ;;
+    test-mode)
+      local test_mode="${1:-}"
+      local normalized
+      local gate_cid
+
+      if [[ -z "${test_mode}" ]]; then
+        normalized="$(normalize_gate_test_mode_value "${GATE_ENABLE_TEST_MODE:-0}")"
+        if [[ "${normalized}" == "1" ]]; then
+          printf 'llm test-mode=on\n'
+        else
+          printf 'llm test-mode=off\n'
+        fi
+        return 0
+      fi
+
+      case "${test_mode}" in
+        on)
+          normalized="1"
+          ;;
+        off)
+          normalized="0"
+          ;;
+        *)
+          die "Usage: agent llm test-mode [on|off]"
+          ;;
+      esac
+
+      gate_cid="$(service_container_id "ollama-gate" || true)"
+      set_gate_test_mode_value "${normalized}" "1"
+
+      if [[ -n "${gate_cid}" ]]; then
+        printf 'llm test-mode=%s (restarted ollama-gate)\n' "${test_mode}"
+      else
+        printf 'llm test-mode=%s (persisted; restart applies when core is started)\n' "${test_mode}"
+      fi
+      ;;
     *)
-      die "Usage: agent llm mode [local|hybrid|remote]"
+      die "Usage: agent llm mode [local|hybrid|remote] | agent llm test-mode [on|off]"
       ;;
   esac
 }
@@ -1821,6 +1894,8 @@ normalize_logs_target() {
 
 run_tests() {
   local selector="$1"
+  local previous_test_mode
+  local restore_test_mode=0
   local -a tests=()
 
   if [[ "$selector" == "all" ]]; then
@@ -1839,11 +1914,32 @@ run_tests() {
 
   [[ "${#tests[@]}" -gt 0 ]] || die "No test scripts found for selector '$selector'."
 
+  previous_test_mode="$(normalize_gate_test_mode_value "${GATE_ENABLE_TEST_MODE:-0}")"
+  if [[ "${previous_test_mode}" != "1" ]]; then
+    printf 'INFO: enabling llm test-mode=on for agent test run\n'
+    set_gate_test_mode_value "1" "1"
+    restore_test_mode=1
+  fi
+
   local test_script
+  local rc=0
+  set +e
   for test_script in "${tests[@]}"; do
     echo "RUN ${test_script}"
     bash "${test_script}"
+    rc=$?
+    if [[ "${rc}" -ne 0 ]]; then
+      break
+    fi
   done
+  set -e
+
+  if [[ "${restore_test_mode}" == "1" ]]; then
+    printf 'INFO: restoring llm test-mode=off after agent test run\n'
+    set_gate_test_mode_value "${previous_test_mode}" "1"
+  fi
+
+  [[ "${rc}" -eq 0 ]] || return "${rc}"
 }
 
 load_runtime_env

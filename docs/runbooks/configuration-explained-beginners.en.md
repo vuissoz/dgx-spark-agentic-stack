@@ -23,7 +23,7 @@ Configuration comes from 5 places:
 
 3. Runtime state file (managed by `agent`)
 - File: `${AGENTIC_ROOT}/deployments/runtime.env`
-- Updated automatically by commands like `agent up`, `agent llm mode`, `agent ollama-models`, `agent ollama-preload`.
+- Updated automatically by commands like `agent up`, `agent llm mode`, `agent llm test-mode`, `agent ollama-models`, `agent ollama-preload`.
 
 4. Service config files under `${AGENTIC_ROOT}`
 - Example: `${AGENTIC_ROOT}/proxy/allowlist.txt`
@@ -87,6 +87,7 @@ Notes:
 | Variable | Allowed values | Default | Stored in |
 |---|---|---|---|
 | `AGENTIC_LLM_MODE` | `local`, `hybrid`, `remote` | `hybrid` | `runtime.env`, `${AGENTIC_ROOT}/gate/state/llm_mode.json` |
+| `GATE_ENABLE_TEST_MODE` | `0` (off) or `1` (on) | `0` | `runtime.env` |
 | `AGENTIC_OPENAI_DAILY_TOKENS` | integer `>= 0` (`0` means unlimited/off) | `0` | `runtime.env` |
 | `AGENTIC_OPENAI_MONTHLY_TOKENS` | integer `>= 0` | `0` | `runtime.env` |
 | `AGENTIC_OPENAI_DAILY_REQUESTS` | integer `>= 0` | `0` | `runtime.env` |

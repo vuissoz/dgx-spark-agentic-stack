@@ -235,6 +235,7 @@ agent <claude|codex|opencode|vibestral> [project]
 agent ls
 agent ps
 agent llm mode [local|hybrid|remote]
+agent llm test-mode [on|off]
 agent logs <service>
 agent stop <tool>
 agent stop service <service...>
@@ -316,6 +317,8 @@ Prérequis runtime:
 - `./agent llm mode local` : bloque explicitement les providers externes.
 - `./agent llm mode hybrid` : local prioritaire + externe selon routage.
 - `./agent llm mode remote` : providers externes autorisés (et possibilité d'arrêter `ollama`/`trtllm` pour libérer GPU/RAM).
+- `./agent llm test-mode off` : valeur par défaut (production), dry-run gate désactivé.
+- `./agent llm test-mode on` : activation explicite pour campagnes de test.
 
 Exemple mode `remote` avec pause locale:
 
