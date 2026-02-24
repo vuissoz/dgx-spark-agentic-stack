@@ -1362,7 +1362,29 @@ purge_runtime_root_symlink_safe() {
   [[ -L "${root}" ]] && die "Refusing cleanup: AGENTIC_ROOT is a symlink: ${root}"
   [[ -d "${root}" ]] || die "Refusing cleanup: AGENTIC_ROOT is not a directory: ${root}"
 
-  find -P "${root}" -mindepth 1 -maxdepth 1 -exec rm -rf --one-file-system -- {} +
+  if find -P "${root}" -mindepth 1 -maxdepth 1 -exec rm -rf --one-file-system -- {} +; then
+    return 0
+  fi
+
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then
+    die "cleanup failed to purge ${root}; rerun with sufficient privileges or repair ownership first"
+  fi
+
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    die "cleanup failed to purge ${root}; docker helper fallback is unavailable and permission repair is required"
+  fi
+
+  warn "cleanup: direct purge failed under rootless-dev, attempting docker helper fallback (ownership/permission drift)"
+  if ! docker run --rm --network none \
+    -v "${root}:/cleanup" \
+    "${AGENTIC_CLEANUP_HELPER_IMAGE:-busybox:1.36.1}" \
+    sh -lc "set -eu; find -P /cleanup -xdev -mindepth 1 -maxdepth 1 -exec chmod -R u+rwx -- {} + >/dev/null 2>&1 || true; find -P /cleanup -xdev -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; chown '${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}' /cleanup || true; chmod 0750 /cleanup || true"; then
+    die "cleanup failed to purge ${root} (helper fallback failed). Try: sudo chown -R $(id -u):$(id -g) '${root}'"
+  fi
+
+  if find -P "${root}" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+    die "cleanup failed: residual files remain under ${root} after helper fallback"
+  fi
 }
 
 collect_cleanup_image_refs() {
