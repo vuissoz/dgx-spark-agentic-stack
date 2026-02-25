@@ -1,4 +1,186 @@
-# One domain per line. Prefix with a dot for subdomains.
-example.com
+# AGENTIC DEV - EXTENDED DOMAIN WHITELIST
+# Policy:
+# - HTTPS only (TCP 443) is enforced by proxy policy.
+# - DNS resolution is required.
+# - No wildcard by default: use explicit domains/subdomains.
+#
+# One entry per line (domain or CIDR).
+
+# ----------------------------------------------------------
+# VERSION CONTROL / SOURCE HOSTING
+# ----------------------------------------------------------
+github.com
+api.github.com
+raw.githubusercontent.com
+objects.githubusercontent.com
+codeload.github.com
+
+gitlab.com
+about.gitlab.com
+
+bitbucket.org
+api.bitbucket.org
+
+# ----------------------------------------------------------
+# PACKAGE REGISTRIES
+# ----------------------------------------------------------
+
+# Python
+pypi.org
+files.pythonhosted.org
+
+# JavaScript
+registry.npmjs.org
+npmjs.com
+
+# Rust
+crates.io
+static.crates.io
+
+# Go
+proxy.golang.org
+sum.golang.org
+
+# Docker / Containers
+registry-1.docker.io
+auth.docker.io
+hub.docker.com
+
+ghcr.io
+quay.io
+
+# NVIDIA (GPU / AI containers)
+nvcr.io
+ngc.nvidia.com
+
+# ----------------------------------------------------------
+# MACHINE LEARNING / MODELS
+# ----------------------------------------------------------
+huggingface.co
+cdn-lfs.huggingface.co
+
+ollama.ai
+
 api.openai.com
+anthropic.com
+api.anthropic.com
 openrouter.ai
+
+# ----------------------------------------------------------
+# DOCUMENTATION / TECH REFERENCES
+# ----------------------------------------------------------
+readthedocs.io
+docs.python.org
+developer.mozilla.org
+stackoverflow.com
+
+kubernetes.io
+helm.sh
+terraform.io
+
+# ----------------------------------------------------------
+# SECURITY / VULNERABILITY DATABASES
+# ----------------------------------------------------------
+cve.mitre.org
+nvd.nist.gov
+security.snyk.io
+osv.dev
+
+# ----------------------------------------------------------
+# CI/CD
+# ----------------------------------------------------------
+circleci.com
+app.circleci.com
+
+travis-ci.com
+
+gitlab-ci.com
+
+# ----------------------------------------------------------
+# CLOUD PROVIDERS (OPTIONAL)
+# ----------------------------------------------------------
+aws.amazon.com
+console.aws.amazon.com
+ec2.amazonaws.com
+s3.amazonaws.com
+
+azure.microsoft.com
+management.azure.com
+
+cloud.google.com
+gcr.io
+
+# ----------------------------------------------------------
+# OBSERVABILITY (OPTIONAL)
+# ----------------------------------------------------------
+grafana.com
+prometheus.io
+
+# ----------------------------------------------------------
+# TIME / CERTIFICATE VALIDATION
+# ----------------------------------------------------------
+letsencrypt.org
+crt.sh
+
+# ----------------------------------------------------------
+# SCIENTIFIC LITERATURE / PREPRINTS
+# ----------------------------------------------------------
+
+# arXiv
+arxiv.org
+export.arxiv.org
+static.arxiv.org
+
+# DOI resolution
+doi.org
+dx.doi.org
+
+# Crossref metadata
+api.crossref.org
+crossref.org
+
+# PubMed / biomedical
+pubmed.ncbi.nlm.nih.gov
+ncbi.nlm.nih.gov
+
+# Europe PMC
+europepmc.org
+
+# HAL (France)
+hal.science
+
+# OpenReview (ML conferences)
+openreview.net
+
+# Semantic Scholar (metadata API)
+api.semanticscholar.org
+semanticscholar.org
+
+# CORE (open access aggregator)
+core.ac.uk
+
+# Papers With Code (benchmarks / repos)
+paperswithcode.com
+
+# IEEE (metadata unless licensed content is available)
+ieeexplore.ieee.org
+
+# Springer (metadata)
+link.springer.com
+
+# ScienceDirect (Elsevier metadata)
+sciencedirect.com
+
+# ACM
+dl.acm.org
+
+# Local institutions
+univ-lorraine.fr
+chru-nancy.fr
+
+# Math indexes
+mathscinet.ams.org
+zbmath.org
+
+# Keep this for generic connectivity checks used by tooling/tests.
+example.com

@@ -128,8 +128,10 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 ### 2.2 Egress allowlist (important for agent outbound access)
 
 - file: `${AGENTIC_ROOT}/proxy/allowlist.txt`
-- default template is intentionally minimal.
-- add only domains required for your workflows.
+- onboarding default now uses the extended curated list from:
+  - `examples/core/allowlist.txt`
+- this list includes explicit domains for: source hosting, package registries, AI/model providers, docs, security feeds, CI/CD, cloud, observability, and scientific literature.
+- keep only domains required for your real workflows (recommended hardening after first bootstrap).
 - for D5 external LLM routing via `ollama-gate`, keep at least:
   - `api.openai.com`
   - `openrouter.ai`

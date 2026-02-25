@@ -41,7 +41,21 @@ Pour arreter proprement:
 ./agent stack stop all
 ```
 
-## 5) Comment savoir si tout va bien
+## 5) Sites web accessibles par defaut
+
+La liste de domaines autorises par defaut est dans:
+- `examples/core/allowlist.txt` (modele repo)
+- `${AGENTIC_ROOT}/proxy/allowlist.txt` (copie runtime active)
+
+Vous pouvez l'afficher avec:
+
+```bash
+./agent profile
+ROOT="$(./agent profile | sed -n 's/^root=//p')"
+cat "${ROOT}/proxy/allowlist.txt"
+```
+
+## 6) Comment savoir si tout va bien
 
 Regle simple:
 - `./agent ps` doit montrer les services en `Up`.
@@ -59,14 +73,14 @@ Exemple:
 ./agent logs openwebui
 ```
 
-## 6) Regles de securite faciles
+## 7) Regles de securite faciles
 
 - Ne jamais exposer en `0.0.0.0`.
 - Ne jamais monter `docker.sock` dans les apps.
 - Garder les secrets hors git.
 - Garder l'acces distant via Tailscale/SSH.
 
-## 7) Mise a jour et retour arriere
+## 8) Mise a jour et retour arriere
 
 Mettre a jour:
 
@@ -80,7 +94,7 @@ Revenir a une version precedente:
 ./agent rollback all <release_id>
 ```
 
-## 8) Besoin d'aller plus loin
+## 9) Besoin d'aller plus loin
 
 - Guide debutant detaille: `docs/runbooks/services-expliques-debutants.md`
 - Guide equivalent en anglais: `docs/runbooks/services-explained-beginners.en.md`

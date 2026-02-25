@@ -408,6 +408,21 @@ normalize_allowlist_csv() {
     | awk 'NF { if (!seen[$0]++) print $0 }'
 }
 
+default_allowlist_csv() {
+  local template_path="${REPO_ROOT}/examples/core/allowlist.txt"
+
+  if [[ ! -r "${template_path}" ]]; then
+    printf '%s\n' "example.com,api.openai.com,openrouter.ai"
+    return 0
+  fi
+
+  awk '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    { print }
+  ' "${template_path}" | paste -sd, -
+}
+
 validate_allowlist_csv() {
   local raw="$1"
   local line
@@ -1200,7 +1215,12 @@ elif [[ "${non_interactive}" -eq 0 ]]; then
   fi
 fi
 
-allowlist_domains="${allowlist_domains_override:-example.com,api.openai.com,openrouter.ai}"
+default_allowlist_domains="$(default_allowlist_csv)"
+if [[ -z "${default_allowlist_domains}" ]]; then
+  default_allowlist_domains="example.com,api.openai.com,openrouter.ai"
+fi
+
+allowlist_domains="${allowlist_domains_override:-${default_allowlist_domains}}"
 if [[ "${network_section_enabled}" -eq 1 ]]; then
   if [[ "${non_interactive}" -eq 0 && -z "${allowlist_domains_override}" ]]; then
     while true; do
