@@ -31,6 +31,7 @@ limits_optional_mem_override=""
 openwebui_admin_email_override=""
 openwebui_admin_password_override=""
 openwebui_secret_key_override=""
+openwebui_allow_model_pull_override=""
 openhands_llm_model_override=""
 openhands_llm_api_key_override=""
 allowlist_domains_override=""
@@ -85,6 +86,7 @@ First-run bootstrap options:
   --openwebui-admin-email <email>
   --openwebui-admin-password <password>
   --openwebui-secret-key <value>
+  --openwebui-allow-model-pull <true|false>
   --openhands-llm-model <name>
   --openhands-llm-api-key <key>
   --allowlist-domains <csv>
@@ -406,6 +408,27 @@ validate_email_value() {
     echo "${key} must look like an email address" >&2
     return 1
   }
+}
+
+validate_true_false_value() {
+  local key="$1"
+  local value="$2"
+  case "${value,,}" in
+    true|false|yes|no|1|0) return 0 ;;
+    *)
+      echo "${key} must be one of: true,false,yes,no,1,0" >&2
+      return 1
+      ;;
+  esac
+}
+
+normalize_true_false_env_value() {
+  local value="$1"
+  case "${value,,}" in
+    true|yes|1) printf '%s\n' "True" ;;
+    false|no|0) printf '%s\n' "False" ;;
+    *) return 1 ;;
+  esac
 }
 
 validate_allowlist_entry() {
@@ -929,6 +952,11 @@ while [[ $# -gt 0 ]]; do
       openwebui_secret_key_override="$2"
       shift 2
       ;;
+    --openwebui-allow-model-pull)
+      [[ $# -ge 2 ]] || die "missing value for --openwebui-allow-model-pull"
+      openwebui_allow_model_pull_override="$2"
+      shift 2
+      ;;
     --openhands-llm-model)
       [[ $# -ge 2 ]] || die "missing value for --openhands-llm-model"
       openhands_llm_model_override="$2"
@@ -1150,6 +1178,8 @@ fi
 openwebui_admin_email="${openwebui_admin_email_override:-admin@local}"
 openwebui_admin_password="${openwebui_admin_password_override:-change-me}"
 openwebui_secret_key="${openwebui_secret_key_override:-change-me-openwebui-secret}"
+openwebui_allow_model_pull_raw="${openwebui_allow_model_pull_override:-false}"
+openwebui_enable_ollama_api="False"
 openhands_llm_model="${openhands_llm_model_override:-${default_model}}"
 openhands_llm_api_key="${openhands_llm_api_key_override:-local-ollama}"
 
@@ -1181,6 +1211,14 @@ if [[ "${ui_section_enabled}" -eq 1 ]]; then
       fi
     fi
 
+    if [[ -z "${openwebui_allow_model_pull_override}" ]]; then
+      if prompt_yes_no "Allow pulling new models from OpenWebUI (native Ollama API)?" "no"; then
+        openwebui_allow_model_pull_raw="true"
+      else
+        openwebui_allow_model_pull_raw="false"
+      fi
+    fi
+
     openhands_llm_model="$(prompt_with_default "LLM_MODEL" "${openhands_llm_model}")"
     if [[ -z "${openhands_llm_api_key_override}" ]]; then
       info "OpenHands local mode accepts any non-empty LLM_API_KEY placeholder (example: local-ollama)."
@@ -1191,6 +1229,9 @@ if [[ "${ui_section_enabled}" -eq 1 ]]; then
   validate_email_value "WEBUI_ADMIN_EMAIL" "${openwebui_admin_email}" || die "invalid WEBUI_ADMIN_EMAIL"
   [[ -n "${openwebui_admin_password}" ]] || die "WEBUI_ADMIN_PASSWORD cannot be empty"
   [[ -n "${openwebui_secret_key}" ]] || die "WEBUI_SECRET_KEY cannot be empty"
+  validate_true_false_value "OPENWEBUI_ALLOW_MODEL_PULL" "${openwebui_allow_model_pull_raw}" || die "invalid OPENWEBUI_ALLOW_MODEL_PULL"
+  openwebui_enable_ollama_api="$(normalize_true_false_env_value "${openwebui_allow_model_pull_raw}")" \
+    || die "invalid OPENWEBUI_ALLOW_MODEL_PULL"
   [[ -n "${openhands_llm_model}" ]] || die "LLM_MODEL cannot be empty"
   [[ -n "${openhands_llm_api_key}" ]] || die "LLM_API_KEY cannot be empty"
 
@@ -1205,6 +1246,7 @@ if [[ "${ui_section_enabled}" -eq 1 ]]; then
 WEBUI_ADMIN_PASSWORD=${openwebui_admin_password}
 OPENAI_API_KEY=none
 WEBUI_SECRET_KEY=${openwebui_secret_key}
+OPENWEBUI_ENABLE_OLLAMA_API=${openwebui_enable_ollama_api}
 "
 
     if ! write_file_atomic "${openwebui_env_path}" 0600 "${openwebui_env_content}"; then

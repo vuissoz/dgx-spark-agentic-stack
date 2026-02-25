@@ -232,6 +232,11 @@ grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${non_interactive_en
   || fail "non-interactive flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_OPTIONAL_MEM='512m'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_LIMIT_OPTIONAL_MEM is not applied"
+non_interactive_allowlist_file="${work_dir}/ni-root/proxy/allowlist.txt"
+[[ -s "${non_interactive_allowlist_file}" ]] \
+  || fail "non-interactive flow did not write default allowlist file"
+grep -q '^registry.ollama.ai$' "${non_interactive_allowlist_file}" \
+  || fail "default allowlist must include registry.ollama.ai"
 assert_git_ignored "${non_interactive_env_file}"
 ok "wizard non-interactive flags mode works"
 

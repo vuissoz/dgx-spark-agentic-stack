@@ -60,6 +60,7 @@ huggingface.co
 cdn-lfs.huggingface.co
 
 ollama.ai
+registry.ollama.ai
 
 api.openai.com
 anthropic.com

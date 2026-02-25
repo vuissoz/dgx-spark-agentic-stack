@@ -746,6 +746,8 @@ Suivi Beads : `dgx-spark-agentic-stack-49e`
 - bind hôte : `127.0.0.1:8080`
 - auth obligatoire (bootstrap admin)
 - backend LLM = `ollama-gate`
+- onboarding : ajouter un flag explicite (désactivé par défaut) pour autoriser le pull de modèles depuis OpenWebUI via l’API Ollama native, tout en conservant le chemin OpenAI-compatible via `ollama-gate` par défaut
+- onboarding/allowlist par défaut : inclure `registry.ollama.ai` (nécessaire au téléchargement de modèles Ollama)
 - persistance : `/srv/agentic/openwebui/`
 
 **Test** : `tests/H1_openwebui.sh`
@@ -951,6 +953,7 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-dvo` — extension de `agent doctor` pour appliquer des contrôles de sécurité profonds de manière uniforme sur tous les services gérés.
 - `dgx-spark-agentic-stack-0li` — accès `sudo` pour les agents dans leur propre conteneur uniquement (sans élévation hôte, sans `docker.sock`), avec cadrage conformité/sécurité.
 - `dgx-spark-agentic-stack-kvs` — onboarding premier démarrage complet (interface type CMake/ccmake) incluant admin/password, allowances réseau et secrets sans étape manuelle cachée.
+- `dgx-spark-agentic-stack-581` — onboarding OpenWebUI : flag optionnel “allow model pull” + extension allowlist par défaut `registry.ollama.ai`.
 
 Objectif :
 - traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).

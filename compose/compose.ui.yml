@@ -22,11 +22,12 @@ services:
       WEBUI_AUTH: "True"
       ENABLE_SIGNUP: "False"
       OPENAI_API_BASE_URL: http://ollama-gate:11435/v1
-      ENABLE_OLLAMA_API: "False"
+      ENABLE_OLLAMA_API: ${OPENWEBUI_ENABLE_OLLAMA_API:-False}
+      OLLAMA_BASE_URL: http://ollama:11434
       ENABLE_OPENAI_API: "True"
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+      NO_PROXY: ollama,ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openwebui/data:/app/backend/data
       - ${AGENTIC_ROOT:-/srv/agentic}/openwebui/static:/app/backend/open_webui/static

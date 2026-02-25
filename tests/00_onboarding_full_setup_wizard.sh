@@ -43,6 +43,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --openwebui-admin-email "${openwebui_email}" \
   --openwebui-admin-password "${openwebui_password}" \
   --openwebui-secret-key "${openwebui_secret}" \
+  --openwebui-allow-model-pull true \
   --openhands-llm-model "${openhands_model}" \
   --openhands-llm-api-key "${openhands_api_key}" \
   --allowlist-domains 'example.com,api.openai.com,10.1.0.0/24' \
@@ -96,6 +97,8 @@ grep -q "^WEBUI_ADMIN_PASSWORD=${openwebui_password}$" "${openwebui_env}" \
   || fail "WEBUI_ADMIN_PASSWORD was not written"
 grep -q "^WEBUI_SECRET_KEY=${openwebui_secret}$" "${openwebui_env}" \
   || fail "WEBUI_SECRET_KEY was not written"
+grep -q '^OPENWEBUI_ENABLE_OLLAMA_API=True$' "${openwebui_env}" \
+  || fail "OPENWEBUI_ENABLE_OLLAMA_API=True was not written"
 grep -q "^LLM_MODEL=${openhands_model}$" "${openhands_env}" \
   || fail "LLM_MODEL was not written"
 grep -q "^LLM_API_KEY=${openhands_api_key}$" "${openhands_env}" \
