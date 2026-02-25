@@ -13,7 +13,7 @@ from typing import Any, Dict, Tuple
 import httpx
 import yaml
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 
 def env_int(name: str, default: int) -> int:
@@ -864,6 +864,60 @@ def extract_total_tokens(payload: Dict[str, Any]) -> int:
     return max(0, parsed)
 
 
+def extract_requested_model(payload: Any) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+
+    model = payload.get("model")
+    if isinstance(model, str) and model.strip():
+        return model.strip()
+
+    name = payload.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+
+    return None
+
+
+def gate_response_headers(
+    decision: str,
+    backend: str,
+    provider: str,
+    llm_mode: str,
+    model_served: str | None = None,
+) -> Dict[str, str]:
+    headers = {
+        "X-Gate-Decision": decision,
+        "X-Gate-Backend": backend,
+        "X-Gate-Provider": provider,
+        "X-Gate-LLM-Mode": llm_mode,
+    }
+    if isinstance(model_served, str) and model_served:
+        headers["X-Model-Served"] = model_served
+    return headers
+
+
+def upstream_response_with_gate_headers(
+    upstream: httpx.Response,
+    decision: str,
+    backend: str,
+    provider: str,
+    llm_mode: str,
+    model_served: str | None = None,
+) -> Response:
+    headers = gate_response_headers(
+        decision=decision,
+        backend=backend,
+        provider=provider,
+        llm_mode=llm_mode,
+        model_served=model_served,
+    )
+    content_type = upstream.headers.get("content-type")
+    if isinstance(content_type, str) and content_type:
+        headers["Content-Type"] = content_type
+    return Response(status_code=upstream.status_code, content=upstream.content, headers=headers)
+
+
 def llm_mode_block_response(provider: str, endpoint: str, llm_mode: str) -> JSONResponse:
     return JSONResponse(
         status_code=403,
@@ -1134,6 +1188,259 @@ async def metrics() -> PlainTextResponse:
             ]
         )
     return PlainTextResponse("\n".join(lines) + "\n")
+
+
+async def read_json_body(request: Request) -> tuple[Dict[str, Any] | None, JSONResponse | None]:
+    try:
+        payload = await request.json()
+    except Exception:
+        return None, JSONResponse(
+            status_code=400,
+            content={"error": {"message": "invalid JSON body", "type": "invalid_request_error"}},
+        )
+
+    if not isinstance(payload, dict):
+        return None, JSONResponse(
+            status_code=400,
+            content={"error": {"message": "JSON body must be an object", "type": "invalid_request_error"}},
+        )
+    return payload, None
+
+
+async def proxy_ollama_api(
+    request: Request,
+    endpoint: str,
+    payload: Dict[str, Any] | None,
+    session_default: str,
+    sticky_model: bool = False,
+) -> Response:
+    queue_wait_timeout_seconds = extract_queue_timeout_seconds(request)
+    session = request.headers.get("X-Agent-Session", session_default)
+    project = request.headers.get("X-Agent-Project", "-")
+    llm_mode = state.get_llm_mode()
+    allow_switch = header_bool(request.headers.get("X-Model-Switch"))
+    started = time.monotonic()
+    acquired = False
+    decision = "active"
+    requested_model = extract_requested_model(payload)
+    model_served = requested_model
+    model_switch = False
+    backend = state.default_backend
+    provider = backend_provider_name(backend)
+    status_code = 200
+    reason = None
+
+    try:
+        decision, acquired = await acquire_gate_slot(queue_wait_timeout_seconds)
+    except asyncio.TimeoutError:
+        latency_ms = int((time.monotonic() - started) * 1000)
+        await state.mark_decision("denied")
+        state.write_log(
+            event_base(
+                session=session,
+                project=project,
+                endpoint=endpoint,
+                decision="denied",
+                model_requested=requested_model,
+                model_served=None,
+                status_code=429,
+                latency_ms=latency_ms,
+                backend=backend,
+                provider=provider,
+                reason="queue_timeout",
+                llm_mode=llm_mode,
+            )
+        )
+        return JSONResponse(
+            status_code=429,
+            content={"error": {"message": "queue timeout", "type": "queue_timeout", "decision": "denied"}},
+        )
+
+    try:
+        if sticky_model and endpoint in ("/api/chat", "/api/generate", "/api/embeddings"):
+            model_served, model_switch = await resolve_model(
+                session=session,
+                requested=requested_model,
+                allow_switch=allow_switch,
+            )
+
+        backend = state.resolve_backend(model_served)
+        provider = backend_provider_name(backend)
+        llm_mode = state.get_llm_mode()
+
+        cfg = state.backend_config(backend)
+        if cfg is None:
+            status_code = 500
+            reason = "backend_config_error"
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": {
+                        "message": f"backend '{backend}' is not configured",
+                        "type": "backend_config_error",
+                        "backend": backend,
+                        "provider": provider,
+                    }
+                },
+            )
+
+        if cfg["protocol"] != "ollama":
+            status_code = 501
+            reason = "ollama_api_unsupported_backend_protocol"
+            return JSONResponse(
+                status_code=501,
+                content={
+                    "error": {
+                        "message": (
+                            f"backend '{backend}' uses protocol '{cfg['protocol']}' and cannot serve native "
+                            f"endpoint '{endpoint}'. Use /v1/* for this model/backend."
+                        ),
+                        "type": "unsupported_backend_protocol",
+                        "backend": backend,
+                        "provider": provider,
+                    }
+                },
+            )
+
+        upstream_payload = payload
+        if isinstance(upstream_payload, dict) and isinstance(model_served, str) and model_served:
+            if "model" in upstream_payload and upstream_payload.get("model") != model_served:
+                upstream_payload = dict(upstream_payload)
+                upstream_payload["model"] = model_served
+            elif "name" in upstream_payload and upstream_payload.get("name") != model_served:
+                upstream_payload = dict(upstream_payload)
+                upstream_payload["name"] = model_served
+
+        try:
+            async with httpx.AsyncClient(timeout=90, trust_env=True) as client:
+                upstream = await client.request(
+                    request.method,
+                    f"{cfg['base_url']}{endpoint}",
+                    json=upstream_payload,
+                    params=dict(request.query_params),
+                )
+        except httpx.RequestError as exc:
+            status_code = 503
+            reason = "backend_unavailable"
+            return backend_unavailable_response(backend, model_served or "unknown", str(exc))
+
+        status_code = upstream.status_code
+        if upstream.status_code >= 500 and backend == "trtllm":
+            reason = "backend_unavailable"
+            detail = upstream.text
+            return backend_unavailable_response(
+                backend,
+                model_served or "unknown",
+                f"HTTP {upstream.status_code}: {detail[:300]}",
+            )
+
+        return upstream_response_with_gate_headers(
+            upstream=upstream,
+            decision=decision,
+            backend=backend,
+            provider=provider,
+            llm_mode=llm_mode,
+            model_served=model_served,
+        )
+    finally:
+        await release_gate_slot(acquired)
+        await state.mark_decision("denied" if status_code == 429 else decision)
+        latency_ms = int((time.monotonic() - started) * 1000)
+        state.write_log(
+            event_base(
+                session=session,
+                project=project,
+                endpoint=endpoint,
+                decision="denied" if status_code == 429 else decision,
+                model_requested=requested_model,
+                model_served=model_served,
+                status_code=status_code,
+                latency_ms=latency_ms,
+                backend=backend,
+                provider=provider,
+                model_switch=model_switch,
+                reason=reason,
+                llm_mode=llm_mode,
+            )
+        )
+
+
+@app.get("/api/version")
+async def api_version(request: Request) -> Response:
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/version",
+        payload=None,
+        session_default="version",
+        sticky_model=False,
+    )
+
+
+@app.get("/api/tags")
+async def api_tags(request: Request) -> Response:
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/tags",
+        payload=None,
+        session_default="models-list",
+        sticky_model=False,
+    )
+
+
+@app.post("/api/show")
+async def api_show(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/show",
+        payload=payload,
+        session_default="show",
+        sticky_model=False,
+    )
+
+
+@app.post("/api/generate")
+async def api_generate(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/generate",
+        payload=payload,
+        session_default="generate",
+        sticky_model=True,
+    )
+
+
+@app.post("/api/chat")
+async def api_chat(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/chat",
+        payload=payload,
+        session_default="chat",
+        sticky_model=True,
+    )
+
+
+@app.post("/api/embeddings")
+async def api_embeddings_ollama(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/embeddings",
+        payload=payload,
+        session_default="embeddings",
+        sticky_model=True,
+    )
 
 
 @app.get("/v1/models")
