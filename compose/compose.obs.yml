@@ -55,8 +55,12 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_HTTP_ADDR: 0.0.0.0
       GF_SERVER_HTTP_PORT: "3000"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/agentic-activity-overview.json
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/grafana:/var/lib/grafana
+      - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/grafana/dashboards:/etc/grafana/dashboards:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -121,6 +125,8 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/config/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/monitoring/promtail/positions:/promtail/positions
       - ${AGENTIC_ROOT:-/srv/agentic}/proxy/logs:/tmp/agentic-proxy:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/gate/logs:/tmp/agentic-gate:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/gate/mcp/logs:/tmp/agentic-gate-mcp:ro
       - ${PROMTAIL_DOCKER_CONTAINERS_HOST_PATH:-/var/lib/docker/containers}:/var/lib/docker/containers:ro
       - ${PROMTAIL_HOST_LOG_PATH:-/var/log}:/var/log:ro
     healthcheck:

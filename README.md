@@ -211,6 +211,10 @@ Ensuite, sur le poste client, ouvrir:
 - `http://127.0.0.1:19090` (Prometheus)
 - `http://127.0.0.1:13100` (Loki)
 
+Au premier démarrage de `obs`, Grafana provisionne automatiquement le dashboard
+`DGX Spark Agentic Activity Overview` (UID `dgx-spark-activity`) avec les datasources
+`Prometheus` et `Loki`.
+
 Ports utiles à tunneliser (selon les modules activés):
 - `11434` → Ollama API (`http://127.0.0.1:11434`)
 - `8080` → OpenWebUI (`http://127.0.0.1:8080`)

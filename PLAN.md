@@ -719,6 +719,23 @@ Suivi Beads : `dgx-spark-agentic-stack-49e`
 - loki reçoit des logs (query retourne ≥1 entrée)
 - métriques GPU (`dcgm_*`) présentes
 
+### G2 Dashboard Grafana “first-run” pour activité agents/outils/réseau/modèles
+**Implémentation**
+- provisioning Grafana automatique au premier démarrage (`datasources` + `dashboard provider` + dashboard JSON) via `${AGENTIC_ROOT}/monitoring/config/grafana/...` ;
+- dashboard par défaut “home” : **DGX Spark Agentic Activity Overview** ;
+- panneaux couvrant au minimum :
+  - appels modèles par agent/projet (`claude`, `codex`, `opencode`, `vibestral`, `openwebui`, `openhands`) ;
+  - latence et tokens externes côté `ollama-gate` ;
+  - appels outils via audit `gate-mcp` ;
+  - activité réseau (requêtes egress + throughput par service).
+- ingestion promtail étendue pour logs structurés `gate` + `gate-mcp` afin d’alimenter les panels sans configuration manuelle post-install.
+
+**Test** : `tests/G2_obs_dashboard_provisioning.sh`
+- artefacts de provisioning présents sous `${AGENTIC_ROOT}/monitoring/config/grafana/...` ;
+- fichiers montés dans le conteneur Grafana ;
+- datasources provisionnées (`Prometheus`, `Loki`) visibles via API Grafana ;
+- dashboard `uid=dgx-spark-activity` présent via API Grafana.
+
 ---
 
 ## H — UIs web demandées : OpenWebUI + OpenHands (durci)

@@ -460,6 +460,10 @@ Local URLs (on the host):
 - Prometheus: `http://127.0.0.1:19090`
 - Loki: `http://127.0.0.1:13100`
 
+At first `obs` start, Grafana auto-loads:
+- datasources: `Prometheus`, `Loki`
+- dashboard: `DGX Spark Agentic Activity Overview` (UID `dgx-spark-activity`)
+
 Remote access pattern is Tailscale + SSH tunnel to host loopback (not direct LAN/public binds).
 
 ## 10. Optional Modules (Later, Explicit Opt-In)

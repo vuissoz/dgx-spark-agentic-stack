@@ -80,6 +80,11 @@ main() {
 
   install -d -m 0750 "${AGENTIC_ROOT}/monitoring"
   install -d -m 0750 "${AGENTIC_ROOT}/monitoring/config"
+  install -d -m 0750 "${AGENTIC_ROOT}/monitoring/config/grafana"
+  install -d -m 0750 "${AGENTIC_ROOT}/monitoring/config/grafana/provisioning"
+  install -d -m 0750 "${AGENTIC_ROOT}/monitoring/config/grafana/provisioning/datasources"
+  install -d -m 0750 "${AGENTIC_ROOT}/monitoring/config/grafana/provisioning/dashboards"
+  install -d -m 0750 "${AGENTIC_ROOT}/monitoring/config/grafana/dashboards"
   install -d -m 0770 "${AGENTIC_ROOT}/monitoring/prometheus"
   install -d -m 0770 "${AGENTIC_ROOT}/monitoring/grafana"
   install -d -m 0770 "${AGENTIC_ROOT}/monitoring/loki"
@@ -90,11 +95,25 @@ main() {
   copy_if_missing "${TEMPLATE_DIR}/prometheus-alerts.yml" "${AGENTIC_ROOT}/monitoring/config/prometheus-alerts.yml" 0644
   copy_if_missing "${TEMPLATE_DIR}/loki-config.yml" "${AGENTIC_ROOT}/monitoring/config/loki-config.yml" 0644
   copy_if_missing "${TEMPLATE_DIR}/promtail-config.yml" "${AGENTIC_ROOT}/monitoring/config/promtail-config.yml" 0644
+  copy_if_missing \
+    "${TEMPLATE_DIR}/grafana-datasources.yml" \
+    "${AGENTIC_ROOT}/monitoring/config/grafana/provisioning/datasources/datasources.yml" \
+    0644
+  copy_if_missing \
+    "${TEMPLATE_DIR}/grafana-dashboards.yml" \
+    "${AGENTIC_ROOT}/monitoring/config/grafana/provisioning/dashboards/dashboards.yml" \
+    0644
+  copy_if_missing \
+    "${TEMPLATE_DIR}/grafana-dashboard-agentic-activity-overview.json" \
+    "${AGENTIC_ROOT}/monitoring/config/grafana/dashboards/agentic-activity-overview.json" \
+    0644
   promtail_path_migration
 
   if [[ "${EUID}" -eq 0 ]]; then
     # Grafana official container runs as uid 472.
-    chown -R 472:472 "${AGENTIC_ROOT}/monitoring/grafana"
+    chown -R 472:472 \
+      "${AGENTIC_ROOT}/monitoring/grafana" \
+      "${AGENTIC_ROOT}/monitoring/config/grafana"
     chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
       "${AGENTIC_ROOT}/monitoring/prometheus" \
       "${AGENTIC_ROOT}/monitoring/loki"

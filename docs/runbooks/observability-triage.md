@@ -74,6 +74,14 @@ Expected: no output.
 
 Use these in Grafana Explore (Loki/Prometheus) or dashboard panels.
 
+Provisioned first-run dashboard:
+- Grafana auto-loads `DGX Spark Agentic Activity Overview` (UID `dgx-spark-activity`).
+- Datasources are auto-provisioned as `Prometheus` and `Loki`.
+- Log streams used by this dashboard:
+  - `{job="gate-events"}` from `${AGENTIC_ROOT}/gate/logs/gate.jsonl`
+  - `{job="gate-mcp-audit"}` from `${AGENTIC_ROOT}/gate/mcp/logs/audit.jsonl`
+  - `{job="egress-proxy"}` from proxy access logs
+
 ### 1) Top egress destinations (count)
 
 LogQL:

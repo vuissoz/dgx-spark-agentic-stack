@@ -43,3 +43,58 @@ scrape_configs:
           method:
           squid_result:
           dest_host:
+          user:
+
+  - job_name: gate-events
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: gate-events
+          __path__: /tmp/agentic-gate/gate.jsonl
+    pipeline_stages:
+      - json:
+          expressions:
+            project: project
+            endpoint: endpoint
+            decision: decision
+            backend: backend
+            provider: provider
+            status_code: status_code
+            reason: reason
+      - labels:
+          project:
+          endpoint:
+          decision:
+          backend:
+          provider:
+          status_code:
+          reason:
+
+  - job_name: gate-mcp-audit
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: gate-mcp-audit
+          __path__: /tmp/agentic-gate-mcp/audit.jsonl
+    pipeline_stages:
+      - json:
+          expressions:
+            action: action
+            decision: decision
+            reason: reason
+            tool: tool
+            project: project
+            status_code: status_code
+            backend: backend
+            provider: provider
+      - labels:
+          action:
+          decision:
+          reason:
+          tool:
+          project:
+          status_code:
+          backend:
+          provider:
