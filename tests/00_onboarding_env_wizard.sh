@@ -129,10 +129,10 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-egress'$" "${default_env_file}"
   || fail "default AGENTIC_EGRESS_NETWORK is not agentic-egress"
 grep -q "^export OLLAMA_MODELS_DIR='/srv/agentic/ollama/models'$" "${default_env_file}" \
   || fail "default OLLAMA_MODELS_DIR is not /srv/agentic/ollama/models"
-grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3:0.6b'$" "${default_env_file}" \
-  || fail "default AGENTIC_DEFAULT_MODEL is not qwen3:0.6b"
-grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='qwen3:0.6b'$" "${default_env_file}" \
-  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not qwen3:0.6b"
+grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${default_env_file}" \
+  || fail "default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
+grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.1:8b'$" "${default_env_file}" \
+  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not llama3.1:8b"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${default_env_file}" \
   || fail "onboarding default must enable agent sudo-mode (AGENTIC_AGENT_NO_NEW_PRIVILEGES=false)"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='1.00'$" "${default_env_file}" \
@@ -193,8 +193,8 @@ fi
 assert_generated_file_baseline "${rootless_default_env_file}"
 grep -q "^export OLLAMA_MODELS_DIR='${HOME}/wkdir/open-webui/ollama_data/models'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_MODELS_DIR is not ${HOME}/wkdir/open-webui/ollama_data/models"
-grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3:0.6b'$" "${rootless_default_env_file}" \
-  || fail "rootless default AGENTIC_DEFAULT_MODEL is not qwen3:0.6b"
+grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
 
 if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \

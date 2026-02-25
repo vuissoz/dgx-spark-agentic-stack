@@ -37,7 +37,7 @@ export COMPOSE_PROFILES=trt
 ```
 
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
-The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `qwen3:0.6b`) and reused by Ollama preload.
+The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `llama3.1:8b`) and reused by Ollama preload.
 
 ## Runtime Layout (summary)
 

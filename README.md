@@ -37,7 +37,7 @@ export COMPOSE_PROFILES=trt
 ```
 
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
-Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `qwen3:0.6b`) et réutilisé pour le preload Ollama.
+Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `llama3.1:8b`) et réutilisé pour le preload Ollama.
 
 ## Arborescence runtime (résumé)
 

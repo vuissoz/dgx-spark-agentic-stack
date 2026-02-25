@@ -6,7 +6,7 @@
 - Re-mount models as read-only for smoke tests.
 
 ## Defaults
-- Generate model: `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3:0.6b`)
+- Generate model: `${AGENTIC_DEFAULT_MODEL}` (fallback `llama3.1:8b`)
 - Embedding model: `qwen3-embedding:0.6b`
 - Budget: `12` GB
 
@@ -26,7 +26,7 @@ Preload then lock read-only:
 Custom models/budget:
 
 ```bash
-./agent ollama-preload --generate-model qwen3:0.6b --embed-model qwen3-embedding:0.6b --budget-gb 12
+./agent ollama-preload --generate-model llama3.1:8b --embed-model qwen3-embedding:0.6b --budget-gb 12
 ```
 
 Switch mount mode manually:

@@ -9,7 +9,7 @@ AGENT_RUNTIME_ENV_FILE="${AGENTIC_ROOT}/deployments/runtime.env"
 CORE_COMPOSE_FILE="${AGENTIC_COMPOSE_DIR}/compose.core.yml"
 OLLAMA_API_URL="${OLLAMA_API_URL:-http://127.0.0.1:11434}"
 
-generate_model="${OLLAMA_PRELOAD_GENERATE_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3:0.6b}}"
+generate_model="${OLLAMA_PRELOAD_GENERATE_MODEL:-${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}}"
 embed_model="${OLLAMA_PRELOAD_EMBED_MODEL:-qwen3-embedding:0.6b}"
 budget_gb="${OLLAMA_MODEL_STORE_BUDGET_GB:-12}"
 lock_ro_after_preload=1
