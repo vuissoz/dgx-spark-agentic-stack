@@ -213,6 +213,7 @@ Options avancees firewall/egress:
 | `AGENTIC_AGENT_BASE_BUILD_CONTEXT` | chemin absolu ou relatif au repo | racine du repo | shell, `runtime.env` |
 | `AGENTIC_AGENT_BASE_DOCKERFILE` | chemin absolu ou relatif au repo | `deployments/images/agent-cli-base/Dockerfile` | shell, `runtime.env` |
 | `AGENTIC_AGENT_CLI_INSTALL_MODE` | `best-effort` ou `required` | `best-effort` | shell, `runtime.env` |
+| `AGENTIC_AGENT_NO_NEW_PRIVILEGES` | `true` ou `false` | `true` | shell, `runtime.env` |
 | `AGENTIC_CODEX_CLI_NPM_SPEC` | spec npm | `@openai/codex@latest` | shell, `runtime.env` |
 | `AGENTIC_CLAUDE_CODE_NPM_SPEC` | spec npm | `@anthropic-ai/claude-code@latest` | shell, `runtime.env` |
 | `AGENTIC_OPENCODE_NPM_SPEC` | spec npm | `opencode-ai@latest` | shell, `runtime.env` |
@@ -226,6 +227,7 @@ Options avancees firewall/egress:
 Notes:
 - `GRAFANA_ADMIN_*` est lu directement par Compose pour `grafana`; ce n'est pas gere comme secret fichier par les scripts d'init.
 - Preferer une injection locale (secret manager ou export shell ponctuel) plutot qu'un fichier versionne.
+- `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false` active le mode `sudo` intra-conteneur pour `agentic-{claude,codex,opencode,vibestral}` (`./agent sudo-mode on`), avec compromis hardening explicite.
 
 ## 3.10 Variables runtime RAG
 

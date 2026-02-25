@@ -355,6 +355,7 @@ Key implemented capabilities:
   - `agent logs <service>`
   - `agent ls`
   - `agent stop <tool>`
+  - `agent sudo-mode [status|on|off]`
 - compliance and tests:
   - `agent doctor [--fix-net]`
   - `agent test <A..L|V|all> [--skip-d5-tests]`

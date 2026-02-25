@@ -81,6 +81,43 @@ service_allows_readwrite_rootfs() {
   esac
 }
 
+service_is_agent_cli() {
+  local service="$1"
+  case "${service}" in
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+assert_agent_sudo_mode_hardening() {
+  local cid="$1"
+  local inspect_out readonly cap_drop security_opt
+
+  inspect_out="$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}|{{join .HostConfig.CapDrop ","}}|{{json .HostConfig.SecurityOpt}}' "${cid}" 2>/dev/null)" \
+    || fail "cannot inspect container ${cid}"
+
+  IFS='|' read -r readonly cap_drop security_opt <<<"${inspect_out}"
+
+  [[ "${readonly}" == "true" ]] || {
+    fail "${cid}: readonly rootfs is not enabled"
+    return 1
+  }
+  [[ ",${cap_drop}," == *",ALL,"* ]] || {
+    fail "${cid}: cap_drop does not include ALL"
+    return 1
+  }
+  [[ "${security_opt}" == *"no-new-privileges:false"* ]] || {
+    fail "${cid}: expected no-new-privileges:false in sudo mode"
+    return 1
+  }
+
+  return 0
+}
+
 mount_destination_present() {
   local cid="$1"
   local destination="$2"
@@ -126,6 +163,9 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 ok "doctor profile=${AGENTIC_PROFILE}"
+if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES}" == "false" ]]; then
+  warn "agent sudo-mode is enabled (AGENTIC_AGENT_NO_NEW_PRIVILEGES=false)"
+fi
 
 if [[ "${#critical_ports[@]}" -gt 0 ]]; then
   if ! assert_no_public_bind "${critical_ports[@]}"; then
@@ -223,8 +263,14 @@ for row in "${running_services[@]}"; do
       doctor_fail_or_warn "service '${service}' runtime restriction baseline failed"
     fi
   else
-    if ! assert_container_hardening "${cid}"; then
-      doctor_fail_or_warn "service '${service}' hardening baseline failed"
+    if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES}" == "false" ]] && service_is_agent_cli "${service}"; then
+      if ! assert_agent_sudo_mode_hardening "${cid}"; then
+        doctor_fail_or_warn "service '${service}' hardening baseline failed in sudo mode"
+      fi
+    else
+      if ! assert_container_hardening "${cid}"; then
+        doctor_fail_or_warn "service '${service}' hardening baseline failed"
+      fi
     fi
   fi
 
@@ -295,6 +341,9 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
   if ! echo "${env_dump}" | grep -q '^GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token$'; then
     doctor_fail "agent '${service}' missing GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token"
   fi
+  if ! echo "${env_dump}" | grep -q '^HOME=/state/home$'; then
+    doctor_fail "agent '${service}' must set HOME=/state/home"
+  fi
 
   if ! mount_destination_present "${cid}" "/run/secrets/gate_mcp.token"; then
     doctor_fail "agent '${service}' must mount /run/secrets/gate_mcp.token read-only"
@@ -308,6 +357,16 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
   else
     if ! timeout 15 docker exec "${cid}" sh -lc "command -v ${primary_cli} >/dev/null"; then
       doctor_fail "agent '${service}' primary CLI '${primary_cli}' is missing"
+    fi
+  fi
+
+  if ! timeout 15 docker exec "${cid}" sh -lc 'test -d /state/home && test -w /state/home'; then
+    doctor_fail "agent '${service}' home directory is not writable (/state/home)"
+  fi
+
+  if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES}" == "false" ]]; then
+    if ! timeout 15 docker exec "${cid}" sh -lc 'command -v sudo >/dev/null && sudo -n true'; then
+      doctor_fail "agent '${service}' sudo-mode is enabled but sudo -n true failed"
     fi
   fi
 done

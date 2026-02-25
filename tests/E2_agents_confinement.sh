@@ -79,6 +79,21 @@ assert_write_boundaries() {
   ok "${container_id}: write boundaries are enforced"
 }
 
+assert_agent_sudo_mode_security() {
+  local container_id="$1"
+  local inspect_out readonly cap_drop security_opt
+
+  inspect_out="$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}|{{join .HostConfig.CapDrop ","}}|{{json .HostConfig.SecurityOpt}}' "${container_id}" 2>/dev/null)" \
+    || fail "${container_id}: cannot inspect hardening fields"
+  IFS='|' read -r readonly cap_drop security_opt <<<"${inspect_out}"
+
+  [[ "${readonly}" == "true" ]] || fail "${container_id}: readonly rootfs must stay enabled in sudo mode"
+  [[ ",${cap_drop}," == *",ALL,"* ]] || fail "${container_id}: cap_drop must include ALL in sudo mode"
+  [[ "${security_opt}" == *"no-new-privileges:false"* ]] || fail "${container_id}: sudo mode expects no-new-privileges:false"
+  assert_container_non_root_user "${container_id}"
+  ok "${container_id}: sudo-mode hardening profile is satisfied"
+}
+
 assert_egress_profile() {
   local container_id="$1"
 
@@ -132,11 +147,20 @@ assert_primary_cli "${opencode_cid}" "opencode"
 assert_primary_cli "${vibestral_cid}" "vibe"
 
 for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}"; do
-  assert_container_security "${cid}"
+  if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}" == "false" ]]; then
+    assert_agent_sudo_mode_security "${cid}"
+  else
+    assert_container_security "${cid}"
+  fi
   assert_proxy_enforced "${cid}"
   assert_egress_profile "${cid}"
   assert_ollama_gate_defaults "${cid}"
   assert_write_boundaries "${cid}"
+  if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}" == "false" ]]; then
+    timeout 20 docker exec "${cid}" sh -lc 'command -v sudo >/dev/null && sudo -n true' \
+      || fail "${cid}: sudo-mode is enabled but sudo -n true failed"
+    ok "${cid}: sudo is usable in sudo mode"
+  fi
 done
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"

@@ -105,6 +105,7 @@ Supported variables:
 - `AGENTIC_AGENT_BASE_BUILD_CONTEXT` (default: repository root)
 - `AGENTIC_AGENT_BASE_DOCKERFILE` (default: `deployments/images/agent-cli-base/Dockerfile`)
 - `AGENTIC_AGENT_CLI_INSTALL_MODE` (`best-effort` by default, `required` for strict builds)
+- `AGENTIC_AGENT_NO_NEW_PRIVILEGES` (`true` by default; set to `false` to enable in-container sudo mode for agent services)
 - `AGENTIC_CODEX_CLI_NPM_SPEC`, `AGENTIC_CLAUDE_CODE_NPM_SPEC`, `AGENTIC_OPENCODE_NPM_SPEC`
 - `AGENTIC_OPENHANDS_INSTALL_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_VERSION`, `AGENTIC_VIBE_INSTALL_SCRIPT`
 
@@ -290,6 +291,7 @@ agent net apply
 agent ollama-link
 agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
 agent ollama-models <rw|ro>
+agent sudo-mode [status|on|off]
 agent update
 agent rollback all <release_id>
 agent rollback host-net <backup_id>
@@ -312,6 +314,7 @@ Examples:
 ./agent stop codex
 ./agent backup run
 ./agent backup list
+./agent sudo-mode on
 ./agent update
 ./agent rollback all <release_id>
 ./agent test all --skip-d5-tests
@@ -320,6 +323,7 @@ Examples:
 
 Notes:
 - `agent stop` handles `claude|codex|opencode|vibestral` tools.
+- `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.
 - `agent rollback all` requires a `release_id`.
 - Use `--skip-d5-tests` (or `AGENTIC_SKIP_D5_TESTS=1`) to skip only `D5_gate_external_providers.sh` with a warning when external API access is unavailable.
 - `agent cleanup` also removes local stack Docker images and purges state without following symlinks.

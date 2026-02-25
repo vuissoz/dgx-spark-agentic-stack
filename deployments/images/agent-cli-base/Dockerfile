@@ -65,6 +65,7 @@ RUN apt-get update \
     rustc \
     shellcheck \
     shfmt \
+    sudo \
     tmux \
     unzip \
     valgrind \
@@ -76,6 +77,13 @@ RUN apt-get update \
 
 RUN groupadd --gid "${AGENT_GID}" agent \
   && useradd --uid "${AGENT_UID}" --gid "${AGENT_GID}" --create-home --shell /bin/bash agent
+
+RUN install -d -m 0750 /etc/sudoers.d \
+  && printf 'agent ALL=(ALL) NOPASSWD:ALL\n' >/etc/sudoers.d/90-agentic-agent \
+  && if id -u ubuntu >/dev/null 2>&1; then printf 'ubuntu ALL=(ALL) NOPASSWD:ALL\n' >/etc/sudoers.d/90-agentic-ubuntu; fi \
+  && chmod 0440 /etc/sudoers.d/90-agentic-agent \
+  && if [ -f /etc/sudoers.d/90-agentic-ubuntu ]; then chmod 0440 /etc/sudoers.d/90-agentic-ubuntu; fi \
+  && visudo -cf /etc/sudoers >/dev/null
 
 COPY deployments/images/agent-cli-base/install-agent-clis.sh /usr/local/bin/install-agent-clis
 COPY deployments/images/agent-cli-base/entrypoint.sh /usr/local/bin/agent-entrypoint

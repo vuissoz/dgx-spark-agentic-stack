@@ -23,15 +23,22 @@ services:
       - /tmp
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges:${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}
     environment:
       AGENT_TOOL: claude
       AGENT_PRIMARY_CLI: claude
       AGENT_SESSION: claude
+      AGENT_HOME: /state/home
       AGENT_WORKSPACE: /workspace
       AGENT_STATE_DIR: /state
       AGENT_LOGS_DIR: /logs
+      HOME: /state/home
+      XDG_CONFIG_HOME: /state/home/.config
+      XDG_CACHE_HOME: /state/home/.cache
       OLLAMA_BASE_URL: http://ollama-gate:11435
       GATE_MCP_URL: http://gate-mcp:8123
       GATE_MCP_AUTH_TOKEN_FILE: /run/secrets/gate_mcp.token
@@ -80,15 +87,22 @@ services:
       - /tmp
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges:${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}
     environment:
       AGENT_TOOL: codex
       AGENT_PRIMARY_CLI: codex
       AGENT_SESSION: codex
+      AGENT_HOME: /state/home
       AGENT_WORKSPACE: /workspace
       AGENT_STATE_DIR: /state
       AGENT_LOGS_DIR: /logs
+      HOME: /state/home
+      XDG_CONFIG_HOME: /state/home/.config
+      XDG_CACHE_HOME: /state/home/.cache
       OLLAMA_BASE_URL: http://ollama-gate:11435
       GATE_MCP_URL: http://gate-mcp:8123
       GATE_MCP_AUTH_TOKEN_FILE: /run/secrets/gate_mcp.token
@@ -137,15 +151,22 @@ services:
       - /tmp
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges:${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}
     environment:
       AGENT_TOOL: opencode
       AGENT_PRIMARY_CLI: opencode
       AGENT_SESSION: opencode
+      AGENT_HOME: /state/home
       AGENT_WORKSPACE: /workspace
       AGENT_STATE_DIR: /state
       AGENT_LOGS_DIR: /logs
+      HOME: /state/home
+      XDG_CONFIG_HOME: /state/home/.config
+      XDG_CACHE_HOME: /state/home/.cache
       OLLAMA_BASE_URL: http://ollama-gate:11435
       GATE_MCP_URL: http://gate-mcp:8123
       GATE_MCP_AUTH_TOKEN_FILE: /run/secrets/gate_mcp.token
@@ -194,15 +215,22 @@ services:
       - /tmp
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges:${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}
     environment:
       AGENT_TOOL: vibestral
       AGENT_PRIMARY_CLI: vibe
       AGENT_SESSION: vibestral
+      AGENT_HOME: /state/home
       AGENT_WORKSPACE: /workspace
       AGENT_STATE_DIR: /state
       AGENT_LOGS_DIR: /logs
+      HOME: /state/home
+      XDG_CONFIG_HOME: /state/home/.config
+      XDG_CACHE_HOME: /state/home/.cache
       OLLAMA_BASE_URL: http://ollama-gate:11435
       GATE_MCP_URL: http://gate-mcp:8123
       GATE_MCP_AUTH_TOKEN_FILE: /run/secrets/gate_mcp.token

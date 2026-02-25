@@ -60,6 +60,10 @@ if profile == "strict-prod":
     strict_root_required.add("ollama")
     strict_root_required.add("promtail")
 readwrite_rootfs_exceptions = {"ollama", "egress-proxy", "opensearch"}
+agent_services = {"agentic-claude", "agentic-codex", "agentic-opencode", "agentic-vibestral"}
+agent_nnp = os.environ.get("AGENTIC_AGENT_NO_NEW_PRIVILEGES", "true").strip().lower()
+if agent_nnp not in {"true", "false"}:
+    agent_nnp = "true"
 
 
 def is_non_root(user_value: object) -> bool:
@@ -80,8 +84,11 @@ for service, service_cfg in sorted(services.items()):
         security_failures.append(f"{service}: cap_drop missing ALL")
 
     security_opt = [str(value) for value in service_cfg.get("security_opt", [])]
-    if "no-new-privileges:true" not in security_opt:
-        security_failures.append(f"{service}: security_opt missing no-new-privileges:true")
+    expected_nnp = "no-new-privileges:true"
+    if service in agent_services and agent_nnp == "false":
+        expected_nnp = "no-new-privileges:false"
+    if expected_nnp not in security_opt:
+        security_failures.append(f"{service}: security_opt missing {expected_nnp}")
 
     if service not in readwrite_rootfs_exceptions and service_cfg.get("read_only") is not True:
         security_failures.append(f"{service}: read_only must be true")

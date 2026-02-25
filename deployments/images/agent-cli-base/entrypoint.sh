@@ -6,12 +6,37 @@ session="${AGENT_SESSION:-${tool}}"
 workspace="${AGENT_WORKSPACE:-/workspace}"
 state_dir="${AGENT_STATE_DIR:-/state}"
 logs_dir="${AGENT_LOGS_DIR:-/logs}"
+agent_home="${AGENT_HOME:-${HOME:-${state_dir}/home}}"
 agent_defaults_file="${AGENT_DEFAULTS_FILE:-${state_dir}/bootstrap/ollama-gate-defaults.env}"
 
-mkdir -p "${workspace}" "${state_dir}" "${logs_dir}"
+export HOME="${agent_home}"
+mkdir -p "${workspace}" "${state_dir}" "${logs_dir}" "${agent_home}" \
+  "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex"
+chmod 0700 "${agent_home}" "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" 2>/dev/null || true
 
 log() {
   printf '%s\n' "$*"
+}
+
+bootstrap_shell_home() {
+  local bash_profile="${agent_home}/.bash_profile"
+  local bashrc="${agent_home}/.bashrc"
+
+  if [[ ! -f "${bash_profile}" ]]; then
+    cat >"${bash_profile}" <<'EOF'
+if [ -f "${HOME}/.bashrc" ]; then
+  . "${HOME}/.bashrc"
+fi
+EOF
+    chmod 0600 "${bash_profile}" || true
+  fi
+
+  if [[ ! -f "${bashrc}" ]]; then
+    cat >"${bashrc}" <<'EOF'
+export PATH="${PATH}"
+EOF
+    chmod 0600 "${bashrc}" || true
+  fi
 }
 
 bootstrap_ollama_gate_defaults() {
@@ -88,12 +113,14 @@ start_session() {
 }
 
 report_primary_cli
+bootstrap_shell_home
 bootstrap_ollama_gate_defaults
-maybe_setup_vibestral
 
 if ! tmux has-session -t "${session}" 2>/dev/null; then
   start_session
 fi
+
+maybe_setup_vibestral
 
 while true; do
   sleep 5

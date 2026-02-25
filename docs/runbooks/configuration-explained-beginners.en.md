@@ -217,6 +217,7 @@ Host firewall/egress advanced options:
 | `AGENTIC_AGENT_BASE_BUILD_CONTEXT` | absolute path or repo-relative path | repo root | shell, `runtime.env` |
 | `AGENTIC_AGENT_BASE_DOCKERFILE` | absolute path or repo-relative path | `deployments/images/agent-cli-base/Dockerfile` | shell, `runtime.env` |
 | `AGENTIC_AGENT_CLI_INSTALL_MODE` | `best-effort` or `required` | `best-effort` | shell, `runtime.env` |
+| `AGENTIC_AGENT_NO_NEW_PRIVILEGES` | `true` or `false` | `true` | shell, `runtime.env` |
 | `AGENTIC_CODEX_CLI_NPM_SPEC` | npm package spec | `@openai/codex@latest` | shell, `runtime.env` |
 | `AGENTIC_CLAUDE_CODE_NPM_SPEC` | npm package spec | `@anthropic-ai/claude-code@latest` | shell, `runtime.env` |
 | `AGENTIC_OPENCODE_NPM_SPEC` | npm package spec | `opencode-ai@latest` | shell, `runtime.env` |
@@ -230,6 +231,7 @@ Host firewall/egress advanced options:
 Notes:
 - `GRAFANA_ADMIN_*` are read directly by Compose for `grafana`; they are not managed as file secrets by runtime init scripts.
 - Prefer injecting `GRAFANA_ADMIN_PASSWORD` from a local secret manager (or one-shot shell export), not from a tracked file.
+- `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false` enables in-container `sudo` mode for `agentic-{claude,codex,opencode,vibestral}` (`./agent sudo-mode on`) with an explicit hardening tradeoff.
 
 ## 3.10 RAG Runtime Variables
 
