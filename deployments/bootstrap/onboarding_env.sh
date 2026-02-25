@@ -431,6 +431,38 @@ normalize_true_false_env_value() {
   esac
 }
 
+normalize_openhands_model() {
+  local model="$1"
+  if [[ "${model}" == */* ]]; then
+    printf '%s\n' "${model}"
+  else
+    printf 'openai/%s\n' "${model}"
+  fi
+}
+
+render_openhands_settings_json() {
+  local model="$1"
+  local api_key="$2"
+  local base_url="$3"
+
+  python3 - "${model}" "${api_key}" "${base_url}" <<'PY'
+import json
+import sys
+
+llm_model, llm_api_key, llm_base_url = sys.argv[1:4]
+payload = {
+    "language": "en",
+    "agent": "CodeActAgent",
+    "llm_model": llm_model,
+    "llm_api_key": llm_api_key,
+    "llm_base_url": llm_base_url,
+    "v1_enabled": True,
+}
+sys.stdout.write(json.dumps(payload, separators=(",", ":")))
+sys.stdout.write("\n")
+PY
+}
+
 validate_allowlist_entry() {
   local entry="$1"
   [[ -n "${entry}" ]] || return 1
@@ -1222,6 +1254,7 @@ openwebui_allow_model_pull_raw="${openwebui_allow_model_pull_override:-true}"
 openwebui_enable_ollama_api="True"
 openhands_llm_model="${openhands_llm_model_override:-${default_model}}"
 openhands_llm_api_key="${openhands_llm_api_key_override:-local-ollama}"
+openhands_llm_base_url="http://ollama-gate:11435/v1"
 
 if [[ "${ui_section_enabled}" -eq 1 ]]; then
   if [[ "${non_interactive}" -eq 0 ]]; then
@@ -1271,6 +1304,7 @@ if [[ "${ui_section_enabled}" -eq 1 ]]; then
   [[ -n "${openwebui_secret_key}" ]] || die "WEBUI_SECRET_KEY cannot be empty"
   [[ -n "${openhands_llm_model}" ]] || die "LLM_MODEL cannot be empty"
   [[ -n "${openhands_llm_api_key}" ]] || die "LLM_API_KEY cannot be empty"
+  [[ -n "${openhands_llm_base_url}" ]] || die "LLM_BASE_URL cannot be empty"
 
   if [[ "${root_is_writable}" -ne 1 ]]; then
     summary_add_deferred "UI credentials were collected but not written because ${root_path} is not writable"
@@ -1295,12 +1329,22 @@ OPENWEBUI_ENABLE_OLLAMA_API=${openwebui_enable_ollama_api}
     openhands_env_path="${root_path}/openhands/config/openhands.env"
     openhands_env_content="LLM_API_KEY=${openhands_llm_api_key}
 LLM_MODEL=${openhands_llm_model}
+LLM_BASE_URL=${openhands_llm_base_url}
 "
 
     if ! write_file_atomic "${openhands_env_path}" 0600 "${openhands_env_content}"; then
       summary_add_blocker "failed to write ${openhands_env_path}"
     else
       summary_add_generated "${openhands_env_path}"
+    fi
+
+    openhands_settings_path="${root_path}/openhands/state/settings.json"
+    openhands_effective_model="$(normalize_openhands_model "${openhands_llm_model}")"
+    openhands_settings_content="$(render_openhands_settings_json "${openhands_effective_model}" "${openhands_llm_api_key}" "${openhands_llm_base_url}")"
+    if ! write_file_atomic "${openhands_settings_path}" 0660 "${openhands_settings_content}"; then
+      summary_add_blocker "failed to write ${openhands_settings_path}"
+    else
+      summary_add_generated "${openhands_settings_path}"
     fi
 
     if [[ -f "${root_path}/openwebui/data/webui.db" ]]; then

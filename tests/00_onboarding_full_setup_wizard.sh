@@ -71,6 +71,7 @@ grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${env_file}" \
 
 openwebui_env="${root_dir}/openwebui/config/openwebui.env"
 openhands_env="${root_dir}/openhands/config/openhands.env"
+openhands_settings="${root_dir}/openhands/state/settings.json"
 allowlist_file="${root_dir}/proxy/allowlist.txt"
 openai_secret_file="${root_dir}/secrets/runtime/openai.api_key"
 openrouter_secret_file="${root_dir}/secrets/runtime/openrouter.api_key"
@@ -80,7 +81,11 @@ mcp_token_file="${root_dir}/secrets/runtime/mcp.token"
 
 [[ -s "${openwebui_env}" ]] || fail "openwebui env file missing: ${openwebui_env}"
 [[ -s "${openhands_env}" ]] || fail "openhands env file missing: ${openhands_env}"
+[[ -s "${openhands_settings}" ]] || fail "openhands settings file missing: ${openhands_settings}"
 [[ -s "${allowlist_file}" ]] || fail "allowlist file missing: ${allowlist_file}"
+openhands_settings_perm="$(stat -c '%a' "${openhands_settings}")"
+[[ "${openhands_settings_perm}" == "660" ]] \
+  || fail "openhands settings file permissions must be 660: ${openhands_settings} (got ${openhands_settings_perm})"
 
 for secret_file in \
   "${openai_secret_file}" \
@@ -105,6 +110,18 @@ grep -q "^LLM_MODEL=${openhands_model}$" "${openhands_env}" \
   || fail "LLM_MODEL was not written"
 grep -q "^LLM_API_KEY=${openhands_api_key}$" "${openhands_env}" \
   || fail "LLM_API_KEY was not written"
+grep -q '^LLM_BASE_URL=http://ollama-gate:11435/v1$' "${openhands_env}" \
+  || fail "LLM_BASE_URL was not written"
+python3 - <<PY || fail "openhands settings.json does not contain expected defaults"
+import json
+from pathlib import Path
+
+payload = json.loads(Path("${openhands_settings}").read_text(encoding="utf-8"))
+assert payload.get("llm_model") == "openai/${openhands_model}"
+assert payload.get("llm_api_key") == "${openhands_api_key}"
+assert payload.get("llm_base_url") == "http://ollama-gate:11435/v1"
+assert payload.get("v1_enabled") is True
+PY
 
 grep -q '^example.com$' "${allowlist_file}" || fail "allowlist missing example.com"
 grep -q '^api.openai.com$' "${allowlist_file}" || fail "allowlist missing api.openai.com"

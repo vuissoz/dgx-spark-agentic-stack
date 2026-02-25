@@ -285,6 +285,10 @@ Baseline files (created by runtime init scripts):
 `openhands.env` keys (sensitive file, mode `600`):
 - `LLM_MODEL`
 - `LLM_API_KEY` (local through `ollama-gate`: any non-empty placeholder, for example `local-ollama`)
+- `LLM_BASE_URL` (default `http://ollama-gate:11435/v1`)
+
+OpenHands first-run preconfiguration:
+- `${AGENTIC_ROOT}/openhands/state/settings.json` is created automatically when missing, so first login does not block on the "AI Provider Configuration" screen.
 
 ## 5. Secrets and Keys
 

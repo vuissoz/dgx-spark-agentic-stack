@@ -37,6 +37,16 @@ echo "${env_dump}" | grep -q '^LLM_API_KEY=' \
   || fail "openhands LLM_API_KEY is missing"
 ok "openhands model/api key env is present"
 
+settings_payload="$(curl -fsS --max-time 10 "http://127.0.0.1:${openhands_port}/api/settings" || true)"
+[[ -n "${settings_payload}" ]] || fail "openhands settings endpoint returned empty payload"
+printf '%s' "${settings_payload}" | grep -q '"llm_api_key_set":true' \
+  || fail "openhands settings preconfiguration missing llm_api_key_set=true"
+printf '%s' "${settings_payload}" | grep -q '"llm_base_url":"http://ollama-gate:11435/v1"' \
+  || fail "openhands settings preconfiguration missing llm_base_url"
+printf '%s' "${settings_payload}" | grep -q '"llm_model":"openai/' \
+  || fail "openhands settings preconfiguration missing provider-qualified llm_model"
+ok "openhands first-run settings are preconfigured"
+
 session="h2-openhands-$RANDOM-$$"
 timeout 20 docker exec "${openhands_cid}" sh -lc "python3 - <<'PY'
 import json

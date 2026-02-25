@@ -281,6 +281,10 @@ Cles `openwebui.env` (fichier sensible en `600`):
 Cles `openhands.env` (fichier sensible en `600`):
 - `LLM_MODEL`
 - `LLM_API_KEY` (en local via `ollama-gate`: n'importe quelle valeur non vide, ex `local-ollama`)
+- `LLM_BASE_URL` (par defaut `http://ollama-gate:11435/v1`)
+
+Preconfiguration premier demarrage OpenHands:
+- `${AGENTIC_ROOT}/openhands/state/settings.json` est cree automatiquement (si absent) avec le modele/provider/base_url, pour eviter l'ecran "AI Provider Configuration" au premier acces.
 
 ## 5. Secrets et cles API
 

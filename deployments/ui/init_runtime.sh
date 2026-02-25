@@ -63,6 +63,64 @@ migrate_env_key() {
   fi
 }
 
+env_value() {
+  local env_file="$1"
+  local key="$2"
+  sed -n "s/^${key}=//p" "${env_file}" | head -n1
+}
+
+normalize_openhands_model() {
+  local model="$1"
+  if [[ "${model}" == */* ]]; then
+    printf '%s\n' "${model}"
+  else
+    printf 'openai/%s\n' "${model}"
+  fi
+}
+
+write_openhands_settings_if_missing() {
+  local env_file="$1"
+  local settings_file="$2"
+  local model api_key base_url effective_model tmp_file
+
+  if [[ -f "${settings_file}" ]]; then
+    chmod 0660 "${settings_file}" || true
+    log "preserve existing runtime file: ${settings_file}"
+    return 0
+  fi
+
+  model="$(env_value "${env_file}" "LLM_MODEL")"
+  api_key="$(env_value "${env_file}" "LLM_API_KEY")"
+  base_url="$(env_value "${env_file}" "LLM_BASE_URL")"
+
+  [[ -n "${model}" ]] || model="${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}"
+  [[ -n "${api_key}" ]] || api_key="local-ollama"
+  [[ -n "${base_url}" ]] || base_url="http://ollama-gate:11435/v1"
+  effective_model="$(normalize_openhands_model "${model}")"
+
+  tmp_file="$(mktemp "${settings_file}.tmp.XXXXXX")"
+  python3 - "${effective_model}" "${api_key}" "${base_url}" >"${tmp_file}" <<'PY'
+import json
+import sys
+
+llm_model, llm_api_key, llm_base_url = sys.argv[1:4]
+payload = {
+    "language": "en",
+    "agent": "CodeActAgent",
+    "llm_model": llm_model,
+    "llm_api_key": llm_api_key,
+    "llm_base_url": llm_base_url,
+    "v1_enabled": True,
+}
+sys.stdout.write(json.dumps(payload, separators=(",", ":")))
+sys.stdout.write("\n")
+PY
+
+  chmod 0660 "${tmp_file}"
+  mv "${tmp_file}" "${settings_file}"
+  log "created runtime file: ${settings_file}"
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui"
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui/config"
@@ -96,14 +154,20 @@ main() {
   ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "OPENWEBUI_ENABLE_OLLAMA_API" "True"
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_API_KEY" "local-ollama"
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_MODEL" "${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}"
+  ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_BASE_URL" "http://ollama-gate:11435/v1"
+  write_openhands_settings_if_missing \
+    "${AGENTIC_ROOT}/openhands/config/openhands.env" \
+    "${AGENTIC_ROOT}/openhands/state/settings.json"
 
   chmod 0600 "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "${AGENTIC_ROOT}/openhands/config/openhands.env"
+  chmod 0660 "${AGENTIC_ROOT}/openhands/state/settings.json" || true
 
   if [[ "${EUID}" -eq 0 ]]; then
     chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
       "${AGENTIC_ROOT}/openwebui/data" \
       "${AGENTIC_ROOT}/openwebui/static" \
       "${AGENTIC_ROOT}/openhands/state" \
+      "${AGENTIC_ROOT}/openhands/state/settings.json" \
       "${AGENTIC_ROOT}/openhands/logs" \
       "${AGENTIC_ROOT}/openhands/workspaces" \
       "${AGENTIC_ROOT}/comfyui/models" \
