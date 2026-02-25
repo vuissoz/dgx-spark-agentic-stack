@@ -24,6 +24,8 @@ export AGENTIC_EGRESS_NETWORK="agentic-${suffix}-egress"
 export AGENTIC_STACK_ALL_TARGETS="optional"
 export AGENTIC_CLEANUP_EXPORT_DIR="${REPO_ROOT}/.runtime/${suffix}-exports"
 export AGENTIC_AGENT_BASE_IMAGE="agentic/l3-cleanup-${suffix}:local"
+export AGENTIC_OLLAMA_MODELS_LINK="${REPO_ROOT}/.runtime/${suffix}-ollama-models-link"
+ollama_models_target="${REPO_ROOT}/.runtime/${suffix}-ollama-models-target"
 
 outside_root="${REPO_ROOT}/.runtime/${suffix}-outside"
 outside_marker="${outside_root}/keep/me.txt"
@@ -47,6 +49,12 @@ cleanup() {
     find "${outside_root}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete || true
     find "${outside_root}" -mindepth 1 -depth -type d -empty -delete || true
     rmdir "${outside_root}" >/dev/null 2>&1 || true
+  fi
+  rm -f "${AGENTIC_OLLAMA_MODELS_LINK}" >/dev/null 2>&1 || true
+  if [[ -d "${ollama_models_target}" ]]; then
+    find "${ollama_models_target}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete || true
+    find "${ollama_models_target}" -mindepth 1 -depth -type d -empty -delete || true
+    rmdir "${ollama_models_target}" >/dev/null 2>&1 || true
   fi
   docker image rm -f "${AGENTIC_AGENT_BASE_IMAGE}" >/dev/null 2>&1 || true
 }
@@ -75,6 +83,8 @@ touch "${AGENTIC_ROOT}/nested/state/value.txt"
 mkdir -p "$(dirname "${outside_marker}")"
 printf 'keep-me\n' >"${outside_marker}"
 ln -s "${outside_root}" "${symlink_path}"
+mkdir -p "${ollama_models_target}"
+ln -s "${ollama_models_target}" "${AGENTIC_OLLAMA_MODELS_LINK}"
 
 printf 'y\nCLEAN\nremove-every-thing\n' | "${agent_bin}" rootless-dev cleanup >/tmp/agent-l3-cleanup.out \
   || fail "agent rootless-dev cleanup interactive flow failed"
@@ -88,6 +98,8 @@ if find "${AGENTIC_ROOT}" -mindepth 1 -print -quit | grep -q .; then
 fi
 [[ -f "${outside_marker}" ]] || fail "cleanup must not follow symlink target outside runtime root"
 [[ ! -e "${symlink_path}" ]] || fail "cleanup must remove symlink entry under runtime root"
+[[ ! -e "${AGENTIC_OLLAMA_MODELS_LINK}" ]] || fail "cleanup must unlink AGENTIC_OLLAMA_MODELS_LINK in rootless-dev"
+[[ -d "${ollama_models_target}" ]] || fail "cleanup must not delete ollama models target directory outside AGENTIC_ROOT"
 
 backup_count="$(find "${AGENTIC_CLEANUP_EXPORT_DIR}" -maxdepth 1 -type f -name '*.tar.gz' | wc -l | tr -d ' ')"
 [[ "${backup_count}" -ge 1 ]] || fail "cleanup must export a backup archive when backup is requested"

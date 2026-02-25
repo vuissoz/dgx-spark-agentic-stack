@@ -1400,6 +1400,20 @@ purge_runtime_root_symlink_safe() {
   fi
 }
 
+cleanup_rootless_ollama_models_link() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+
+  if [[ -L "${AGENTIC_OLLAMA_MODELS_LINK}" ]]; then
+    rm -f -- "${AGENTIC_OLLAMA_MODELS_LINK}"
+    printf 'cleanup removed_ollama_models_link=%s\n' "${AGENTIC_OLLAMA_MODELS_LINK}"
+    return 0
+  fi
+
+  if [[ -e "${AGENTIC_OLLAMA_MODELS_LINK}" ]]; then
+    warn "cleanup: expected symlink at AGENTIC_OLLAMA_MODELS_LINK but found non-symlink path '${AGENTIC_OLLAMA_MODELS_LINK}'"
+  fi
+}
+
 collect_cleanup_image_refs() {
   local -a compose_files=()
   local -a compose_args=()
@@ -1684,6 +1698,7 @@ USAGE
   fi
 
   purge_runtime_root_symlink_safe "${AGENTIC_ROOT}"
+  cleanup_rootless_ollama_models_link
   remove_cleanup_images_best_effort "${cleanup_images[@]}"
   install -d -m 0750 "${AGENTIC_ROOT}"
 
