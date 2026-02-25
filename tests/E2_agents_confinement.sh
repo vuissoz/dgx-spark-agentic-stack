@@ -53,7 +53,10 @@ assert_ollama_gate_defaults() {
       test \"\${OLLAMA_BASE_URL}\" = 'http://ollama-gate:11435'; \
       test \"\${OPENAI_BASE_URL}\" = 'http://ollama-gate:11435/v1'; \
       test \"\${OPENAI_API_BASE_URL}\" = 'http://ollama-gate:11435/v1'; \
-      test \"\${OPENAI_API_BASE}\" = 'http://ollama-gate:11435/v1'" \
+      test \"\${OPENAI_API_BASE}\" = 'http://ollama-gate:11435/v1'; \
+      test \"\${OPENAI_API_KEY}\" = 'local-ollama'; \
+      test \"\${ANTHROPIC_BASE_URL}\" = 'http://ollama-gate:11435'; \
+      test \"\${ANTHROPIC_API_KEY}\" = 'local-ollama'" \
     || fail "${container_id}: defaults file does not resolve to ollama-gate endpoint"
 
   ok "${container_id}: first-run LLM defaults target ollama-gate"

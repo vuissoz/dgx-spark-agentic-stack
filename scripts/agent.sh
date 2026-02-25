@@ -983,7 +983,8 @@ prepare_tool_session() {
     docker exec "${container_id}" tmux new-session -d -s "${tool}" -c "${workspace}" \
       "bash -lc 'if [ -f \"${defaults_file}\" ]; then source \"${defaults_file}\"; fi; exec bash -l'"
   fi
-  docker exec "${container_id}" sh -lc "tmux send-keys -t '${tool}' C-c 'cd \"${workspace}\"' C-m"
+  docker exec "${container_id}" sh -lc "tmux send-keys -t '${tool}' C-c"
+  docker exec "${container_id}" sh -lc "tmux send-keys -t '${tool}' 'cd \"${workspace}\"' C-m"
 }
 
 cmd_tool_attach() {

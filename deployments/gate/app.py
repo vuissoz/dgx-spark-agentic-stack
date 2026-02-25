@@ -8,7 +8,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 import httpx
 import yaml
@@ -1691,11 +1691,18 @@ def embedding_from_upstream(protocol: str, payload: Dict[str, Any]) -> list[floa
     return None
 
 
-@app.post("/v1/chat/completions")
-async def v1_chat_completions(request: Request) -> JSONResponse:
-    payload = await request.json()
-    requested_model = payload.get("model")
-    session = request.headers.get("X-Agent-Session") or payload.get("user") or "anonymous"
+async def handle_chat_completion_endpoint(
+    request: Request,
+    *,
+    endpoint: str,
+    payload: Dict[str, Any],
+    messages: Any,
+    requested_model: str | None,
+    session: str,
+    response_builder: Callable[[str, str], Dict[str, Any]],
+    stream: bool = False,
+    stream_builder: Callable[[str, str], str] | None = None,
+) -> Response:
     project = request.headers.get("X-Agent-Project", "-")
     allow_switch = header_bool(request.headers.get("X-Model-Switch"))
     llm_mode = state.get_llm_mode()
@@ -1712,9 +1719,9 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
             event_base(
                 session=session,
                 project=project,
-                endpoint="/v1/chat/completions",
+                endpoint=endpoint,
                 decision="denied",
-                model_requested=requested_model if isinstance(requested_model, str) else None,
+                model_requested=requested_model,
                 model_served=None,
                 status_code=429,
                 latency_ms=latency_ms,
@@ -1764,7 +1771,7 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
         if llm_mode == "local" and is_external_provider:
             status_code = 403
             reason = "external_provider_disabled"
-            return llm_mode_block_response(provider, "/v1/chat/completions", llm_mode)
+            return llm_mode_block_response(provider, endpoint, llm_mode)
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
         if is_external_provider:
@@ -1787,7 +1794,7 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 upstream_status, upstream_json, upstream_text = await backend_chat_completion(
                     backend,
                     model_served,
-                    payload.get("messages", []),
+                    messages,
                 )
             except BackendAuthError as exc:
                 status_code = 503
@@ -1845,29 +1852,33 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
         if is_external_provider:
             await state.external_quota_record(provider, project, external_tokens_used)
 
-        response_payload = {
-            "id": f"chatcmpl-{uuid.uuid4().hex}",
-            "object": "chat.completion",
-            "created": int(time.time()),
-            "model": model_served,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": content},
-                    "finish_reason": "stop",
-                }
-            ],
-        }
+        effective_model = model_served or requested_model or "unknown"
+        if stream and stream_builder is not None:
+            headers = gate_response_headers(
+                decision=decision,
+                backend=backend,
+                provider=provider,
+                llm_mode=llm_mode,
+                model_served=effective_model,
+            )
+            headers["Content-Type"] = "text/event-stream; charset=utf-8"
+            return Response(
+                status_code=200,
+                content=stream_builder(effective_model, content),
+                headers=headers,
+            )
+
+        response_payload = response_builder(effective_model, content)
         return JSONResponse(
             status_code=200,
             content=response_payload,
-            headers={
-                "X-Gate-Decision": decision,
-                "X-Model-Served": model_served,
-                "X-Gate-Backend": backend,
-                "X-Gate-Provider": provider,
-                "X-Gate-LLM-Mode": llm_mode,
-            },
+            headers=gate_response_headers(
+                decision=decision,
+                backend=backend,
+                provider=provider,
+                llm_mode=llm_mode,
+                model_served=effective_model,
+            ),
         )
     finally:
         await release_gate_slot(acquired)
@@ -1877,9 +1888,9 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
             event_base(
                 session=session,
                 project=project,
-                endpoint="/v1/chat/completions",
+                endpoint=endpoint,
                 decision="denied" if status_code == 429 else decision,
-                model_requested=requested_model if isinstance(requested_model, str) else None,
+                model_requested=requested_model,
                 model_served=model_served,
                 status_code=status_code,
                 latency_ms=latency_ms,
@@ -1891,6 +1902,381 @@ async def v1_chat_completions(request: Request) -> JSONResponse:
                 external_tokens=external_tokens_used if is_external_provider else None,
             )
         )
+
+
+def extract_text_content(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+
+    if isinstance(value, dict):
+        for key in ("text", "input_text", "content", "value"):
+            candidate = value.get(key)
+            if isinstance(candidate, str):
+                return candidate
+            if isinstance(candidate, (dict, list)):
+                nested = extract_text_content(candidate)
+                if nested:
+                    return nested
+        return ""
+
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            text = extract_text_content(item)
+            if text:
+                parts.append(text)
+        return "\n".join(parts)
+
+    return ""
+
+
+def normalize_chat_role(value: Any) -> str:
+    if not isinstance(value, str):
+        return "user"
+
+    role = value.strip().lower()
+    if role in ("system", "developer"):
+        return "system"
+    if role == "assistant":
+        return "assistant"
+    return "user"
+
+
+def normalize_session_name(value: Any, fallback: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return fallback
+
+
+def messages_from_responses_payload(payload: Dict[str, Any]) -> list[Dict[str, str]]:
+    messages: list[Dict[str, str]] = []
+
+    instructions = payload.get("instructions")
+    if isinstance(instructions, str) and instructions.strip():
+        messages.append({"role": "system", "content": instructions})
+
+    input_value = payload.get("input")
+    if isinstance(input_value, str):
+        if input_value.strip():
+            messages.append({"role": "user", "content": input_value})
+        return messages
+
+    if isinstance(input_value, dict):
+        role = normalize_chat_role(input_value.get("role"))
+        text = extract_text_content(input_value)
+        if text:
+            messages.append({"role": role, "content": text})
+        return messages
+
+    if isinstance(input_value, list):
+        for item in input_value:
+            if isinstance(item, str):
+                if item.strip():
+                    messages.append({"role": "user", "content": item})
+                continue
+            if not isinstance(item, dict):
+                continue
+            role = normalize_chat_role(item.get("role"))
+            text = extract_text_content(item.get("content"))
+            if not text:
+                text = extract_text_content(item)
+            if text:
+                messages.append({"role": role, "content": text})
+    return messages
+
+
+def messages_from_anthropic_payload(payload: Dict[str, Any]) -> list[Dict[str, str]]:
+    messages: list[Dict[str, str]] = []
+
+    system_text = extract_text_content(payload.get("system"))
+    if system_text:
+        messages.append({"role": "system", "content": system_text})
+
+    raw_messages = payload.get("messages")
+    if not isinstance(raw_messages, list):
+        return messages
+
+    for item in raw_messages:
+        if not isinstance(item, dict):
+            continue
+        role = normalize_chat_role(item.get("role"))
+        if role == "system":
+            role = "user"
+        text = extract_text_content(item.get("content"))
+        if text:
+            messages.append({"role": role, "content": text})
+    return messages
+
+
+def sse_event(event: str, payload: Dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+def build_chat_completion_payload(model: str, content: str) -> Dict[str, Any]:
+    return {
+        "id": f"chatcmpl-{uuid.uuid4().hex}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            }
+        ],
+    }
+
+
+def build_responses_payload(model: str, content: str) -> Dict[str, Any]:
+    response_id = f"resp_{uuid.uuid4().hex}"
+    message_id = f"msg_{uuid.uuid4().hex}"
+    return {
+        "id": response_id,
+        "object": "response",
+        "created_at": now_iso(),
+        "status": "completed",
+        "model": model,
+        "output_text": content,
+        "error": None,
+        "output": [
+            {
+                "id": message_id,
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": content, "annotations": []}],
+            }
+        ],
+        "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+    }
+
+
+def build_responses_stream(model: str, content: str) -> str:
+    final_payload = build_responses_payload(model, content)
+    response_id = final_payload["id"]
+    output_item = final_payload["output"][0]
+    output_item_id = output_item["id"]
+    output_part = output_item["content"][0]
+    created_payload = {
+        "type": "response.created",
+        "response": {
+            "id": response_id,
+            "object": "response",
+            "created_at": final_payload["created_at"],
+            "status": "in_progress",
+            "model": model,
+            "output": [],
+        },
+    }
+    in_progress_payload = {
+        "type": "response.in_progress",
+        "response": {
+            "id": response_id,
+            "object": "response",
+            "created_at": final_payload["created_at"],
+            "status": "in_progress",
+            "model": model,
+            "output": [],
+        },
+    }
+    output_item_added = {
+        "type": "response.output_item.added",
+        "response_id": response_id,
+        "output_index": 0,
+        "item": {
+            "id": output_item_id,
+            "type": "message",
+            "status": "in_progress",
+            "role": "assistant",
+            "content": [],
+        },
+    }
+    content_part_added = {
+        "type": "response.content_part.added",
+        "response_id": response_id,
+        "output_index": 0,
+        "item_id": output_item_id,
+        "content_index": 0,
+        "part": {"type": "output_text", "text": ""},
+    }
+    delta_payload = {
+        "type": "response.output_text.delta",
+        "response_id": response_id,
+        "output_index": 0,
+        "item_id": output_item_id,
+        "content_index": 0,
+        "delta": content,
+    }
+    text_done_payload = {
+        "type": "response.output_text.done",
+        "response_id": response_id,
+        "output_index": 0,
+        "item_id": output_item_id,
+        "content_index": 0,
+        "text": content,
+    }
+    content_part_done = {
+        "type": "response.content_part.done",
+        "response_id": response_id,
+        "output_index": 0,
+        "item_id": output_item_id,
+        "content_index": 0,
+        "part": output_part,
+    }
+    output_item_done = {
+        "type": "response.output_item.done",
+        "response_id": response_id,
+        "output_index": 0,
+        "item": output_item,
+    }
+    completed_payload = {"type": "response.completed", "response": final_payload}
+    return (
+        sse_event("response.created", created_payload)
+        + sse_event("response.in_progress", in_progress_payload)
+        + sse_event("response.output_item.added", output_item_added)
+        + sse_event("response.content_part.added", content_part_added)
+        + sse_event("response.output_text.delta", delta_payload)
+        + sse_event("response.output_text.done", text_done_payload)
+        + sse_event("response.content_part.done", content_part_done)
+        + sse_event("response.output_item.done", output_item_done)
+        + sse_event("response.completed", completed_payload)
+        + "data: [DONE]\n\n"
+    )
+
+
+def build_anthropic_message_payload(model: str, content: str) -> Dict[str, Any]:
+    return {
+        "id": f"msg_{uuid.uuid4().hex}",
+        "type": "message",
+        "role": "assistant",
+        "model": model,
+        "content": [{"type": "text", "text": content}],
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "usage": {"input_tokens": 0, "output_tokens": 0},
+    }
+
+
+def build_anthropic_message_stream(model: str, content: str) -> str:
+    payload = build_anthropic_message_payload(model, content)
+    message_start = dict(payload)
+    message_start["content"] = []
+    message_start["stop_reason"] = None
+    events = [
+        sse_event("message_start", {"type": "message_start", "message": message_start}),
+        sse_event(
+            "content_block_start",
+            {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+        ),
+        sse_event(
+            "content_block_delta",
+            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": content}},
+        ),
+        sse_event("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        sse_event(
+            "message_delta",
+            {"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": None}, "usage": {"output_tokens": 0}},
+        ),
+        sse_event("message_stop", {"type": "message_stop"}),
+    ]
+    return "".join(events)
+
+
+@app.post("/v1/chat/completions")
+async def v1_chat_completions(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None or payload is None:
+        return error
+
+    requested_model = payload.get("model") if isinstance(payload.get("model"), str) else None
+    session = normalize_session_name(request.headers.get("X-Agent-Session") or payload.get("user"), "anonymous")
+    messages = payload.get("messages", [])
+
+    return await handle_chat_completion_endpoint(
+        request,
+        endpoint="/v1/chat/completions",
+        payload=payload,
+        messages=messages,
+        requested_model=requested_model,
+        session=session,
+        response_builder=build_chat_completion_payload,
+        stream=False,
+    )
+
+
+@app.post("/responses")
+@app.post("/v1/responses")
+async def v1_responses(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None or payload is None:
+        return error
+
+    requested_model = payload.get("model") if isinstance(payload.get("model"), str) else None
+    session = normalize_session_name(request.headers.get("X-Agent-Session") or payload.get("user"), "responses")
+    messages = messages_from_responses_payload(payload)
+    if not messages:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "input must contain at least one text message",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+    stream = bool(payload.get("stream"))
+    endpoint = request.url.path if request.url.path in ("/responses", "/v1/responses") else "/v1/responses"
+    return await handle_chat_completion_endpoint(
+        request,
+        endpoint=endpoint,
+        payload=payload,
+        messages=messages,
+        requested_model=requested_model,
+        session=session,
+        response_builder=build_responses_payload,
+        stream=stream,
+        stream_builder=build_responses_stream,
+    )
+
+
+@app.post("/messages")
+@app.post("/v1/messages")
+async def v1_messages(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None or payload is None:
+        return error
+
+    requested_model = payload.get("model") if isinstance(payload.get("model"), str) else None
+    metadata = payload.get("metadata")
+    metadata_user = metadata.get("user_id") if isinstance(metadata, dict) else None
+    session = normalize_session_name(request.headers.get("X-Agent-Session") or metadata_user, "messages")
+    messages = messages_from_anthropic_payload(payload)
+    if not messages:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "messages must contain at least one text item",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+    stream = bool(payload.get("stream"))
+    endpoint = request.url.path if request.url.path in ("/messages", "/v1/messages") else "/v1/messages"
+    return await handle_chat_completion_endpoint(
+        request,
+        endpoint=endpoint,
+        payload=payload,
+        messages=messages,
+        requested_model=requested_model,
+        session=session,
+        response_builder=build_anthropic_message_payload,
+        stream=stream,
+        stream_builder=build_anthropic_message_stream,
+    )
 
 
 @app.post("/v1/embeddings")

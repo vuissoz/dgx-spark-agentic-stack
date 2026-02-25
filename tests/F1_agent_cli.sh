@@ -17,8 +17,10 @@ agent_bin="${REPO_ROOT}/agent"
 assert_cmd docker
 
 claude_cid="$(require_service_container agentic-claude)" || exit 1
+codex_cid="$(require_service_container agentic-codex)" || exit 1
 vibestral_cid="$(require_service_container agentic-vibestral)" || exit 1
 wait_for_container_ready "${claude_cid}" 60 || fail "agentic-claude is not ready"
+wait_for_container_ready "${codex_cid}" 60 || fail "agentic-codex is not ready"
 wait_for_container_ready "${vibestral_cid}" 60 || fail "agentic-vibestral is not ready"
 
 ls_output="$("${agent_bin}" ls)"
@@ -34,7 +36,22 @@ timeout 20 docker exec "${claude_cid}" tmux has-session -t claude \
   || fail "agent claude did not create/keep tmux session"
 timeout 20 docker exec "${claude_cid}" sh -lc "test -d '/workspace/${project_name}'" \
   || fail "agent claude did not create project workspace /workspace/${project_name}"
+claude_path="$(timeout 20 docker exec "${claude_cid}" tmux display-message -p -t claude '#{pane_current_path}')"
+[[ "${claude_path}" == "/workspace/${project_name}" ]] \
+  || fail "agent claude tmux pane path mismatch (expected=/workspace/${project_name}, actual=${claude_path})"
 ok "agent claude prepares tmux session and project workspace"
+
+codex_project="f1-codex-${USER:-agent}-$$"
+AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${codex_project}" "${agent_bin}" codex >/tmp/agent-f1-codex.out
+
+timeout 20 docker exec "${codex_cid}" tmux has-session -t codex \
+  || fail "agent codex did not create/keep tmux session"
+timeout 20 docker exec "${codex_cid}" sh -lc "test -d '/workspace/${codex_project}'" \
+  || fail "agent codex did not create project workspace /workspace/${codex_project}"
+codex_path="$(timeout 20 docker exec "${codex_cid}" tmux display-message -p -t codex '#{pane_current_path}')"
+[[ "${codex_path}" == "/workspace/${codex_project}" ]] \
+  || fail "agent codex tmux pane path mismatch (expected=/workspace/${codex_project}, actual=${codex_path})"
+ok "agent codex prepares tmux session and project workspace"
 
 vibestral_project="f1-vibestral-${USER:-agent}-$$"
 AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${vibestral_project}" "${agent_bin}" vibestral >/tmp/agent-f1-vibestral.out
@@ -45,6 +62,9 @@ timeout 20 docker exec "${vibestral_cid}" sh -lc "test -d '/workspace/${vibestra
   || fail "agent vibestral did not create project workspace /workspace/${vibestral_project}"
 timeout 20 docker exec "${vibestral_cid}" sh -lc 'command -v vibe >/dev/null' \
   || fail "agent vibestral runtime is missing vibe CLI"
+vibestral_path="$(timeout 20 docker exec "${vibestral_cid}" tmux display-message -p -t vibestral '#{pane_current_path}')"
+[[ "${vibestral_path}" == "/workspace/${vibestral_project}" ]] \
+  || fail "agent vibestral tmux pane path mismatch (expected=/workspace/${vibestral_project}, actual=${vibestral_path})"
 ok "agent vibestral prepares tmux session, workspace, and vibe CLI runtime"
 
 ok "F1_agent_cli passed"
