@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
@@ -12,6 +13,9 @@ fi
 
 assert_cmd curl
 assert_cmd ss
+
+agent_bin="${REPO_ROOT}/agent"
+[[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
 
 ollama_cid="$(require_service_container ollama)"
 toolbox_cid="$(require_service_container toolbox)"
@@ -56,11 +60,30 @@ models_dest="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}
 models_dest="${models_dest:-${OLLAMA_CONTAINER_MODELS_PATH:-/root/.ollama/models}}"
 actual_models_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "'"${models_dest}"'"}}{{println .Source}}{{end}}{{end}}' "${ollama_cid}" | head -n 1)"
 [[ -n "${actual_models_mount}" ]] || fail "missing mount for ${models_dest} on ollama container"
+actual_models_mount_rw="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "'"${models_dest}"'"}}{{println .RW}}{{end}}{{end}}' "${ollama_cid}" | head -n 1)"
+[[ -n "${actual_models_mount_rw}" ]] || fail "missing mount RW flag for ${models_dest} on ollama container"
 
 expected_models_dir="$(readlink -f "${expected_models_dir}" 2>/dev/null || printf '%s' "${expected_models_dir}")"
 actual_models_mount="$(readlink -f "${actual_models_mount}" 2>/dev/null || printf '%s' "${actual_models_mount}")"
 [[ "${actual_models_mount}" == "${expected_models_dir}" ]] \
   || fail "ollama models mount source mismatch (expected=${expected_models_dir}, actual=${actual_models_mount})"
 ok "ollama models mount source matches effective OLLAMA_MODELS_DIR"
+
+status_output="$("${agent_bin}" ollama-models status)"
+printf '%s\n' "${status_output}" | grep -q '^ollama_models_mount_mode=' \
+  || fail "ollama-models status is missing ollama_models_mount_mode"
+printf '%s\n' "${status_output}" | grep -q '^ollama_service_state=running$' \
+  || fail "ollama-models status should report running service state"
+printf '%s\n' "${status_output}" | grep -q "^ollama_models_mount_source_runtime=${actual_models_mount}$" \
+  || fail "ollama-models status runtime mount source mismatch"
+
+if [[ "${actual_models_mount_rw}" == "true" ]]; then
+  expected_runtime_mode="rw"
+else
+  expected_runtime_mode="ro"
+fi
+printf '%s\n' "${status_output}" | grep -q "^ollama_models_mount_mode_runtime=${expected_runtime_mode}$" \
+  || fail "ollama-models status runtime mount mode mismatch"
+ok "agent ollama-models status reports runtime mount details"
 
 ok "C1_ollama_basic passed"

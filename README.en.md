@@ -295,7 +295,7 @@ agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
 agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
-agent ollama-models <rw|ro>
+agent ollama-models [status|rw|ro]
 agent sudo-mode [status|on|off]
 agent update
 agent rollback all <release_id>
@@ -345,6 +345,7 @@ Preload then switch to read-only for smoke tests:
 
 ```bash
 ./agent ollama-preload
+./agent ollama-models status
 ./agent ollama-models ro
 ./agent ollama-models rw
 ```

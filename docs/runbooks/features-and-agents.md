@@ -374,7 +374,7 @@ Key implemented capabilities:
   - `agent onboard [runtime flags...] [--openwebui-admin-email ... --openwebui-admin-password ... --openwebui-allow-model-pull <true|false> --default-model ... --openhands-llm-model ... --allowlist-domains ... --optional-modules ... --output ... --non-interactive --require-complete]`
   - `agent ollama-link`
   - `agent ollama-preload ...`
-  - `agent ollama-models <rw|ro>`
+  - `agent ollama-models [status|rw|ro]`
 
 ## Notes for Operations
 

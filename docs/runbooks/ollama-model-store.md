@@ -32,6 +32,7 @@ Custom models/budget:
 Switch mount mode manually:
 
 ```bash
+./agent ollama-models status
 ./agent ollama-models rw
 ./agent ollama-models ro
 ```

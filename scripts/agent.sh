@@ -50,7 +50,7 @@ Usage:
   agent net apply
   agent ollama-link
   agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
-  agent ollama-models <rw|ro>
+  agent ollama-models [status|rw|ro]
   agent sudo-mode [status|on|off]
   agent update
   agent rollback all <release_id>
@@ -1706,22 +1706,84 @@ USAGE
   printf 'cleanup completed root=%s\n' "${AGENTIC_ROOT}"
 }
 
-cmd_ollama_models_mode() {
-  local mode="${1:-}"
-  [[ "${mode}" == "rw" || "${mode}" == "ro" ]] || die "Usage: agent ollama-models <rw|ro>"
+cmd_ollama_models_status() {
+  local configured_mode="${OLLAMA_MODELS_MOUNT_MODE:-rw}"
+  local configured_source
+  local configured_dest="${OLLAMA_CONTAINER_MODELS_PATH:-/root/.ollama/models}"
+  local runtime_dest="${configured_dest}"
+  local runtime_mode="unknown"
+  local runtime_source=""
+  local ollama_cid=""
+  local service_state="not-running"
+  local mount_entry=""
+  local mount_rw=""
 
-  ensure_runtime_env
-  ensure_core_runtime
-  set_runtime_env_value "OLLAMA_MODELS_MOUNT_MODE" "${mode}"
-  export OLLAMA_MODELS_MOUNT_MODE="${mode}"
+  configured_source="$(canonicalize_path "${OLLAMA_MODELS_DIR}")"
 
-  local core_compose_file
-  core_compose_file="$(stack_to_compose_file core)"
-  [[ -f "${core_compose_file}" ]] || die "Compose file not found for core stack: ${core_compose_file}"
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    ollama_cid="$(service_container_id "ollama" || true)"
+    if [[ -n "${ollama_cid}" ]]; then
+      service_state="$(docker inspect --format '{{.State.Status}}' "${ollama_cid}" 2>/dev/null || echo unknown)"
+      runtime_dest="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${ollama_cid}" 2>/dev/null | sed -n 's/^OLLAMA_MODELS=//p' | head -n 1)"
+      runtime_dest="${runtime_dest:-${configured_dest}}"
+      mount_entry="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "'"${runtime_dest}"'"}}{{printf "%s|%v" .Source .RW}}{{end}}{{end}}' "${ollama_cid}" 2>/dev/null || true)"
+      if [[ -n "${mount_entry}" ]]; then
+        runtime_source="${mount_entry%%|*}"
+        mount_rw="${mount_entry##*|}"
+        runtime_source="$(canonicalize_path "${runtime_source}")"
+        if [[ "${mount_rw}" == "true" ]]; then
+          runtime_mode="rw"
+        else
+          runtime_mode="ro"
+        fi
+      else
+        runtime_mode="missing"
+      fi
+    fi
+  fi
 
-  require_cmd docker
-  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${core_compose_file}" up -d --force-recreate ollama
-  printf 'ollama models mount mode updated to %s\n' "${mode}"
+  printf 'ollama_models_mount_mode=%s\n' "${configured_mode}"
+  printf 'ollama_models_dir=%s\n' "${configured_source}"
+  printf 'ollama_container_models_path=%s\n' "${configured_dest}"
+  printf 'ollama_service_state=%s\n' "${service_state}"
+  printf 'ollama_models_mount_mode_runtime=%s\n' "${runtime_mode}"
+
+  if [[ -n "${ollama_cid}" ]]; then
+    printf 'ollama_container_models_path_runtime=%s\n' "${runtime_dest}"
+    if [[ -n "${runtime_source}" ]]; then
+      printf 'ollama_models_mount_source_runtime=%s\n' "${runtime_source}"
+    fi
+    if [[ "${runtime_mode}" != "missing" && "${runtime_mode}" != "${configured_mode}" ]]; then
+      warn "ollama models runtime mode (${runtime_mode}) differs from configured mode (${configured_mode}); run: agent ollama-models ${configured_mode}"
+    fi
+  fi
+}
+
+cmd_ollama_models() {
+  local action="${1:-status}"
+
+  case "${action}" in
+    status)
+      cmd_ollama_models_status
+      ;;
+    rw|ro)
+      ensure_runtime_env
+      ensure_core_runtime
+      set_runtime_env_value "OLLAMA_MODELS_MOUNT_MODE" "${action}"
+      export OLLAMA_MODELS_MOUNT_MODE="${action}"
+
+      local core_compose_file
+      core_compose_file="$(stack_to_compose_file core)"
+      [[ -f "${core_compose_file}" ]] || die "Compose file not found for core stack: ${core_compose_file}"
+
+      require_cmd docker
+      docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${core_compose_file}" up -d --force-recreate ollama
+      printf 'ollama models mount mode updated to %s\n' "${action}"
+      ;;
+    *)
+      die "Usage: agent ollama-models [status|rw|ro]"
+      ;;
+  esac
 }
 
 cmd_ollama_preload() {
@@ -2401,8 +2463,8 @@ case "$cmd" in
     cmd_ollama_link
     ;;
   ollama-models)
-    [[ $# -ge 2 ]] || die "Usage: agent ollama-models <rw|ro>"
-    cmd_ollama_models_mode "$2"
+    [[ $# -le 2 ]] || die "Usage: agent ollama-models [status|rw|ro]"
+    cmd_ollama_models "${2:-status}"
     ;;
   ollama-preload)
     shift
