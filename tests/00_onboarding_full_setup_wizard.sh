@@ -66,6 +66,14 @@ grep -q "^export AGENTIC_DEFAULT_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_DEFAULT_MODEL"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export OLLAMA_PRELOAD_GENERATE_MODEL"
+grep -q "^export AGENTIC_OLLAMA_GATE_BASE_URL='http://ollama-gate:11435'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_OLLAMA_GATE_BASE_URL"
+grep -q "^export ANTHROPIC_BASE_URL='http://ollama-gate:11435'$" "${env_file}" \
+  || fail "full setup onboarding env must export ANTHROPIC_BASE_URL"
+grep -q "^export ANTHROPIC_API_KEY='local-ollama'$" "${env_file}" \
+  || fail "full setup onboarding env must export ANTHROPIC_API_KEY placeholder"
+grep -q "^export ANTHROPIC_MODEL='${default_model}'$" "${env_file}" \
+  || fail "full setup onboarding env must export ANTHROPIC_MODEL"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${env_file}" \
   || fail "full setup onboarding env must export OPENWEBUI_ENABLE_OLLAMA_API"
 
