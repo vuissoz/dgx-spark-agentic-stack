@@ -126,6 +126,8 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-egress'$" "${default_env_file}"
   || fail "default AGENTIC_EGRESS_NETWORK is not agentic-egress"
 grep -q "^export OLLAMA_MODELS_DIR='/srv/agentic/ollama/models'$" "${default_env_file}" \
   || fail "default OLLAMA_MODELS_DIR is not /srv/agentic/ollama/models"
+grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${default_env_file}" \
+  || fail "onboarding default must enable agent sudo-mode (AGENTIC_AGENT_NO_NEW_PRIVILEGES=false)"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='1.00'$" "${default_env_file}" \
   || fail "default AGENTIC_LIMIT_DEFAULT_CPUS is not 1.00"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_MEM='1g'$" "${default_env_file}" \
@@ -153,6 +155,8 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-ci-egress'$" "${override_env_fi
   || fail "override AGENTIC_EGRESS_NETWORK is not applied"
 grep -q "^export OLLAMA_MODELS_DIR='${work_dir}/custom-ollama-models'$" "${override_env_file}" \
   || fail "override OLLAMA_MODELS_DIR is not applied"
+grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${override_env_file}" \
+  || fail "override flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.55'$" "${override_env_file}" \
   || fail "override AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_MEM='640m'$" "${override_env_file}" \
@@ -193,6 +197,8 @@ fi
 assert_generated_file_baseline "${non_interactive_env_file}"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.60'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
+grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${non_interactive_env_file}" \
+  || fail "non-interactive flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_OPTIONAL_MEM='512m'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_LIMIT_OPTIONAL_MEM is not applied"
 assert_git_ignored "${non_interactive_env_file}"

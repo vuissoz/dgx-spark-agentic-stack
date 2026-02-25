@@ -57,6 +57,8 @@ fi
 
 [[ -s "${env_file}" ]] || fail "full setup env output is missing: ${env_file}"
 bash -n "${env_file}" || fail "full setup env output is invalid bash: ${env_file}"
+grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${env_file}" \
+  || fail "full setup onboarding env must enable agent sudo-mode by default"
 
 openwebui_env="${root_dir}/openwebui/config/openwebui.env"
 openhands_env="${root_dir}/openhands/config/openhands.env"
