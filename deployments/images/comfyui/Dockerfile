@@ -38,16 +38,20 @@ RUN python3 -m pip install --upgrade pip setuptools wheel \
     fi; \
   fi
 
-RUN mkdir -p /comfyui/models /comfyui/input /comfyui/output /comfyui/user /tmp/comfyui-temp \
+RUN mkdir -p /opt/comfyui-defaults \
+  && cp -a "${COMFYUI_HOME}/custom_nodes" /opt/comfyui-defaults/custom_nodes \
+  && mkdir -p /comfyui/models /comfyui/input /comfyui/output /comfyui/user /comfyui/custom_nodes /tmp/comfyui-temp \
   && rm -rf \
     "${COMFYUI_HOME}/models" \
     "${COMFYUI_HOME}/input" \
     "${COMFYUI_HOME}/output" \
     "${COMFYUI_HOME}/user" \
+    "${COMFYUI_HOME}/custom_nodes" \
   && ln -s /comfyui/models "${COMFYUI_HOME}/models" \
   && ln -s /comfyui/input "${COMFYUI_HOME}/input" \
   && ln -s /comfyui/output "${COMFYUI_HOME}/output" \
-  && ln -s /comfyui/user "${COMFYUI_HOME}/user"
+  && ln -s /comfyui/user "${COMFYUI_HOME}/user" \
+  && ln -s /comfyui/custom_nodes "${COMFYUI_HOME}/custom_nodes"
 
 COPY deployments/images/comfyui/entrypoint.sh /usr/local/bin/comfyui-entrypoint
 RUN chmod 0755 /usr/local/bin/comfyui-entrypoint

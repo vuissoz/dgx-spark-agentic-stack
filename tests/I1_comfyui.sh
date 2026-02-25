@@ -21,6 +21,10 @@ timeout 20 docker exec "${comfy_cid}" sh -lc 'test -d /opt/comfyui/custom_nodes/
   || fail "comfyui manager extension is missing (/opt/comfyui/custom_nodes/ComfyUI-Manager)"
 ok "comfyui manager extension is installed"
 
+timeout 20 docker exec "${comfy_cid}" sh -lc 'test -d /comfyui/custom_nodes/ComfyUI-Manager' \
+  || fail "comfyui manager extension is not present in persistent /comfyui/custom_nodes"
+ok "comfyui manager extension is available through persistent /comfyui/custom_nodes"
+
 gpu_requests_json="$(docker inspect --format '{{json .HostConfig.DeviceRequests}}' "${comfy_cid}" 2>/dev/null || true)"
 python3 - "${gpu_requests_json}" <<'PY'
 import json

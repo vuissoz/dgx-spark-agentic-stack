@@ -80,6 +80,7 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/comfyui/input"
   install -d -m 0770 "${AGENTIC_ROOT}/comfyui/output"
   install -d -m 0770 "${AGENTIC_ROOT}/comfyui/user"
+  install -d -m 0770 "${AGENTIC_ROOT}/comfyui/custom_nodes"
 
   copy_if_missing "${TEMPLATE_DIR}/openwebui.env" "${AGENTIC_ROOT}/openwebui/config/openwebui.env" 0600
   copy_if_missing "${TEMPLATE_DIR}/openhands.env" "${AGENTIC_ROOT}/openhands/config/openhands.env" 0600
@@ -107,7 +108,8 @@ main() {
       "${AGENTIC_ROOT}/comfyui/models" \
       "${AGENTIC_ROOT}/comfyui/input" \
       "${AGENTIC_ROOT}/comfyui/output" \
-      "${AGENTIC_ROOT}/comfyui/user"
+      "${AGENTIC_ROOT}/comfyui/user" \
+      "${AGENTIC_ROOT}/comfyui/custom_nodes"
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then
@@ -119,7 +121,8 @@ main() {
       "${AGENTIC_ROOT}/comfyui/models" \
       "${AGENTIC_ROOT}/comfyui/input" \
       "${AGENTIC_ROOT}/comfyui/output" \
-      "${AGENTIC_ROOT}/comfyui/user"
+      "${AGENTIC_ROOT}/comfyui/user" \
+      "${AGENTIC_ROOT}/comfyui/custom_nodes"
     log "non-root runtime init: relaxed UI runtime dirs for userns compatibility"
 
     if [[ -f "${AGENTIC_ROOT}/openwebui/data/webui.db" && ! -w "${AGENTIC_ROOT}/openwebui/data/webui.db" ]]; then

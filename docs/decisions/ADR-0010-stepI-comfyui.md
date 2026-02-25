@@ -6,7 +6,7 @@ Accepted
 ## Context
 Step I requires a ComfyUI web service for image generation while keeping the security baseline:
 - no public bind (`127.0.0.1` host bind only),
-- persistent model/input/output/user paths under `/srv/agentic/comfyui`,
+- persistent model/input/output/user/custom_nodes paths under `/srv/agentic/comfyui`,
 - explicit GPU enablement with a low-priority profile marker,
 - compatibility with controlled egress posture.
 
@@ -25,6 +25,8 @@ Step I requires a ComfyUI web service for image generation while keeping the sec
     - `${AGENTIC_ROOT}/comfyui/input:/comfyui/input`
     - `${AGENTIC_ROOT}/comfyui/output:/comfyui/output`
     - `${AGENTIC_ROOT}/comfyui/user:/comfyui/user`
+    - `${AGENTIC_ROOT}/comfyui/custom_nodes:/comfyui/custom_nodes`
+  - custom nodes are seeded on first start from the image defaults so `ComfyUI-Manager` remains available even with an empty persistent mount,
   - hardening baseline (`read_only: true`, `tmpfs: /tmp`, `cap_drop: [ALL]`, `no-new-privileges`).
 - Extend `deployments/ui/init_runtime.sh` to create ComfyUI runtime directories.
 - Add `tests/I1_comfyui.sh`:

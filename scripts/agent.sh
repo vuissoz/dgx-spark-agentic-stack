@@ -1207,7 +1207,8 @@ forget_target_paths() {
         "${AGENTIC_ROOT}/comfyui/models" \
         "${AGENTIC_ROOT}/comfyui/input" \
         "${AGENTIC_ROOT}/comfyui/output" \
-        "${AGENTIC_ROOT}/comfyui/user"
+        "${AGENTIC_ROOT}/comfyui/user" \
+        "${AGENTIC_ROOT}/comfyui/custom_nodes"
       ;;
     openclaw)
       printf '%s\n' \

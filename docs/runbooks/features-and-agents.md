@@ -212,6 +212,7 @@ Primary CLI contract per baseline service:
   - `${AGENTIC_ROOT}/comfyui/input`
   - `${AGENTIC_ROOT}/comfyui/output`
   - `${AGENTIC_ROOT}/comfyui/user`
+  - `${AGENTIC_ROOT}/comfyui/custom_nodes`
 
 ### `comfyui-loopback`
 - Host URL: `http://127.0.0.1:${COMFYUI_HOST_PORT:-8188}`

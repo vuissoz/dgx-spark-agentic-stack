@@ -52,7 +52,7 @@ Dossiers persistants clés:
 - `dns/`
 - `openwebui/`
 - `openhands/{config,state,logs,workspaces}/`
-- `comfyui/{models,input,output,user}/`
+- `comfyui/{models,input,output,user,custom_nodes}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
 - `optional/{openclaw,mcp,pi-mono,goose,portainer}/...`

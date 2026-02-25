@@ -45,6 +45,7 @@ required_dirs=(
   "${AGENTIC_ROOT}/comfyui/input"
   "${AGENTIC_ROOT}/comfyui/output"
   "${AGENTIC_ROOT}/comfyui/user"
+  "${AGENTIC_ROOT}/comfyui/custom_nodes"
   "${AGENTIC_ROOT}/rag"
   "${AGENTIC_ROOT}/rag/qdrant"
   "${AGENTIC_ROOT}/rag/qdrant-snapshots"
