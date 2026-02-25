@@ -191,10 +191,19 @@ default_ollama_models_for_profile() {
   local profile="$1"
   local root_path="$2"
   if [[ "${profile}" == "rootless-dev" ]]; then
-    printf '%s\n' "${AGENTIC_REPO_ROOT}/.runtime/ollama-models"
+    printf '%s\n' "${HOME}/wkdir/open-webui/ollama_data/models"
   else
     printf '%s\n' "${root_path}/ollama/models"
   fi
+}
+
+default_ollama_tmp_for_models_dir() {
+  local models_dir="$1"
+  if [[ "$(basename "${models_dir}")" == "models" ]]; then
+    printf '%s\n' "$(dirname "${models_dir}")/tmp"
+    return 0
+  fi
+  printf '%s\n' ""
 }
 
 default_limits_default_cpus_for_profile() {
@@ -1052,6 +1061,32 @@ fi
 
 if [[ "${root_is_writable}" -ne 1 ]]; then
   warn "${root_path} is not writable for the current user; file bootstrap sections may be deferred."
+fi
+
+if [[ "${profile}" == "rootless-dev" ]]; then
+  ollama_tmp_dir="$(default_ollama_tmp_for_models_dir "${ollama_models}")"
+
+  if path_parent_writable_or_exists "${ollama_models}"; then
+    install -d -m 0770 "${ollama_models}" \
+      || summary_add_deferred "failed to create Ollama models directory: ${ollama_models}"
+    if [[ -d "${ollama_models}" ]]; then
+      summary_add_generated "${ollama_models}"
+    fi
+  else
+    summary_add_deferred "Ollama models directory not created (parent not writable): ${ollama_models}"
+  fi
+
+  if [[ -n "${ollama_tmp_dir}" ]]; then
+    if path_parent_writable_or_exists "${ollama_tmp_dir}"; then
+      install -d -m 0770 "${ollama_tmp_dir}" \
+        || summary_add_deferred "failed to create Ollama tmp directory: ${ollama_tmp_dir}"
+      if [[ -d "${ollama_tmp_dir}" ]]; then
+        summary_add_generated "${ollama_tmp_dir}"
+      fi
+    else
+      summary_add_deferred "Ollama tmp directory not created (parent not writable): ${ollama_tmp_dir}"
+    fi
+  fi
 fi
 
 section "Section 2/4: UI Admin Bootstrap (OpenWebUI + OpenHands)"

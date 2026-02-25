@@ -15,6 +15,7 @@ override_env_file="${work_dir}/override.env.generated.sh"
 default_log="${work_dir}/default.log"
 override_log="${work_dir}/override.log"
 non_interactive_env_file="${work_dir}/non-interactive.env.generated.sh"
+rootless_default_env_file="${work_dir}/rootless-default.env.generated.sh"
 
 trap 'rm -rf "${work_dir}"' EXIT
 mkdir -p "${work_dir}"
@@ -168,6 +169,21 @@ grep -q "^export AGENTIC_LIMIT_OBS_MEM='512m'$" "${override_env_file}" \
 
 assert_git_ignored "${override_env_file}"
 ok "wizard override flow writes custom values"
+
+if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
+  --non-interactive \
+  --profile rootless-dev \
+  --root "${work_dir}/rootless-default-root" \
+  --skip-ui-bootstrap \
+  --skip-network-bootstrap \
+  --skip-secret-bootstrap \
+  --output "${rootless_default_env_file}" >/dev/null 2>&1; then
+  fail "wizard rootless default mode failed"
+fi
+assert_generated_file_baseline "${rootless_default_env_file}"
+grep -q "^export OLLAMA_MODELS_DIR='${HOME}/wkdir/open-webui/ollama_data/models'$" "${rootless_default_env_file}" \
+  || fail "rootless default OLLAMA_MODELS_DIR is not ${HOME}/wkdir/open-webui/ollama_data/models"
+ok "wizard rootless default models path is open-webui/ollama_data/models"
 
 if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --non-interactive \

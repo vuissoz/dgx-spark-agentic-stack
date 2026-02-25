@@ -105,9 +105,9 @@ Notes:
 
 | Variable | Allowed values | Default | Stored in |
 |---|---|---|---|
-| `OLLAMA_MODELS_DIR` | absolute path | `${AGENTIC_ROOT}/ollama/models` | shell, `runtime.env` |
+| `OLLAMA_MODELS_DIR` | absolute path | `strict-prod`: `${AGENTIC_ROOT}/ollama/models`; `rootless-dev` (onboarding): `${HOME}/wkdir/open-webui/ollama_data/models` | shell, `runtime.env` |
 | `AGENTIC_OLLAMA_MODELS_LINK` | absolute path (rootless symlink path) | `${REPO}/.runtime/ollama-models` | shell, `runtime.env` |
-| `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | absolute path (rootless real target) | `${REPO}/.runtime/ollama-models-data` | shell, `runtime.env` |
+| `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | absolute path (rootless real target) | `${REPO}/.runtime/ollama-models-data` (or value derived from `OLLAMA_MODELS_DIR` when onboarding provides one) | shell, `runtime.env` |
 | `OLLAMA_CONTAINER_MODELS_PATH` | container path | `/root/.ollama/models` | `/tmp/ollama/models` in `rootless-dev` |
 | `OLLAMA_MODELS_MOUNT_MODE` | `rw` or `ro` | `rw` | `runtime.env` |
 | `OLLAMA_PRELOAD_GENERATE_MODEL` | model id string | `qwen3:0.6b` | `runtime.env` |

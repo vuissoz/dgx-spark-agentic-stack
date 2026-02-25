@@ -235,6 +235,10 @@ source .runtime/env.generated.sh
 ./agent profile
 ```
 
+In `rootless-dev`, onboarding now proposes the Ollama host model path:
+- `${HOME}/wkdir/open-webui/ollama_data/models`
+- and creates sibling `${HOME}/wkdir/open-webui/ollama_data/tmp` when writable.
+
 By default, `./agent onboard` writes `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false` in `.runtime/env.generated.sh` (agent in-container sudo-mode enabled). If you want hardened mode, run `./agent sudo-mode off` (or export `AGENTIC_AGENT_NO_NEW_PRIVILEGES=true`) before starting `agents`.
 
 In `rootless-dev`, this wizard can directly create/update:

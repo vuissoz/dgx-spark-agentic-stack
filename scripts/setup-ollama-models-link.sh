@@ -7,7 +7,8 @@ source "${SCRIPT_DIR}/lib/runtime.sh"
 
 runtime_env_file="${AGENTIC_ROOT}/deployments/runtime.env"
 link_path="${AGENTIC_OLLAMA_MODELS_LINK:-${AGENTIC_REPO_ROOT}/.runtime/ollama-models}"
-target_dir="${AGENTIC_OLLAMA_MODELS_TARGET_DIR:-${AGENTIC_REPO_ROOT}/.runtime/ollama-models-data}"
+default_target_dir="${AGENTIC_REPO_ROOT}/.runtime/ollama-models-data"
+target_dir="${AGENTIC_OLLAMA_MODELS_TARGET_DIR:-}"
 link_backups_dir="${AGENTIC_OLLAMA_LINK_BACKUPS_DIR:-${AGENTIC_ROOT}/deployments/ollama-link/backups}"
 changes_log="${AGENTIC_ROOT}/deployments/changes.log"
 skip_backup="${AGENTIC_SKIP_OLLAMA_LINK_BACKUP:-0}"
@@ -21,7 +22,7 @@ Usage:
 
 Defaults:
   --link-path  ${link_path}
-  --target-dir ${target_dir}
+  --target-dir ${target_dir:-<derived from OLLAMA_MODELS_DIR or ${default_target_dir}>}
 USAGE
 }
 
@@ -174,9 +175,18 @@ main() {
   local needs_change=0
   local replace_existing=0
   local backup_id="none"
+  local env_ollama_models_dir="${OLLAMA_MODELS_DIR:-}"
 
   if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then
     die "setup-ollama-models-link.sh is intended for AGENTIC_PROFILE=rootless-dev"
+  fi
+
+  if [[ -z "${target_dir}" ]]; then
+    if [[ -n "${env_ollama_models_dir}" && "${env_ollama_models_dir}" != "${link_path}" ]]; then
+      target_dir="${env_ollama_models_dir}"
+    else
+      target_dir="${default_target_dir}"
+    fi
   fi
 
   install -d -m 0770 "$(dirname "${target_dir}")"
