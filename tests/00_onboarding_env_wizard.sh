@@ -44,6 +44,7 @@ ${custom_network}
 ${custom_egress_network}
 ${custom_models}
 ${custom_default_model}
+
 0.55
 640m
 

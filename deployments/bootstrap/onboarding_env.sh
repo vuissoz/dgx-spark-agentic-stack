@@ -647,6 +647,83 @@ prompt_secret_or_generate() {
   printf '%s\n' "${value}"
 }
 
+prompt_password_with_default() {
+  local prompt="$1"
+  local default_value="$2"
+  local value=""
+  local confirmation=""
+
+  while true; do
+    if [[ -t 0 ]]; then
+      printf '%s [hidden] (Enter keeps default): ' "${prompt}" >&2
+      IFS= read -r -s value || die "input aborted"
+      echo >&2
+    else
+      printf '%s [hidden] (Enter keeps default): ' "${prompt}" >&2
+      IFS= read -r value || die "input aborted"
+    fi
+
+    if [[ -z "${value}" ]]; then
+      printf '%s\n' "${default_value}"
+      return 0
+    fi
+
+    if [[ -t 0 ]]; then
+      printf 'Confirm %s [hidden]: ' "${prompt}" >&2
+      IFS= read -r -s confirmation || die "input aborted"
+      echo >&2
+    else
+      printf 'Confirm %s [hidden]: ' "${prompt}" >&2
+      IFS= read -r confirmation || die "input aborted"
+    fi
+
+    if [[ "${value}" == "${confirmation}" ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+
+    echo "Values do not match. Please try again." >&2
+  done
+}
+
+prompt_password_or_generate() {
+  local prompt="$1"
+  local value=""
+  local confirmation=""
+
+  while true; do
+    if [[ -t 0 ]]; then
+      printf '%s [hidden] (Enter to auto-generate): ' "${prompt}" >&2
+      IFS= read -r -s value || die "input aborted"
+      echo >&2
+    else
+      printf '%s [hidden] (Enter to auto-generate): ' "${prompt}" >&2
+      IFS= read -r value || die "input aborted"
+    fi
+
+    if [[ -z "${value}" ]]; then
+      printf '\n'
+      return 0
+    fi
+
+    if [[ -t 0 ]]; then
+      printf 'Confirm %s [hidden]: ' "${prompt}" >&2
+      IFS= read -r -s confirmation || die "input aborted"
+      echo >&2
+    else
+      printf 'Confirm %s [hidden]: ' "${prompt}" >&2
+      IFS= read -r confirmation || die "input aborted"
+    fi
+
+    if [[ "${value}" == "${confirmation}" ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+
+    echo "Values do not match. Please try again." >&2
+  done
+}
+
 normalize_output_path() {
   if [[ "${output_file}" != /* ]]; then
     output_file="${AGENTIC_REPO_ROOT}/${output_file}"
@@ -1339,6 +1416,10 @@ collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_oll
 collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 grafana_admin_user="${grafana_admin_user_override:-${GRAFANA_ADMIN_USER:-admin}}"
 grafana_admin_password="${grafana_admin_password_override:-${GRAFANA_ADMIN_PASSWORD:-replace-with-strong-password}}"
+if [[ "${non_interactive}" -eq 0 && -z "${grafana_admin_password_override}" ]]; then
+  info "GRAFANA_ADMIN_PASSWORD is used for first Grafana login (blank keeps current default)."
+  grafana_admin_password="$(prompt_password_with_default "GRAFANA_ADMIN_PASSWORD" "${grafana_admin_password}")"
+fi
 validate_non_empty_single_line_value "GRAFANA_ADMIN_USER" "${grafana_admin_user}" || die "invalid GRAFANA_ADMIN_USER"
 validate_non_empty_single_line_value "GRAFANA_ADMIN_PASSWORD" "${grafana_admin_password}" || die "invalid GRAFANA_ADMIN_PASSWORD"
 
@@ -1458,7 +1539,7 @@ if [[ "${ui_section_enabled}" -eq 1 ]]; then
     done
 
     if [[ -z "${openwebui_admin_password_override}" ]]; then
-      candidate="$(prompt_secret_or_generate "WEBUI_ADMIN_PASSWORD")"
+      candidate="$(prompt_password_or_generate "WEBUI_ADMIN_PASSWORD")"
       if [[ -n "${candidate}" ]]; then
         openwebui_admin_password="${candidate}"
       else

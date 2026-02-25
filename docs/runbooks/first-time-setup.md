@@ -252,6 +252,7 @@ In `rootless-dev`, onboarding now proposes the Ollama host model path:
 
 By default, `./agent onboard` writes `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false` in `.runtime/env.generated.sh` (agent in-container sudo-mode enabled). If you want hardened mode, run `./agent sudo-mode off` (or export `AGENTIC_AGENT_NO_NEW_PRIVILEGES=true`) before starting `agents`.
 It now also writes `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` in `.runtime/env.generated.sh` (overridable via `--grafana-admin-user` and `--grafana-admin-password`).
+In interactive mode, password prompts (`GRAFANA_ADMIN_PASSWORD`, `WEBUI_ADMIN_PASSWORD`) require double entry and must match.
 
 In `rootless-dev`, this wizard can directly create/update:
 - `${AGENTIC_ROOT}/openwebui/config/openwebui.env`
