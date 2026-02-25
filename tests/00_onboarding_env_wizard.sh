@@ -20,7 +20,7 @@ trap 'rm -rf "${work_dir}"' EXIT
 mkdir -p "${work_dir}"
 
 run_default_answers() {
-  if ! printf '\n%.0s' {1..20} \
+  if ! printf '\n%.0s' {1..80} \
     | AGENTIC_PROFILE=strict-prod "${wizard_script}" --output "${default_env_file}" >"${default_log}" 2>&1; then
     cat "${default_log}" >&2 || true
     fail "wizard failed with default Enter answers"
@@ -43,6 +43,34 @@ ${custom_egress_network}
 ${custom_models}
 0.55
 640m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

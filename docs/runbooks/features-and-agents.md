@@ -369,7 +369,7 @@ Key implemented capabilities:
   - `agent vm cleanup [--name ... --yes --dry-run]`
 - profile and model store utilities:
   - `agent profile`
-  - `agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]`
+  - `agent onboard [runtime flags...] [--openwebui-admin-email ... --openwebui-admin-password ... --openhands-llm-model ... --allowlist-domains ... --optional-modules ... --output ... --non-interactive --require-complete]`
   - `agent ollama-link`
   - `agent ollama-preload ...`
   - `agent ollama-models <rw|ro>`

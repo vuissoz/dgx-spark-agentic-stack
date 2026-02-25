@@ -108,13 +108,15 @@ export GRAFANA_ADMIN_USER='admin'
 export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 ```
 
-2. OpenWebUI admin credentials (`openwebui.env`, created during `ui` init):
+2. OpenWebUI admin credentials (`openwebui.env`):
 - file: `${AGENTIC_ROOT}/openwebui/config/openwebui.env`
 - keys:
   - `WEBUI_ADMIN_EMAIL`
   - `WEBUI_ADMIN_PASSWORD`
   - `OPENAI_API_KEY`
   - `WEBUI_SECRET_KEY`
+- **must be set before your first real login attempt on OpenWebUI**
+- these values are bootstrap credentials for first setup; if OpenWebUI already initialized its DB, changing this file alone does not reset existing users
 
 3. OpenHands model/API settings (`openhands.env`, created during `ui` init):
 - file: `${AGENTIC_ROOT}/openhands/config/openhands.env`
@@ -222,6 +224,24 @@ ssh-add -l
 
 - Fallback option: switch remote to HTTPS + PAT with a credential helper, then re-run the non-interactive check with `git ls-remote origin`.
 
+### 2.7 Recommended: run onboarding wizard before first startup
+
+The easiest way to avoid getting stuck with default UI credentials is to run:
+
+```bash
+./agent onboard
+source .runtime/env.generated.sh
+./agent profile
+```
+
+In `rootless-dev`, this wizard can directly create/update:
+- `${AGENTIC_ROOT}/openwebui/config/openwebui.env`
+- `${AGENTIC_ROOT}/openhands/config/openhands.env`
+- `${AGENTIC_ROOT}/proxy/allowlist.txt`
+- `${AGENTIC_ROOT}/secrets/runtime/*` (if selected)
+
+In `strict-prod`, if `${AGENTIC_ROOT}` is not writable from your current shell, the wizard will mark file bootstrap actions as deferred; run the equivalent edits with `sudo` before first `agent up ui`.
+
 ## 3. Bootstrap Host Runtime Tree
 
 ### `strict-prod`
@@ -302,11 +322,23 @@ sudo ./agent up agents,ui,obs,rag
 ./agent up agents,ui,obs,rag
 ```
 
-During `ui` startup, runtime env files are materialized automatically if missing:
+Before first UI login, verify the OpenWebUI/OpenHands config files:
 - `${AGENTIC_ROOT}/openwebui/config/openwebui.env`
 - `${AGENTIC_ROOT}/openhands/config/openhands.env`
 
-Edit them now and restart `ui` once:
+If you already used `./agent onboard` and set non-default values, just confirm:
+
+```bash
+grep -E '^(WEBUI_ADMIN_EMAIL|WEBUI_ADMIN_PASSWORD)=' "${AGENTIC_ROOT}/openwebui/config/openwebui.env"
+```
+
+If files do not exist yet (for example you skipped onboarding), do this once:
+1. start `ui` to materialize templates,
+2. edit credentials,
+3. restart `ui`,
+4. then log in.
+
+Commands:
 
 ```bash
 # strict-prod
@@ -321,6 +353,18 @@ $EDITOR "${HOME}/.local/share/agentic/openhands/config/openhands.env"
 ```
 
 If you use a custom `AGENTIC_ROOT`, edit `${ROOT}/openwebui/config/openwebui.env` and `${ROOT}/openhands/config/openhands.env`.
+
+If OpenWebUI was already initialized with unwanted defaults and login keeps failing, reset its persisted state explicitly (destructive):
+
+```bash
+# strict-prod
+sudo ./agent forget openwebui --yes
+sudo ./agent up ui
+
+# rootless-dev
+./agent forget openwebui --yes
+./agent up ui
+```
 
 Optional: set gate LLM operating mode (`hybrid` default):
 
