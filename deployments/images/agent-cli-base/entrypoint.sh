@@ -13,6 +13,10 @@ export HOME="${agent_home}"
 mkdir -p "${workspace}" "${state_dir}" "${logs_dir}" "${agent_home}" \
   "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe"
 chmod 0700 "${agent_home}" "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" 2>/dev/null || true
+if [[ -n "${TMPDIR:-}" ]]; then
+  mkdir -p "${TMPDIR}"
+  chmod 0700 "${TMPDIR}" 2>/dev/null || true
+fi
 
 log() {
   printf '%s\n' "$*"

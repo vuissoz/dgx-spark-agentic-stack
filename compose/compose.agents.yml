@@ -167,6 +167,7 @@ services:
       AGENT_STATE_DIR: /state
       AGENT_LOGS_DIR: /logs
       HOME: /state/home
+      TMPDIR: /state/tmp
       XDG_CONFIG_HOME: /state/home/.config
       XDG_CACHE_HOME: /state/home/.cache
       OLLAMA_BASE_URL: http://ollama-gate:11435
