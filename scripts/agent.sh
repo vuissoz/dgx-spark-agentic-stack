@@ -2000,7 +2000,14 @@ cmd_update() {
     build_agents_local_images "$(stack_to_compose_file agents)"
   fi
 
-  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" pull --ignore-pull-failures
+  local -a pull_cmd=(
+    docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" pull --ignore-pull-failures
+  )
+  if docker compose pull --help 2>/dev/null | grep -q -- "--ignore-buildable"; then
+    pull_cmd+=(--ignore-buildable)
+  fi
+
+  "${pull_cmd[@]}"
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" up -d --remove-orphans
   apply_core_network_policy
 
