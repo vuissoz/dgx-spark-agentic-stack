@@ -3,7 +3,7 @@ set -euo pipefail
 
 seed_custom_nodes() {
   local defaults_dir="/opt/comfyui-defaults/custom_nodes"
-  local runtime_dir="/comfyui/custom_nodes"
+  local runtime_dir="/opt/comfyui/custom_nodes"
 
   [[ -d "${defaults_dir}" ]] || return 0
   mkdir -p "${runtime_dir}"

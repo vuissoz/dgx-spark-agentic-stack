@@ -130,7 +130,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/input:/comfyui/input
       - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/output:/comfyui/output
       - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/user:/comfyui/user
-      - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/custom_nodes:/comfyui/custom_nodes
+      - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/custom_nodes:/opt/comfyui/custom_nodes
     healthcheck:
       test:
         - CMD-SHELL

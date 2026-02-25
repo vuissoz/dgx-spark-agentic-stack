@@ -25,7 +25,7 @@ Step I requires a ComfyUI web service for image generation while keeping the sec
     - `${AGENTIC_ROOT}/comfyui/input:/comfyui/input`
     - `${AGENTIC_ROOT}/comfyui/output:/comfyui/output`
     - `${AGENTIC_ROOT}/comfyui/user:/comfyui/user`
-    - `${AGENTIC_ROOT}/comfyui/custom_nodes:/comfyui/custom_nodes`
+    - `${AGENTIC_ROOT}/comfyui/custom_nodes:/opt/comfyui/custom_nodes` (kept inside the ComfyUI source tree so ComfyUI-Manager resolves the correct git root)
   - custom nodes are seeded on first start from the image defaults so `ComfyUI-Manager` remains available even with an empty persistent mount,
   - hardening baseline (`read_only: true`, `tmpfs: /tmp`, `cap_drop: [ALL]`, `no-new-privileges`).
 - Extend `deployments/ui/init_runtime.sh` to create ComfyUI runtime directories.

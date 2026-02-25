@@ -21,9 +21,37 @@ timeout 20 docker exec "${comfy_cid}" sh -lc 'test -d /opt/comfyui/custom_nodes/
   || fail "comfyui manager extension is missing (/opt/comfyui/custom_nodes/ComfyUI-Manager)"
 ok "comfyui manager extension is installed"
 
-timeout 20 docker exec "${comfy_cid}" sh -lc 'test -d /comfyui/custom_nodes/ComfyUI-Manager' \
-  || fail "comfyui manager extension is not present in persistent /comfyui/custom_nodes"
-ok "comfyui manager extension is available through persistent /comfyui/custom_nodes"
+timeout 20 docker exec "${comfy_cid}" sh -lc 'cd /opt/comfyui && git rev-parse --is-inside-work-tree >/dev/null' \
+  || fail "comfyui source tree is not detected as a git repository under /opt/comfyui"
+ok "comfyui source tree is a git repository"
+
+mounts_json="$(docker inspect --format '{{json .Mounts}}' "${comfy_cid}" 2>/dev/null || true)"
+python3 - "${mounts_json}" "${AGENTIC_ROOT:-/srv/agentic}/comfyui/custom_nodes" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1]
+expected_source = sys.argv[2]
+try:
+    mounts = json.loads(raw)
+except json.JSONDecodeError:
+    raise SystemExit("comfyui has invalid Mounts payload")
+
+if not isinstance(mounts, list):
+    raise SystemExit("comfyui mounts payload is not a list")
+
+for mount in mounts:
+    if not isinstance(mount, dict):
+        continue
+    if mount.get("Destination") == "/opt/comfyui/custom_nodes" and mount.get("Source") == expected_source:
+        raise SystemExit(0)
+
+raise SystemExit(
+    "comfyui custom_nodes mount is missing or points to an unexpected destination; "
+    "expected host /srv path mapped to /opt/comfyui/custom_nodes"
+)
+PY
+ok "comfyui custom_nodes persistence is mounted on /opt/comfyui/custom_nodes"
 
 gpu_requests_json="$(docker inspect --format '{{json .HostConfig.DeviceRequests}}' "${comfy_cid}" 2>/dev/null || true)"
 python3 - "${gpu_requests_json}" <<'PY'
