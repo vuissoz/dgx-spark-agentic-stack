@@ -364,7 +364,7 @@ Key implemented capabilities:
   - `agent rollback host-net <backup_id>`
   - `agent rollback ollama-link <backup_id|latest>`
 - vm provisioning:
-  - `agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]`
+  - `agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]`
   - `agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]`
   - `agent vm cleanup [--name ... --yes --dry-run]`
 - profile and model store utilities:
