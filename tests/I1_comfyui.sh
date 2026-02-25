@@ -17,6 +17,10 @@ comfy_port="${COMFYUI_HOST_PORT:-8188}"
 comfy_cid="$(require_service_container comfyui)" || exit 1
 wait_for_container_ready "${comfy_cid}" 300 || fail "comfyui is not ready"
 
+timeout 20 docker exec "${comfy_cid}" sh -lc 'test -d /opt/comfyui/custom_nodes/ComfyUI-Manager' \
+  || fail "comfyui manager extension is missing (/opt/comfyui/custom_nodes/ComfyUI-Manager)"
+ok "comfyui manager extension is installed"
+
 gpu_requests_json="$(docker inspect --format '{{json .HostConfig.DeviceRequests}}' "${comfy_cid}" 2>/dev/null || true)"
 python3 - "${gpu_requests_json}" <<'PY'
 import json

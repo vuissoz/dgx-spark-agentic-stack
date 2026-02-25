@@ -14,6 +14,8 @@ Step I requires a ComfyUI web service for image generation while keeping the sec
 - Extend `compose/compose.ui.yml` with `comfyui`:
   - image built locally as `agentic/comfyui:local` from `deployments/images/comfyui/Dockerfile`,
   - source checkout from `https://github.com/comfyanonymous/ComfyUI` at build time (`COMFYUI_REF`, default `master`),
+  - install `ComfyUI-Manager` at image build time from `https://github.com/ltdrdata/ComfyUI-Manager` (`COMFYUI_MANAGER_REF`, default `main`) to expose built-in model management on first startup,
+  - include a minimal C toolchain (`gcc` + `libc6-dev`) in build dependencies so `PyOpenGL-accelerate` can be compiled on `aarch64` when no prebuilt wheel is available,
   - `comfyui` service stays on the internal network only;
   - host bind `127.0.0.1:${COMFYUI_HOST_PORT:-8188}:8188` is published by a dedicated loopback reverse-proxy sidecar (`comfyui-loopback`) attached to both `agentic` and `agentic-egress`,
   - GPU request enabled (`gpus: all`),

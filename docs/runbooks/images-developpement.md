@@ -70,7 +70,9 @@ Variable de contournement:
 
 `comfyui` declare un `build:` dans `compose/compose.ui.yml` avec:
 - image cible `agentic/comfyui:local`,
-- arg `COMFYUI_REF` (defaut `master`).
+- arg `COMFYUI_REF` (defaut `master`),
+- arg `COMFYUI_MANAGER_REPO` (defaut `https://github.com/ltdrdata/ComfyUI-Manager.git`),
+- arg `COMFYUI_MANAGER_REF` (defaut `main`).
 
 Important:
 - contrairement a `core/agents/optional`, il n'y a pas de mecanisme de stamp specifique ComfyUI.

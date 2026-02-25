@@ -112,6 +112,8 @@ Notes:
 | `RAG_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
 | `TRTLLM_MODELS` | selecteur modele/backend | `qwen3-nvfp4-demo` | shell |
 | `COMFYUI_REF` | ref git pour build image ComfyUI | `master` | shell |
+| `COMFYUI_MANAGER_REPO` | repo git extension manager ComfyUI (vide = desactive) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |
+| `COMFYUI_MANAGER_REF` | ref git extension manager ComfyUI | `main` | shell |
 
 ## 3.5 Variables de ports publies host
 

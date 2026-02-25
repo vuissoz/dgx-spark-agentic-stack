@@ -244,6 +244,7 @@ Pour debutant:
 Entrees/sorties:
 - Service interne principal, avec stockage sur `${AGENTIC_ROOT}/comfyui/*`.
 - Utilise GPU (`gpus: all`) avec profil low-priority dans cette stack.
+- Extension `ComfyUI-Manager` preinstallee dans l'image (model manager dispo des le premier demarrage).
 
 Liens officiels:
 - ComfyUI docs: https://docs.comfy.org/

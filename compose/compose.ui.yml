@@ -104,6 +104,8 @@ services:
       dockerfile: deployments/images/comfyui/Dockerfile
       args:
         COMFYUI_REF: ${COMFYUI_REF:-master}
+        COMFYUI_MANAGER_REPO: ${COMFYUI_MANAGER_REPO:-https://github.com/ltdrdata/ComfyUI-Manager.git}
+        COMFYUI_MANAGER_REF: ${COMFYUI_MANAGER_REF:-main}
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_COMFYUI_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_COMFYUI_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}

@@ -241,6 +241,7 @@ For beginners:
 Inputs/outputs:
 - Main internal service with storage in `${AGENTIC_ROOT}/comfyui/*`.
 - Uses GPU (`gpus: all`) with low-priority profile marker in this stack.
+- `ComfyUI-Manager` extension is preinstalled in the image (model manager available on first startup).
 
 Official links:
 - ComfyUI docs: https://docs.comfy.org/

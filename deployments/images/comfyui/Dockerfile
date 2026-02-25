@@ -2,6 +2,8 @@ FROM python:3.11-slim-bookworm
 
 ARG COMFYUI_REPO=https://github.com/comfyanonymous/ComfyUI.git
 ARG COMFYUI_REF=master
+ARG COMFYUI_MANAGER_REPO=https://github.com/ltdrdata/ComfyUI-Manager.git
+ARG COMFYUI_MANAGER_REF=main
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -12,7 +14,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
+    gcc \
     git \
+    libc6-dev \
     libgl1 \
     libglib2.0-0 \
     tini \
@@ -26,7 +30,13 @@ RUN git clone --depth 1 --branch "${COMFYUI_REF}" "${COMFYUI_REPO}" "${COMFYUI_H
 WORKDIR ${COMFYUI_HOME}
 
 RUN python3 -m pip install --upgrade pip setuptools wheel \
-  && python3 -m pip install -r requirements.txt
+  && python3 -m pip install -r requirements.txt \
+  && if [ -n "${COMFYUI_MANAGER_REPO}" ]; then \
+    git clone --depth 1 --branch "${COMFYUI_MANAGER_REF}" "${COMFYUI_MANAGER_REPO}" "${COMFYUI_HOME}/custom_nodes/ComfyUI-Manager"; \
+    if [ -f "${COMFYUI_HOME}/custom_nodes/ComfyUI-Manager/requirements.txt" ]; then \
+      python3 -m pip install -r "${COMFYUI_HOME}/custom_nodes/ComfyUI-Manager/requirements.txt"; \
+    fi; \
+  fi
 
 RUN mkdir -p /comfyui/models /comfyui/input /comfyui/output /comfyui/user /tmp/comfyui-temp \
   && rm -rf \
