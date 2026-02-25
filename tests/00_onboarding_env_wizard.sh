@@ -133,6 +133,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${default_env_file}" \
   || fail "default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.1:8b'$" "${default_env_file}" \
   || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not llama3.1:8b"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${default_env_file}" \
+  || fail "default OPENWEBUI_ENABLE_OLLAMA_API must be True (allow model pull)"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${default_env_file}" \
   || fail "onboarding default must enable agent sudo-mode (AGENTIC_AGENT_NO_NEW_PRIVILEGES=false)"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='1.00'$" "${default_env_file}" \
@@ -166,6 +168,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override AGENTIC_DEFAULT_MODEL is not applied"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override OLLAMA_PRELOAD_GENERATE_MODEL is not applied"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${override_env_file}" \
+  || fail "override flow default OPENWEBUI_ENABLE_OLLAMA_API must remain True unless explicitly disabled"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${override_env_file}" \
   || fail "override flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.55'$" "${override_env_file}" \
@@ -195,6 +199,8 @@ grep -q "^export OLLAMA_MODELS_DIR='${HOME}/wkdir/open-webui/ollama_data/models'
   || fail "rootless default OLLAMA_MODELS_DIR is not ${HOME}/wkdir/open-webui/ollama_data/models"
 grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${rootless_default_env_file}" \
+  || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be True"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
 
 if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
@@ -228,6 +234,8 @@ grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.60'$" "${non_interactive_env_file
   || fail "non-interactive AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
 grep -q "^export AGENTIC_DEFAULT_MODEL='tinyllama:latest'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_DEFAULT_MODEL is not applied"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${non_interactive_env_file}" \
+  || fail "non-interactive default OPENWEBUI_ENABLE_OLLAMA_API must be True"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${non_interactive_env_file}" \
   || fail "non-interactive flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_OPTIONAL_MEM='512m'$" "${non_interactive_env_file}" \

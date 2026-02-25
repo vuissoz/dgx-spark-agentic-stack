@@ -22,7 +22,7 @@ services:
       WEBUI_AUTH: "True"
       ENABLE_SIGNUP: "False"
       OPENAI_API_BASE_URL: http://ollama-gate:11435/v1
-      ENABLE_OLLAMA_API: ${OPENWEBUI_ENABLE_OLLAMA_API:-False}
+      ENABLE_OLLAMA_API: ${OPENWEBUI_ENABLE_OLLAMA_API:-True}
       OLLAMA_BASE_URL: http://ollama:11434
       ENABLE_OPENAI_API: "True"
       HTTP_PROXY: http://egress-proxy:3128

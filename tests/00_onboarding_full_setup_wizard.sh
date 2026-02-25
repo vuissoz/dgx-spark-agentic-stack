@@ -66,6 +66,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_DEFAULT_MODEL"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export OLLAMA_PRELOAD_GENERATE_MODEL"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${env_file}" \
+  || fail "full setup onboarding env must export OPENWEBUI_ENABLE_OLLAMA_API"
 
 openwebui_env="${root_dir}/openwebui/config/openwebui.env"
 openhands_env="${root_dir}/openhands/config/openhands.env"
