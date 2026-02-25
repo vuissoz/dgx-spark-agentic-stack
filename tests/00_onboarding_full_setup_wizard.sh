@@ -19,7 +19,8 @@ strict_log_file="${work_dir}/strict.log"
 openwebui_email="admin@example.local"
 openwebui_password="S3cure-Pass-123"
 openwebui_secret="webui-secret-xyz"
-openhands_model="qwen3:0.6b"
+default_model="qwen3:0.6b"
+openhands_model="${default_model}"
 openhands_api_key="openhands-api-key"
 openai_key="openai-api-key"
 openrouter_key="openrouter-api-key"
@@ -38,6 +39,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --network agentic-onboard-full-net \
   --egress-network agentic-onboard-full-egress \
   --ollama-models-dir "${work_dir}/models" \
+  --default-model "${default_model}" \
   --openwebui-admin-email "${openwebui_email}" \
   --openwebui-admin-password "${openwebui_password}" \
   --openwebui-secret-key "${openwebui_secret}" \
@@ -59,6 +61,10 @@ fi
 bash -n "${env_file}" || fail "full setup env output is invalid bash: ${env_file}"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${env_file}" \
   || fail "full setup onboarding env must enable agent sudo-mode by default"
+grep -q "^export AGENTIC_DEFAULT_MODEL='${default_model}'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_DEFAULT_MODEL"
+grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \
+  || fail "full setup onboarding env must export OLLAMA_PRELOAD_GENERATE_MODEL"
 
 openwebui_env="${root_dir}/openwebui/config/openwebui.env"
 openhands_env="${root_dir}/openhands/config/openhands.env"

@@ -106,7 +106,8 @@ Notes:
 | `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | chemin absolu (target rootless) | `${REPO}/.runtime/ollama-models-data` (ou valeur derivee de `OLLAMA_MODELS_DIR` quand fournie par onboarding) | shell, `runtime.env` |
 | `OLLAMA_CONTAINER_MODELS_PATH` | chemin interne conteneur | `/root/.ollama/models` | `/tmp/ollama/models` en `rootless-dev` |
 | `OLLAMA_MODELS_MOUNT_MODE` | `rw` ou `ro` | `rw` | `runtime.env` |
-| `OLLAMA_PRELOAD_GENERATE_MODEL` | identifiant de modele | `qwen3:0.6b` | `runtime.env` |
+| `AGENTIC_DEFAULT_MODEL` | identifiant de modele | `qwen3:0.6b` | shell, `runtime.env` |
+| `OLLAMA_PRELOAD_GENERATE_MODEL` | identifiant de modele | `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3:0.6b`) | `runtime.env` |
 | `OLLAMA_PRELOAD_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | entier positif | `12` | `runtime.env` |
 | `RAG_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |

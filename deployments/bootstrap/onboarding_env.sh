@@ -12,6 +12,7 @@ compose_project_override=""
 network_override=""
 egress_network_override=""
 ollama_models_override=""
+default_model_override=""
 limits_default_cpus_override=""
 limits_default_mem_override=""
 limits_core_cpus_override=""
@@ -64,6 +65,7 @@ Runtime options:
   --network <name>
   --egress-network <name>
   --ollama-models-dir <path>
+  --default-model <name>
   --limits-default-cpus <cores>
   --limits-default-mem <size>
   --limits-core-cpus <cores>
@@ -324,6 +326,24 @@ validate_compose_or_network_name() {
     echo "${key} must match [a-zA-Z0-9][a-zA-Z0-9_.-]*" >&2
     return 1
   }
+}
+
+validate_model_id_value() {
+  local key="$1"
+  local value="$2"
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+  [[ "${value}" != *$'\n'* ]] || {
+    echo "${key} must be a single-line model id" >&2
+    return 1
+  }
+  [[ "${value}" != *[[:space:]]* ]] || {
+    echo "${key} must not contain spaces" >&2
+    return 1
+  }
+  return 0
 }
 
 validate_path_value() {
@@ -644,21 +664,22 @@ write_env_file() {
   local network="$4"
   local egress_network="$5"
   local ollama_models="$6"
-  local limits_default_cpus="$7"
-  local limits_default_mem="$8"
-  local limits_core_cpus="$9"
-  local limits_core_mem="${10}"
-  local limits_agents_cpus="${11}"
-  local limits_agents_mem="${12}"
-  local limits_ui_cpus="${13}"
-  local limits_ui_mem="${14}"
-  local limits_obs_cpus="${15}"
-  local limits_obs_mem="${16}"
-  local limits_rag_cpus="${17}"
-  local limits_rag_mem="${18}"
-  local limits_optional_cpus="${19}"
-  local limits_optional_mem="${20}"
-  local out_file="${21}"
+  local default_model="$7"
+  local limits_default_cpus="$8"
+  local limits_default_mem="$9"
+  local limits_core_cpus="${10}"
+  local limits_core_mem="${11}"
+  local limits_agents_cpus="${12}"
+  local limits_agents_mem="${13}"
+  local limits_ui_cpus="${14}"
+  local limits_ui_mem="${15}"
+  local limits_obs_cpus="${16}"
+  local limits_obs_mem="${17}"
+  local limits_rag_cpus="${18}"
+  local limits_rag_mem="${19}"
+  local limits_optional_cpus="${20}"
+  local limits_optional_mem="${21}"
+  local out_file="${22}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -675,6 +696,8 @@ export AGENTIC_NETWORK=$(shell_quote "${network}")
 export AGENTIC_EGRESS_NETWORK=$(shell_quote "${egress_network}")
 export AGENTIC_DOCKER_USER_SOURCE_NETWORKS=$(shell_quote "${network},${egress_network}")
 export OLLAMA_MODELS_DIR=$(shell_quote "${ollama_models}")
+export AGENTIC_DEFAULT_MODEL=$(shell_quote "${default_model}")
+export OLLAMA_PRELOAD_GENERATE_MODEL=$(shell_quote "${default_model}")
 export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'
 export AGENTIC_LIMIT_DEFAULT_CPUS=$(shell_quote "${limits_default_cpus}")
 export AGENTIC_LIMIT_DEFAULT_MEM=$(shell_quote "${limits_default_mem}")
@@ -814,6 +837,11 @@ while [[ $# -gt 0 ]]; do
     --ollama-models-dir)
       [[ $# -ge 2 ]] || die "missing value for --ollama-models-dir"
       ollama_models_override="$2"
+      shift 2
+      ;;
+    --default-model)
+      [[ $# -ge 2 ]] || die "missing value for --default-model"
+      default_model_override="$2"
       shift 2
       ;;
     --limits-default-cpus)
@@ -1023,6 +1051,7 @@ collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_ove
 collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_network}" "${egress_network_override}" validate_compose_or_network_name "AGENTIC_EGRESS_NETWORK is dedicated to controlled outbound traffic."
 
 collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_ollama_models_for_profile "${profile}" "${root_path}")" "${ollama_models_override}" "OLLAMA_MODELS_DIR points to the shared Ollama model storage path on host."
+collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3:0.6b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 
 collect_cpu_limit limits_default_cpus "AGENTIC_LIMIT_DEFAULT_CPUS" "$(default_limits_default_cpus_for_profile "${profile}")" "${limits_default_cpus_override}" "AGENTIC_LIMIT_DEFAULT_CPUS sets fallback CPU cap for all services."
 collect_mem_limit limits_default_mem "AGENTIC_LIMIT_DEFAULT_MEM" "$(default_limits_default_mem_for_profile "${profile}")" "${limits_default_mem_override}"
@@ -1052,6 +1081,7 @@ write_env_file \
   "${network}" \
   "${egress_network}" \
   "${ollama_models}" \
+  "${default_model}" \
   "${limits_default_cpus}" \
   "${limits_default_mem}" \
   "${limits_core_cpus}" \
@@ -1120,7 +1150,7 @@ fi
 openwebui_admin_email="${openwebui_admin_email_override:-admin@local}"
 openwebui_admin_password="${openwebui_admin_password_override:-change-me}"
 openwebui_secret_key="${openwebui_secret_key_override:-change-me-openwebui-secret}"
-openhands_llm_model="${openhands_llm_model_override:-qwen3:0.6b}"
+openhands_llm_model="${openhands_llm_model_override:-${default_model}}"
 openhands_llm_api_key="${openhands_llm_api_key_override:-local-ollama}"
 
 if [[ "${ui_section_enabled}" -eq 1 ]]; then

@@ -123,6 +123,7 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 - keys:
   - `LLM_MODEL`
   - `LLM_API_KEY`
+- default model source: `AGENTIC_DEFAULT_MODEL` (onboarding flag: `--default-model`)
 - for local routing through `ollama-gate`, `LLM_API_KEY` can be any non-empty placeholder (example: `local-ollama`)
 
 ### 2.2 Egress allowlist (important for agent outbound access)
@@ -235,6 +236,12 @@ The easiest way to avoid getting stuck with default UI credentials is to run:
 ./agent onboard
 source .runtime/env.generated.sh
 ./agent profile
+```
+
+Example with explicit default local model:
+
+```bash
+./agent onboard --default-model llama3.2:1b
 ```
 
 In `rootless-dev`, onboarding now proposes the Ollama host model path:
@@ -429,6 +436,19 @@ sudo ./agent ls
 ```
 
 If `doctor` fails, fix the reported item first (bind scope, healthcheck, security flags, policy checks, or release manifest).
+
+Then run the dedicated default-model e2e probe:
+
+```bash
+bash tests/L5_default_model_e2e.sh
+```
+
+This validates that the configured default model is present in Ollama and responds to `hello` from:
+- Ollama direct
+- `ollama-gate`
+- `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
+- `openwebui`
+- `openhands`
 
 ## 9. First Access
 

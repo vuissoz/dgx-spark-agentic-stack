@@ -31,6 +31,7 @@ run_default_answers() {
 run_override_answers() {
   local custom_root="${work_dir}/custom-runtime-root"
   local custom_models="${work_dir}/custom-ollama-models"
+  local custom_default_model="llama3.2:1b"
   local custom_compose="agentic-ci"
   local custom_network="agentic-ci-net"
   local custom_egress_network="agentic-ci-egress"
@@ -42,6 +43,7 @@ ${custom_compose}
 ${custom_network}
 ${custom_egress_network}
 ${custom_models}
+${custom_default_model}
 0.55
 640m
 
@@ -127,6 +129,10 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-egress'$" "${default_env_file}"
   || fail "default AGENTIC_EGRESS_NETWORK is not agentic-egress"
 grep -q "^export OLLAMA_MODELS_DIR='/srv/agentic/ollama/models'$" "${default_env_file}" \
   || fail "default OLLAMA_MODELS_DIR is not /srv/agentic/ollama/models"
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3:0.6b'$" "${default_env_file}" \
+  || fail "default AGENTIC_DEFAULT_MODEL is not qwen3:0.6b"
+grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='qwen3:0.6b'$" "${default_env_file}" \
+  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not qwen3:0.6b"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${default_env_file}" \
   || fail "onboarding default must enable agent sudo-mode (AGENTIC_AGENT_NO_NEW_PRIVILEGES=false)"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='1.00'$" "${default_env_file}" \
@@ -156,6 +162,10 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-ci-egress'$" "${override_env_fi
   || fail "override AGENTIC_EGRESS_NETWORK is not applied"
 grep -q "^export OLLAMA_MODELS_DIR='${work_dir}/custom-ollama-models'$" "${override_env_file}" \
   || fail "override OLLAMA_MODELS_DIR is not applied"
+grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.2:1b'$" "${override_env_file}" \
+  || fail "override AGENTIC_DEFAULT_MODEL is not applied"
+grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.2:1b'$" "${override_env_file}" \
+  || fail "override OLLAMA_PRELOAD_GENERATE_MODEL is not applied"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${override_env_file}" \
   || fail "override flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.55'$" "${override_env_file}" \
@@ -183,6 +193,8 @@ fi
 assert_generated_file_baseline "${rootless_default_env_file}"
 grep -q "^export OLLAMA_MODELS_DIR='${HOME}/wkdir/open-webui/ollama_data/models'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_MODELS_DIR is not ${HOME}/wkdir/open-webui/ollama_data/models"
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3:0.6b'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_DEFAULT_MODEL is not qwen3:0.6b"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
 
 if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
@@ -193,6 +205,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --network agentic-ni-net \
   --egress-network agentic-ni-egress \
   --ollama-models-dir "${work_dir}/ni-models" \
+  --default-model tinyllama:latest \
   --limits-default-cpus 0.60 \
   --limits-default-mem 768m \
   --limits-core-cpus 1.20 \
@@ -213,6 +226,8 @@ fi
 assert_generated_file_baseline "${non_interactive_env_file}"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.60'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
+grep -q "^export AGENTIC_DEFAULT_MODEL='tinyllama:latest'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_DEFAULT_MODEL is not applied"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${non_interactive_env_file}" \
   || fail "non-interactive flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_OPTIONAL_MEM='512m'$" "${non_interactive_env_file}" \

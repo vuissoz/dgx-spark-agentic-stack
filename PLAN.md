@@ -273,6 +273,24 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
 - POST `/api/generate` retourne 200 + payload non vide (avec timeout court)
 - logs ollama présents
 
+### C2b Modèle Ollama par défaut configurable + validation e2e “hello”
+Suivi Beads : `dgx-spark-agentic-stack-ahh`
+
+**Implémentation**
+- introduire une variable runtime canonique `AGENTIC_DEFAULT_MODEL` (fallback `qwen3:0.6b`) utilisée comme source de vérité pour:
+  - preload Ollama (`OLLAMA_PRELOAD_GENERATE_MODEL`),
+  - onboarding (`agent onboard --default-model`),
+  - bootstrap OpenHands (`LLM_MODEL` par défaut).
+- conserver la compatibilité avec les variables existantes (`OLLAMA_PRELOAD_GENERATE_MODEL`, `LLM_MODEL`) sans régression.
+- exposer la valeur effective dans `agent profile` et la persister dans `${AGENTIC_ROOT}/deployments/runtime.env`.
+
+**Test** : `tests/L5_default_model_e2e.sh`
+- vérifie que le modèle par défaut est présent dans `ollama /api/tags`.
+- exécute un appel `hello` direct sur Ollama (`/api/generate`) et valide une réponse non vide.
+- exécute le même appel via `ollama-gate`.
+- exécute le même appel depuis chaque agent (`claude`, `codex`, `opencode`, `vibestral`) via `ollama-gate`.
+- exécute le même appel depuis `openwebui` et `openhands` via `ollama-gate`.
+
 ### C3 Backend alternatif : TRT-LLM (NVFP4) derrière le gate
 **Implémentation**
 - ajouter un service `trtllm` dédié dans un compose séparé (ex: `compose.trt.yml`) activé via profile (ex: `trt`), sans exposition host.

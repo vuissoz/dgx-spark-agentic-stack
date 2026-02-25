@@ -37,6 +37,7 @@ export COMPOSE_PROFILES=trt
 ```
 
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
+The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `qwen3:0.6b`) and reused by Ollama preload.
 
 ## Runtime Layout (summary)
 
@@ -296,7 +297,7 @@ agent update
 agent rollback all <release_id>
 agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
-agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
+agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --default-model ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
 agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
 agent vm cleanup [--name ... --yes --dry-run]
@@ -344,10 +345,22 @@ Preload then switch to read-only for smoke tests:
 ./agent ollama-models rw
 ```
 
+To override the stack default local model (also used by preload):
+
+```bash
+export AGENTIC_DEFAULT_MODEL=llama3.2:1b
+```
+
 Model link rollback:
 
 ```bash
 ./agent rollback ollama-link <backup_id|latest>
+```
+
+Default-model e2e probe (Ollama, gate, agents, OpenWebUI, OpenHands):
+
+```bash
+bash tests/L5_default_model_e2e.sh
 ```
 
 ## External LLM Routing (D5)

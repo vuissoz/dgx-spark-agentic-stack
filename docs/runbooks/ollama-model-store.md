@@ -6,9 +6,15 @@
 - Re-mount models as read-only for smoke tests.
 
 ## Defaults
-- Generate model: `qwen3:0.6b`
+- Generate model: `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3:0.6b`)
 - Embedding model: `qwen3-embedding:0.6b`
 - Budget: `12` GB
+
+Global default model override (used by preload and onboarding defaults):
+
+```bash
+export AGENTIC_DEFAULT_MODEL=llama3.2:1b
+```
 
 ## Commands
 Preload then lock read-only:

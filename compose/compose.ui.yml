@@ -74,6 +74,7 @@ services:
     environment:
       RUNTIME: cli
       LLM_BASE_URL: http://ollama-gate:11435/v1
+      AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3:0.6b}
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1

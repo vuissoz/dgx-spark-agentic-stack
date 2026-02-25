@@ -37,6 +37,7 @@ export COMPOSE_PROFILES=trt
 ```
 
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
+Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `qwen3:0.6b`) et réutilisé pour le preload Ollama.
 
 ## Arborescence runtime (résumé)
 
@@ -296,7 +297,7 @@ agent update
 agent rollback all <release_id>
 agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
-agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
+agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --default-model ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
 agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
 agent vm cleanup [--name ... --yes --dry-run]
@@ -344,10 +345,22 @@ Préchargement puis passage RO pour smoke tests:
 ./agent ollama-models rw
 ```
 
+Pour changer le modèle local par défaut de la stack (et du preload):
+
+```bash
+export AGENTIC_DEFAULT_MODEL=llama3.2:1b
+```
+
 Rollback du lien:
 
 ```bash
 ./agent rollback ollama-link <backup_id|latest>
+```
+
+Test e2e du modèle par défaut (Ollama, gate, agents, OpenWebUI, OpenHands):
+
+```bash
+bash tests/L5_default_model_e2e.sh
 ```
 
 ## Routage LLM externe (D5)
