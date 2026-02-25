@@ -121,8 +121,9 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 3. OpenHands model/API settings (`openhands.env`, created during `ui` init):
 - file: `${AGENTIC_ROOT}/openhands/config/openhands.env`
 - keys:
-  - `OPENHANDS_LLM_MODEL`
-  - `OPENHANDS_LLM_API_KEY`
+  - `LLM_MODEL`
+  - `LLM_API_KEY`
+- for local routing through `ollama-gate`, `LLM_API_KEY` can be any non-empty placeholder (example: `local-ollama`)
 
 ### 2.2 Egress allowlist (important for agent outbound access)
 
@@ -330,6 +331,7 @@ If you already used `./agent onboard` and set non-default values, just confirm:
 
 ```bash
 grep -E '^(WEBUI_ADMIN_EMAIL|WEBUI_ADMIN_PASSWORD)=' "${AGENTIC_ROOT}/openwebui/config/openwebui.env"
+grep -E '^(LLM_MODEL|LLM_API_KEY)=' "${AGENTIC_ROOT}/openhands/config/openhands.env"
 ```
 
 If files do not exist yet (for example you skipped onboarding), do this once:

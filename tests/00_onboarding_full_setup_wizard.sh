@@ -88,10 +88,10 @@ grep -q "^WEBUI_ADMIN_PASSWORD=${openwebui_password}$" "${openwebui_env}" \
   || fail "WEBUI_ADMIN_PASSWORD was not written"
 grep -q "^WEBUI_SECRET_KEY=${openwebui_secret}$" "${openwebui_env}" \
   || fail "WEBUI_SECRET_KEY was not written"
-grep -q "^OPENHANDS_LLM_MODEL=${openhands_model}$" "${openhands_env}" \
-  || fail "OPENHANDS_LLM_MODEL was not written"
-grep -q "^OPENHANDS_LLM_API_KEY=${openhands_api_key}$" "${openhands_env}" \
-  || fail "OPENHANDS_LLM_API_KEY was not written"
+grep -q "^LLM_MODEL=${openhands_model}$" "${openhands_env}" \
+  || fail "LLM_MODEL was not written"
+grep -q "^LLM_API_KEY=${openhands_api_key}$" "${openhands_env}" \
+  || fail "LLM_API_KEY was not written"
 
 grep -q '^example.com$' "${allowlist_file}" || fail "allowlist missing example.com"
 grep -q '^api.openai.com$' "${allowlist_file}" || fail "allowlist missing api.openai.com"

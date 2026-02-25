@@ -1069,8 +1069,8 @@ fi
 openwebui_admin_email="${openwebui_admin_email_override:-admin@local}"
 openwebui_admin_password="${openwebui_admin_password_override:-change-me}"
 openwebui_secret_key="${openwebui_secret_key_override:-change-me-openwebui-secret}"
-openhands_llm_model="${openhands_llm_model_override:-dry-run-model}"
-openhands_llm_api_key="${openhands_llm_api_key_override:-none}"
+openhands_llm_model="${openhands_llm_model_override:-qwen3:0.6b}"
+openhands_llm_api_key="${openhands_llm_api_key_override:-local-ollama}"
 
 if [[ "${ui_section_enabled}" -eq 1 ]]; then
   if [[ "${non_interactive}" -eq 0 ]]; then
@@ -1100,17 +1100,18 @@ if [[ "${ui_section_enabled}" -eq 1 ]]; then
       fi
     fi
 
-    openhands_llm_model="$(prompt_with_default "OPENHANDS_LLM_MODEL" "${openhands_llm_model}")"
+    openhands_llm_model="$(prompt_with_default "LLM_MODEL" "${openhands_llm_model}")"
     if [[ -z "${openhands_llm_api_key_override}" ]]; then
-      openhands_llm_api_key="$(prompt_secret_with_default "OPENHANDS_LLM_API_KEY" "${openhands_llm_api_key}")"
+      info "OpenHands local mode accepts any non-empty LLM_API_KEY placeholder (example: local-ollama)."
+      openhands_llm_api_key="$(prompt_secret_with_default "LLM_API_KEY" "${openhands_llm_api_key}")"
     fi
   fi
 
   validate_email_value "WEBUI_ADMIN_EMAIL" "${openwebui_admin_email}" || die "invalid WEBUI_ADMIN_EMAIL"
   [[ -n "${openwebui_admin_password}" ]] || die "WEBUI_ADMIN_PASSWORD cannot be empty"
   [[ -n "${openwebui_secret_key}" ]] || die "WEBUI_SECRET_KEY cannot be empty"
-  [[ -n "${openhands_llm_model}" ]] || die "OPENHANDS_LLM_MODEL cannot be empty"
-  [[ -n "${openhands_llm_api_key}" ]] || die "OPENHANDS_LLM_API_KEY cannot be empty"
+  [[ -n "${openhands_llm_model}" ]] || die "LLM_MODEL cannot be empty"
+  [[ -n "${openhands_llm_api_key}" ]] || die "LLM_API_KEY cannot be empty"
 
   if [[ "${root_is_writable}" -ne 1 ]]; then
     summary_add_deferred "UI credentials were collected but not written because ${root_path} is not writable"
@@ -1132,8 +1133,8 @@ WEBUI_SECRET_KEY=${openwebui_secret_key}
     fi
 
     openhands_env_path="${root_path}/openhands/config/openhands.env"
-    openhands_env_content="OPENHANDS_LLM_API_KEY=${openhands_llm_api_key}
-OPENHANDS_LLM_MODEL=${openhands_llm_model}
+    openhands_env_content="LLM_API_KEY=${openhands_llm_api_key}
+LLM_MODEL=${openhands_llm_model}
 "
 
     if ! write_file_atomic "${openhands_env_path}" 0600 "${openhands_env_content}"; then

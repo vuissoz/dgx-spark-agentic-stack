@@ -276,8 +276,8 @@ Cles `openwebui.env` (fichier sensible en `600`):
 - `WEBUI_SECRET_KEY`
 
 Cles `openhands.env` (fichier sensible en `600`):
-- `OPENHANDS_LLM_MODEL`
-- `OPENHANDS_LLM_API_KEY`
+- `LLM_MODEL`
+- `LLM_API_KEY` (en local via `ollama-gate`: n'importe quelle valeur non vide, ex `local-ollama`)
 
 ## 5. Secrets et cles API
 

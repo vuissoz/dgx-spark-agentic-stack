@@ -280,8 +280,8 @@ Baseline files (created by runtime init scripts):
 - `WEBUI_SECRET_KEY`
 
 `openhands.env` keys (sensitive file, mode `600`):
-- `OPENHANDS_LLM_MODEL`
-- `OPENHANDS_LLM_API_KEY`
+- `LLM_MODEL`
+- `LLM_API_KEY` (local through `ollama-gate`: any non-empty placeholder, for example `local-ollama`)
 
 ## 5. Secrets and Keys
 

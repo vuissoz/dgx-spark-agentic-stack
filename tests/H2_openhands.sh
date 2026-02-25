@@ -31,6 +31,11 @@ env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' 
 echo "${env_dump}" | grep -q '^LLM_BASE_URL=http://ollama-gate:11435/v1$' \
   || fail "openhands LLM_BASE_URL is not pinned to ollama-gate"
 ok "openhands is configured to use ollama-gate"
+echo "${env_dump}" | grep -q '^LLM_MODEL=' \
+  || fail "openhands LLM_MODEL is missing"
+echo "${env_dump}" | grep -q '^LLM_API_KEY=' \
+  || fail "openhands LLM_API_KEY is missing"
+ok "openhands model/api key env is present"
 
 session="h2-openhands-$RANDOM-$$"
 timeout 20 docker exec "${openhands_cid}" sh -lc "python3 - <<'PY'
