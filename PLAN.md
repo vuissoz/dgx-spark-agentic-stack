@@ -114,6 +114,33 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - shellcheck/parse du fichier généré (`bash -n`) ;
 - vérifie que le fichier est ignoré par git et n’inclut aucun secret.
 
+### 0.5 Onboarding complet “type CMake/ccmake” (premier démarrage)
+Suivi Beads : `dgx-spark-agentic-stack-kvs`
+
+**Implémentation**
+- étendre `agent onboard` avec une interface guidée plus ergonomique (mode “assistant de configuration” inspiré CMake/ccmake : sections claires, navigation simple, validation immédiate).
+- couvrir **tout** le setup obligatoire du premier démarrage dans le même flux, sans étape cachée :
+  - profil/runtime (`AGENTIC_PROFILE`, `AGENTIC_ROOT`, réseaux, project name) ;
+  - bootstrap admin pour services UI activés (utilisateur admin + mot de passe via prompt masqué) ;
+  - configuration réseau/egress (allowlist initiale domaines/CIDR autorisés selon politique) ;
+  - secrets requis par modules activés (création/génération guidée ou saisie manuelle).
+- sortie des secrets :
+  - fichiers séparés sous `${AGENTIC_ROOT}/secrets/runtime/` uniquement ;
+  - permissions strictes (`chmod 600`) ;
+  - jamais écrits dans les fichiers versionnés ni affichés en clair dans les logs.
+- produire un récapitulatif final “prêt à exécuter” :
+  - fichiers générés,
+  - modules activés,
+  - commandes suivantes exactes (`agent profile`, `agent up ...`, `agent doctor`),
+  - alertes bloquantes explicites si un paramètre obligatoire manque.
+
+**Test** : `tests/00_onboarding_full_setup_wizard.sh`
+- chemin interactif simulé : complète les sections runtime/admin/network/secrets et vérifie qu’aucune question obligatoire n’est contournée ;
+- chemin non interactif (`--non-interactive` + flags/fichiers) : génère la même structure cible ;
+- vérifie les permissions des secrets (`600`) et leur absence des artefacts versionnés/logs ;
+- vérifie qu’un setup incomplet retourne un code non-zéro avec message actionnable ;
+- valide que la sortie finale liste toutes les commandes post-onboarding nécessaires.
+
 ---
 
 ## A — Fondations hôte & arborescence `/srv/agentic`
@@ -888,6 +915,7 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-2oj` — étude + remédiation du hardening non uniforme (services encore root par défaut en `strict-prod`, healthchecks manquants sur services longue durée).
 - `dgx-spark-agentic-stack-dvo` — extension de `agent doctor` pour appliquer des contrôles de sécurité profonds de manière uniforme sur tous les services gérés.
 - `dgx-spark-agentic-stack-0li` — accès `sudo` pour les agents dans leur propre conteneur uniquement (sans élévation hôte, sans `docker.sock`), avec cadrage conformité/sécurité.
+- `dgx-spark-agentic-stack-kvs` — onboarding premier démarrage complet (interface type CMake/ccmake) incluant admin/password, allowances réseau et secrets sans étape manuelle cachée.
 
 Objectif :
 - traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).
