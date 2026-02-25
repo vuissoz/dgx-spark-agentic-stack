@@ -65,6 +65,7 @@ registry.ollama.ai
 api.openai.com
 anthropic.com
 api.anthropic.com
+platform.claude.com
 openrouter.ai
 
 # ----------------------------------------------------------
