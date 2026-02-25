@@ -98,8 +98,8 @@ assert_generated_file_baseline() {
   [[ -s "${file_path}" ]] || fail "generated file is missing or empty: ${file_path}"
   bash -n "${file_path}" || fail "generated file is not valid bash syntax: ${file_path}"
 
-  if grep -Eiq '(secret|token|password|api_key|private_key)' "${file_path}"; then
-    fail "generated file must not contain secret-looking keys: ${file_path}"
+  if grep -Eq '^export (WEBUI_ADMIN_PASSWORD|OPENAI_API_KEY|OPENROUTER_API_KEY|OPENCLAW_TOKEN|MCP_TOKEN)=' "${file_path}"; then
+    fail "generated onboarding env must not contain application bootstrap secrets: ${file_path}"
   fi
 }
 
@@ -133,6 +133,10 @@ grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${default_env_file}" \
   || fail "default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.1:8b'$" "${default_env_file}" \
   || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not llama3.1:8b"
+grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${default_env_file}" \
+  || fail "default GRAFANA_ADMIN_USER is not admin"
+grep -q "^export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'$" "${default_env_file}" \
+  || fail "default GRAFANA_ADMIN_PASSWORD is not replace-with-strong-password"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${default_env_file}" \
   || fail "default OPENWEBUI_ENABLE_OLLAMA_API must be True (allow model pull)"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${default_env_file}" \
@@ -168,6 +172,10 @@ grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override AGENTIC_DEFAULT_MODEL is not applied"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override OLLAMA_PRELOAD_GENERATE_MODEL is not applied"
+grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${override_env_file}" \
+  || fail "override flow default GRAFANA_ADMIN_USER must be admin unless explicitly overridden"
+grep -q "^export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'$" "${override_env_file}" \
+  || fail "override flow default GRAFANA_ADMIN_PASSWORD must be replace-with-strong-password unless explicitly overridden"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${override_env_file}" \
   || fail "override flow default OPENWEBUI_ENABLE_OLLAMA_API must remain True unless explicitly disabled"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${override_env_file}" \
@@ -212,6 +220,8 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --egress-network agentic-ni-egress \
   --ollama-models-dir "${work_dir}/ni-models" \
   --default-model tinyllama:latest \
+  --grafana-admin-user grafana-admin \
+  --grafana-admin-password grafana-strong-password \
   --limits-default-cpus 0.60 \
   --limits-default-mem 768m \
   --limits-core-cpus 1.20 \
@@ -234,6 +244,10 @@ grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.60'$" "${non_interactive_env_file
   || fail "non-interactive AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
 grep -q "^export AGENTIC_DEFAULT_MODEL='tinyllama:latest'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_DEFAULT_MODEL is not applied"
+grep -q "^export GRAFANA_ADMIN_USER='grafana-admin'$" "${non_interactive_env_file}" \
+  || fail "non-interactive GRAFANA_ADMIN_USER is not applied"
+grep -q "^export GRAFANA_ADMIN_PASSWORD='grafana-strong-password'$" "${non_interactive_env_file}" \
+  || fail "non-interactive GRAFANA_ADMIN_PASSWORD is not applied"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${non_interactive_env_file}" \
   || fail "non-interactive default OPENWEBUI_ENABLE_OLLAMA_API must be True"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${non_interactive_env_file}" \

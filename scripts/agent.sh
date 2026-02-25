@@ -57,7 +57,7 @@ Usage:
   agent rollback host-net <backup_id>
   agent rollback ollama-link <backup_id|latest>
   agent prereqs
-  agent onboard [runtime flags...] [--openwebui-admin-email ... --openwebui-admin-password ... --default-model ... --openhands-llm-model ... --allowlist-domains ... --optional-modules ... --output ... --non-interactive --require-complete]
+  agent onboard [runtime flags...] [--openwebui-admin-email ... --openwebui-admin-password ... --default-model ... --grafana-admin-user ... --grafana-admin-password ... --openhands-llm-model ... --allowlist-domains ... --optional-modules ... --output ... --non-interactive --require-complete]
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
   agent vm cleanup [--name ... --yes --dry-run]

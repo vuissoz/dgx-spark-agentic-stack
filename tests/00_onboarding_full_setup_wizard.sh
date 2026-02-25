@@ -21,6 +21,8 @@ openwebui_password="S3cure-Pass-123"
 openwebui_secret="webui-secret-xyz"
 default_model="llama3.1:8b"
 openhands_model="${default_model}"
+grafana_admin_user="grafana-admin"
+grafana_admin_password="grafana-strong-password"
 openhands_api_key="openhands-api-key"
 openai_key="openai-api-key"
 openrouter_key="openrouter-api-key"
@@ -40,6 +42,8 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --egress-network agentic-onboard-full-egress \
   --ollama-models-dir "${work_dir}/models" \
   --default-model "${default_model}" \
+  --grafana-admin-user "${grafana_admin_user}" \
+  --grafana-admin-password "${grafana_admin_password}" \
   --openwebui-admin-email "${openwebui_email}" \
   --openwebui-admin-password "${openwebui_password}" \
   --openwebui-secret-key "${openwebui_secret}" \
@@ -66,6 +70,10 @@ grep -q "^export AGENTIC_DEFAULT_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_DEFAULT_MODEL"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export OLLAMA_PRELOAD_GENERATE_MODEL"
+grep -q "^export GRAFANA_ADMIN_USER='${grafana_admin_user}'$" "${env_file}" \
+  || fail "full setup onboarding env must export GRAFANA_ADMIN_USER"
+grep -q "^export GRAFANA_ADMIN_PASSWORD='${grafana_admin_password}'$" "${env_file}" \
+  || fail "full setup onboarding env must export GRAFANA_ADMIN_PASSWORD"
 grep -q "^export AGENTIC_OLLAMA_GATE_BASE_URL='http://ollama-gate:11435'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_OLLAMA_GATE_BASE_URL"
 grep -q "^export ANTHROPIC_BASE_URL='http://ollama-gate:11435'$" "${env_file}" \

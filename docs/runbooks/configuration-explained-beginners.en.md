@@ -231,6 +231,7 @@ Host firewall/egress advanced options:
 
 Notes:
 - `GRAFANA_ADMIN_*` are read directly by Compose for `grafana`; they are not managed as file secrets by runtime init scripts.
+- `./agent onboard` now writes `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` into the generated onboarding env output (`.runtime/env.generated.sh`) and accepts `--grafana-admin-user` / `--grafana-admin-password` overrides.
 - Prefer injecting `GRAFANA_ADMIN_PASSWORD` from a local secret manager (or one-shot shell export), not from a tracked file.
 - `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false` enables in-container `sudo` mode for `agentic-{claude,codex,opencode,vibestral}` (`./agent sudo-mode on`) with an explicit hardening tradeoff.
 

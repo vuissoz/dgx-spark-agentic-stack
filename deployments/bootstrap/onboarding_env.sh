@@ -13,6 +13,8 @@ network_override=""
 egress_network_override=""
 ollama_models_override=""
 default_model_override=""
+grafana_admin_user_override=""
+grafana_admin_password_override=""
 limits_default_cpus_override=""
 limits_default_mem_override=""
 limits_core_cpus_override=""
@@ -67,6 +69,8 @@ Runtime options:
   --egress-network <name>
   --ollama-models-dir <path>
   --default-model <name>
+  --grafana-admin-user <name>
+  --grafana-admin-password <password>
   --limits-default-cpus <cores>
   --limits-default-mem <size>
   --limits-core-cpus <cores>
@@ -346,6 +350,19 @@ validate_model_id_value() {
     return 1
   }
   return 0
+}
+
+validate_non_empty_single_line_value() {
+  local key="$1"
+  local value="$2"
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+  [[ "${value}" != *$'\n'* ]] || {
+    echo "${key} must be a single-line value" >&2
+    return 1
+  }
 }
 
 validate_path_value() {
@@ -909,21 +926,23 @@ write_env_file() {
   local egress_network="$5"
   local ollama_models="$6"
   local default_model="$7"
-  local limits_default_cpus="$8"
-  local limits_default_mem="$9"
-  local limits_core_cpus="${10}"
-  local limits_core_mem="${11}"
-  local limits_agents_cpus="${12}"
-  local limits_agents_mem="${13}"
-  local limits_ui_cpus="${14}"
-  local limits_ui_mem="${15}"
-  local limits_obs_cpus="${16}"
-  local limits_obs_mem="${17}"
-  local limits_rag_cpus="${18}"
-  local limits_rag_mem="${19}"
-  local limits_optional_cpus="${20}"
-  local limits_optional_mem="${21}"
-  local out_file="${22}"
+  local grafana_admin_user="$8"
+  local grafana_admin_password="$9"
+  local limits_default_cpus="${10}"
+  local limits_default_mem="${11}"
+  local limits_core_cpus="${12}"
+  local limits_core_mem="${13}"
+  local limits_agents_cpus="${14}"
+  local limits_agents_mem="${15}"
+  local limits_ui_cpus="${16}"
+  local limits_ui_mem="${17}"
+  local limits_obs_cpus="${18}"
+  local limits_obs_mem="${19}"
+  local limits_rag_cpus="${20}"
+  local limits_rag_mem="${21}"
+  local limits_optional_cpus="${22}"
+  local limits_optional_mem="${23}"
+  local out_file="${24}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -942,6 +961,8 @@ export AGENTIC_DOCKER_USER_SOURCE_NETWORKS=$(shell_quote "${network},${egress_ne
 export OLLAMA_MODELS_DIR=$(shell_quote "${ollama_models}")
 export AGENTIC_DEFAULT_MODEL=$(shell_quote "${default_model}")
 export OLLAMA_PRELOAD_GENERATE_MODEL=$(shell_quote "${default_model}")
+export GRAFANA_ADMIN_USER=$(shell_quote "${grafana_admin_user}")
+export GRAFANA_ADMIN_PASSWORD=$(shell_quote "${grafana_admin_password}")
 export AGENTIC_OLLAMA_GATE_BASE_URL='http://ollama-gate:11435'
 export AGENTIC_OLLAMA_GATE_V1_URL='http://ollama-gate:11435/v1'
 export ANTHROPIC_BASE_URL='http://ollama-gate:11435'
@@ -1091,6 +1112,16 @@ while [[ $# -gt 0 ]]; do
     --default-model)
       [[ $# -ge 2 ]] || die "missing value for --default-model"
       default_model_override="$2"
+      shift 2
+      ;;
+    --grafana-admin-user)
+      [[ $# -ge 2 ]] || die "missing value for --grafana-admin-user"
+      grafana_admin_user_override="$2"
+      shift 2
+      ;;
+    --grafana-admin-password)
+      [[ $# -ge 2 ]] || die "missing value for --grafana-admin-password"
+      grafana_admin_password_override="$2"
       shift 2
       ;;
     --limits-default-cpus)
@@ -1306,6 +1337,10 @@ collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_net
 
 collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_ollama_models_for_profile "${profile}" "${root_path}")" "${ollama_models_override}" "OLLAMA_MODELS_DIR points to the shared Ollama model storage path on host."
 collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
+grafana_admin_user="${grafana_admin_user_override:-${GRAFANA_ADMIN_USER:-admin}}"
+grafana_admin_password="${grafana_admin_password_override:-${GRAFANA_ADMIN_PASSWORD:-replace-with-strong-password}}"
+validate_non_empty_single_line_value "GRAFANA_ADMIN_USER" "${grafana_admin_user}" || die "invalid GRAFANA_ADMIN_USER"
+validate_non_empty_single_line_value "GRAFANA_ADMIN_PASSWORD" "${grafana_admin_password}" || die "invalid GRAFANA_ADMIN_PASSWORD"
 
 collect_cpu_limit limits_default_cpus "AGENTIC_LIMIT_DEFAULT_CPUS" "$(default_limits_default_cpus_for_profile "${profile}")" "${limits_default_cpus_override}" "AGENTIC_LIMIT_DEFAULT_CPUS sets fallback CPU cap for all services."
 collect_mem_limit limits_default_mem "AGENTIC_LIMIT_DEFAULT_MEM" "$(default_limits_default_mem_for_profile "${profile}")" "${limits_default_mem_override}"
@@ -1336,6 +1371,8 @@ write_env_file \
   "${egress_network}" \
   "${ollama_models}" \
   "${default_model}" \
+  "${grafana_admin_user}" \
+  "${grafana_admin_password}" \
   "${limits_default_cpus}" \
   "${limits_default_mem}" \
   "${limits_core_cpus}" \
