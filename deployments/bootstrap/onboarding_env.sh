@@ -522,6 +522,8 @@ validate_optional_modules_csv() {
   local raw="$1"
   local entry
   local normalized
+  local saw_none=0
+  local saw_module=0
 
   normalized="$(normalize_allowlist_csv "${raw}" | tr '[:upper:]' '[:lower:]')"
   if [[ -z "${normalized}" ]]; then
@@ -531,13 +533,23 @@ validate_optional_modules_csv() {
   while IFS= read -r entry; do
     [[ -n "${entry}" ]] || continue
     case "${entry}" in
-      none|openclaw|mcp|pi-mono|goose|portainer) ;;
+      none)
+        saw_none=1
+        ;;
+      openclaw|mcp|pi-mono|goose|portainer)
+        saw_module=1
+        ;;
       *)
         echo "unknown optional module '${entry}' (allowed: openclaw,mcp,pi-mono,goose,portainer,none)" >&2
         return 1
         ;;
     esac
   done <<<"${normalized}"
+
+  if [[ "${saw_none}" -eq 1 && "${saw_module}" -eq 1 ]]; then
+    echo "optional modules value 'none' cannot be combined with other modules" >&2
+    return 1
+  fi
 }
 
 prompt_with_default() {
@@ -721,6 +733,143 @@ upsert_export_in_file() {
     rm -f "${tmp_file}"
     return 1
   }
+  return 0
+}
+
+upsert_key_value_in_file() {
+  local file_path="$1"
+  local key="$2"
+  local value="$3"
+  local mode="${4:-0640}"
+  local tmp_file
+
+  [[ -f "${file_path}" ]] || return 1
+  tmp_file="$(mktemp "${file_path}.tmp.XXXXXX")" || return 1
+
+  awk -v k="${key}" -v v="${value}" '
+    BEGIN { replaced=0 }
+    $0 ~ ("^" k "=") {
+      if (!replaced) {
+        print k "=" v
+        replaced=1
+      }
+      next
+    }
+    { print }
+    END {
+      if (!replaced) {
+        print k "=" v
+      }
+    }
+  ' "${file_path}" >"${tmp_file}" || {
+    rm -f "${tmp_file}"
+    return 1
+  }
+
+  chmod "${mode}" "${tmp_file}" || {
+    rm -f "${tmp_file}"
+    return 1
+  }
+  mv "${tmp_file}" "${file_path}" || {
+    rm -f "${tmp_file}"
+    return 1
+  }
+  return 0
+}
+
+optional_request_default_need() {
+  local module="$1"
+  case "${module}" in
+    openclaw) printf '%s\n' "Enable scoped OpenClaw webhook and DM automation for approved workflows." ;;
+    mcp) printf '%s\n' "Expose a restricted MCP catalog for local automation workflows." ;;
+    pi-mono) printf '%s\n' "Provide an additional isolated CLI agent runtime for targeted tasks." ;;
+    goose) printf '%s\n' "Provide an isolated Goose CLI runtime for approved workflows." ;;
+    portainer) printf '%s\n' "Provide temporary loopback-only Portainer visibility for local diagnostics." ;;
+    *) return 1 ;;
+  esac
+}
+
+optional_request_default_success() {
+  local module="$1"
+  case "${module}" in
+    openclaw) printf '%s\n' "Webhook auth succeeds, deny paths stay blocked, and service healthcheck stays green." ;;
+    mcp) printf '%s\n' "Only allowlisted tools are available and service healthcheck stays green." ;;
+    pi-mono) printf '%s\n' "Container starts with expected user/workspace mappings and no forbidden mounts." ;;
+    goose) printf '%s\n' "Container starts successfully with isolated workspace and expected proxy controls." ;;
+    portainer) printf '%s\n' "UI is reachable on loopback only and runs without docker.sock mount." ;;
+    *) return 1 ;;
+  esac
+}
+
+ensure_optional_request_file() {
+  local root_path="$1"
+  local module="$2"
+  local request_path="${root_path}/deployments/optional/${module}.request"
+  local need_value
+  local success_value
+  local owner_value
+  local created=0
+  local changed=0
+  local request_content
+
+  need_value="$(optional_request_default_need "${module}")" || {
+    summary_add_blocker "unable to resolve request defaults for optional module ${module}"
+    return 1
+  }
+  success_value="$(optional_request_default_success "${module}")" || {
+    summary_add_blocker "unable to resolve success defaults for optional module ${module}"
+    return 1
+  }
+  owner_value="${SUDO_USER:-${USER:-operator}}"
+
+  if [[ ! -f "${request_path}" ]]; then
+    request_content="need=${need_value}
+success=${success_value}
+owner=${owner_value}
+expires_at=
+"
+    if ! write_file_atomic "${request_path}" 0640 "${request_content}"; then
+      summary_add_blocker "failed to write ${request_path}"
+      return 1
+    fi
+    created=1
+  fi
+
+  if ! grep -Eq '^need=[^[:space:]].+$' "${request_path}"; then
+    if ! upsert_key_value_in_file "${request_path}" "need" "${need_value}" 0640; then
+      summary_add_blocker "failed to update need= in ${request_path}"
+      return 1
+    fi
+    changed=1
+  fi
+
+  if ! grep -Eq '^success=[^[:space:]].+$' "${request_path}"; then
+    if ! upsert_key_value_in_file "${request_path}" "success" "${success_value}" 0640; then
+      summary_add_blocker "failed to update success= in ${request_path}"
+      return 1
+    fi
+    changed=1
+  fi
+
+  if ! grep -Eq '^owner=' "${request_path}"; then
+    if ! upsert_key_value_in_file "${request_path}" "owner" "${owner_value}" 0640; then
+      summary_add_blocker "failed to update owner= in ${request_path}"
+      return 1
+    fi
+    changed=1
+  fi
+
+  if ! grep -Eq '^expires_at=' "${request_path}"; then
+    if ! upsert_key_value_in_file "${request_path}" "expires_at" "" 0640; then
+      summary_add_blocker "failed to update expires_at= in ${request_path}"
+      return 1
+    fi
+    changed=1
+  fi
+
+  if [[ "${created}" -eq 1 || "${changed}" -eq 1 ]]; then
+    summary_add_generated "${request_path}"
+  fi
   return 0
 }
 
@@ -1526,6 +1675,9 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
 
   if [[ "${root_is_writable}" -ne 1 ]]; then
     summary_add_deferred "secret values were collected but not written because ${root_path} is not writable"
+    if [[ "${normalized_modules}" != "none" ]]; then
+      summary_add_deferred "optional request files were not written because ${root_path} is not writable"
+    fi
     if [[ "${require_complete}" -eq 1 ]]; then
       summary_add_blocker "secret bootstrap requested but runtime root is not writable"
     fi
@@ -1535,6 +1687,13 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     write_secret_file "${root_path}" "openclaw.token" "${openclaw_token}" || true
     write_secret_file "${root_path}" "openclaw.webhook_secret" "${openclaw_webhook_secret}" || true
     write_secret_file "${root_path}" "mcp.token" "${mcp_token}" || true
+
+    if [[ "${normalized_modules}" != "none" ]]; then
+      while IFS= read -r module; do
+        [[ -n "${module}" && "${module}" != "none" ]] || continue
+        ensure_optional_request_file "${root_path}" "${module}" || true
+      done <<<"${normalized_modules}"
+    fi
   fi
 else
   summary_add_deferred "secret bootstrap skipped (no secret files generated by onboard)"
