@@ -15,6 +15,59 @@ The baseline "whole stack" in this guide is:
 
 Optional modules are covered at the end.
 
+## 0. After Reboot: Restore Session Context and Restart
+
+After a system reboot, a new terminal session usually does not keep your previous `export` values.
+In this repo, `./agent` defaults to `strict-prod` when `AGENTIC_PROFILE` is not set.
+If your last deployment was `rootless-dev`, commands may appear to show an "empty" stack until you restore the same context.
+
+### 0.1 Restore the last generated runtime env (recommended)
+
+```bash
+cd /home/vuissoz/wkdir/dgx-spark-agentic-stack
+source .runtime/env.generated.sh
+./agent profile
+```
+
+Expected: `profile=rootless-dev` and `compose_project=agentic-dev` if you were running rootless before reboot.
+
+If `.runtime/env.generated.sh` is missing, set profile manually:
+
+```bash
+export AGENTIC_PROFILE=rootless-dev
+./agent profile
+```
+
+### 0.2 Find what is stopped
+
+```bash
+./agent ls
+./agent ps
+docker ps -a --filter "label=com.docker.compose.project=$(./agent profile | sed -n 's/^compose_project=//p')" \
+  --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+```
+
+- `./agent ls` shows agent tool runtime (`up/down`, tmux session state).
+- `./agent ps` shows currently running containers for the active compose project.
+- `docker ps -a ...` also shows exited/stopped containers in that same project.
+
+### 0.3 Restart baseline services
+
+```bash
+./agent up core
+./agent up agents,ui,obs,rag
+./agent doctor
+```
+
+Use the same profile consistently for all commands.
+If you prefer no shell exports, prefix each call with profile directly:
+
+```bash
+./agent rootless-dev up core
+./agent rootless-dev up agents,ui,obs,rag
+./agent rootless-dev doctor
+```
+
 ## 1. Decide Your Profile
 
 Choose one profile first:

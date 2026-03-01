@@ -1,9 +1,9 @@
-# Runbook: Ollama Model Store (RW preload, RO smoke)
+# Runbook: Ollama Model Store (state-preserving preload)
 
 ## Goal
 - Preload one small chat model plus one embedding model.
 - Keep model storage under a 12 GB budget.
-- Re-mount models as read-only for smoke tests.
+- Preserve the initial mount mode (`rw` or `ro`) after preload.
 
 ## Defaults
 - Generate model: `${AGENTIC_DEFAULT_MODEL}` (fallback `llama3.1:8b`)
@@ -17,7 +17,7 @@ export AGENTIC_DEFAULT_MODEL=llama3.2:1b
 ```
 
 ## Commands
-Preload then lock read-only:
+Preload with automatic mode preservation:
 
 ```bash
 ./agent ollama-preload
@@ -44,6 +44,9 @@ Rollback of the rootless models symlink (after `agent ollama-link` output `backu
 ```
 
 ## Notes
-- `ollama-preload` sets `OLLAMA_MODELS_MOUNT_MODE` in `${AGENTIC_ROOT}/deployments/runtime.env`.
-- The mode persists for later `agent up core` / `agent update` runs.
+- `ollama-preload` now preserves the initial Ollama model mount mode:
+  - if already `rw`, no mount-mode recreate is triggered and final mode stays `rw`;
+  - if initially `ro`, preload switches to `rw` temporarily, then restores `ro` by default.
+- `--no-lock-ro` keeps `rw` after preload when a temporary switch occurred.
+- final `OLLAMA_MODELS_MOUNT_MODE` is written to `${AGENTIC_ROOT}/deployments/runtime.env`.
 - In `strict-prod`, run with privileges that can write `${AGENTIC_ROOT}`.

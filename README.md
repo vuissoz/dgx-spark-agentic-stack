@@ -341,7 +341,7 @@ En `rootless-dev`, le lien symbolique local des modèles est géré via:
 ./agent ollama-link
 ```
 
-Préchargement puis passage RO pour smoke tests:
+Préchargement avec préservation du mode de mount courant (`rw`/`ro`):
 
 ```bash
 ./agent ollama-preload

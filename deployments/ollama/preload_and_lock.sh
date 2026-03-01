@@ -36,6 +36,9 @@ Defaults:
   --generate-model ${generate_model}
   --embed-model    ${embed_model}
   --budget-gb      ${budget_gb}
+Behavior:
+  - preserves current Ollama mount mode by default (restores it if a temporary switch is needed)
+  - --no-lock-ro keeps rw after preload when a temporary switch from ro occurred
 USAGE
 }
 
@@ -97,6 +100,18 @@ service_container_id() {
     --format '{{.ID}}' | head -n 1
 }
 
+normalize_mount_mode() {
+  local mode="${1:-}"
+  case "${mode}" in
+    rw|ro)
+      printf '%s\n' "${mode}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 wait_for_ollama_api() {
   local timeout_seconds="${1:-120}"
   local elapsed=0
@@ -112,11 +127,20 @@ wait_for_ollama_api() {
   return 1
 }
 
-models_mount_is_readonly() {
+container_mount_mode() {
   local container_id="$1"
   local rw_flag
   rw_flag="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "'"${OLLAMA_CONTAINER_MODELS_PATH}"'"}}{{println .RW}}{{end}}{{end}}' "${container_id}" | head -n 1)"
-  [[ "${rw_flag}" == "false" ]]
+  case "${rw_flag}" in
+    true) printf 'rw\n' ;;
+    false) printf 'ro\n' ;;
+    *) printf 'unknown\n' ;;
+  esac
+}
+
+models_mount_is_readonly() {
+  local container_id="$1"
+  [[ "$(container_mount_mode "${container_id}")" == "ro" ]]
 }
 
 apply_ollama_mount_mode() {
@@ -126,6 +150,38 @@ apply_ollama_mount_mode() {
   OLLAMA_MODELS_MOUNT_MODE="${mode}" \
     docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${CORE_COMPOSE_FILE}" up -d --force-recreate ollama
   set_runtime_env_value "OLLAMA_MODELS_MOUNT_MODE" "${mode}"
+}
+
+ensure_ollama_running() {
+  [[ -f "${CORE_COMPOSE_FILE}" ]] || die "core compose file not found: ${CORE_COMPOSE_FILE}"
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${CORE_COMPOSE_FILE}" up -d ollama
+}
+
+detect_initial_mount_mode() {
+  local configured_mode="${OLLAMA_MODELS_MOUNT_MODE:-rw}"
+  local normalized_configured_mode
+  local container_id
+  local runtime_mode
+
+  normalized_configured_mode="$(normalize_mount_mode "${configured_mode}")" \
+    || die "invalid OLLAMA_MODELS_MOUNT_MODE='${configured_mode}' (expected rw or ro)"
+
+  container_id="$(service_container_id ollama)"
+  if [[ -n "${container_id}" ]]; then
+    runtime_mode="$(container_mount_mode "${container_id}")"
+    if [[ "${runtime_mode}" == "rw" || "${runtime_mode}" == "ro" ]]; then
+      printf '%s\n' "${runtime_mode}"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' "${normalized_configured_mode}"
+}
+
+ensure_models_dir_writable() {
+  local container_id="$1"
+  docker exec "${container_id}" sh -lc "test -w '${OLLAMA_CONTAINER_MODELS_PATH}'" \
+    || die "ollama model path is not writable in container (${OLLAMA_CONTAINER_MODELS_PATH}); check host path permissions for ${OLLAMA_MODELS_DIR}"
 }
 
 to_bytes() {
@@ -162,13 +218,33 @@ main() {
   (( capacity_bytes >= budget_bytes )) \
     || die "filesystem capacity is below configured budget (${capacity_bytes} bytes < ${budget_bytes} bytes)"
 
-  log "switching ollama model mount to read-write for preload"
-  apply_ollama_mount_mode "rw"
-  wait_for_ollama_api 180 || die "ollama API did not become ready after switching to read-write mode"
-
+  local initial_mount_mode
+  local switched_mount_mode=0
+  local final_mount_mode
   local ollama_cid
+  initial_mount_mode="$(detect_initial_mount_mode)"
+
+  if [[ "${initial_mount_mode}" == "rw" ]]; then
+    ollama_cid="$(service_container_id ollama)"
+    if [[ -n "${ollama_cid}" ]]; then
+      log "ollama model mount already rw; skipping mount-mode recreate"
+    else
+      log "ollama model mount configured as rw; starting ollama without force-recreate"
+      ensure_ollama_running
+    fi
+    final_mount_mode="rw"
+    wait_for_ollama_api 180 || die "ollama API did not become ready in rw mode"
+  else
+    log "switching ollama model mount to read-write for preload (initial mode=${initial_mount_mode})"
+    apply_ollama_mount_mode "rw"
+    switched_mount_mode=1
+    final_mount_mode="rw"
+    wait_for_ollama_api 180 || die "ollama API did not become ready after switching to read-write mode"
+  fi
+
   ollama_cid="$(service_container_id ollama)"
   [[ -n "${ollama_cid}" ]] || die "ollama container is not running"
+  ensure_models_dir_writable "${ollama_cid}"
 
   local -A seen_models=()
   local -a model_queue=()
@@ -198,19 +274,29 @@ main() {
   set_runtime_env_value "OLLAMA_MODEL_STORE_BUDGET_GB" "${budget_gb}"
   set_runtime_env_value "RAG_EMBED_MODEL" "${embed_model}"
 
-  if [[ "${lock_ro_after_preload}" -eq 1 ]]; then
-    log "switching ollama model mount to read-only for smoke tests"
-    apply_ollama_mount_mode "ro"
-    wait_for_ollama_api 180 || die "ollama API did not become ready after switching to read-only mode"
-    ollama_cid="$(service_container_id ollama)"
-    [[ -n "${ollama_cid}" ]] || die "ollama container is not running after read-only switch"
-    models_mount_is_readonly "${ollama_cid}" || die "ollama model mount is not read-only after lock"
+  if [[ "${switched_mount_mode}" -eq 1 ]]; then
+    if [[ "${lock_ro_after_preload}" -eq 1 ]]; then
+      log "restoring ollama model mount to initial mode (${initial_mount_mode})"
+      apply_ollama_mount_mode "${initial_mount_mode}"
+      wait_for_ollama_api 180 || die "ollama API did not become ready after restoring initial mode"
+      ollama_cid="$(service_container_id ollama)"
+      [[ -n "${ollama_cid}" ]] || die "ollama container is not running after mount mode restore"
+      if [[ "${initial_mount_mode}" == "ro" ]]; then
+        models_mount_is_readonly "${ollama_cid}" || die "ollama model mount is not read-only after restore"
+      fi
+      final_mount_mode="${initial_mount_mode}"
+    else
+      log "keeping ollama model mount in read-write mode because --no-lock-ro"
+      final_mount_mode="rw"
+    fi
   fi
+
+  set_runtime_env_value "OLLAMA_MODELS_MOUNT_MODE" "${final_mount_mode}"
 
   printf 'OK: ollama preload completed models=%s budget_gb=%s mount_mode=%s size_bytes=%s\n' \
     "$(IFS=,; echo "${model_queue[*]}")" \
     "${budget_gb}" \
-    "$([[ "${lock_ro_after_preload}" -eq 1 ]] && echo ro || echo rw)" \
+    "${final_mount_mode}" \
     "${final_size_bytes}"
 }
 
