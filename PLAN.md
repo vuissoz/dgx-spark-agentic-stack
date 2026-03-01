@@ -1130,6 +1130,7 @@ Suivi Beads : `dgx-spark-agentic-stack-9kz`
 
 Suivi Beads :
 - `dgx-spark-agentic-stack-blw` — onboarding/runtime : customisation des limites CPU/RAM pour l’ensemble des services conteneurisés.
+- `dgx-spark-agentic-stack-vgl` — onboarding : ajouter une question explicite `AGENTIC_LIMIT_OLLAMA_MEM` (et son flag non-interactif) pour éviter un héritage implicite trop restrictif depuis `AGENTIC_LIMIT_CORE_MEM`.
 - `dgx-spark-agentic-stack-2oj` — étude + remédiation du hardening non uniforme (services encore root par défaut en `strict-prod`, healthchecks manquants sur services longue durée).
 - `dgx-spark-agentic-stack-dvo` — extension de `agent doctor` pour appliquer des contrôles de sécurité profonds de manière uniforme sur tous les services gérés.
 - `dgx-spark-agentic-stack-0li` — accès `sudo` pour les agents dans leur propre conteneur uniquement (sans élévation hôte, sans `docker.sock`), avec cadrage conformité/sécurité.

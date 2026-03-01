@@ -82,6 +82,8 @@ grep -q "^export ANTHROPIC_API_KEY='local-ollama'$" "${env_file}" \
   || fail "full setup onboarding env must export ANTHROPIC_API_KEY placeholder"
 grep -q "^export ANTHROPIC_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export ANTHROPIC_MODEL"
+grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='2g'$" "${env_file}" \
+  || fail "full setup onboarding env must export default rootless AGENTIC_LIMIT_OLLAMA_MEM"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${env_file}" \
   || fail "full setup onboarding env must export OPENWEBUI_ENABLE_OLLAMA_API"
 

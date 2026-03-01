@@ -142,6 +142,9 @@ Defauts par stack (persistes en `runtime.env`):
 - `AGENTIC_LIMIT_RAG_CPUS`, `AGENTIC_LIMIT_RAG_MEM`
 - `AGENTIC_LIMIT_OPTIONAL_CPUS`, `AGENTIC_LIMIT_OPTIONAL_MEM`
 
+Question dediee dans l'onboarding:
+- `AGENTIC_LIMIT_OLLAMA_MEM` (defaut: valeur de `AGENTIC_LIMIT_CORE_MEM`)
+
 Overrides service par service:
 - `AGENTIC_LIMIT_<SERVICE_NAME>_CPUS`
 - `AGENTIC_LIMIT_<SERVICE_NAME>_MEM`

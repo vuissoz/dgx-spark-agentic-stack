@@ -150,6 +150,8 @@ grep -q "^export AGENTIC_LIMIT_CORE_CPUS='1.50'$" "${default_env_file}" \
   || fail "default AGENTIC_LIMIT_CORE_CPUS is not 1.50"
 grep -q "^export AGENTIC_LIMIT_CORE_MEM='3g'$" "${default_env_file}" \
   || fail "default AGENTIC_LIMIT_CORE_MEM is not 3g"
+grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='3g'$" "${default_env_file}" \
+  || fail "default AGENTIC_LIMIT_OLLAMA_MEM must follow core memory when unset"
 
 assert_git_ignored "${default_env_file}"
 ok "wizard default Enter flow generates expected defaults"
@@ -189,6 +191,8 @@ grep -q "^export AGENTIC_LIMIT_OBS_CPUS='0.50'$" "${override_env_file}" \
   || fail "rootless default AGENTIC_LIMIT_OBS_CPUS is not applied"
 grep -q "^export AGENTIC_LIMIT_OBS_MEM='512m'$" "${override_env_file}" \
   || fail "rootless default AGENTIC_LIMIT_OBS_MEM is not applied"
+grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='2g'$" "${override_env_file}" \
+  || fail "override flow default AGENTIC_LIMIT_OLLAMA_MEM should follow rootless core memory"
 
 assert_git_ignored "${override_env_file}"
 ok "wizard override flow writes custom values"
@@ -227,6 +231,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --limits-default-mem 768m \
   --limits-core-cpus 1.20 \
   --limits-core-mem 2g \
+  --limits-ollama-mem 6g \
   --limits-agents-cpus 0.70 \
   --limits-agents-mem 1g \
   --limits-ui-cpus 0.80 \
@@ -255,6 +260,8 @@ grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${non_interactive_en
   || fail "non-interactive flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_OPTIONAL_MEM='512m'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_LIMIT_OPTIONAL_MEM is not applied"
+grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='6g'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_LIMIT_OLLAMA_MEM is not applied"
 non_interactive_allowlist_file="${work_dir}/ni-root/proxy/allowlist.txt"
 [[ -s "${non_interactive_allowlist_file}" ]] \
   || fail "non-interactive flow did not write default allowlist file"

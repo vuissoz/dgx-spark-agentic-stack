@@ -236,6 +236,8 @@ The onboarding wizard now also writes resource caps:
   - `AGENTIC_LIMIT_OBS_{CPUS|MEM}`
   - `AGENTIC_LIMIT_RAG_{CPUS|MEM}`
   - `AGENTIC_LIMIT_OPTIONAL_{CPUS|MEM}`
+- dedicated Ollama memory prompt:
+  - `AGENTIC_LIMIT_OLLAMA_MEM` (defaults to `AGENTIC_LIMIT_CORE_MEM` when left unchanged)
 
 Every service can still be overridden individually with:
 - `AGENTIC_LIMIT_<SERVICE_NAME>_CPUS`

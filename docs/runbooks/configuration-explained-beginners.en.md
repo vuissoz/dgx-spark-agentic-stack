@@ -146,6 +146,9 @@ Stack-level defaults (persisted in `runtime.env`):
 - `AGENTIC_LIMIT_RAG_CPUS`, `AGENTIC_LIMIT_RAG_MEM`
 - `AGENTIC_LIMIT_OPTIONAL_CPUS`, `AGENTIC_LIMIT_OPTIONAL_MEM`
 
+Dedicated onboarding prompt:
+- `AGENTIC_LIMIT_OLLAMA_MEM` (default: inherits `AGENTIC_LIMIT_CORE_MEM`)
+
 Per-service override pattern:
 - `AGENTIC_LIMIT_<SERVICE_NAME>_CPUS`
 - `AGENTIC_LIMIT_<SERVICE_NAME>_MEM`

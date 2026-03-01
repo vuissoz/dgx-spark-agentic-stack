@@ -19,6 +19,7 @@ limits_default_cpus_override=""
 limits_default_mem_override=""
 limits_core_cpus_override=""
 limits_core_mem_override=""
+limits_ollama_mem_override=""
 limits_agents_cpus_override=""
 limits_agents_mem_override=""
 limits_ui_cpus_override=""
@@ -75,6 +76,7 @@ Runtime options:
   --limits-default-mem <size>
   --limits-core-cpus <cores>
   --limits-core-mem <size>
+  --limits-ollama-mem <size>
   --limits-agents-cpus <cores>
   --limits-agents-mem <size>
   --limits-ui-cpus <cores>
@@ -1009,17 +1011,18 @@ write_env_file() {
   local limits_default_mem="${11}"
   local limits_core_cpus="${12}"
   local limits_core_mem="${13}"
-  local limits_agents_cpus="${14}"
-  local limits_agents_mem="${15}"
-  local limits_ui_cpus="${16}"
-  local limits_ui_mem="${17}"
-  local limits_obs_cpus="${18}"
-  local limits_obs_mem="${19}"
-  local limits_rag_cpus="${20}"
-  local limits_rag_mem="${21}"
-  local limits_optional_cpus="${22}"
-  local limits_optional_mem="${23}"
-  local out_file="${24}"
+  local limits_ollama_mem="${14}"
+  local limits_agents_cpus="${15}"
+  local limits_agents_mem="${16}"
+  local limits_ui_cpus="${17}"
+  local limits_ui_mem="${18}"
+  local limits_obs_cpus="${19}"
+  local limits_obs_mem="${20}"
+  local limits_rag_cpus="${21}"
+  local limits_rag_mem="${22}"
+  local limits_optional_cpus="${23}"
+  local limits_optional_mem="${24}"
+  local out_file="${25}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1050,6 +1053,7 @@ export AGENTIC_LIMIT_DEFAULT_CPUS=$(shell_quote "${limits_default_cpus}")
 export AGENTIC_LIMIT_DEFAULT_MEM=$(shell_quote "${limits_default_mem}")
 export AGENTIC_LIMIT_CORE_CPUS=$(shell_quote "${limits_core_cpus}")
 export AGENTIC_LIMIT_CORE_MEM=$(shell_quote "${limits_core_mem}")
+export AGENTIC_LIMIT_OLLAMA_MEM=$(shell_quote "${limits_ollama_mem}")
 export AGENTIC_LIMIT_AGENTS_CPUS=$(shell_quote "${limits_agents_cpus}")
 export AGENTIC_LIMIT_AGENTS_MEM=$(shell_quote "${limits_agents_mem}")
 export AGENTIC_LIMIT_UI_CPUS=$(shell_quote "${limits_ui_cpus}")
@@ -1139,9 +1143,11 @@ collect_mem_limit() {
   local key="$2"
   local default_value="$3"
   local override_value="$4"
+  local info_text="${5:-}"
 
   out_ref="${override_value:-${default_value}}"
   if [[ "${non_interactive}" -eq 0 && -z "${override_value}" ]]; then
+    [[ -n "${info_text}" ]] && info "${info_text}"
     while true; do
       candidate="$(prompt_with_default "${key}" "${out_ref}")"
       if validate_memory_limit_value "${key}" "${candidate}"; then
@@ -1219,6 +1225,11 @@ while [[ $# -gt 0 ]]; do
     --limits-core-mem)
       [[ $# -ge 2 ]] || die "missing value for --limits-core-mem"
       limits_core_mem_override="$2"
+      shift 2
+      ;;
+    --limits-ollama-mem)
+      [[ $# -ge 2 ]] || die "missing value for --limits-ollama-mem"
+      limits_ollama_mem_override="$2"
       shift 2
       ;;
     --limits-agents-cpus)
@@ -1428,6 +1439,7 @@ collect_mem_limit limits_default_mem "AGENTIC_LIMIT_DEFAULT_MEM" "$(default_limi
 
 collect_cpu_limit limits_core_cpus "AGENTIC_LIMIT_CORE_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "core")" "${limits_core_cpus_override}" "AGENTIC_LIMIT_CORE_CPUS/AGENTIC_LIMIT_CORE_MEM set defaults for core services."
 collect_mem_limit limits_core_mem "AGENTIC_LIMIT_CORE_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "core")" "${limits_core_mem_override}"
+collect_mem_limit limits_ollama_mem "AGENTIC_LIMIT_OLLAMA_MEM" "${AGENTIC_LIMIT_OLLAMA_MEM:-${limits_core_mem}}" "${limits_ollama_mem_override}" "AGENTIC_LIMIT_OLLAMA_MEM overrides Ollama memory only. Increase it for larger local models."
 
 collect_cpu_limit limits_agents_cpus "AGENTIC_LIMIT_AGENTS_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "agents")" "${limits_agents_cpus_override}" "AGENTIC_LIMIT_AGENTS_CPUS/AGENTIC_LIMIT_AGENTS_MEM set defaults for agent containers."
 collect_mem_limit limits_agents_mem "AGENTIC_LIMIT_AGENTS_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "agents")" "${limits_agents_mem_override}"
@@ -1458,6 +1470,7 @@ write_env_file \
   "${limits_default_mem}" \
   "${limits_core_cpus}" \
   "${limits_core_mem}" \
+  "${limits_ollama_mem}" \
   "${limits_agents_cpus}" \
   "${limits_agents_mem}" \
   "${limits_ui_cpus}" \
