@@ -184,6 +184,102 @@ ensure_models_dir_writable() {
     || die "ollama model path is not writable in container (${OLLAMA_CONTAINER_MODELS_PATH}); check host path permissions for ${OLLAMA_MODELS_DIR}"
 }
 
+container_user_uid() {
+  local container_id="$1"
+  docker exec "${container_id}" sh -lc 'id -u'
+}
+
+ensure_model_manifest_writable() {
+  local container_id="$1"
+  local model_ref="$2"
+  local container_uid
+  local probe_output
+
+  container_uid="$(container_user_uid "${container_id}")"
+  if [[ "${container_uid}" == "0" ]]; then
+    return 0
+  fi
+
+  probe_output="$(
+    docker exec -i "${container_id}" sh -s -- "${model_ref}" "${OLLAMA_CONTAINER_MODELS_PATH}" <<'SH'
+set -eu
+model_ref="$1"
+models_path="$2"
+
+ref="${model_ref}"
+tag="${ref##*:}"
+if [ "${tag}" = "${ref}" ]; then
+  tag="latest"
+else
+  ref="${ref%:*}"
+fi
+
+host="registry.ollama.ai"
+path="${ref}"
+case "${ref}" in
+  */*)
+    first="${ref%%/*}"
+    rest="${ref#*/}"
+    case "${first}" in
+      *.*|*:*|localhost)
+        host="${first}"
+        path="${rest}"
+        ;;
+      *)
+        host="registry.ollama.ai"
+        path="${ref}"
+        ;;
+    esac
+    ;;
+  *)
+    path="library/${ref}"
+    ;;
+esac
+
+target_dir="${models_path}/manifests/${host}/${path}"
+target_file="${target_dir}/${tag}"
+probe_dir="${target_dir}"
+while [ "${probe_dir}" != "/" ] && [ ! -e "${probe_dir}" ]; do
+  probe_dir="$(dirname "${probe_dir}")"
+done
+
+if [ ! -w "${probe_dir}" ]; then
+  printf 'UNWRITABLE_PATH=%s\n' "${probe_dir}"
+  printf 'TARGET_DIR=%s\n' "${target_dir}"
+  exit 42
+fi
+
+if [ -e "${target_dir}" ] && [ ! -w "${target_dir}" ]; then
+  printf 'UNWRITABLE_PATH=%s\n' "${target_dir}"
+  printf 'TARGET_DIR=%s\n' "${target_dir}"
+  exit 42
+fi
+
+if [ -e "${target_file}" ] && [ ! -w "${target_file}" ]; then
+  printf 'UNWRITABLE_PATH=%s\n' "${target_file}"
+  printf 'TARGET_DIR=%s\n' "${target_dir}"
+  exit 42
+fi
+SH
+  )" || {
+    local repair_cmd
+    repair_cmd=$(
+      cat <<EOF
+MODEL_DIR="\$(readlink -f '${OLLAMA_MODELS_DIR}')"
+docker run --rm -v "\$MODEL_DIR":/models alpine:3.21 sh -lc "chown -R \$(id -u):\$(id -g) /models && find /models -type d -exec chmod u+rwx {} + && find /models -type f -exec chmod u+rw {} +"
+EOF
+    )
+    die "$(
+      cat <<EOF
+model store permissions are incompatible with non-root Ollama writes before pulling '${model_ref}'.
+${probe_output}
+Repair command:
+${repair_cmd}
+EOF
+    )"
+  }
+}
+
 to_bytes() {
   local gib="$1"
   printf '%s\n' "$((gib * 1024 * 1024 * 1024))"
@@ -260,6 +356,7 @@ main() {
   [[ "${#model_queue[@]}" -gt 0 ]] || die "no model selected for preload"
 
   for model in "${model_queue[@]}"; do
+    ensure_model_manifest_writable "${ollama_cid}" "${model}"
     log "pulling model '${model}'"
     docker exec "${ollama_cid}" ollama pull "${model}"
   done
