@@ -182,6 +182,23 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
 **Test** : `tests/A3_no_public_bind.sh`
 - `ss -lntp` ne doit montrer **aucun** port critique (ex: 11434, 8080, 3000, 8188, 9090, 3100, 9100…) écoutant sur `0.0.0.0`
 
+### A4 Contrôle explicite “pas de docker.sock” (statique + runtime)
+Suivi Beads : `dgx-spark-agentic-stack-ao5`
+
+**Implémentation**
+- ajouter un test dédié qui valide l’invariant “pas de mount `docker.sock`” :
+  - statique (`docker compose config`) sur tous les plans ;
+  - runtime (`docker inspect`) sur les conteneurs du projet.
+- vérifier l’absence de motifs de contournement évidents :
+  - `/var/run/docker.sock`
+  - `/run/docker.sock`
+  - bind implicite via volume nommé pointant vers le socket hôte.
+
+**Test** : `tests/A4_no_docker_sock_static_and_runtime.sh`
+- échoue si un mount socket Docker apparaît dans la config Compose effective.
+- échoue si un mount socket Docker apparaît sur un conteneur en exécution.
+- passe en nominal sur baseline `core+agents+ui`.
+
 ---
 
 ## B — Noyau réseau : réseau privé, DNS interne, proxy egress, enforcement DOCKER-USER
@@ -248,6 +265,24 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
 - exécute le rollback du backup créé,
 - vérifie que l’état final (`iptables-save`) est identique à l’état initial (hash égal).
 - en `rootless-dev` : test explicitement skip (attendu).
+
+### B6 Résistance anti-contournement egress depuis conteneurs agents
+Suivi Beads : `dgx-spark-agentic-stack-39m`
+
+**Implémentation**
+- ajouter un test orienté conteneurs agents (pas uniquement `toolbox`) qui tente des bypass classiques :
+  - requête directe sans proxy ;
+  - `NO_PROXY=*` / désactivation explicite des variables proxy ;
+  - tentative directe vers IP publique (pour éviter le seul contrôle DNS).
+- valider en parallèle que le chemin proxy continue de fonctionner quand la destination est allowlistée.
+- en `rootless-dev`, conserver le comportement de skip explicite des assertions host-root-only.
+
+**Test** : `tests/B6_egress_bypass_resistance.sh`
+- depuis au moins un conteneur agent (`agentic-codex` ou `agentic-claude`) :
+  - egress direct = refus explicite ;
+  - egress via proxy = succès/deny conforme à la policy allowlist.
+- en `strict-prod`, preuve de blocage via règles DOCKER-USER/proxy.
+- en `rootless-dev`, skip explicite des contrôles impossibles sans root.
 
 ---
 
@@ -711,6 +746,63 @@ Suivi Beads : `dgx-spark-agentic-stack-49e`
 - après modification ciblée d’un dossier persistant -> snapshot suivant contient uniquement le delta attendu.
 - `restore <snapshot_id>` restaure les fichiers persistants ciblés.
 - vérification stricte : aucun fichier secret inclus dans snapshot/manifest.
+
+### F9 Rollback hermétique depuis artefacts snapshot
+Suivi Beads : `dgx-spark-agentic-stack-ywl`
+
+**Implémentation**
+- renforcer le rollback pour qu’il soit déterministe à partir des artefacts release uniquement :
+  - source de vérité = `${AGENTIC_ROOT}/deployments/releases/<id>/{compose.effective.yml,images.json,...}` ;
+  - éviter la dépendance aux fichiers Compose du working tree courant.
+- conserver un mode de compatibilité explicite pour anciennes releases si nécessaire (fallback documenté).
+
+**Test** : `tests/F9_rollback_hermetic_from_snapshot.sh`
+- créer une release via `agent update` ;
+- modifier ensuite un compose local (drift contrôlé) ;
+- exécuter `agent rollback all <release_id>` ;
+- vérifier que le rollback restaure l’état de la release (images/services/health) malgré le drift du repo.
+
+### F10 Intégrité des artefacts de release + anti-fuite secrets
+Suivi Beads : `dgx-spark-agentic-stack-7eo`
+
+**Implémentation**
+- formaliser le contrat minimal des artefacts de release :
+  - `release.meta`, `images.json`, `health_report.json`, `compose.effective.yml`, `compose.files`, `runtime.env` (redacté).
+- ajouter un contrôle anti-fuite de secrets dans les artefacts exportés (mots-clés + patterns usuels).
+
+**Test** : `tests/F10_release_artifact_integrity.sh`
+- vérifie la présence/cohérence des fichiers obligatoires d’une release.
+- vérifie que `runtime.env` exporté n’expose pas de clés/valeurs sensibles.
+- vérifie que `images.json` contient les champs requis par service (image configurée/résolue, digest, état, santé).
+
+### F11 Cohérence du schéma runtime env (anti-drift)
+Suivi Beads : `dgx-spark-agentic-stack-3je`
+
+**Implémentation**
+- centraliser/normaliser la liste des clés runtime attendues pour réduire la dérive entre :
+  - `scripts/lib/runtime.sh` (defaults/export),
+  - `load_runtime_env` / `ensure_runtime_env`,
+  - `agent profile`.
+- rendre la dérive détectable en CI via test dédié.
+
+**Test** : `tests/F11_runtime_env_schema_drift.sh`
+- compare les clés exposées dans les différents points de vérité runtime.
+- échoue si une clé est présente dans une couche mais absente/incohérente ailleurs.
+- vérifie la stabilité minimale du contrat `agent profile` pour les clés critiques.
+
+### F12 Contrat `agent doctor` par profil (strict-prod vs rootless-dev)
+Suivi Beads : `dgx-spark-agentic-stack-eus`
+
+**Implémentation**
+- expliciter et figer le contrat attendu :
+  - `strict-prod` : écarts structurants => échec non-zéro ;
+  - `rootless-dev` : checks host-root-only => warning/skip, sans masquer les échecs runtime réels.
+- couvrir les cas limites de flags `AGENTIC_SKIP_*` pour éviter les régressions de sévérité.
+
+**Test** : `tests/F12_doctor_profile_contract.sh`
+- valide que `doctor` échoue en `strict-prod` sur une dérive host-root structurante.
+- valide que la même dérive est downgradée en warning/skip en `rootless-dev`.
+- valide que les dérives runtime (ex: santé conteneur, bind public critique) restent bloquantes dans les deux profils.
 
 ---
 
