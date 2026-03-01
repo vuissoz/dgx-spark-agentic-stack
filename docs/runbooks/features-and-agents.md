@@ -69,6 +69,7 @@ For configuration variables, accepted values, storage locations, and secrets han
   - resolves model routing policy (`model -> backend`) from `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
   - supports external provider backends (`openai`, `openrouter`) with the same client API (`/v1/*`).
   - logs backend/provider audit fields (`backend`, `provider`) for every `/v1/*` request.
+  - enriches `/v1/models` entries with non-sensitive `metadata` sourced from backend catalogs (for Ollama: `/api/tags` details such as digest/family/quantization when available).
   - reads provider secrets from `${AGENTIC_ROOT}/secrets/runtime/*.api_key` (never from git).
 
 ### `gate-mcp`

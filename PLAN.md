@@ -471,6 +471,17 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - `/v1/messages` et `/messages` retournent `200` + payload compatible.
 - stream `/v1/messages` expose les événements attendus (`content_block_delta`, `message_stop`).
 
+### D9 Contrat `/v1/models` enrichi (metadata interop)
+**Implémentation**
+- enrichir la réponse `GET /v1/models` de `ollama-gate` avec des champs `metadata` non sensibles dérivés des catalogues backend (ex: Ollama `/api/tags`) tout en conservant les champs de base OpenAI-compatibles (`id`, `object`, `owned_by`).
+- garantir une dégradation sûre: absence de metadata détaillée ne doit pas casser le endpoint.
+
+**Test** : `tests/D9_gate_models_metadata.sh`
+- `/v1/models` retourne `200` avec `object=list` et une liste non vide.
+- chaque entrée conserve les champs de base compatibles (`id/object/owned_by`).
+- au moins un modèle expose `metadata` avec provenance `ollama:/api/tags`.
+- pour un modèle commun `/v1/models` <-> `/api/tags`, les champs enrichis clés (digest/size/family quand présents) sont cohérents.
+
 ---
  
 ## E — Agents CLI persistants : image `agent-cli-base` + tmux + workspaces
@@ -1137,6 +1148,7 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-kvs` — onboarding premier démarrage complet (interface type CMake/ccmake) incluant admin/password, allowances réseau et secrets sans étape manuelle cachée.
 - `dgx-spark-agentic-stack-581` — onboarding OpenWebUI : flag optionnel “allow model pull” + extension allowlist par défaut `registry.ollama.ai`.
 - `dgx-spark-agentic-stack-0p4` — `agent ollama-preload` doit préserver le mode de mount initial (`rw`/`ro`) pour éviter les recreates inutiles et les changements d’état inattendus.
+- `dgx-spark-agentic-stack-2ld` — enrichir `/v1/models` dans `ollama-gate` avec des métadonnées de modèles non sensibles (issues des backends, notamment Ollama `/api/tags`) pour améliorer l’interopérabilité client.
 
 Objectif :
 - traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).

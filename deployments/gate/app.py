@@ -994,11 +994,99 @@ def backend_request_headers(cfg: Dict[str, Any], api_key: str) -> Dict[str, str]
     return headers
 
 
-async def fetch_backend_models(backend: str) -> list[str]:
+def parse_iso_to_unix_seconds(value: Any) -> int | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if candidate.endswith("Z"):
+        candidate = f"{candidate[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp())
+
+
+def normalize_ollama_model_record(item: Dict[str, Any], backend: str, provider: str) -> Dict[str, Any] | None:
+    name = item.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+
+    record: Dict[str, Any] = {"id": name, "object": "model", "owned_by": "ollama-gate"}
+    created = parse_iso_to_unix_seconds(item.get("modified_at"))
+    if created is not None:
+        record["created"] = created
+
+    metadata: Dict[str, Any] = {"backend": backend, "provider": provider, "source": "ollama:/api/tags"}
+    digest = item.get("digest")
+    if isinstance(digest, str) and digest:
+        metadata["digest"] = digest
+    size = item.get("size")
+    if isinstance(size, int) and size >= 0:
+        metadata["size_bytes"] = size
+    modified_at = item.get("modified_at")
+    if isinstance(modified_at, str) and modified_at:
+        metadata["modified_at"] = modified_at
+
+    details = item.get("details")
+    if isinstance(details, dict):
+        family = details.get("family")
+        if isinstance(family, str) and family:
+            metadata["family"] = family
+        families = details.get("families")
+        if isinstance(families, list):
+            normalized_families = [entry for entry in families if isinstance(entry, str) and entry]
+            if normalized_families:
+                metadata["families"] = normalized_families
+        parameter_size = details.get("parameter_size")
+        if isinstance(parameter_size, str) and parameter_size:
+            metadata["parameter_size"] = parameter_size
+        quantization_level = details.get("quantization_level")
+        if isinstance(quantization_level, str) and quantization_level:
+            metadata["quantization_level"] = quantization_level
+        fmt = details.get("format")
+        if isinstance(fmt, str) and fmt:
+            metadata["format"] = fmt
+        parent_model = details.get("parent_model")
+        if isinstance(parent_model, str) and parent_model:
+            metadata["parent_model"] = parent_model
+
+    record["metadata"] = metadata
+    return record
+
+
+def normalize_openai_model_record(item: Dict[str, Any], backend: str, provider: str) -> Dict[str, Any] | None:
+    name = item.get("id")
+    if not isinstance(name, str) or not name:
+        return None
+
+    owned_by = item.get("owned_by")
+    if not isinstance(owned_by, str) or not owned_by:
+        owned_by = "ollama-gate"
+    record: Dict[str, Any] = {"id": name, "object": "model", "owned_by": owned_by}
+
+    created = item.get("created")
+    if isinstance(created, int) and created > 0:
+        record["created"] = created
+    elif isinstance(created, str):
+        normalized_created = parse_iso_to_unix_seconds(created)
+        if normalized_created is not None:
+            record["created"] = normalized_created
+
+    record["metadata"] = {"backend": backend, "provider": provider, "source": "openai:/models"}
+    return record
+
+
+async def fetch_backend_model_catalog(backend: str) -> list[Dict[str, Any]]:
     cfg = state.backend_config(backend)
     if cfg is None:
         return []
 
+    provider = backend_provider_name(backend)
     if cfg["protocol"] == "ollama":
         async with httpx.AsyncClient(timeout=10, trust_env=True) as client:
             resp = await client.get(f"{cfg['base_url']}/api/tags")
@@ -1006,14 +1094,14 @@ async def fetch_backend_models(backend: str) -> list[str]:
             payload = resp.json()
 
         models = payload.get("models", [])
-        names: list[str] = []
+        records: list[Dict[str, Any]] = []
         if isinstance(models, list):
             for item in models:
                 if isinstance(item, dict):
-                    name = item.get("name")
-                    if isinstance(name, str) and name:
-                        names.append(name)
-        return names
+                    record = normalize_ollama_model_record(item, backend=backend, provider=provider)
+                    if record is not None:
+                        records.append(record)
+        return records
 
     if cfg["protocol"] == "openai":
         api_key = resolve_backend_api_key(backend, cfg)
@@ -1023,18 +1111,27 @@ async def fetch_backend_models(backend: str) -> list[str]:
             resp.raise_for_status()
             payload = resp.json()
 
-        names: list[str] = []
         models = payload.get("data")
+        records: list[Dict[str, Any]] = []
         if isinstance(models, list):
             for item in models:
-                if not isinstance(item, dict):
-                    continue
-                name = item.get("id")
-                if isinstance(name, str) and name:
-                    names.append(name)
-        return names
+                if isinstance(item, dict):
+                    record = normalize_openai_model_record(item, backend=backend, provider=provider)
+                    if record is not None:
+                        records.append(record)
+        return records
 
     return []
+
+
+async def fetch_backend_models(backend: str) -> list[str]:
+    records = await fetch_backend_model_catalog(backend)
+    names: list[str] = []
+    for record in records:
+        name = record.get("id")
+        if isinstance(name, str) and name:
+            names.append(name)
+    return names
 
 
 async def resolve_model(session: str, requested: str | None, allow_switch: bool) -> Tuple[str, bool]:
@@ -1488,10 +1585,10 @@ async def v1_models(request: Request) -> JSONResponse:
             status_code = 403
             reason = "external_provider_disabled"
             return llm_mode_block_response(provider, "/v1/models", llm_mode)
-        names = await fetch_backend_models(backend)
+        records = await fetch_backend_model_catalog(backend)
         response = {
             "object": "list",
-            "data": [{"id": name, "object": "model", "owned_by": "ollama-gate"} for name in names],
+            "data": records,
         }
         return JSONResponse(
             status_code=200,
