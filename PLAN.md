@@ -1,4 +1,4 @@
-# PLAN.md — Implémentation du CDC DGX Spark (A→K) par Codex + GPT-5.2
+# PLAN.md — Implémentation du CDC DGX Spark (A→L) par Codex + GPT-5.2
 
 Ce plan est conçu pour être exécuté par un agent de coding (Codex) : chaque sous-tâche produit des artefacts concrets (fichiers, scripts, compose) et **chaque sous-tâche a un test automatique** (script) avec critères d’acceptation binaires. On n’enchaîne pas une étape tant que ses tests ne sont pas verts.
 
@@ -39,7 +39,7 @@ Un troisième chemin d’exécution est autorisé pour les tests d’intégratio
 Contrainte mémoire (Ollama) :
 
 - si la VM n’a pas assez de RAM pour des modèles 7B+, utiliser un **petit modèle** uniquement pour les smoke tests (ex: 0.5B à 3B quantisé) ;
-- ce mode valide la posture stack/ops (A→K), pas la performance/capacité cible d’un modèle lourd.
+- ce mode valide la posture stack/ops (A→L), pas la performance/capacité cible d’un modèle lourd.
 
 ---
 
@@ -54,7 +54,7 @@ Le contenu attendu reste identique :
 
 - `/srv/agentic/deployments/` : compose, scripts, snapshots (rollback), policies
 - `/srv/agentic/bin/agent` : point d’entrée opérateur (commande unique)
-- `/srv/agentic/tests/` : tests automatiques (A→K)
+- `/srv/agentic/tests/` : tests automatiques (A→L)
 - `/srv/agentic/secrets/` : secrets runtime + logs rotation
 - `/srv/agentic/{ollama,gate,proxy,dns,openwebui,openhands,comfyui,rag,monitoring}/`
 - `/srv/agentic/{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
@@ -62,7 +62,7 @@ Le contenu attendu reste identique :
 
 ### 0.2 Standard “tests”
 Chaque test est un script shell idempotent dans `<AGENTIC_ROOT>/tests/` :
-- `tests/A_*.sh … tests/K_*.sh`
+- `tests/A_*.sh … tests/L_*.sh` + `tests/V_*.sh`
 - retour code `0` si OK, `!=0` sinon
 - output lisible (OK/FAIL) + option : JSON dans `deployments/test-reports/<ts>/`
 
@@ -76,9 +76,14 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - `agent ps`
 - `agent logs <service>`
 - `agent llm mode <local|hybrid|remote>` (pilotage backend LLM sans casser les agents)
+- `agent llm test-mode [on|off]` (mode test runtime du gate pour campagnes automatisées)
 - `agent forget <target> --yes` (reset destructif ciblé d’un domaine persistant)
 - `agent backup <run|list|restore <snapshot_id>>` (snapshots incrémentaux des données persistantes + config non-secrète)
-- `agent test <A|B|…|K>` (exécute le(s) script(s) correspondants)
+- `agent ollama-link` + `agent rollback ollama-link <backup_id|latest>` (gestion store modèles rootless)
+- `agent ollama-models [status|rw|ro]` (pilotage mode de mount des modèles Ollama)
+- `agent sudo-mode [status|on|off]` (élévation intra-conteneur agents, contrôlée et réversible)
+- `agent vm create ...` + `agent vm test ...` + `agent vm cleanup ...` (campagne `strict-prod` en VM dédiée)
+- `agent test <A|B|…|L|V|all>` (exécute le(s) script(s) correspondants)
 - `agent doctor` (agrégat de conformité “doit rester vert”)
 - `agent profile` (affiche le profil effectif + chemins/réseaux)
 
@@ -263,6 +268,16 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
 - health docker : `healthy`
 - `docker inspect ollama` confirme le source mount des modèles = valeur effective de `OLLAMA_MODELS_DIR` (ou fallback par défaut)
 
+### C1b Gestion du store modèles Ollama (link rootless + mode mount)
+**Implémentation**
+- fournir un helper rootless `agent ollama-link` pour relier un store modèles local existant vers le chemin runtime attendu, sans copie destructive.
+- fournir `agent rollback ollama-link <backup_id|latest>` pour restaurer l’état précédent du lien.
+- fournir `agent ollama-models [status|rw|ro]` pour auditer/changer le mode de mount du store modèles, avec persistance dans `runtime.env`.
+
+**Test** : `tests/C1_ollama_basic.sh`
+- `agent ollama-models status` expose le mode de mount effectif + source runtime.
+- cohérence entre mode configuré et mode réellement monté sur le conteneur `ollama`.
+
 ### C2 Smoke test génération
 **Implémentation**
 - script `deployments/ollama/smoke_generate.sh` (prompt court)
@@ -407,39 +422,19 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - en mode `remote` avec `ollama`/`trtllm` arrêtés, le MCP continue de refléter correctement le provider externe actif.
 - accès non autorisé ou hors réseau interne -> refus explicite.
 
-### D8 Ordonnancement par “époques de modèle” (mémoire limitée, un modèle actif)
+### D8 Compatibilité protocolaire multi-clients (`/v1/responses`, `/v1/messages`)
 **Implémentation**
-- implémenter dans `ollama-gate` une politique explicite “single active model epoch” :
-  - un seul modèle actif à la fois (aligné avec la contrainte RAM du DGX Spark) ;
-  - `GATE_CONCURRENCY=1` conservé, et file globale pilotée par classes de priorité.
-- définir des classes de requêtes (au minimum) :
-  - `interactive` (UI/chat opérateur) priorité haute ;
-  - `agent` (sessions codex/claude/opencode) priorité moyenne ;
-  - `batch` (ingest RAG/embeddings massifs) priorité basse.
-- utiliser une file pondérée (WFQ/WRR) avec bornes :
-  - taille max par classe ;
-  - timeout d’attente par classe ;
-  - refus explicite (`429` avec raison) quand saturation.
-- introduire des “époques de modèle” pour limiter le thrashing :
-  - traiter un lot de requêtes du modèle actif (`max_requests_per_epoch` ou `max_epoch_seconds`) ;
-  - ne changer de modèle que si conditions de switch remplies (`queue_active_model` vide ou `oldest_wait_other_model > switch_force_after_seconds`) ;
-  - appliquer hystérésis (`min_dwell_seconds`) + cooldown (`switch_cooldown_seconds`) entre deux switches.
-- conserver la compatibilité sticky session :
-  - sticky reste la source de vérité session -> modèle ;
-  - changement implicite interdit sans signal explicite (`X-Model-Switch` ou MCP `gate.switch_model`).
-- enrichir les métriques/logs gate :
-  - `epoch_id`, `active_model`, `epoch_switch_total`, `switch_reason`, `queue_wait_ms`, `queue_class`, `model_queue_depth`.
+- exposer des endpoints de compatibilité OpenAI/Anthropic au niveau `ollama-gate` :
+  - `POST /v1/responses` + alias `POST /responses` ;
+  - `POST /v1/messages` + alias `POST /messages`.
+- conserver une API client stable côté agents/UIs sans bypass direct vers les providers.
+- supporter le streaming SSE sur `messages` (événements compatibles clients Anthropic).
+- conserver la cohérence sticky/session du routage modèle pendant ces appels.
 
-**Test** : `tests/D8_gate_model_epoch_scheduler.sh`
-- charge mixte simulée (`interactive`, `agent`, `batch`) avec deux modèles concurrents :
-  - p95 d’attente `interactive` < p95 `batch` ;
-  - aucune famine complète des classes non prioritaires (au moins N requêtes servies par fenêtre).
-- sous rafale de demandes alternant deux modèles, le nombre de switches reste borné (anti-thrashing effectif).
-- sticky respecté :
-  - même session sans switch explicite -> `model_served` stable ;
-  - switch explicite -> changement effectif puis stabilité dans l’époque suivante.
-- en saturation de file, réponses `429` explicites avec `reason` actionnable ; aucun crash du gate.
-- logs/metrics contiennent `epoch_id`, `switch_reason`, et les profondeurs de file par modèle/classe.
+**Test** : `tests/D8_gate_protocol_compat.sh`
+- `/v1/responses` et `/responses` retournent `200` + payload compatible.
+- `/v1/messages` et `/messages` retournent `200` + payload compatible.
+- stream `/v1/messages` expose les événements attendus (`content_block_delta`, `message_stop`).
 
 ---
  
@@ -542,11 +537,13 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
   - redeploy compose
 - en `strict-prod`, associer le snapshot de release au dernier backup host-net disponible (référence `backup_id`) pour pouvoir restaurer aussi les changements imposés par `sudo`.
 - journal : `deployments/changes.log`
+- ajouter un bootstrap automatique de manifest release au premier `agent up ...` réussi si aucun `deployments/current/images.json` n’existe encore.
 
 **Test** : `tests/F2_update_rollback.sh`
 - `agent update` crée un snapshot complet (`deployments/releases/<ts>/…`)
 - après un “changement” (pull latest), `agent rollback <ts>` restaure exactement les digests
 - healthchecks redeviennent `healthy`
+- complément de couverture : `tests/F5_auto_release_manifest.sh` valide la création auto d’un manifest release lors d’un `up`.
 
 ### F3 `agent doctor` (gating sécurité)
 **Implémentation**
@@ -565,6 +562,19 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - si on force un bind `0.0.0.0` dans un compose de test : doctor=FAILED
 - si DOCKER-USER absent : doctor=FAILED
 - en `rootless-dev` : le test valide l’exécution de doctor sans exiger l’échec DOCKER-USER
+
+### F3b Matrice de hardening Compose (contrôle statique global)
+**Implémentation**
+- ajouter un contrôle statique rendu `docker compose config` sur tous les services (core/agents/ui/obs/rag/optional) pour éviter les régressions de baseline sécurité.
+- vérifier au minimum :
+  - `cap_drop: [ALL]` ;
+  - `security_opt` avec `no-new-privileges` cohérent avec le mode agent (`sudo-mode`) ;
+  - `read_only: true` hors exceptions explicitement documentées ;
+  - présence healthcheck ;
+  - politique user non-root hors exceptions système explicites.
+
+**Test** : `tests/F6_hardening_matrix.sh`
+- échoue sur toute dérive de hardening dans la config Compose effective.
 
 ### F4 `agent forget` : reset ciblé des environnements persistants (mode “fresh install”)
 **Implémentation**
@@ -705,6 +715,16 @@ Suivi Beads : `dgx-spark-agentic-stack-49e`
 ---
 
 ## G — Observabilité : Prometheus + Grafana + Loki + DCGM exporter
+
+### G0 Réparation ownership rootless + migration promtail (pré-vol obs)
+**Implémentation**
+- rendre `deployments/obs/init_runtime.sh` idempotent en mode `rootless-dev`, y compris après dérive d’ownership/permissions.
+- corriger automatiquement ownership UID:GID runtime des dossiers `monitoring/*`.
+- migrer la config promtail legacy (`/var/log/agentic-proxy/...`) vers le chemin runtime attendu (`/tmp/agentic-proxy/...`) quand nécessaire.
+
+**Test** : `tests/G0_obs_rootless_ownership_repair.sh`
+- vérifie réparation ownership/permissions + idempotence.
+- vérifie migration de chemin promtail et suppression de l’ancien chemin legacy.
 
 ### G1 Déployer stack obs
 **Implémentation**
@@ -850,7 +870,7 @@ Suivi Beads : `dgx-spark-agentic-stack-49e`
 
 ---
 
-## K — Modules optionnels à risque : OpenClaw / MCP Catalog / Portainer (activation conditionnelle)
+## K — Modules optionnels à risque : OpenClaw / MCP Catalog / pi-mono / goose / Portainer (activation conditionnelle)
 
 Principe : **désactivé par défaut**. Un module n’est activé que si :
 - besoin explicite + définition de succès
@@ -909,6 +929,71 @@ Principe : **désactivé par défaut**. Un module n’est activé que si :
 - pas de mount docker.sock direct
 - si socket-proxy : seules APIs allowlistées répondent
 
+### K4 pi-mono (si activé)
+**Implémentation**
+- profile Compose : `optional-pi-mono`.
+- exécution via image `agent-cli-base` locale, persistance dédiée `${AGENTIC_ROOT}/optional/pi-mono/{state,logs,workspaces}`.
+- baseline hardening identique aux agents CLI (non-root, read-only, cap_drop ALL, NNP).
+
+**Test** : `tests/F6_hardening_matrix.sh`
+- vérifie la baseline hardening de `optional-pi-mono` dans la config Compose rendue.
+
+### K5 goose (si activé)
+**Implémentation**
+- profile Compose : `optional-goose`.
+- service interne-only, persistance dédiée `${AGENTIC_ROOT}/optional/goose/{state,logs,workspaces}`.
+- baseline hardening alignée optional (read-only, cap_drop ALL, NNP, pas de bind public).
+
+**Test** : `tests/F6_hardening_matrix.sh`
+- vérifie la baseline hardening de `optional-goose` dans la config Compose rendue.
+
+---
+
+## L — Exploitation transverse (ressources, cleanup, modèle par défaut)
+
+Cette section regroupe des capacités déjà implémentées mais transverses aux sections C/F.
+
+### L1 Stop/start ciblé services & conteneurs
+**Implémentation**
+- `agent stop service <service...>` / `agent start service <service...>`.
+- `agent stop container <container...>` / `agent start container <container...>`.
+- garde-fou : refus hors projet Compose actif.
+
+**Test** : `tests/L1_stop_resources.sh`
+- valide les transitions `running <-> exited` sur service et conteneur.
+
+### L2 Orchestration stepwise de la stack
+**Implémentation**
+- `agent stack start <targets|all>` (`core -> agents -> ui -> obs -> rag -> optional`).
+- `agent stack stop <targets|all>` (`optional -> rag -> obs -> ui -> agents -> core`).
+
+**Test** : `tests/L2_stack_stepwise.sh`
+- valide ordre effectif + état final des services.
+
+### L3 Cleanup global profilé (brand new)
+**Implémentation**
+- `agent cleanup` avec variantes profilées (`agent strict-prod cleanup`, `agent rootless-dev cleanup`).
+- purge symlink-safe + export optionnel + suppression images locales stack.
+
+**Test** : `tests/L3_cleanup.sh`
+- valide flow interactif, sécurité symlink et état final propre.
+
+### L4 Fallback cleanup rootless en cas de permission denied
+**Implémentation**
+- en `rootless-dev`, si purge directe échoue sur arborescence runtime (permissions), basculer sur un helper Docker de nettoyage.
+- conserver un log explicite du fallback et terminer sur un état runtime propre.
+
+**Test** : `tests/L4_cleanup_permission_denied_fallback.sh`
+- simule une arborescence non purgeable en direct et valide le fallback + résultat final.
+
+### L5 Modèle par défaut e2e multi-clients
+**Implémentation**
+- propager `AGENTIC_DEFAULT_MODEL` de bout en bout (Ollama direct, gate, agents, UIs).
+- garantir une réponse non vide sur scénario de smoke `hello`.
+
+**Test** : `tests/L5_default_model_e2e.sh`
+- valide le flux `hello` via Ollama, gate, agents et UIs.
+
 ---
 
 ## Validation complémentaire — VM dédiée `strict-prod` (prod-like)
@@ -918,9 +1003,11 @@ Suivi Beads : `dgx-spark-agentic-stack-9kz`
 ### V1 Campagne de validation complète en VM
 **Implémentation**
 - provisionner une VM Linux dédiée (Ubuntu LTS recommandé) avec privilèges root ;
-- ajouter une commande opérateur de nettoyage VM :
+- ajouter des commandes opérateur dédiées :
+  - `agent vm create --name <vm-name> --cpus <n> --memory <size> --disk <size> [--require-gpu]`
+  - `agent vm test --name <vm-name> [--test-selectors <csv|all>] [--allow-no-gpu|--require-gpu] [--skip-d5-tests]`
   - `agent vm cleanup --name <vm-name>`
-  - comportement attendu : stop propre de la VM puis suppression de la VM (sans toucher d’autres VMs) ;
+  - comportement attendu : create/test/cleanup orchestrés sans toucher d’autres VMs ;
 - exécuter strictement le profil :
   - `export AGENTIC_PROFILE=strict-prod`
   - `sudo ./deployments/bootstrap/init_fs.sh`
@@ -938,6 +1025,8 @@ Suivi Beads : `dgx-spark-agentic-stack-9kz`
 - si la VM n’a pas de GPU passthrough : documenter explicitement les tests GPU en `skip/blocked` avec justification (pas de contournement sécurité).
 
 **Test** : `tests/V1_vm_strict_prod_validation.sh`
+- contrat dry-run create : `tests/00_vm_create_dry_run.sh`
+- contrat dry-run cleanup : `tests/00_vm_cleanup_dry_run.sh`
 - vérifie que le script de campagne retourne `0` quand la VM satisfait les prérequis ;
 - vérifie la présence des artefacts de preuve ;
 - échoue si `doctor` strict est non vert hors exceptions explicitement marquées ;
@@ -982,12 +1071,12 @@ La stack est “opérable” quand :
 Critères de clôture par profil :
 - `strict-prod` : tous les points ci-dessus sont obligatoires et bloquants.
 - `rootless-dev` : mode accepté pour développement local, avec traçabilité claire des écarts non validables sans root.
-- `strict-prod` sur VM dédiée : accepté pour validation “prod-like” du pipeline A→K avec petit modèle Ollama ; tests de charge/modèles lourds restent hors périmètre de cette VM contrainte.
+- `strict-prod` sur VM dédiée : accepté pour validation “prod-like” du pipeline A→L avec petit modèle Ollama ; tests de charge/modèles lourds restent hors périmètre de cette VM contrainte.
 
 ---
 
 ## Ordre d’exécution imposé (chemin critique)
-A → B → C → D → E → F → G → H → I → J → K
+A → B → C → D → E → F → G → H → I → J → K → L
 
 Validation complémentaire recommandée après chemin critique :
 - V1 (VM dédiée `strict-prod` prod-like)
