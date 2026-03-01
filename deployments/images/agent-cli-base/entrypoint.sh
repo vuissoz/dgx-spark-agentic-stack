@@ -25,6 +25,7 @@ log() {
 bootstrap_shell_home() {
   local bash_profile="${agent_home}/.bash_profile"
   local bashrc="${agent_home}/.bashrc"
+  local local_bin_line='export PATH="${HOME}/.local/bin:${PATH}"'
 
   if [[ ! -f "${bash_profile}" ]]; then
     cat >"${bash_profile}" <<'EOF'
@@ -37,9 +38,11 @@ EOF
 
   if [[ ! -f "${bashrc}" ]]; then
     cat >"${bashrc}" <<'EOF'
-export PATH="${PATH}"
+export PATH="${HOME}/.local/bin:${PATH}"
 EOF
     chmod 0600 "${bashrc}" || true
+  elif ! grep -Eq '/\.local/bin' "${bashrc}"; then
+    printf '%s\n' "${local_bin_line}" >>"${bashrc}"
   fi
 }
 
