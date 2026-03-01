@@ -174,18 +174,19 @@ The stack intentionally favors early, visible failure over silent drift.
 
 Suggested order:
 1. this introduction (`introduction.md`),
-2. `onboarding-ultra-simple.fr.md` / `.en.md` / `.de.md` / `.it.md` (non-technical quickstart),
-3. `profiles.md` (execution semantics),
-4. `configuration-expliquee-debutants.md` (beginner-friendly FR configuration reference),
-5. `configuration-explained-beginners.en.md` (beginner-friendly EN configuration reference),
-6. `images-developpement.md` (local image build/update/override/rollback behavior),
-7. `first-time-setup.md` (day-0 bootstrap),
-8. `strict-prod-vm.md` (dedicated VM path for prod-like validation),
-9. `features-and-agents.md` (component capabilities),
-10. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
-11. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
-12. `codex-debutant.md` (beginner step-by-step usage of `agentic-codex`),
-13. specialized runbooks (`optional-modules.md`, `observability-triage.md`, etc.).
+2. `implementation-strategy-refactoring.md` (technical implementation strategy and refactoring priorities),
+3. `onboarding-ultra-simple.fr.md` / `.en.md` / `.de.md` / `.it.md` (non-technical quickstart),
+4. `profiles.md` (execution semantics),
+5. `configuration-expliquee-debutants.md` (beginner-friendly FR configuration reference),
+6. `configuration-explained-beginners.en.md` (beginner-friendly EN configuration reference),
+7. `images-developpement.md` (local image build/update/override/rollback behavior),
+8. `first-time-setup.md` (day-0 bootstrap),
+9. `strict-prod-vm.md` (dedicated VM path for prod-like validation),
+10. `features-and-agents.md` (component capabilities),
+11. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
+12. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
+13. `codex-debutant.md` (beginner step-by-step usage of `agentic-codex`),
+14. specialized runbooks (`optional-modules.md`, `observability-triage.md`, etc.).
 
 When troubleshooting:
 - always capture active profile and effective runtime values first (`./agent profile`),

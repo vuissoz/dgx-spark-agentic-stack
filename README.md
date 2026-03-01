@@ -449,6 +449,8 @@ Préconditions (runtime):
 
 - Introduction (philosophie de la stack et modèle d'exploitation):
   - `docs/runbooks/introduction.md`
+- Strategie d'implementation et priorites de refactoring:
+  - `docs/runbooks/implementation-strategy-refactoring.md`
 - Guide pas à pas (première installation complète):
   - `docs/runbooks/first-time-setup.md`
 - VM dédiée `strict-prod` (validation prod-like):

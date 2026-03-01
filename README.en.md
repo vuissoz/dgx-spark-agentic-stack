@@ -449,6 +449,8 @@ Runtime prerequisites:
 
 - Introduction (stack philosophy and operating model):
   - `docs/runbooks/introduction.md`
+- Implementation strategy and refactoring priorities:
+  - `docs/runbooks/implementation-strategy-refactoring.md`
 - Step-by-step guide (full first deployment):
   - `docs/runbooks/first-time-setup.md`
 - Dedicated `strict-prod` VM (prod-like validation):
