@@ -8,6 +8,7 @@ source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 profile_override=""
 root_override=""
+agent_workspaces_root_override=""
 compose_project_override=""
 network_override=""
 egress_network_override=""
@@ -65,6 +66,7 @@ Usage:
 Runtime options:
   --profile <strict-prod|rootless-dev>
   --root <path>
+  --agent-workspaces-root <path>
   --compose-project <name>
   --network <name>
   --egress-network <name>
@@ -167,6 +169,16 @@ default_root_for_profile() {
     printf '%s\n' "${HOME}/.local/share/agentic"
   else
     printf '%s\n' "/srv/agentic"
+  fi
+}
+
+default_agent_workspaces_root_for_profile() {
+  local profile="$1"
+  local root_path="$2"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "${root_path}/agent-workspaces"
+  else
+    printf '%s\n' "${root_path}"
   fi
 }
 
@@ -1000,29 +1012,30 @@ generate_secret_value() {
 write_env_file() {
   local profile="$1"
   local root_path="$2"
-  local compose_project="$3"
-  local network="$4"
-  local egress_network="$5"
-  local ollama_models="$6"
-  local default_model="$7"
-  local grafana_admin_user="$8"
-  local grafana_admin_password="$9"
-  local limits_default_cpus="${10}"
-  local limits_default_mem="${11}"
-  local limits_core_cpus="${12}"
-  local limits_core_mem="${13}"
-  local limits_ollama_mem="${14}"
-  local limits_agents_cpus="${15}"
-  local limits_agents_mem="${16}"
-  local limits_ui_cpus="${17}"
-  local limits_ui_mem="${18}"
-  local limits_obs_cpus="${19}"
-  local limits_obs_mem="${20}"
-  local limits_rag_cpus="${21}"
-  local limits_rag_mem="${22}"
-  local limits_optional_cpus="${23}"
-  local limits_optional_mem="${24}"
-  local out_file="${25}"
+  local agent_workspaces_root="$3"
+  local compose_project="$4"
+  local network="$5"
+  local egress_network="$6"
+  local ollama_models="$7"
+  local default_model="$8"
+  local grafana_admin_user="$9"
+  local grafana_admin_password="${10}"
+  local limits_default_cpus="${11}"
+  local limits_default_mem="${12}"
+  local limits_core_cpus="${13}"
+  local limits_core_mem="${14}"
+  local limits_ollama_mem="${15}"
+  local limits_agents_cpus="${16}"
+  local limits_agents_mem="${17}"
+  local limits_ui_cpus="${18}"
+  local limits_ui_mem="${19}"
+  local limits_obs_cpus="${20}"
+  local limits_obs_mem="${21}"
+  local limits_rag_cpus="${22}"
+  local limits_rag_mem="${23}"
+  local limits_optional_cpus="${24}"
+  local limits_optional_mem="${25}"
+  local out_file="${26}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1034,6 +1047,7 @@ write_env_file() {
 # Source this file in your shell to set runtime variables.
 export AGENTIC_PROFILE=$(shell_quote "${profile}")
 export AGENTIC_ROOT=$(shell_quote "${root_path}")
+export AGENTIC_AGENT_WORKSPACES_ROOT=$(shell_quote "${agent_workspaces_root}")
 export AGENTIC_COMPOSE_PROJECT=$(shell_quote "${compose_project}")
 export AGENTIC_NETWORK=$(shell_quote "${network}")
 export AGENTIC_EGRESS_NETWORK=$(shell_quote "${egress_network}")
@@ -1170,6 +1184,11 @@ while [[ $# -gt 0 ]]; do
     --root)
       [[ $# -ge 2 ]] || die "missing value for --root"
       root_override="$2"
+      shift 2
+      ;;
+    --agent-workspaces-root)
+      [[ $# -ge 2 ]] || die "missing value for --agent-workspaces-root"
+      agent_workspaces_root_override="$2"
       shift 2
       ;;
     --compose-project)
@@ -1419,6 +1438,8 @@ else
   validate_path_value "${profile}" "AGENTIC_ROOT" "${root_path}" || die "invalid AGENTIC_ROOT"
 fi
 
+collect_path_value agent_workspaces_root "AGENTIC_AGENT_WORKSPACES_ROOT" "${profile}" "$(default_agent_workspaces_root_for_profile "${profile}" "${root_path}")" "${agent_workspaces_root_override}" "AGENTIC_AGENT_WORKSPACES_ROOT controls where per-agent /workspace host folders are stored."
+
 collect_text_value compose_project "AGENTIC_COMPOSE_PROJECT" "${default_compose_project}" "${compose_project_override}" validate_compose_or_network_name "AGENTIC_COMPOSE_PROJECT is the docker compose project name used to namespace resources."
 collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_override}" validate_compose_or_network_name "AGENTIC_NETWORK is the private docker network for internal traffic."
 collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_network}" "${egress_network_override}" validate_compose_or_network_name "AGENTIC_EGRESS_NETWORK is dedicated to controlled outbound traffic."
@@ -1459,6 +1480,7 @@ collect_mem_limit limits_optional_mem "AGENTIC_LIMIT_OPTIONAL_MEM" "$(default_li
 write_env_file \
   "${profile}" \
   "${root_path}" \
+  "${agent_workspaces_root}" \
   "${compose_project}" \
   "${network}" \
   "${egress_network}" \

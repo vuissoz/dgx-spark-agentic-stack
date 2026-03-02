@@ -49,7 +49,7 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/claude/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/claude/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/claude/workspaces:/workspace
+      - ${AGENTIC_AGENT_WORKSPACES_ROOT:-${AGENTIC_ROOT:-/srv/agentic}}/claude/workspaces:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
@@ -114,7 +114,7 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/codex/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/codex/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/codex/workspaces:/workspace
+      - ${AGENTIC_AGENT_WORKSPACES_ROOT:-${AGENTIC_ROOT:-/srv/agentic}}/codex/workspaces:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
@@ -180,7 +180,7 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/opencode/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/opencode/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/opencode/workspaces:/workspace
+      - ${AGENTIC_AGENT_WORKSPACES_ROOT:-${AGENTIC_ROOT:-/srv/agentic}}/opencode/workspaces:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
@@ -245,7 +245,7 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/vibestral/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/vibestral/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/vibestral/workspaces:/workspace
+      - ${AGENTIC_AGENT_WORKSPACES_ROOT:-${AGENTIC_ROOT:-/srv/agentic}}/vibestral/workspaces:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro

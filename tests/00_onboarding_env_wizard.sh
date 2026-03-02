@@ -30,6 +30,7 @@ run_default_answers() {
 
 run_override_answers() {
   local custom_root="${work_dir}/custom-runtime-root"
+  local custom_workspace_root="${work_dir}/custom-agent-workspaces"
   local custom_models="${work_dir}/custom-ollama-models"
   local custom_default_model="llama3.2:1b"
   local custom_compose="agentic-ci"
@@ -39,6 +40,7 @@ run_override_answers() {
   if ! cat <<EOF | AGENTIC_PROFILE=strict-prod "${wizard_script}" --output "${override_env_file}" >"${override_log}" 2>&1
 rootless-dev
 ${custom_root}
+${custom_workspace_root}
 ${custom_compose}
 ${custom_network}
 ${custom_egress_network}
@@ -122,6 +124,8 @@ grep -q "^export AGENTIC_PROFILE='strict-prod'$" "${default_env_file}" \
   || fail "default profile is not strict-prod"
 grep -q "^export AGENTIC_ROOT='/srv/agentic'$" "${default_env_file}" \
   || fail "default AGENTIC_ROOT is not /srv/agentic"
+grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='/srv/agentic'$" "${default_env_file}" \
+  || fail "default AGENTIC_AGENT_WORKSPACES_ROOT is not /srv/agentic"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic'$" "${default_env_file}" \
   || fail "default AGENTIC_COMPOSE_PROJECT is not agentic"
 grep -q "^export AGENTIC_NETWORK='agentic'$" "${default_env_file}" \
@@ -163,6 +167,8 @@ grep -q "^export AGENTIC_PROFILE='rootless-dev'$" "${override_env_file}" \
   || fail "override profile is not rootless-dev"
 grep -q "^export AGENTIC_ROOT='${work_dir}/custom-runtime-root'$" "${override_env_file}" \
   || fail "override AGENTIC_ROOT is not applied"
+grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${work_dir}/custom-agent-workspaces'$" "${override_env_file}" \
+  || fail "override AGENTIC_AGENT_WORKSPACES_ROOT is not applied"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic-ci'$" "${override_env_file}" \
   || fail "override AGENTIC_COMPOSE_PROJECT is not applied"
 grep -q "^export AGENTIC_NETWORK='agentic-ci-net'$" "${override_env_file}" \
@@ -210,6 +216,8 @@ fi
 assert_generated_file_baseline "${rootless_default_env_file}"
 grep -q "^export OLLAMA_MODELS_DIR='${HOME}/wkdir/open-webui/ollama_data/models'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_MODELS_DIR is not ${HOME}/wkdir/open-webui/ollama_data/models"
+grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${work_dir}/rootless-default-root/agent-workspaces'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_AGENT_WORKSPACES_ROOT is not <root>/agent-workspaces"
 grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${rootless_default_env_file}" \
@@ -220,6 +228,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --non-interactive \
   --profile rootless-dev \
   --root "${work_dir}/ni-root" \
+  --agent-workspaces-root "${work_dir}/ni-agent-workspaces" \
   --compose-project agentic-ni \
   --network agentic-ni-net \
   --egress-network agentic-ni-egress \
@@ -250,6 +259,8 @@ grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.60'$" "${non_interactive_env_file
   || fail "non-interactive AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
 grep -q "^export AGENTIC_DEFAULT_MODEL='tinyllama:latest'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_DEFAULT_MODEL is not applied"
+grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${work_dir}/ni-agent-workspaces'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_AGENT_WORKSPACES_ROOT is not applied"
 grep -q "^export GRAFANA_ADMIN_USER='grafana-admin'$" "${non_interactive_env_file}" \
   || fail "non-interactive GRAFANA_ADMIN_USER is not applied"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='grafana-strong-password'$" "${non_interactive_env_file}" \

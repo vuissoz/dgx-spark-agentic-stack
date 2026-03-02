@@ -15,6 +15,7 @@ agent_bin="${REPO_ROOT}/agent"
 [[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
 
 runtime_root="$(mktemp -d)"
+agent_workspaces_root="${runtime_root}/agent-workspaces"
 compose_project="agentic-f4-${RANDOM}"
 network_name="agentic-f4-${RANDOM}"
 llm_network_name="agentic-f4-llm-${RANDOM}"
@@ -23,6 +24,7 @@ egress_network_name="agentic-f4-egress-${RANDOM}"
 run_agent() {
   AGENTIC_PROFILE=rootless-dev \
   AGENTIC_ROOT="${runtime_root}" \
+  AGENTIC_AGENT_WORKSPACES_ROOT="${agent_workspaces_root}" \
   AGENTIC_COMPOSE_PROJECT="${compose_project}" \
   AGENTIC_NETWORK="${network_name}" \
   AGENTIC_LLM_NETWORK="${llm_network_name}" \
@@ -36,23 +38,28 @@ cleanup() {
 trap cleanup EXIT
 
 AGENTIC_PROFILE=rootless-dev AGENTIC_ROOT="${runtime_root}" \
+  AGENTIC_AGENT_WORKSPACES_ROOT="${agent_workspaces_root}" \
   "${REPO_ROOT}/deployments/bootstrap/init_fs.sh" >/dev/null
 AGENTIC_PROFILE=rootless-dev AGENTIC_ROOT="${runtime_root}" \
+  AGENTIC_AGENT_WORKSPACES_ROOT="${agent_workspaces_root}" \
   "${REPO_ROOT}/deployments/core/init_runtime.sh" >/dev/null
 AGENTIC_PROFILE=rootless-dev AGENTIC_ROOT="${runtime_root}" \
+  AGENTIC_AGENT_WORKSPACES_ROOT="${agent_workspaces_root}" \
   AGENT_RUNTIME_UID="$(id -u)" AGENT_RUNTIME_GID="$(id -g)" \
   "${REPO_ROOT}/deployments/agents/init_runtime.sh" >/dev/null
 AGENTIC_PROFILE=rootless-dev AGENTIC_ROOT="${runtime_root}" \
+  AGENTIC_AGENT_WORKSPACES_ROOT="${agent_workspaces_root}" \
   AGENT_RUNTIME_UID="$(id -u)" AGENT_RUNTIME_GID="$(id -g)" \
   "${REPO_ROOT}/deployments/ui/init_runtime.sh" >/dev/null
 AGENTIC_PROFILE=rootless-dev AGENTIC_ROOT="${runtime_root}" \
+  AGENTIC_AGENT_WORKSPACES_ROOT="${agent_workspaces_root}" \
   AGENT_RUNTIME_UID="$(id -u)" AGENT_RUNTIME_GID="$(id -g)" \
   "${REPO_ROOT}/deployments/optional/init_runtime.sh" >/dev/null
 ok "runtime initialized for forget command checks"
 
-touch "${runtime_root}/vibestral/workspaces/.f4-vibestral-marker"
-touch "${runtime_root}/codex/workspaces/.f4-codex-marker"
-touch "${runtime_root}/claude/workspaces/.f4-claude-marker"
+touch "${agent_workspaces_root}/vibestral/workspaces/.f4-vibestral-marker"
+touch "${agent_workspaces_root}/codex/workspaces/.f4-codex-marker"
+touch "${agent_workspaces_root}/claude/workspaces/.f4-claude-marker"
 
 set +e
 printf '\n' | run_agent forget vibestral >/tmp/agent-f4-deny.out 2>&1
@@ -62,9 +69,9 @@ set -e
 ok "forget refuses without explicit confirmation"
 
 printf 'yes\nyes\n' | run_agent forget vibestral >/tmp/agent-f4-vibestral.out
-[[ ! -e "${runtime_root}/vibestral/workspaces/.f4-vibestral-marker" ]] \
+[[ ! -e "${agent_workspaces_root}/vibestral/workspaces/.f4-vibestral-marker" ]] \
   || fail "vibestral marker must be removed after interactive forget"
-[[ -d "${runtime_root}/vibestral/workspaces" ]] || fail "vibestral workspace dir must be recreated"
+[[ -d "${agent_workspaces_root}/vibestral/workspaces" ]] || fail "vibestral workspace dir must be recreated"
 [[ -d "${runtime_root}/vibestral/state" ]] || fail "vibestral state dir must be recreated"
 [[ -d "${runtime_root}/vibestral/logs" ]] || fail "vibestral logs dir must be recreated"
 ok "forget vibestral recreates runtime layout"
@@ -74,9 +81,9 @@ backup_count="$(find "${runtime_root}/deployments/forget-backups" -maxdepth 1 -t
 ok "forget vibestral creates backup archive"
 
 run_agent forget codex --yes --no-backup >/tmp/agent-f4-codex.out
-[[ ! -e "${runtime_root}/codex/workspaces/.f4-codex-marker" ]] \
+[[ ! -e "${agent_workspaces_root}/codex/workspaces/.f4-codex-marker" ]] \
   || fail "codex marker must be removed after forget codex"
-[[ -e "${runtime_root}/claude/workspaces/.f4-claude-marker" ]] \
+[[ -e "${agent_workspaces_root}/claude/workspaces/.f4-claude-marker" ]] \
   || fail "forget codex must not remove claude marker"
 ok "forget codex keeps other agent workspaces intact"
 

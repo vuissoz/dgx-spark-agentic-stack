@@ -12,8 +12,10 @@ BOOTSTRAP_SCRIPT="${REPO_ROOT}/deployments/bootstrap/init_fs.sh"
 AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
 if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
   AGENTIC_ROOT="${AGENTIC_ROOT:-${HOME}/.local/share/agentic}"
+  AGENTIC_AGENT_WORKSPACES_ROOT="${AGENTIC_AGENT_WORKSPACES_ROOT:-${AGENTIC_ROOT}/agent-workspaces}"
 else
   AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+  AGENTIC_AGENT_WORKSPACES_ROOT="${AGENTIC_AGENT_WORKSPACES_ROOT:-${AGENTIC_ROOT}}"
 fi
 
 "${BOOTSTRAP_SCRIPT}"
@@ -53,16 +55,16 @@ required_dirs=(
   "${AGENTIC_ROOT}/rag/scripts"
   "${AGENTIC_ROOT}/claude/state"
   "${AGENTIC_ROOT}/claude/logs"
-  "${AGENTIC_ROOT}/claude/workspaces"
   "${AGENTIC_ROOT}/codex/state"
   "${AGENTIC_ROOT}/codex/logs"
-  "${AGENTIC_ROOT}/codex/workspaces"
   "${AGENTIC_ROOT}/opencode/state"
   "${AGENTIC_ROOT}/opencode/logs"
-  "${AGENTIC_ROOT}/opencode/workspaces"
   "${AGENTIC_ROOT}/vibestral/state"
   "${AGENTIC_ROOT}/vibestral/logs"
-  "${AGENTIC_ROOT}/vibestral/workspaces"
+  "${AGENTIC_AGENT_WORKSPACES_ROOT}/claude/workspaces"
+  "${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces"
+  "${AGENTIC_AGENT_WORKSPACES_ROOT}/opencode/workspaces"
+  "${AGENTIC_AGENT_WORKSPACES_ROOT}/vibestral/workspaces"
   "${AGENTIC_ROOT}/shared-ro"
   "${AGENTIC_ROOT}/shared-rw"
 )

@@ -20,6 +20,7 @@ assert_cmd rsync
 suffix="f8-$RANDOM-$$"
 export AGENTIC_PROFILE=rootless-dev
 export AGENTIC_ROOT="${REPO_ROOT}/.runtime/${suffix}-root"
+export AGENTIC_AGENT_WORKSPACES_ROOT="${AGENTIC_ROOT}/agent-workspaces"
 export AGENTIC_COMPOSE_PROJECT="agentic-${suffix}"
 export AGENTIC_NETWORK="agentic-${suffix}"
 export AGENTIC_EGRESS_NETWORK="agentic-${suffix}-egress"
@@ -35,10 +36,10 @@ trap cleanup EXIT
 
 "${REPO_ROOT}/deployments/bootstrap/init_fs.sh" >/tmp/agent-f8-initfs.out
 
-mkdir -p "${AGENTIC_ROOT}/codex/workspaces/demo"
+mkdir -p "${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo"
 mkdir -p "${AGENTIC_ROOT}/claude/state"
 mkdir -p "${AGENTIC_ROOT}/secrets/runtime"
-printf 'version-one\n' >"${AGENTIC_ROOT}/codex/workspaces/demo/readme.txt"
+printf 'version-one\n' >"${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/readme.txt"
 printf 'marker-one\n' >"${AGENTIC_ROOT}/claude/state/marker.txt"
 printf 'super-secret-key\n' >"${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
 
@@ -61,9 +62,9 @@ changed2="$(printf '%s\n' "${run2_output}" | sed -n 's/^changed_entries=//p' | t
 [[ "${changed2}" -le 3 ]] || fail "backup run #2 should be near-zero incremental delta (changed_entries=${changed2})"
 ok "second backup snapshot is incremental (changed_entries=${changed2})"
 
-printf 'version-two\n' >"${AGENTIC_ROOT}/codex/workspaces/demo/readme.txt"
+printf 'version-two\n' >"${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/readme.txt"
 printf 'marker-two\n' >"${AGENTIC_ROOT}/claude/state/marker.txt"
-printf 'private-key-material\n' >"${AGENTIC_ROOT}/codex/workspaces/demo/key.PEM"
+printf 'private-key-material\n' >"${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/key.PEM"
 
 sleep 1
 run3_output="$("${agent_bin}" backup run)"
@@ -73,21 +74,21 @@ changed3="$(printf '%s\n' "${run3_output}" | sed -n 's/^changed_entries=//p' | t
 [[ "${changed3}" =~ ^[0-9]+$ ]] || fail "backup run #3 did not report numeric changed_entries"
 [[ "${changed3}" -gt 0 ]] || fail "backup run #3 should include a non-zero delta after targeted file changes"
 
-grep -q 'codex/workspaces/demo/readme.txt' "${snapshots_root}/${id3}/metadata/rsync.changes" \
+grep -q 'agent-workspaces/codex/workspaces/demo/readme.txt' "${snapshots_root}/${id3}/metadata/rsync.changes" \
   || fail "snapshot #3 delta does not include updated codex workspace file"
 ok "targeted modifications are captured in incremental delta"
 
-printf 'corrupted\n' >"${AGENTIC_ROOT}/codex/workspaces/demo/readme.txt"
+printf 'corrupted\n' >"${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/readme.txt"
 rm -f "${AGENTIC_ROOT}/claude/state/marker.txt"
 
 "${agent_bin}" backup restore "${id3}" --yes >/tmp/agent-f8-restore.out \
   || fail "backup restore failed for snapshot ${id3}"
 
-grep -q '^version-two$' "${AGENTIC_ROOT}/codex/workspaces/demo/readme.txt" \
+grep -q '^version-two$' "${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/readme.txt" \
   || fail "backup restore did not restore codex workspace file content"
 grep -q '^marker-two$' "${AGENTIC_ROOT}/claude/state/marker.txt" \
   || fail "backup restore did not restore claude state file"
-[[ ! -f "${AGENTIC_ROOT}/codex/workspaces/demo/key.PEM" ]] \
+[[ ! -f "${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/key.PEM" ]] \
   || fail "backup restore should remove excluded key material patterns"
 ok "backup restore restored targeted persistent files"
 

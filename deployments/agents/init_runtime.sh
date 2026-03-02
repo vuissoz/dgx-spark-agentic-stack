@@ -2,6 +2,12 @@
 set -euo pipefail
 
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
+if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
+  AGENTIC_AGENT_WORKSPACES_ROOT="${AGENTIC_AGENT_WORKSPACES_ROOT:-${AGENTIC_ROOT}/agent-workspaces}"
+else
+  AGENTIC_AGENT_WORKSPACES_ROOT="${AGENTIC_AGENT_WORKSPACES_ROOT:-${AGENTIC_ROOT}}"
+fi
 AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
 AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
 
@@ -50,16 +56,16 @@ main() {
   local -a writable_dirs=(
     "${AGENTIC_ROOT}/claude/state"
     "${AGENTIC_ROOT}/claude/logs"
-    "${AGENTIC_ROOT}/claude/workspaces"
     "${AGENTIC_ROOT}/codex/state"
     "${AGENTIC_ROOT}/codex/logs"
-    "${AGENTIC_ROOT}/codex/workspaces"
     "${AGENTIC_ROOT}/opencode/state"
     "${AGENTIC_ROOT}/opencode/logs"
-    "${AGENTIC_ROOT}/opencode/workspaces"
     "${AGENTIC_ROOT}/vibestral/state"
     "${AGENTIC_ROOT}/vibestral/logs"
-    "${AGENTIC_ROOT}/vibestral/workspaces"
+    "${AGENTIC_AGENT_WORKSPACES_ROOT}/claude/workspaces"
+    "${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces"
+    "${AGENTIC_AGENT_WORKSPACES_ROOT}/opencode/workspaces"
+    "${AGENTIC_AGENT_WORKSPACES_ROOT}/vibestral/workspaces"
     "${AGENTIC_ROOT}/shared-rw"
   )
 
@@ -83,7 +89,7 @@ main() {
     done
   fi
 
-  log "agents runtime initialized at ${AGENTIC_ROOT} (uid=${AGENT_RUNTIME_UID}, gid=${AGENT_RUNTIME_GID})"
+  log "agents runtime initialized at ${AGENTIC_ROOT} with workspaces root ${AGENTIC_AGENT_WORKSPACES_ROOT} (uid=${AGENT_RUNTIME_UID}, gid=${AGENT_RUNTIME_GID})"
 }
 
 main "$@"

@@ -167,18 +167,26 @@ for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}"; 
 done
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+agentic_profile="${AGENTIC_PROFILE:-strict-prod}"
+if [[ -n "${AGENTIC_AGENT_WORKSPACES_ROOT:-}" ]]; then
+  agent_workspaces_root="${AGENTIC_AGENT_WORKSPACES_ROOT}"
+elif [[ "${agentic_profile}" == "rootless-dev" ]]; then
+  agent_workspaces_root="${agentic_root}/agent-workspaces"
+else
+  agent_workspaces_root="${agentic_root}"
+fi
 assert_mount_source "${claude_cid}" "/state" "${agentic_root}/claude/state"
 assert_mount_source "${claude_cid}" "/logs" "${agentic_root}/claude/logs"
-assert_mount_source "${claude_cid}" "/workspace" "${agentic_root}/claude/workspaces"
+assert_mount_source "${claude_cid}" "/workspace" "${agent_workspaces_root}/claude/workspaces"
 assert_mount_source "${codex_cid}" "/state" "${agentic_root}/codex/state"
 assert_mount_source "${codex_cid}" "/logs" "${agentic_root}/codex/logs"
-assert_mount_source "${codex_cid}" "/workspace" "${agentic_root}/codex/workspaces"
+assert_mount_source "${codex_cid}" "/workspace" "${agent_workspaces_root}/codex/workspaces"
 assert_mount_source "${opencode_cid}" "/state" "${agentic_root}/opencode/state"
 assert_mount_source "${opencode_cid}" "/logs" "${agentic_root}/opencode/logs"
-assert_mount_source "${opencode_cid}" "/workspace" "${agentic_root}/opencode/workspaces"
+assert_mount_source "${opencode_cid}" "/workspace" "${agent_workspaces_root}/opencode/workspaces"
 assert_mount_source "${vibestral_cid}" "/state" "${agentic_root}/vibestral/state"
 assert_mount_source "${vibestral_cid}" "/logs" "${agentic_root}/vibestral/logs"
-assert_mount_source "${vibestral_cid}" "/workspace" "${agentic_root}/vibestral/workspaces"
-ok "agents volumes map to ${agentic_root}/<tool>/{state,logs,workspaces}"
+assert_mount_source "${vibestral_cid}" "/workspace" "${agent_workspaces_root}/vibestral/workspaces"
+ok "agents volumes map to ${agentic_root}/<tool>/{state,logs} and ${agent_workspaces_root}/<tool>/workspaces"
 
 ok "E2_agents_confinement passed"

@@ -22,6 +22,14 @@ assert_cmd curl
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+agentic_profile="${AGENTIC_PROFILE:-strict-prod}"
+if [[ -n "${AGENTIC_AGENT_WORKSPACES_ROOT:-}" ]]; then
+  agent_workspaces_root="${AGENTIC_AGENT_WORKSPACES_ROOT}"
+elif [[ "${agentic_profile}" == "rootless-dev" ]]; then
+  agent_workspaces_root="${agentic_root}/agent-workspaces"
+else
+  agent_workspaces_root="${agentic_root}"
+fi
 install -d -m 0700 "${agentic_root}/secrets/runtime"
 install -d -m 0750 "${agentic_root}/deployments/optional"
 
@@ -76,9 +84,9 @@ grep -q '"decision":"deny"' "${audit_log}" || fail "mcp audit log must include a
 
 # Secret value must stay outside user workspaces.
 for workspace in \
-  "${agentic_root}/claude/workspaces" \
-  "${agentic_root}/codex/workspaces" \
-  "${agentic_root}/opencode/workspaces"; do
+  "${agent_workspaces_root}/claude/workspaces" \
+  "${agent_workspaces_root}/codex/workspaces" \
+  "${agent_workspaces_root}/opencode/workspaces"; do
   [[ -d "${workspace}" ]] || continue
   if grep -Rqs --binary-files=without-match -- "${mcp_token}" "${workspace}"; then
     fail "mcp token leaked into workspace: ${workspace}"

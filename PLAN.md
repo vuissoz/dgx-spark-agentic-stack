@@ -58,6 +58,9 @@ Le contenu attendu reste identique :
 - `/srv/agentic/secrets/` : secrets runtime + logs rotation
 - `/srv/agentic/{ollama,gate,proxy,dns,openwebui,openhands,comfyui,rag,monitoring}/`
 - `/srv/agentic/{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
+- `AGENTIC_AGENT_WORKSPACES_ROOT` peut séparer les workspaces agents du reste :
+  - `strict-prod` par défaut : `${AGENTIC_ROOT}` (donc `${AGENTIC_ROOT}/<tool>/workspaces`)
+  - `rootless-dev` par défaut : `${AGENTIC_ROOT}/agent-workspaces` (donc `${AGENTIC_AGENT_WORKSPACES_ROOT}/<tool>/workspaces`)
 - `/srv/agentic/shared-ro/` et `/srv/agentic/shared-rw/`
 
 ### 0.2 Standard “tests”
@@ -528,7 +531,8 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 **Implémentation**
 - `deployments/compose/compose.agents.yml`
 - volumes par outil :
-  - `/srv/agentic/<tool>/{state,logs,workspaces}`
+  - `${AGENTIC_ROOT}/<tool>/{state,logs}`
+  - `${AGENTIC_AGENT_WORKSPACES_ROOT}/<tool>/workspaces` (fallback `${AGENTIC_ROOT}/<tool>/workspaces`)
 - env :
   - `OLLAMA_BASE_URL=http://ollama-gate:<port>`
   - `HTTP(S)_PROXY=http://egress-proxy:3128`
@@ -1149,6 +1153,7 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-581` — onboarding OpenWebUI : flag optionnel “allow model pull” + extension allowlist par défaut `registry.ollama.ai`.
 - `dgx-spark-agentic-stack-0p4` — `agent ollama-preload` doit préserver le mode de mount initial (`rw`/`ro`) pour éviter les recreates inutiles et les changements d’état inattendus.
 - `dgx-spark-agentic-stack-2ld` — enrichir `/v1/models` dans `ollama-gate` avec des métadonnées de modèles non sensibles (issues des backends, notamment Ollama `/api/tags`) pour améliorer l’interopérabilité client.
+- `dgx-spark-agentic-stack-41m` — introduire `AGENTIC_AGENT_WORKSPACES_ROOT` (onboarding/runtime + defaults `rootless-dev`) pour isoler proprement les workspaces agents.
 
 Objectif :
 - traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).
