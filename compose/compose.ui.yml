@@ -83,7 +83,7 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openhands/state:/.openhands
       - ${AGENTIC_ROOT:-/srv/agentic}/openhands/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/openhands/workspaces:/workspace
+      - ${AGENTIC_OPENHANDS_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openhands/workspaces}:/workspace
     healthcheck:
       test:
         - CMD-SHELL

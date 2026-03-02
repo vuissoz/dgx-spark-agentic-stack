@@ -201,7 +201,7 @@ Primary CLI contract per baseline service:
 - Persistence:
   - `${AGENTIC_ROOT}/openhands/state`
   - `${AGENTIC_ROOT}/openhands/logs`
-  - `${AGENTIC_ROOT}/openhands/workspaces`
+  - `${AGENTIC_OPENHANDS_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/openhands/workspaces`)
 - Why it exists:
   - provides UI-driven agentic workflows while preserving the no-`docker.sock` policy.
 
@@ -372,7 +372,7 @@ Key implemented capabilities:
   - `agent vm cleanup [--name ... --yes --dry-run]`
 - profile and model store utilities:
   - `agent profile`
-  - `agent onboard [runtime flags...] [--agent-workspaces-root ... --claude-workspaces-dir ... --codex-workspaces-dir ... --opencode-workspaces-dir ... --vibestral-workspaces-dir ... --openwebui-admin-email ... --openwebui-admin-password ... --openwebui-allow-model-pull <true|false> --default-model ... --grafana-admin-user ... --grafana-admin-password ... --openhands-llm-model ... --allowlist-domains ... --optional-modules ... --output ... --non-interactive --require-complete]`
+  - `agent onboard [runtime flags...] [--agent-workspaces-root ... --claude-workspaces-dir ... --codex-workspaces-dir ... --opencode-workspaces-dir ... --vibestral-workspaces-dir ... --openhands-workspaces-dir ... --openwebui-admin-email ... --openwebui-admin-password ... --openwebui-allow-model-pull <true|false> --default-model ... --grafana-admin-user ... --grafana-admin-password ... --openhands-llm-model ... --allowlist-domains ... --optional-modules ... --output ... --non-interactive --require-complete]`
   - `agent ollama-link`
   - `agent ollama-preload ...`
   - `agent ollama-models [status|rw|ro]`

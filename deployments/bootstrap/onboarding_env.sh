@@ -13,6 +13,7 @@ claude_workspaces_dir_override=""
 codex_workspaces_dir_override=""
 opencode_workspaces_dir_override=""
 vibestral_workspaces_dir_override=""
+openhands_workspaces_dir_override=""
 compose_project_override=""
 network_override=""
 egress_network_override=""
@@ -75,6 +76,7 @@ Runtime options:
   --codex-workspaces-dir <path>
   --opencode-workspaces-dir <path>
   --vibestral-workspaces-dir <path>
+  --openhands-workspaces-dir <path>
   --compose-project <name>
   --network <name>
   --egress-network <name>
@@ -194,6 +196,11 @@ default_agent_workspace_dir_for_tool() {
   local agent_workspaces_root="$1"
   local tool="$2"
   printf '%s\n' "${agent_workspaces_root}/${tool}/workspaces"
+}
+
+default_openhands_workspaces_dir() {
+  local root_path="$1"
+  printf '%s\n' "${root_path}/openhands/workspaces"
 }
 
 default_compose_project_for_profile() {
@@ -1031,29 +1038,30 @@ write_env_file() {
   local codex_workspaces_dir="$5"
   local opencode_workspaces_dir="$6"
   local vibestral_workspaces_dir="$7"
-  local compose_project="$8"
-  local network="$9"
-  local egress_network="${10}"
-  local ollama_models="${11}"
-  local default_model="${12}"
-  local grafana_admin_user="${13}"
-  local grafana_admin_password="${14}"
-  local limits_default_cpus="${15}"
-  local limits_default_mem="${16}"
-  local limits_core_cpus="${17}"
-  local limits_core_mem="${18}"
-  local limits_ollama_mem="${19}"
-  local limits_agents_cpus="${20}"
-  local limits_agents_mem="${21}"
-  local limits_ui_cpus="${22}"
-  local limits_ui_mem="${23}"
-  local limits_obs_cpus="${24}"
-  local limits_obs_mem="${25}"
-  local limits_rag_cpus="${26}"
-  local limits_rag_mem="${27}"
-  local limits_optional_cpus="${28}"
-  local limits_optional_mem="${29}"
-  local out_file="${30}"
+  local openhands_workspaces_dir="$8"
+  local compose_project="$9"
+  local network="${10}"
+  local egress_network="${11}"
+  local ollama_models="${12}"
+  local default_model="${13}"
+  local grafana_admin_user="${14}"
+  local grafana_admin_password="${15}"
+  local limits_default_cpus="${16}"
+  local limits_default_mem="${17}"
+  local limits_core_cpus="${18}"
+  local limits_core_mem="${19}"
+  local limits_ollama_mem="${20}"
+  local limits_agents_cpus="${21}"
+  local limits_agents_mem="${22}"
+  local limits_ui_cpus="${23}"
+  local limits_ui_mem="${24}"
+  local limits_obs_cpus="${25}"
+  local limits_obs_mem="${26}"
+  local limits_rag_cpus="${27}"
+  local limits_rag_mem="${28}"
+  local limits_optional_cpus="${29}"
+  local limits_optional_mem="${30}"
+  local out_file="${31}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1070,6 +1078,7 @@ export AGENTIC_CLAUDE_WORKSPACES_DIR=$(shell_quote "${claude_workspaces_dir}")
 export AGENTIC_CODEX_WORKSPACES_DIR=$(shell_quote "${codex_workspaces_dir}")
 export AGENTIC_OPENCODE_WORKSPACES_DIR=$(shell_quote "${opencode_workspaces_dir}")
 export AGENTIC_VIBESTRAL_WORKSPACES_DIR=$(shell_quote "${vibestral_workspaces_dir}")
+export AGENTIC_OPENHANDS_WORKSPACES_DIR=$(shell_quote "${openhands_workspaces_dir}")
 export AGENTIC_COMPOSE_PROJECT=$(shell_quote "${compose_project}")
 export AGENTIC_NETWORK=$(shell_quote "${network}")
 export AGENTIC_EGRESS_NETWORK=$(shell_quote "${egress_network}")
@@ -1231,6 +1240,11 @@ while [[ $# -gt 0 ]]; do
     --vibestral-workspaces-dir)
       [[ $# -ge 2 ]] || die "missing value for --vibestral-workspaces-dir"
       vibestral_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --openhands-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --openhands-workspaces-dir"
+      openhands_workspaces_dir_override="$2"
       shift 2
       ;;
     --compose-project)
@@ -1485,6 +1499,7 @@ collect_path_value claude_workspaces_dir "AGENTIC_CLAUDE_WORKSPACES_DIR" "${prof
 collect_path_value codex_workspaces_dir "AGENTIC_CODEX_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "codex")" "${codex_workspaces_dir_override}" "AGENTIC_CODEX_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-codex."
 collect_path_value opencode_workspaces_dir "AGENTIC_OPENCODE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "opencode")" "${opencode_workspaces_dir_override}" "AGENTIC_OPENCODE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-opencode."
 collect_path_value vibestral_workspaces_dir "AGENTIC_VIBESTRAL_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "vibestral")" "${vibestral_workspaces_dir_override}" "AGENTIC_VIBESTRAL_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-vibestral."
+collect_path_value openhands_workspaces_dir "AGENTIC_OPENHANDS_WORKSPACES_DIR" "${profile}" "$(default_openhands_workspaces_dir "${root_path}")" "${openhands_workspaces_dir_override}" "AGENTIC_OPENHANDS_WORKSPACES_DIR controls the host path mounted as /workspace in openhands."
 
 collect_text_value compose_project "AGENTIC_COMPOSE_PROJECT" "${default_compose_project}" "${compose_project_override}" validate_compose_or_network_name "AGENTIC_COMPOSE_PROJECT is the docker compose project name used to namespace resources."
 collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_override}" validate_compose_or_network_name "AGENTIC_NETWORK is the private docker network for internal traffic."
@@ -1531,6 +1546,7 @@ write_env_file \
   "${codex_workspaces_dir}" \
   "${opencode_workspaces_dir}" \
   "${vibestral_workspaces_dir}" \
+  "${openhands_workspaces_dir}" \
   "${compose_project}" \
   "${network}" \
   "${egress_network}" \

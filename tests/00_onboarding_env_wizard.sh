@@ -37,6 +37,7 @@ run_override_answers() {
   local custom_codex_workspace="${work_dir}/custom-workspaces/codex"
   local custom_opencode_workspace="${work_dir}/custom-workspaces/opencode"
   local custom_vibestral_workspace="${work_dir}/custom-workspaces/vibestral"
+  local custom_openhands_workspace="${work_dir}/custom-workspaces/openhands"
   local custom_models="${work_dir}/custom-ollama-models"
   local custom_default_model="llama3.2:1b"
   local custom_compose="agentic-ci"
@@ -51,6 +52,7 @@ ${custom_claude_workspace}
 ${custom_codex_workspace}
 ${custom_opencode_workspace}
 ${custom_vibestral_workspace}
+${custom_openhands_workspace}
 ${custom_compose}
 ${custom_network}
 ${custom_egress_network}
@@ -109,7 +111,7 @@ EOF
 run_openclaw_secret_answers() {
   local openclaw_root="${work_dir}/openclaw-root"
 
-  if ! printf '\n\n\n\n\n\n\n\n\n' \
+  if ! printf '\n\n\n\n\n\n\n\n\n\n\n\n' \
     | AGENTIC_PROFILE=strict-prod "${wizard_script}" \
       --profile rootless-dev \
       --root "${openclaw_root}" \
@@ -183,6 +185,8 @@ grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='/srv/agentic/opencode/workspac
   || fail "default AGENTIC_OPENCODE_WORKSPACES_DIR is not /srv/agentic/opencode/workspaces"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='/srv/agentic/vibestral/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not /srv/agentic/vibestral/workspaces"
+grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='/srv/agentic/openhands/workspaces'$" "${default_env_file}" \
+  || fail "default AGENTIC_OPENHANDS_WORKSPACES_DIR is not /srv/agentic/openhands/workspaces"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic'$" "${default_env_file}" \
   || fail "default AGENTIC_COMPOSE_PROJECT is not agentic"
 grep -q "^export AGENTIC_NETWORK='agentic'$" "${default_env_file}" \
@@ -234,6 +238,8 @@ grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/custom-workspaces/
   || fail "override AGENTIC_OPENCODE_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/custom-workspaces/vibestral'$" "${override_env_file}" \
   || fail "override AGENTIC_VIBESTRAL_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/custom-workspaces/openhands'$" "${override_env_file}" \
+  || fail "override AGENTIC_OPENHANDS_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic-ci'$" "${override_env_file}" \
   || fail "override AGENTIC_COMPOSE_PROJECT is not applied"
 grep -q "^export AGENTIC_NETWORK='agentic-ci-net'$" "${override_env_file}" \
@@ -291,6 +297,8 @@ grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/rootless-default-r
   || fail "rootless default AGENTIC_OPENCODE_WORKSPACES_DIR is not <root>/agent-workspaces/opencode/workspaces"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/rootless-default-root/agent-workspaces/vibestral/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not <root>/agent-workspaces/vibestral/workspaces"
+grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/rootless-default-root/openhands/workspaces'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_OPENHANDS_WORKSPACES_DIR is not <root>/openhands/workspaces"
 grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${rootless_default_env_file}" \
@@ -318,6 +326,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --codex-workspaces-dir "${work_dir}/ni-workspaces/codex" \
   --opencode-workspaces-dir "${work_dir}/ni-workspaces/opencode" \
   --vibestral-workspaces-dir "${work_dir}/ni-workspaces/vibestral" \
+  --openhands-workspaces-dir "${work_dir}/ni-workspaces/openhands" \
   --compose-project agentic-ni \
   --network agentic-ni-net \
   --egress-network agentic-ni-egress \
@@ -358,6 +367,8 @@ grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/ni-workspaces/open
   || fail "non-interactive AGENTIC_OPENCODE_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/ni-workspaces/vibestral'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_VIBESTRAL_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/ni-workspaces/openhands'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_OPENHANDS_WORKSPACES_DIR is not applied"
 grep -q "^export GRAFANA_ADMIN_USER='grafana-admin'$" "${non_interactive_env_file}" \
   || fail "non-interactive GRAFANA_ADMIN_USER is not applied"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='grafana-strong-password'$" "${non_interactive_env_file}" \

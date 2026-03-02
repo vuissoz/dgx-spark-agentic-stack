@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
 AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
 AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
+AGENTIC_OPENHANDS_WORKSPACES_DIR="${AGENTIC_OPENHANDS_WORKSPACES_DIR:-${AGENTIC_ROOT}/openhands/workspaces}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/ui"
 
 log() {
@@ -131,7 +132,7 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/openhands/config"
   install -d -m 0770 "${AGENTIC_ROOT}/openhands/state"
   install -d -m 0770 "${AGENTIC_ROOT}/openhands/logs"
-  install -d -m 0770 "${AGENTIC_ROOT}/openhands/workspaces"
+  install -d -m 0770 "${AGENTIC_OPENHANDS_WORKSPACES_DIR}"
 
   install -d -m 0750 "${AGENTIC_ROOT}/comfyui"
   install -d -m 0770 "${AGENTIC_ROOT}/comfyui/models"
@@ -169,7 +170,7 @@ main() {
       "${AGENTIC_ROOT}/openhands/state" \
       "${AGENTIC_ROOT}/openhands/state/settings.json" \
       "${AGENTIC_ROOT}/openhands/logs" \
-      "${AGENTIC_ROOT}/openhands/workspaces" \
+      "${AGENTIC_OPENHANDS_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/comfyui/models" \
       "${AGENTIC_ROOT}/comfyui/input" \
       "${AGENTIC_ROOT}/comfyui/output" \
@@ -182,7 +183,7 @@ main() {
       "${AGENTIC_ROOT}/openwebui/static" \
       "${AGENTIC_ROOT}/openhands/state" \
       "${AGENTIC_ROOT}/openhands/logs" \
-      "${AGENTIC_ROOT}/openhands/workspaces" \
+      "${AGENTIC_OPENHANDS_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/comfyui/models" \
       "${AGENTIC_ROOT}/comfyui/input" \
       "${AGENTIC_ROOT}/comfyui/output" \

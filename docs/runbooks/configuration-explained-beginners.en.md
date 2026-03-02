@@ -197,6 +197,7 @@ Other useful operational variables:
 - `AGENTIC_CODEX_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-codex`)
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-opencode`)
 - `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-vibestral`)
+- `AGENTIC_OPENHANDS_WORKSPACES_DIR` (host path mounted to `/workspace` for `openhands`)
 - `AGENT_NO_ATTACH=1` (prepare tmux session without attaching)
 - `AGENTIC_DOCTOR_CRITICAL_PORTS` (comma list of ports for loopback checks)
 
