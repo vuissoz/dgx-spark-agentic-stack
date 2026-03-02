@@ -58,6 +58,8 @@ ngc.nvidia.com
 # ----------------------------------------------------------
 huggingface.co
 cdn-lfs.huggingface.co
+cas-server.xethub.hf.co
+transfer.xethub.hf.co
 
 ollama.ai
 registry.ollama.ai
