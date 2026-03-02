@@ -295,6 +295,10 @@ source .runtime/env.generated.sh
 ./agent profile
 ```
 
+During this wizard, set these two workspace-related values explicitly:
+- `AGENTIC_AGENT_WORKSPACES_ROOT` (host directory that backs `/workspace` in agent containers)
+- `AGENT_DEFAULT_PROJECT` (default folder under `/workspace` used by `./agent <tool>` when no project argument is provided)
+
 Example with explicit default local model:
 
 ```bash

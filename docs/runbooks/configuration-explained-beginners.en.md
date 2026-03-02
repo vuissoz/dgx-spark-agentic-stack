@@ -192,7 +192,8 @@ Common toggles (`0` or `1`):
 
 Other useful operational variables:
 - `AGENT_LOG_TAIL` (default `200` for `agent logs`)
-- `AGENT_PROJECT_NAME` (override auto project folder name for `agent <tool> [project]`)
+- `AGENT_DEFAULT_PROJECT` (default `default`; used by `agent <tool>` when no `<project>` arg is provided)
+- `AGENT_PROJECT_NAME` (one-shot override for the current shell invocation)
 - `AGENT_NO_ATTACH=1` (prepare tmux session without attaching)
 - `AGENTIC_DOCTOR_CRITICAL_PORTS` (comma list of ports for loopback checks)
 

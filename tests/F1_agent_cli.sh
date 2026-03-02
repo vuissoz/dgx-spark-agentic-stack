@@ -53,6 +53,16 @@ codex_path="$(timeout 20 docker exec "${codex_cid}" tmux display-message -p -t c
   || fail "agent codex tmux pane path mismatch (expected=/workspace/${codex_project}, actual=${codex_path})"
 ok "agent codex prepares tmux session and project workspace"
 
+default_project="$("${agent_bin}" profile | sed -n 's/^agent_default_project=//p')"
+[[ -n "${default_project}" ]] || fail "agent profile did not expose agent_default_project"
+env -u AGENT_PROJECT_NAME AGENT_NO_ATTACH=1 "${agent_bin}" codex >/tmp/agent-f1-codex-default.out
+timeout 20 docker exec "${codex_cid}" sh -lc "test -d '/workspace/${default_project}'" \
+  || fail "agent codex did not create default workspace /workspace/${default_project}"
+codex_default_path="$(timeout 20 docker exec "${codex_cid}" tmux display-message -p -t codex '#{pane_current_path}')"
+[[ "${codex_default_path}" == "/workspace/${default_project}" ]] \
+  || fail "agent codex default project path mismatch (expected=/workspace/${default_project}, actual=${codex_default_path})"
+ok "agent codex no-arg mode uses AGENT_DEFAULT_PROJECT"
+
 vibestral_project="f1-vibestral-${USER:-agent}-$$"
 AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${vibestral_project}" "${agent_bin}" vibestral >/tmp/agent-f1-vibestral.out
 

@@ -96,8 +96,9 @@ Effet:
 
 Le nom est detecte automatiquement (ordre):
 1. `AGENT_PROJECT_NAME` si defini,
-2. nom du repo git courant,
-3. sinon nom du dossier courant.
+2. `AGENT_DEFAULT_PROJECT` (par defaut `default`),
+3. nom du repo git courant,
+4. sinon nom du dossier courant.
 
 Le nom auto-detecte est nettoye (espaces/caracteres speciaux remplaces par `-`).
 

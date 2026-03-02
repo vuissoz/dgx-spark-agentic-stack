@@ -9,6 +9,7 @@ source "${REPO_ROOT}/scripts/lib/runtime.sh"
 profile_override=""
 root_override=""
 agent_workspaces_root_override=""
+agent_default_project_override=""
 compose_project_override=""
 network_override=""
 egress_network_override=""
@@ -67,6 +68,7 @@ Runtime options:
   --profile <strict-prod|rootless-dev>
   --root <path>
   --agent-workspaces-root <path>
+  --agent-default-project <name>
   --compose-project <name>
   --network <name>
   --egress-network <name>
@@ -180,6 +182,11 @@ default_agent_workspaces_root_for_profile() {
   else
     printf '%s\n' "${root_path}"
   fi
+}
+
+default_agent_project_for_profile() {
+  local _profile="$1"
+  printf '%s\n' "default"
 }
 
 default_compose_project_for_profile() {
@@ -344,6 +351,23 @@ validate_compose_or_network_name() {
   }
   [[ "${value}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || {
     echo "${key} must match [a-zA-Z0-9][a-zA-Z0-9_.-]*" >&2
+    return 1
+  }
+}
+
+validate_project_dir_name() {
+  local key="$1"
+  local value="$2"
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+  [[ "${value}" != *$'\n'* ]] || {
+    echo "${key} must be a single-line value" >&2
+    return 1
+  }
+  [[ "${value}" =~ ^[a-zA-Z0-9._-]+$ ]] || {
+    echo "${key} must match [a-zA-Z0-9._-]+ (no slashes/spaces)" >&2
     return 1
   }
 }
@@ -1013,29 +1037,30 @@ write_env_file() {
   local profile="$1"
   local root_path="$2"
   local agent_workspaces_root="$3"
-  local compose_project="$4"
-  local network="$5"
-  local egress_network="$6"
-  local ollama_models="$7"
-  local default_model="$8"
-  local grafana_admin_user="$9"
-  local grafana_admin_password="${10}"
-  local limits_default_cpus="${11}"
-  local limits_default_mem="${12}"
-  local limits_core_cpus="${13}"
-  local limits_core_mem="${14}"
-  local limits_ollama_mem="${15}"
-  local limits_agents_cpus="${16}"
-  local limits_agents_mem="${17}"
-  local limits_ui_cpus="${18}"
-  local limits_ui_mem="${19}"
-  local limits_obs_cpus="${20}"
-  local limits_obs_mem="${21}"
-  local limits_rag_cpus="${22}"
-  local limits_rag_mem="${23}"
-  local limits_optional_cpus="${24}"
-  local limits_optional_mem="${25}"
-  local out_file="${26}"
+  local agent_default_project="$4"
+  local compose_project="$5"
+  local network="$6"
+  local egress_network="$7"
+  local ollama_models="$8"
+  local default_model="$9"
+  local grafana_admin_user="${10}"
+  local grafana_admin_password="${11}"
+  local limits_default_cpus="${12}"
+  local limits_default_mem="${13}"
+  local limits_core_cpus="${14}"
+  local limits_core_mem="${15}"
+  local limits_ollama_mem="${16}"
+  local limits_agents_cpus="${17}"
+  local limits_agents_mem="${18}"
+  local limits_ui_cpus="${19}"
+  local limits_ui_mem="${20}"
+  local limits_obs_cpus="${21}"
+  local limits_obs_mem="${22}"
+  local limits_rag_cpus="${23}"
+  local limits_rag_mem="${24}"
+  local limits_optional_cpus="${25}"
+  local limits_optional_mem="${26}"
+  local out_file="${27}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1048,6 +1073,7 @@ write_env_file() {
 export AGENTIC_PROFILE=$(shell_quote "${profile}")
 export AGENTIC_ROOT=$(shell_quote "${root_path}")
 export AGENTIC_AGENT_WORKSPACES_ROOT=$(shell_quote "${agent_workspaces_root}")
+export AGENT_DEFAULT_PROJECT=$(shell_quote "${agent_default_project}")
 export AGENTIC_COMPOSE_PROJECT=$(shell_quote "${compose_project}")
 export AGENTIC_NETWORK=$(shell_quote "${network}")
 export AGENTIC_EGRESS_NETWORK=$(shell_quote "${egress_network}")
@@ -1189,6 +1215,11 @@ while [[ $# -gt 0 ]]; do
     --agent-workspaces-root)
       [[ $# -ge 2 ]] || die "missing value for --agent-workspaces-root"
       agent_workspaces_root_override="$2"
+      shift 2
+      ;;
+    --agent-default-project)
+      [[ $# -ge 2 ]] || die "missing value for --agent-default-project"
+      agent_default_project_override="$2"
       shift 2
       ;;
     --compose-project)
@@ -1439,6 +1470,7 @@ else
 fi
 
 collect_path_value agent_workspaces_root "AGENTIC_AGENT_WORKSPACES_ROOT" "${profile}" "$(default_agent_workspaces_root_for_profile "${profile}" "${root_path}")" "${agent_workspaces_root_override}" "AGENTIC_AGENT_WORKSPACES_ROOT controls where per-agent /workspace host folders are stored."
+collect_text_value agent_default_project "AGENT_DEFAULT_PROJECT" "$(default_agent_project_for_profile "${profile}")" "${agent_default_project_override}" validate_project_dir_name "AGENT_DEFAULT_PROJECT is the default folder name created under /workspace when running 'agent <tool>' without an explicit <project>."
 
 collect_text_value compose_project "AGENTIC_COMPOSE_PROJECT" "${default_compose_project}" "${compose_project_override}" validate_compose_or_network_name "AGENTIC_COMPOSE_PROJECT is the docker compose project name used to namespace resources."
 collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_override}" validate_compose_or_network_name "AGENTIC_NETWORK is the private docker network for internal traffic."
@@ -1481,6 +1513,7 @@ write_env_file \
   "${profile}" \
   "${root_path}" \
   "${agent_workspaces_root}" \
+  "${agent_default_project}" \
   "${compose_project}" \
   "${network}" \
   "${egress_network}" \

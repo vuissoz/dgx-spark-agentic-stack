@@ -72,6 +72,8 @@ grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}
   || fail "full setup onboarding env must export OLLAMA_PRELOAD_GENERATE_MODEL"
 grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${root_dir}/agent-workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export rootless default AGENTIC_AGENT_WORKSPACES_ROOT"
+grep -q "^export AGENT_DEFAULT_PROJECT='default'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENT_DEFAULT_PROJECT"
 grep -q "^export GRAFANA_ADMIN_USER='${grafana_admin_user}'$" "${env_file}" \
   || fail "full setup onboarding env must export GRAFANA_ADMIN_USER"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='${grafana_admin_password}'$" "${env_file}" \
