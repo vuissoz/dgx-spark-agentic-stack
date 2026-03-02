@@ -1739,6 +1739,7 @@ fi
 openai_api_key="${openai_api_key_override:-}"
 openrouter_api_key="${openrouter_api_key_override:-}"
 optional_modules_raw="${optional_modules_override:-none}"
+optional_modules_list=()
 openclaw_token="${openclaw_token_override:-}"
 openclaw_webhook_secret="${openclaw_webhook_secret_override:-}"
 mcp_token="${mcp_token_override:-}"
@@ -1775,7 +1776,8 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
   if [[ "${normalized_modules}" == "none" ]]; then
     :
   else
-    while IFS= read -r module; do
+    mapfile -t optional_modules_list < <(printf '%s\n' "${normalized_modules}")
+    for module in "${optional_modules_list[@]}"; do
       [[ -n "${module}" ]] || continue
       summary_add_module "${module}"
       case "${module}" in
@@ -1823,7 +1825,7 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
         pi-mono|goose|portainer)
           ;;
       esac
-    done <<<"${normalized_modules}"
+    done
   fi
 
   if [[ "${root_is_writable}" -ne 1 ]]; then
@@ -1841,11 +1843,11 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     write_secret_file "${root_path}" "openclaw.webhook_secret" "${openclaw_webhook_secret}" || true
     write_secret_file "${root_path}" "mcp.token" "${mcp_token}" || true
 
-    if [[ "${normalized_modules}" != "none" ]]; then
-      while IFS= read -r module; do
+    if [[ "${#optional_modules_list[@]}" -gt 0 ]]; then
+      for module in "${optional_modules_list[@]}"; do
         [[ -n "${module}" && "${module}" != "none" ]] || continue
         ensure_optional_request_file "${root_path}" "${module}" || true
-      done <<<"${normalized_modules}"
+      done
     fi
   fi
 else

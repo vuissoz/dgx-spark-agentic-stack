@@ -16,6 +16,8 @@ default_log="${work_dir}/default.log"
 override_log="${work_dir}/override.log"
 non_interactive_env_file="${work_dir}/non-interactive.env.generated.sh"
 rootless_default_env_file="${work_dir}/rootless-default.env.generated.sh"
+openclaw_env_file="${work_dir}/openclaw-secrets.env.generated.sh"
+openclaw_log="${work_dir}/openclaw-secrets.log"
 
 trap 'rm -rf "${work_dir}"' EXIT
 mkdir -p "${work_dir}"
@@ -93,6 +95,45 @@ EOF
   then
     cat "${override_log}" >&2 || true
     fail "wizard failed with overridden answers"
+  fi
+}
+
+run_openclaw_secret_answers() {
+  local openclaw_root="${work_dir}/openclaw-root"
+
+  if ! printf '\n\n\n\n\n' \
+    | AGENTIC_PROFILE=strict-prod "${wizard_script}" \
+      --profile rootless-dev \
+      --root "${openclaw_root}" \
+      --agent-workspaces-root "${work_dir}/openclaw-workspaces" \
+      --compose-project agentic-openclaw \
+      --network agentic-openclaw-net \
+      --egress-network agentic-openclaw-egress \
+      --ollama-models-dir "${work_dir}/openclaw-models" \
+      --default-model llama3.1:8b \
+      --grafana-admin-user admin \
+      --grafana-admin-password replace-with-strong-password \
+      --limits-default-cpus 0.60 \
+      --limits-default-mem 768m \
+      --limits-core-cpus 1.20 \
+      --limits-core-mem 2g \
+      --limits-ollama-mem 2g \
+      --limits-agents-cpus 0.70 \
+      --limits-agents-mem 1g \
+      --limits-ui-cpus 0.80 \
+      --limits-ui-mem 1g \
+      --limits-obs-cpus 0.55 \
+      --limits-obs-mem 768m \
+      --limits-rag-cpus 0.90 \
+      --limits-rag-mem 1g \
+      --limits-optional-cpus 0.40 \
+      --limits-optional-mem 512m \
+      --skip-ui-bootstrap \
+      --skip-network-bootstrap \
+      --optional-modules openclaw \
+      --output "${openclaw_env_file}" >"${openclaw_log}" 2>&1; then
+    cat "${openclaw_log}" >&2 || true
+    fail "wizard failed during openclaw secret bootstrap"
   fi
 }
 
@@ -223,6 +264,18 @@ grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${rootless_default_env_f
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${rootless_default_env_file}" \
   || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be True"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
+
+run_openclaw_secret_answers
+assert_generated_file_baseline "${openclaw_env_file}"
+openclaw_token_file="${work_dir}/openclaw-root/secrets/runtime/openclaw.token"
+openclaw_webhook_secret_file="${work_dir}/openclaw-root/secrets/runtime/openclaw.webhook_secret"
+[[ -s "${openclaw_token_file}" ]] \
+  || fail "openclaw token file must be generated when optional module openclaw is selected"
+[[ -s "${openclaw_webhook_secret_file}" ]] \
+  || fail "openclaw webhook secret file must be generated when optional module openclaw is selected"
+grep -q "ERROR: input aborted" "${openclaw_log}" \
+  && fail "openclaw secret bootstrap should not abort input in interactive mode"
+ok "wizard openclaw secret bootstrap works with interactive stdin"
 
 if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --non-interactive \
