@@ -72,8 +72,14 @@ grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}
   || fail "full setup onboarding env must export OLLAMA_PRELOAD_GENERATE_MODEL"
 grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${root_dir}/agent-workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export rootless default AGENTIC_AGENT_WORKSPACES_ROOT"
-grep -q "^export AGENT_DEFAULT_PROJECT='default'$" "${env_file}" \
-  || fail "full setup onboarding env must export AGENT_DEFAULT_PROJECT"
+grep -q "^export AGENTIC_CLAUDE_WORKSPACES_DIR='${root_dir}/agent-workspaces/claude/workspaces'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_CLAUDE_WORKSPACES_DIR"
+grep -q "^export AGENTIC_CODEX_WORKSPACES_DIR='${root_dir}/agent-workspaces/codex/workspaces'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_CODEX_WORKSPACES_DIR"
+grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${root_dir}/agent-workspaces/opencode/workspaces'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_OPENCODE_WORKSPACES_DIR"
+grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${root_dir}/agent-workspaces/vibestral/workspaces'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_VIBESTRAL_WORKSPACES_DIR"
 grep -q "^export GRAFANA_ADMIN_USER='${grafana_admin_user}'$" "${env_file}" \
   || fail "full setup onboarding env must export GRAFANA_ADMIN_USER"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='${grafana_admin_password}'$" "${env_file}" \

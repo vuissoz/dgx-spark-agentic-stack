@@ -297,7 +297,7 @@ source .runtime/env.generated.sh
 
 During this wizard, set these two workspace-related values explicitly:
 - `AGENTIC_AGENT_WORKSPACES_ROOT` (host directory that backs `/workspace` in agent containers)
-- `AGENT_DEFAULT_PROJECT` (default folder under `/workspace` used by `./agent <tool>` when no project argument is provided)
+- `AGENTIC_CLAUDE_WORKSPACES_DIR`, `AGENTIC_CODEX_WORKSPACES_DIR`, `AGENTIC_OPENCODE_WORKSPACES_DIR`, `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (one host directory per agent container mounted to `/workspace`)
 
 Example with explicit default local model:
 

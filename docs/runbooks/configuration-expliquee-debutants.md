@@ -188,8 +188,11 @@ Toggles frequents (`0` ou `1`):
 
 Autres variables utiles:
 - `AGENT_LOG_TAIL` (defaut `200`)
-- `AGENT_DEFAULT_PROJECT` (defaut `default`; utilise par `agent <tool>` sans argument `<project>`)
 - `AGENT_PROJECT_NAME` (override ponctuel pour l'invocation courante)
+- `AGENTIC_CLAUDE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-claude`)
+- `AGENTIC_CODEX_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-codex`)
+- `AGENTIC_OPENCODE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-opencode`)
+- `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-vibestral`)
 - `AGENT_NO_ATTACH=1`
 - `AGENTIC_DOCTOR_CRITICAL_PORTS`
 

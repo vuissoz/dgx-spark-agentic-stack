@@ -192,8 +192,11 @@ Common toggles (`0` or `1`):
 
 Other useful operational variables:
 - `AGENT_LOG_TAIL` (default `200` for `agent logs`)
-- `AGENT_DEFAULT_PROJECT` (default `default`; used by `agent <tool>` when no `<project>` arg is provided)
 - `AGENT_PROJECT_NAME` (one-shot override for the current shell invocation)
+- `AGENTIC_CLAUDE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-claude`)
+- `AGENTIC_CODEX_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-codex`)
+- `AGENTIC_OPENCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-opencode`)
+- `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-vibestral`)
 - `AGENT_NO_ATTACH=1` (prepare tmux session without attaching)
 - `AGENTIC_DOCTOR_CRITICAL_PORTS` (comma list of ports for loopback checks)
 

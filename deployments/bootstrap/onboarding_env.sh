@@ -9,7 +9,10 @@ source "${REPO_ROOT}/scripts/lib/runtime.sh"
 profile_override=""
 root_override=""
 agent_workspaces_root_override=""
-agent_default_project_override=""
+claude_workspaces_dir_override=""
+codex_workspaces_dir_override=""
+opencode_workspaces_dir_override=""
+vibestral_workspaces_dir_override=""
 compose_project_override=""
 network_override=""
 egress_network_override=""
@@ -68,7 +71,10 @@ Runtime options:
   --profile <strict-prod|rootless-dev>
   --root <path>
   --agent-workspaces-root <path>
-  --agent-default-project <name>
+  --claude-workspaces-dir <path>
+  --codex-workspaces-dir <path>
+  --opencode-workspaces-dir <path>
+  --vibestral-workspaces-dir <path>
   --compose-project <name>
   --network <name>
   --egress-network <name>
@@ -184,9 +190,10 @@ default_agent_workspaces_root_for_profile() {
   fi
 }
 
-default_agent_project_for_profile() {
-  local _profile="$1"
-  printf '%s\n' "default"
+default_agent_workspace_dir_for_tool() {
+  local agent_workspaces_root="$1"
+  local tool="$2"
+  printf '%s\n' "${agent_workspaces_root}/${tool}/workspaces"
 }
 
 default_compose_project_for_profile() {
@@ -351,23 +358,6 @@ validate_compose_or_network_name() {
   }
   [[ "${value}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || {
     echo "${key} must match [a-zA-Z0-9][a-zA-Z0-9_.-]*" >&2
-    return 1
-  }
-}
-
-validate_project_dir_name() {
-  local key="$1"
-  local value="$2"
-  [[ -n "${value}" ]] || {
-    echo "${key} cannot be empty" >&2
-    return 1
-  }
-  [[ "${value}" != *$'\n'* ]] || {
-    echo "${key} must be a single-line value" >&2
-    return 1
-  }
-  [[ "${value}" =~ ^[a-zA-Z0-9._-]+$ ]] || {
-    echo "${key} must match [a-zA-Z0-9._-]+ (no slashes/spaces)" >&2
     return 1
   }
 }
@@ -1037,30 +1027,33 @@ write_env_file() {
   local profile="$1"
   local root_path="$2"
   local agent_workspaces_root="$3"
-  local agent_default_project="$4"
-  local compose_project="$5"
-  local network="$6"
-  local egress_network="$7"
-  local ollama_models="$8"
-  local default_model="$9"
-  local grafana_admin_user="${10}"
-  local grafana_admin_password="${11}"
-  local limits_default_cpus="${12}"
-  local limits_default_mem="${13}"
-  local limits_core_cpus="${14}"
-  local limits_core_mem="${15}"
-  local limits_ollama_mem="${16}"
-  local limits_agents_cpus="${17}"
-  local limits_agents_mem="${18}"
-  local limits_ui_cpus="${19}"
-  local limits_ui_mem="${20}"
-  local limits_obs_cpus="${21}"
-  local limits_obs_mem="${22}"
-  local limits_rag_cpus="${23}"
-  local limits_rag_mem="${24}"
-  local limits_optional_cpus="${25}"
-  local limits_optional_mem="${26}"
-  local out_file="${27}"
+  local claude_workspaces_dir="$4"
+  local codex_workspaces_dir="$5"
+  local opencode_workspaces_dir="$6"
+  local vibestral_workspaces_dir="$7"
+  local compose_project="$8"
+  local network="$9"
+  local egress_network="${10}"
+  local ollama_models="${11}"
+  local default_model="${12}"
+  local grafana_admin_user="${13}"
+  local grafana_admin_password="${14}"
+  local limits_default_cpus="${15}"
+  local limits_default_mem="${16}"
+  local limits_core_cpus="${17}"
+  local limits_core_mem="${18}"
+  local limits_ollama_mem="${19}"
+  local limits_agents_cpus="${20}"
+  local limits_agents_mem="${21}"
+  local limits_ui_cpus="${22}"
+  local limits_ui_mem="${23}"
+  local limits_obs_cpus="${24}"
+  local limits_obs_mem="${25}"
+  local limits_rag_cpus="${26}"
+  local limits_rag_mem="${27}"
+  local limits_optional_cpus="${28}"
+  local limits_optional_mem="${29}"
+  local out_file="${30}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1073,7 +1066,10 @@ write_env_file() {
 export AGENTIC_PROFILE=$(shell_quote "${profile}")
 export AGENTIC_ROOT=$(shell_quote "${root_path}")
 export AGENTIC_AGENT_WORKSPACES_ROOT=$(shell_quote "${agent_workspaces_root}")
-export AGENT_DEFAULT_PROJECT=$(shell_quote "${agent_default_project}")
+export AGENTIC_CLAUDE_WORKSPACES_DIR=$(shell_quote "${claude_workspaces_dir}")
+export AGENTIC_CODEX_WORKSPACES_DIR=$(shell_quote "${codex_workspaces_dir}")
+export AGENTIC_OPENCODE_WORKSPACES_DIR=$(shell_quote "${opencode_workspaces_dir}")
+export AGENTIC_VIBESTRAL_WORKSPACES_DIR=$(shell_quote "${vibestral_workspaces_dir}")
 export AGENTIC_COMPOSE_PROJECT=$(shell_quote "${compose_project}")
 export AGENTIC_NETWORK=$(shell_quote "${network}")
 export AGENTIC_EGRESS_NETWORK=$(shell_quote "${egress_network}")
@@ -1217,9 +1213,24 @@ while [[ $# -gt 0 ]]; do
       agent_workspaces_root_override="$2"
       shift 2
       ;;
-    --agent-default-project)
-      [[ $# -ge 2 ]] || die "missing value for --agent-default-project"
-      agent_default_project_override="$2"
+    --claude-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --claude-workspaces-dir"
+      claude_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --codex-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --codex-workspaces-dir"
+      codex_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --opencode-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --opencode-workspaces-dir"
+      opencode_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --vibestral-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --vibestral-workspaces-dir"
+      vibestral_workspaces_dir_override="$2"
       shift 2
       ;;
     --compose-project)
@@ -1470,7 +1481,10 @@ else
 fi
 
 collect_path_value agent_workspaces_root "AGENTIC_AGENT_WORKSPACES_ROOT" "${profile}" "$(default_agent_workspaces_root_for_profile "${profile}" "${root_path}")" "${agent_workspaces_root_override}" "AGENTIC_AGENT_WORKSPACES_ROOT controls where per-agent /workspace host folders are stored."
-collect_text_value agent_default_project "AGENT_DEFAULT_PROJECT" "$(default_agent_project_for_profile "${profile}")" "${agent_default_project_override}" validate_project_dir_name "AGENT_DEFAULT_PROJECT is the default folder name created under /workspace when running 'agent <tool>' without an explicit <project>."
+collect_path_value claude_workspaces_dir "AGENTIC_CLAUDE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "claude")" "${claude_workspaces_dir_override}" "AGENTIC_CLAUDE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-claude."
+collect_path_value codex_workspaces_dir "AGENTIC_CODEX_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "codex")" "${codex_workspaces_dir_override}" "AGENTIC_CODEX_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-codex."
+collect_path_value opencode_workspaces_dir "AGENTIC_OPENCODE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "opencode")" "${opencode_workspaces_dir_override}" "AGENTIC_OPENCODE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-opencode."
+collect_path_value vibestral_workspaces_dir "AGENTIC_VIBESTRAL_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "vibestral")" "${vibestral_workspaces_dir_override}" "AGENTIC_VIBESTRAL_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-vibestral."
 
 collect_text_value compose_project "AGENTIC_COMPOSE_PROJECT" "${default_compose_project}" "${compose_project_override}" validate_compose_or_network_name "AGENTIC_COMPOSE_PROJECT is the docker compose project name used to namespace resources."
 collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_override}" validate_compose_or_network_name "AGENTIC_NETWORK is the private docker network for internal traffic."
@@ -1513,7 +1527,10 @@ write_env_file \
   "${profile}" \
   "${root_path}" \
   "${agent_workspaces_root}" \
-  "${agent_default_project}" \
+  "${claude_workspaces_dir}" \
+  "${codex_workspaces_dir}" \
+  "${opencode_workspaces_dir}" \
+  "${vibestral_workspaces_dir}" \
   "${compose_project}" \
   "${network}" \
   "${egress_network}" \

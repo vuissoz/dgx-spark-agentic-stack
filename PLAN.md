@@ -107,7 +107,10 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `AGENTIC_PROFILE` (`strict-prod` par défaut, `rootless-dev` proposé pour dev local),
   - `AGENTIC_ROOT`,
   - `AGENTIC_AGENT_WORKSPACES_ROOT`,
-  - `AGENT_DEFAULT_PROJECT` (nom de dossier par défaut sous `/workspace` pour `agent <tool>` sans argument),
+  - `AGENTIC_CLAUDE_WORKSPACES_DIR`,
+  - `AGENTIC_CODEX_WORKSPACES_DIR`,
+  - `AGENTIC_OPENCODE_WORKSPACES_DIR`,
+  - `AGENTIC_VIBESTRAL_WORKSPACES_DIR`,
   - `AGENTIC_COMPOSE_PROJECT`,
   - `AGENTIC_NETWORK`,
   - `AGENTIC_EGRESS_NETWORK`,
@@ -1156,7 +1159,7 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-0p4` — `agent ollama-preload` doit préserver le mode de mount initial (`rw`/`ro`) pour éviter les recreates inutiles et les changements d’état inattendus.
 - `dgx-spark-agentic-stack-2ld` — enrichir `/v1/models` dans `ollama-gate` avec des métadonnées de modèles non sensibles (issues des backends, notamment Ollama `/api/tags`) pour améliorer l’interopérabilité client.
 - `dgx-spark-agentic-stack-41m` — introduire `AGENTIC_AGENT_WORKSPACES_ROOT` (onboarding/runtime + defaults `rootless-dev`) pour isoler proprement les workspaces agents.
-- `dgx-spark-agentic-stack-3oq` — découpler le projet workspace par défaut des agents du nom de repo courant (`AGENT_DEFAULT_PROJECT` + prompt onboarding) pour éviter la confusion avec `/home/.../wkdir/...`.
+- `dgx-spark-agentic-stack-zs0` — onboarding/runtime : ajouter des chemins persistants `/workspace` dédiés par agent (`AGENTIC_{CLAUDE,CODEX,OPENCODE,VIBESTRAL}_WORKSPACES_DIR`) pour montage explicite conteneur par conteneur.
 
 Objectif :
 - traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).
