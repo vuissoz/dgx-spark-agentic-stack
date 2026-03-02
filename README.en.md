@@ -366,6 +366,7 @@ Default-model e2e probe (Ollama, gate, agents, OpenWebUI, OpenHands):
 
 ```bash
 bash tests/L5_default_model_e2e.sh
+bash tests/L6_codex_model_catalog.sh
 ```
 
 ## External LLM Routing (D5)

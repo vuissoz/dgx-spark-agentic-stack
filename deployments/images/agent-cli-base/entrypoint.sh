@@ -22,6 +22,18 @@ log() {
   printf '%s\n' "$*"
 }
 
+write_if_changed() {
+  local target_path="$1"
+  local source_path="$2"
+
+  if [[ -f "${target_path}" ]] && cmp -s "${source_path}" "${target_path}"; then
+    rm -f "${source_path}"
+    return 0
+  fi
+
+  mv "${source_path}" "${target_path}"
+}
+
 bootstrap_shell_home() {
   local bash_profile="${agent_home}/.bash_profile"
   local bashrc="${agent_home}/.bashrc"
@@ -99,22 +111,134 @@ EOF
 bootstrap_codex_config() {
   [[ "${tool}" == "codex" ]] || return 0
 
+  local codex_bootstrap_dir="${state_dir}/bootstrap"
+  local codex_catalog="${AGENT_CODEX_MODEL_CATALOG_FILE:-${codex_bootstrap_dir}/codex-model-catalog.json}"
   local codex_config="${agent_home}/.codex/config.toml"
-  if [[ -f "${codex_config}" ]]; then
-    return 0
-  fi
+  local default_model="${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}"
+  local gate_base_url="${AGENTIC_OLLAMA_GATE_BASE_URL:-http://ollama-gate:11435}"
+  local codex_base_instructions
+  local tmp_catalog
+  local tmp_existing
+  local tmp_filtered
+  local tmp_config
 
-  cat >"${codex_config}" <<EOF
-model = "${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}"
+  codex_base_instructions="$(cat <<'EOF'
+You are Codex, a coding agent running in the Codex CLI on a user's machine.
+
+Focus on practical software engineering work: understand the request, inspect the codebase, apply targeted changes, and verify outcomes.
+
+Be concise, factual, and collaborative. Explain tradeoffs only when they matter.
+
+Prefer safe, reversible actions. Avoid destructive operations unless explicitly requested.
+EOF
+)"
+
+  mkdir -p "${codex_bootstrap_dir}"
+  tmp_catalog="$(mktemp)"
+  python3 - "${default_model}" "${codex_base_instructions}" >"${tmp_catalog}" <<'PY'
+import json
+import sys
+
+model = sys.argv[1]
+base_instructions = sys.argv[2]
+
+catalog = {
+    "models": [
+        {
+            "slug": model,
+            "display_name": model,
+            "description": "Local Ollama model via ollama-gate",
+            "default_reasoning_level": "medium",
+            "supported_reasoning_levels": [
+                {"effort": "low", "description": "Fast responses with lighter reasoning"},
+                {"effort": "medium", "description": "Balanced speed and reasoning"},
+                {"effort": "high", "description": "Deeper reasoning for complex tasks"},
+            ],
+            "shell_type": "shell_command",
+            "visibility": "list",
+            "supported_in_api": True,
+            "priority": 1,
+            "availability_nux": None,
+            "upgrade": None,
+            "base_instructions": base_instructions,
+            "model_messages": None,
+            "supports_reasoning_summaries": False,
+            "default_reasoning_summary": "auto",
+            "support_verbosity": False,
+            "default_verbosity": None,
+            "apply_patch_tool_type": "freeform",
+            "truncation_policy": {"mode": "bytes", "limit": 10000},
+            "supports_parallel_tool_calls": False,
+            "context_window": 272000,
+            "auto_compact_token_limit": None,
+            "effective_context_window_percent": 95,
+            "experimental_supported_tools": [],
+            "input_modalities": ["text", "image"],
+            "prefer_websockets": False,
+        }
+    ]
+}
+
+json.dump(catalog, sys.stdout, indent=2)
+sys.stdout.write("\n")
+PY
+  write_if_changed "${codex_catalog}" "${tmp_catalog}"
+  chmod 0600 "${codex_catalog}" || true
+
+  tmp_config="$(mktemp)"
+  {
+    cat <<EOF
+# Managed by agent-entrypoint (codex local provider defaults)
+model = "${default_model}"
 model_provider = "ollama_gate"
+model_catalog_json = "${codex_catalog}"
 
 [model_providers.ollama_gate]
 name = "ollama-gate"
-base_url = "${AGENTIC_OLLAMA_GATE_BASE_URL:-http://ollama-gate:11435}"
+base_url = "${gate_base_url}"
 wire_api = "responses"
 EOF
+  } >"${tmp_config}"
+
+  if [[ -f "${codex_config}" ]]; then
+    tmp_existing="$(mktemp)"
+    tmp_filtered="$(mktemp)"
+    cp "${codex_config}" "${tmp_existing}"
+    awk '
+      BEGIN { in_provider_section = 0 }
+      {
+        if (in_provider_section == 1) {
+          if ($0 ~ /^[[:space:]]*\[/) {
+            in_provider_section = 0
+          } else {
+            next
+          }
+        }
+
+        if ($0 ~ /^[[:space:]]*model[[:space:]]*=/) next
+        if ($0 ~ /^[[:space:]]*model_provider[[:space:]]*=/) next
+        if ($0 ~ /^[[:space:]]*model_catalog_json[[:space:]]*=/) next
+        if ($0 ~ /^[[:space:]]*\[model_providers\.ollama_gate\][[:space:]]*$/) {
+          in_provider_section = 1
+          next
+        }
+
+        print
+      }
+    ' "${tmp_existing}" >"${tmp_filtered}"
+    rm -f "${tmp_existing}"
+
+    if [[ -s "${tmp_filtered}" ]]; then
+      printf '\n' >>"${tmp_config}"
+      cat "${tmp_filtered}" >>"${tmp_config}"
+    fi
+    rm -f "${tmp_filtered}"
+  fi
+
+  write_if_changed "${codex_config}" "${tmp_config}"
   chmod 0600 "${codex_config}" || true
-  log "INFO: created codex defaults config (${codex_config})"
+  log "INFO: codex defaults config reconciled (${codex_config})"
+  log "INFO: codex model catalog reconciled (${codex_catalog})"
 }
 
 bootstrap_vibestral_config() {

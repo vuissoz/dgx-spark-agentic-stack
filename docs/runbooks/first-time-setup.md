@@ -500,6 +500,7 @@ Then run the dedicated default-model e2e probe:
 
 ```bash
 bash tests/L5_default_model_e2e.sh
+bash tests/L6_codex_model_catalog.sh
 ```
 
 This validates that the configured default model is present in Ollama and responds to `hello` from:
@@ -508,6 +509,11 @@ This validates that the configured default model is present in Ollama and respon
 - `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
 - `openwebui`
 - `openhands`
+
+`L6` additionally validates Codex-specific bootstrap correctness:
+- `~/.codex/config.toml` contains managed `model_catalog_json` for the local default model,
+- catalog includes `AGENTIC_DEFAULT_MODEL`,
+- `codex exec` runs without `fallback model metadata` warning.
 
 ## 9. First Access
 
