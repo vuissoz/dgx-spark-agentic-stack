@@ -158,6 +158,12 @@ sudo ./agent up agents,ui,obs,rag
 sudo ./agent doctor
 ```
 
+Equivalent one-shot command:
+
+```bash
+sudo -E ./agent first-up
+```
+
 Nettoyage du runtime `strict-prod` (retour état "fresh"):
 
 ```bash
@@ -175,6 +181,12 @@ export AGENTIC_PROFILE=rootless-dev
 ./agent up core
 ./agent up agents,ui,obs,rag
 ./agent doctor
+```
+
+Equivalent one-shot command:
+
+```bash
+./agent first-up
 ```
 
 Nettoyage du runtime `rootless-dev` (retour état "fresh"):
@@ -273,6 +285,7 @@ Commandes supportées:
 ```text
 agent [strict-prod|rootless-dev] <commande ...>
 agent profile
+agent first-up [--env-file <path>] [--no-env] [--dry-run]
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
 agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
@@ -314,6 +327,7 @@ Exemples:
 ```bash
 ./agent up core
 ./agent up agents,ui
+./agent first-up
 ./agent codex my-project
 ./agent logs ollama
 ./agent stop codex

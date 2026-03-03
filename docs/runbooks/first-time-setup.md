@@ -54,12 +54,24 @@ docker ps -a --filter "label=com.docker.compose.project=$(./agent profile | sed 
 ### 0.3 Restart baseline services
 
 ```bash
-./agent up core
-./agent up agents,ui,obs,rag
-./agent doctor
+./agent first-up
 ```
 
 Use the same profile consistently for all commands.
+`first-up` runs this full sequence in order:
+- load `.runtime/env.generated.sh` automatically when present,
+- `agent profile`,
+- `deployments/bootstrap/init_fs.sh`,
+- `agent up core`,
+- `agent up agents,ui,obs,rag`,
+- `agent doctor`.
+
+In `strict-prod`, run with sudo:
+
+```bash
+sudo -E ./agent first-up
+```
+
 If you prefer no shell exports, prefix each call with profile directly:
 
 ```bash
@@ -567,18 +579,11 @@ See:
 
 Once configuration is settled, normal startup is:
 
-### `strict-prod`
+### All profiles
+`first-up` is the recommended one-command path:
 
 ```bash
-sudo ./agent up core
-sudo ./agent up agents,ui,obs,rag
-sudo ./agent doctor
-```
-
-### `rootless-dev`
-
-```bash
-./agent up core
-./agent up agents,ui,obs,rag
-./agent doctor
+./agent first-up
+# strict-prod:
+# sudo -E ./agent first-up
 ```

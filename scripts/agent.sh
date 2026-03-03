@@ -30,6 +30,7 @@ usage() {
 Usage:
   agent [strict-prod|rootless-dev] <command ...>
   agent profile
+  agent first-up [--env-file <path>] [--no-env] [--dry-run]
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
@@ -1855,6 +1856,133 @@ cmd_ollama_link() {
   "${AGENT_OLLAMA_LINK_SCRIPT}"
 }
 
+run_first_up_step() {
+  local step_name="$1"
+  local dry_run="$2"
+  shift 2
+  local -a cmd=("$@")
+  local rendered=""
+  local token
+
+  for token in "${cmd[@]}"; do
+    if [[ -z "${rendered}" ]]; then
+      rendered="$(printf '%q' "${token}")"
+    else
+      rendered="${rendered} $(printf '%q' "${token}")"
+    fi
+  done
+
+  printf 'first-up step=%s cmd=%s\n' "${step_name}" "${rendered}"
+  if [[ "${dry_run}" == "1" ]]; then
+    return 0
+  fi
+
+  "${cmd[@]}"
+}
+
+cmd_first_up() {
+  local env_file="${AGENTIC_ONBOARD_OUTPUT:-${AGENTIC_REPO_ROOT}/.runtime/env.generated.sh}"
+  local use_env=1
+  local dry_run=0
+  local failed=0
+  local step=""
+  local -a profile_cmd=()
+  local -a init_fs_cmd=()
+  local -a up_core_cmd=()
+  local -a up_baseline_cmd=()
+  local -a doctor_cmd=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --env-file)
+        [[ $# -ge 2 ]] || die "missing value for --env-file"
+        env_file="$2"
+        shift 2
+        ;;
+      --no-env)
+        use_env=0
+        shift
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent first-up [--env-file <path>] [--no-env] [--dry-run]
+
+Description:
+  Run first-start sequence in one command:
+  1) load onboarding env file (unless --no-env)
+  2) agent profile
+  3) deployments/bootstrap/init_fs.sh
+  4) agent up core
+  5) agent up agents,ui,obs,rag
+  6) agent doctor
+USAGE
+        return 0
+        ;;
+      *)
+        die "Unknown first-up argument: $1"
+        ;;
+    esac
+  done
+
+  if [[ "${env_file}" != /* ]]; then
+    env_file="${PWD}/${env_file}"
+  fi
+
+  if [[ "${use_env}" == "1" ]]; then
+    if [[ -f "${env_file}" ]]; then
+      # shellcheck disable=SC1090
+      source "${env_file}"
+      printf 'first-up loaded_env=%s\n' "${env_file}"
+    else
+      warn "first-up: env file not found, continuing with current shell context: ${env_file}"
+    fi
+  fi
+
+  profile_cmd=("${AGENTIC_REPO_ROOT}/agent" profile)
+  init_fs_cmd=("${AGENTIC_REPO_ROOT}/deployments/bootstrap/init_fs.sh")
+  up_core_cmd=("${AGENTIC_REPO_ROOT}/agent" up core)
+  up_baseline_cmd=("${AGENTIC_REPO_ROOT}/agent" up agents,ui,obs,rag)
+  doctor_cmd=("${AGENTIC_REPO_ROOT}/agent" doctor)
+
+  step="profile"
+  run_first_up_step "${step}" "${dry_run}" "${profile_cmd[@]}" || failed=1
+  if [[ "${failed}" == "0" ]]; then
+    step="init-fs"
+    run_first_up_step "${step}" "${dry_run}" "${init_fs_cmd[@]}" || failed=1
+  fi
+  if [[ "${failed}" == "0" ]]; then
+    step="up-core"
+    run_first_up_step "${step}" "${dry_run}" "${up_core_cmd[@]}" || failed=1
+  fi
+  if [[ "${failed}" == "0" ]]; then
+    step="up-baseline"
+    run_first_up_step "${step}" "${dry_run}" "${up_baseline_cmd[@]}" || failed=1
+  fi
+  if [[ "${failed}" == "0" ]]; then
+    step="doctor"
+    run_first_up_step "${step}" "${dry_run}" "${doctor_cmd[@]}" || failed=1
+  fi
+
+  if [[ "${failed}" == "1" ]]; then
+    if [[ "${AGENTIC_PROFILE}" == "strict-prod" && "${EUID}" -ne 0 ]]; then
+      warn "first-up failed in strict-prod without root privileges; retry with sudo if failure is permission-related."
+      printf 'hint: sudo -E %q first-up --env-file %q\n' "${AGENTIC_REPO_ROOT}/agent" "${env_file}" >&2
+    fi
+    die "first-up failed at step '${step}'"
+  fi
+
+  if [[ "${dry_run}" == "1" ]]; then
+    printf 'first-up completed (dry-run)\n'
+  else
+    printf 'first-up completed\n'
+  fi
+}
+
 cmd_onboard() {
   [[ -x "${AGENT_ONBOARD_SCRIPT}" ]] || die "onboarding wizard script missing or not executable: ${AGENT_ONBOARD_SCRIPT}"
   "${AGENT_ONBOARD_SCRIPT}" "$@"
@@ -2309,6 +2437,10 @@ cmd="${1:-}"
 case "$cmd" in
   profile)
     cmd_profile
+    ;;
+  first-up)
+    shift
+    cmd_first_up "$@"
     ;;
   up)
     [[ $# -ge 2 ]] || die "Usage: agent up <core|agents|ui|obs|rag|optional>"

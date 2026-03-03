@@ -1,32 +1,31 @@
-# Plan - dgx-spark-agentic-stack-5f1
+# Plan - dgx-spark-agentic-stack-l7w
 
 ## Objective
-Ensure `agentic-codex` in `rootless-dev` bootstraps a known model catalog for `AGENTIC_DEFAULT_MODEL` (including `qwen3.5:35b`) so Codex does not fall back to unknown-model metadata, and add an automated verification path.
+Add a single user-friendly command that runs the first-start sequence end-to-end:
+`source .runtime/env.generated.sh`, `agent profile`, `init_fs`, `agent up core`, `agent up agents,ui,obs,rag`, `agent doctor`.
 
 ## Scope
-- Bootstrap/migrate Codex runtime config in `agent-cli-base` entrypoint.
-- Add deterministic test validating config + runtime execution on local model.
-- Update docs (ADR + setup runbook).
+- Add a new `agent` subcommand for one-shot first startup.
+- Keep behavior deterministic and actionable in both `strict-prod` and `rootless-dev`.
+- Update first-time setup documentation.
+- Add a focused CLI regression test.
 
 ## Steps
-1. Add codex catalog bootstrap function in entrypoint:
-- create `/state/bootstrap/codex-model-catalog.json` if missing,
-- populate it with `AGENTIC_DEFAULT_MODEL` metadata compatible with Codex model schema,
-- wire `model_catalog_json` into `~/.codex/config.toml`.
+1. Add `agent first-up` command:
+- auto-load onboarding env file when present,
+- run sequence steps in strict order with clear step logging,
+- support a safe `--dry-run` mode for testability.
 
-2. Add idempotent migration logic for existing `~/.codex/config.toml`:
-- keep existing user options,
-- enforce/repair `model`, `model_provider`, provider block, and `model_catalog_json`.
+2. Add failure guidance:
+- on failure, stop immediately with non-zero exit,
+- in `strict-prod` non-root context, print explicit sudo rerun hint.
 
-3. Add test `tests/L6_codex_model_catalog.sh`:
-- verify config has `model_catalog_json`,
-- verify catalog JSON contains `AGENTIC_DEFAULT_MODEL`,
-- execute `codex exec` from `agentic-codex` and assert no fallback metadata warning.
+3. Update docs:
+- `docs/runbooks/first-time-setup.md` with one-command path.
 
-4. Update docs:
-- ADR documenting why custom catalog is needed for local non-OpenAI models.
-- runbook update for new validation command.
+4. Add test:
+- add CLI test covering `first-up --dry-run` flow and env auto-load behavior.
 
-5. Validation:
-- run test(s) for onboarding/config and new L6 test,
-- commit + `bd sync` + push.
+5. Validation and delivery:
+- run targeted tests,
+- commit, `bd sync`, and push.
