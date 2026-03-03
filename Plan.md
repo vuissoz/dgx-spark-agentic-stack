@@ -7,6 +7,7 @@ Add a single user-friendly command that runs the first-start sequence end-to-end
 ## Scope
 - Add a new `agent` subcommand for one-shot first startup.
 - Keep behavior deterministic and actionable in both `strict-prod` and `rootless-dev`.
+- Ensure GitHub reachability is explicitly covered for every agent container (`github.com` DNS + egress path).
 - Update first-time setup documentation.
 - Add a focused CLI regression test.
 
@@ -26,6 +27,10 @@ Add a single user-friendly command that runs the first-start sequence end-to-end
 4. Add test:
 - add CLI test covering `first-up --dry-run` flow and env auto-load behavior.
 
-5. Validation and delivery:
+5. GitHub connectivity baseline for each agent:
+- update plan/docs so onboarding allowlist includes required GitHub domains,
+- add validation guidance for each agent (`getent hosts github.com`, optional SSH reachability check).
+
+6. Validation and delivery:
 - run targeted tests,
 - commit, `bd sync`, and push.

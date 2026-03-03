@@ -136,7 +136,7 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
 - couvrir **tout** le setup obligatoire du premier démarrage dans le même flux, sans étape cachée :
   - profil/runtime (`AGENTIC_PROFILE`, `AGENTIC_ROOT`, réseaux, project name) ;
   - bootstrap admin pour services UI activés (utilisateur admin + mot de passe via prompt masqué) ;
-  - configuration réseau/egress (allowlist initiale domaines/CIDR autorisés selon politique) ;
+  - configuration réseau/egress (allowlist initiale domaines/CIDR autorisés selon politique), avec une baseline incluant les endpoints GitHub nécessaires aux agents (`github.com`, `api.github.com`, `codeload.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`) ;
   - secrets requis par modules activés (création/génération guidée ou saisie manuelle).
 - sortie des secrets :
   - fichiers séparés sous `${AGENTIC_ROOT}/secrets/runtime/` uniquement ;
@@ -235,12 +235,14 @@ Suivi Beads : `dgx-spark-agentic-stack-ao5`
 - ajouter service `egress-proxy` (ex: squid/tinyproxy) dans `compose.core.yml` (interne uniquement)
 - policy allowlist : `/srv/agentic/proxy/allowlist.txt`
 - logs proxy : `/srv/agentic/proxy/logs/`
+- inclure dans l’allowlist par défaut les endpoints GitHub nécessaires aux workflows git des agents (au minimum `github.com`, `api.github.com`, `codeload.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`) ; option SSH explicite via `ssh.github.com:443` si activée.
 
 **Test** : `tests/B3_proxy_policy.sh`
 - depuis toolbox (sans proxy env) : `curl -fsS https://example.com` **échoue**
 - depuis toolbox (avec proxy) : `curl -fsS -x http://egress-proxy:3128 https://example.com` :
   - OK si `example.com` allowlisté
   - sinon doit retourner un DENY explicite (acceptable si mode strict) + log présent
+- depuis toolbox (avec proxy) : accès `https://github.com` et `https://api.github.com/meta` OK quand baseline allowlist active
 
 ### B4 DOCKER-USER : anti-bypass (DROP+LOG)
 **Implémentation**
@@ -560,6 +562,9 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - `docker exec agentic-claude sh -lc 'test -f /state/bootstrap/ollama-gate-defaults.env'` OK (idem codex/opencode/vibestral) + variables résolues vers `http://ollama-gate:11435(/v1)`
 - `docker inspect` prouve : non-root, readonly rootfs, cap_drop ALL, NNP
 - egress : direct KO, via proxy conforme
+- pour chaque agent (`claude`, `codex`, `opencode`, `vibestral`) :
+  - `getent hosts github.com` renvoie une résolution DNS valide ;
+  - `ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -T git@github.com` ne doit jamais échouer sur `Temporary failure in name resolution` (un refus d’authentification est acceptable).
 - écritures : OK dans workspace/state/logs, KO ailleurs
 
 ---
