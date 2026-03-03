@@ -8,6 +8,7 @@ Add a single user-friendly command that runs the first-start sequence end-to-end
 - Add a new `agent` subcommand for one-shot first startup.
 - Keep behavior deterministic and actionable in both `strict-prod` and `rootless-dev`.
 - Ensure GitHub reachability is explicitly covered for every agent container (`github.com` DNS + egress path).
+- Make tmux persistence explicit when users connect to agent shells.
 - Update first-time setup documentation.
 - Add a focused CLI regression test.
 
@@ -31,6 +32,10 @@ Add a single user-friendly command that runs the first-start sequence end-to-end
 - update plan/docs so onboarding allowlist includes required GitHub domains,
 - add validation guidance for each agent (`getent hosts github.com`, optional SSH reachability check).
 
-6. Validation and delivery:
+6. Add a connection notice for persistent tmux shells:
+- display a short message when `agent <tool>` prepares/attaches to explain persistent session behavior,
+- mention detaching shortcut (`Ctrl-b d`) so users do not confuse detach with stop.
+
+7. Validation and delivery:
 - run targeted tests,
 - commit, `bd sync`, and push.

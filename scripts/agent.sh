@@ -1039,6 +1039,8 @@ cmd_tool_attach() {
   service="$(tool_to_service "${tool}")"
   container_id="$(service_container_id "${service}")"
 
+  printf 'INFO: %s uses a persistent tmux session. Detach with Ctrl-b d (session keeps running).\n' "${tool}"
+
   if [[ "${AGENT_NO_ATTACH:-0}" == "1" ]]; then
     printf 'prepared tool=%s project=%s container=%s\n' "${tool}" "${project}" "${container_id}"
     return 0

@@ -31,6 +31,10 @@ ok "agent ls returns a structured output"
 
 project_name="f1-${USER:-agent}-$$"
 AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${project_name}" "${agent_bin}" claude >/tmp/agent-f1.out
+grep -q 'persistent tmux session' /tmp/agent-f1.out \
+  || fail "agent claude output is missing tmux persistence notice"
+grep -q 'Ctrl-b d' /tmp/agent-f1.out \
+  || fail "agent claude output is missing tmux detach shortcut notice"
 
 timeout 20 docker exec "${claude_cid}" tmux has-session -t claude \
   || fail "agent claude did not create/keep tmux session"
