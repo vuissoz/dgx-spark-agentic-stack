@@ -35,6 +35,8 @@ grep -q 'persistent tmux session' /tmp/agent-f1.out \
   || fail "agent claude output is missing tmux persistence notice"
 grep -q 'Ctrl-b d' /tmp/agent-f1.out \
   || fail "agent claude output is missing tmux detach shortcut notice"
+grep -q 'attach reset sends Ctrl-c' /tmp/agent-f1.out \
+  || fail "agent claude output is missing tmux attach reset warning"
 
 timeout 20 docker exec "${claude_cid}" tmux has-session -t claude \
   || fail "agent claude did not create/keep tmux session"

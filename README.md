@@ -342,6 +342,7 @@ Exemples:
 
 Notes:
 - `agent stop` gère les tools `claude|codex|opencode|vibestral`.
+- `agent <tool> [project]` attache une session tmux persistante (shell déjà existant dans le conteneur): `Ctrl-b d` détache sans arrêter la session, et l'attache envoie un `Ctrl-c` puis `cd /workspace/<project>` (peut interrompre une commande en cours dans ce pane).
 - `agent sudo-mode on` active `sudo` dans les conteneurs agents (en relachant uniquement `no-new-privileges` pour ces services); `agent sudo-mode off` revient au mode durci.
 - `agent rollback all` exige un `release_id`.
 - Utiliser `--skip-d5-tests` (ou `AGENTIC_SKIP_D5_TESTS=1`) pour ignorer uniquement `D5_gate_external_providers.sh` avec un warning si l'accès API externe n'est pas disponible.

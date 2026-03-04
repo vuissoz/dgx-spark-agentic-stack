@@ -1040,6 +1040,9 @@ cmd_tool_attach() {
   container_id="$(service_container_id "${service}")"
 
   printf 'INFO: %s uses a persistent tmux session. Detach with Ctrl-b d (session keeps running).\n' "${tool}"
+  printf 'INFO: you are attaching to an existing shell in-container (not auto-running %s).\n' "${tool}"
+  printf 'INFO: attach reset sends Ctrl-c, then cd to /workspace/%s; a running foreground command in that pane will be interrupted.\n' "${project}"
+  printf 'INFO: use "exit" to close the pane/session; entrypoint will recreate an empty shell session automatically.\n'
 
   if [[ "${AGENT_NO_ATTACH:-0}" == "1" ]]; then
     printf 'prepared tool=%s project=%s container=%s\n' "${tool}" "${project}" "${container_id}"
