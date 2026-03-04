@@ -134,6 +134,12 @@ mount_destination_read_only() {
   awk -F'|' -v d="${destination}" '$1 == d && $2 == "false" { found=1 } END { exit(found ? 0 : 1) }' <<<"${mounts}"
 }
 
+allowlist_has_entry() {
+  local allowlist_file="$1"
+  local entry="$2"
+  grep -Fxiq -- "${entry}" "${allowlist_file}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fix-net)
@@ -387,6 +393,20 @@ fi
 
 if [[ ! -d "${AGENTIC_ROOT}/gate/mcp/logs" ]]; then
   doctor_fail "gate MCP audit log directory is missing: ${AGENTIC_ROOT}/gate/mcp/logs"
+fi
+
+comfyui_cid="$(service_container_id comfyui)"
+if [[ -n "${comfyui_cid}" ]]; then
+  allowlist_file="${AGENTIC_ROOT}/proxy/allowlist.txt"
+  if [[ ! -f "${allowlist_file}" ]]; then
+    doctor_fail_or_warn "proxy allowlist file is missing: ${allowlist_file}"
+  else
+    for required_domain in api.comfy.org registry.comfy.org; do
+      if ! allowlist_has_entry "${allowlist_file}" "${required_domain}"; then
+        doctor_fail_or_warn "proxy allowlist missing required ComfyUI domain '${required_domain}' in ${allowlist_file}"
+      fi
+    done
+  fi
 fi
 
 optional_openclaw_cid="$(service_container_id optional-openclaw)"

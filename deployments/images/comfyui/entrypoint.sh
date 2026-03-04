@@ -18,9 +18,44 @@ seed_custom_nodes() {
   fi
 }
 
+resolve_comfyui_port() {
+  local previous=""
+  local token
+  for token in "$@"; do
+    if [[ "${previous}" == "--port" ]]; then
+      printf '%s\n' "${token}"
+      return 0
+    fi
+    case "${token}" in
+      --port=*)
+        printf '%s\n' "${token#--port=}"
+        return 0
+        ;;
+    esac
+    previous="${token}"
+  done
+
+  printf '8188\n'
+}
+
+ensure_manager_log_compat_symlink() {
+  local port="$1"
+  local user_dir="/comfyui/user"
+  local canonical_log="${user_dir}/comfyui_${port}.log"
+  local compat_log="${user_dir}/comfyui.log"
+
+  mkdir -p "${user_dir}"
+  if [[ ! -e "${compat_log}" ]]; then
+    ln -s "$(basename "${canonical_log}")" "${compat_log}" || true
+  fi
+}
+
 seed_custom_nodes
 
 if [[ "${1:-}" == "python3" && "${2:-}" == "main.py" ]]; then
+  comfyui_port="$(resolve_comfyui_port "$@")"
+  ensure_manager_log_compat_symlink "${comfyui_port}"
+
   if ! printf ' %s ' "$*" | grep -q ' --cpu '; then
     if ! python3 - <<'PY'
 import sys

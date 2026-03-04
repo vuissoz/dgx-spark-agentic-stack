@@ -40,6 +40,43 @@ copy_if_missing() {
   log "created runtime file: ${dst}"
 }
 
+iter_allowlist_entries() {
+  local file="$1"
+  awk '
+    /^[[:space:]]*#/ { next }
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/[[:space:]]+$/, "", line)
+      if (line != "") {
+        print line
+      }
+    }
+  ' "${file}"
+}
+
+ensure_allowlist_baseline_entries() {
+  local template_file="$1"
+  local runtime_file="$2"
+  local entry
+  local missing_count=0
+
+  [[ -f "${template_file}" ]] || die "allowlist template not found: ${template_file}"
+  [[ -f "${runtime_file}" ]] || return 0
+
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    if ! grep -Fxiq -- "${entry}" "${runtime_file}"; then
+      printf '%s\n' "${entry}" >> "${runtime_file}"
+      missing_count=$((missing_count + 1))
+    fi
+  done < <(iter_allowlist_entries "${template_file}")
+
+  if (( missing_count > 0 )); then
+    log "updated allowlist baseline: appended ${missing_count} missing entries to ${runtime_file}"
+  fi
+}
+
 set_proxy_runtime_permissions() {
   local proxy_logs_dir="${AGENTIC_ROOT}/proxy/logs"
   local -a proxy_log_files=(
@@ -206,6 +243,7 @@ main() {
   copy_if_missing "${TEMPLATE_DIR}/unbound.conf" "${AGENTIC_ROOT}/dns/unbound.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/squid.conf" "${AGENTIC_ROOT}/proxy/config/squid.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt" 0644
+  ensure_allowlist_baseline_entries "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt"
   chmod 0640 "${AGENTIC_ROOT}/gate/config/model_routes.yml"
   chmod 0644 "${AGENTIC_ROOT}/dns/unbound.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/config/squid.conf"

@@ -28,6 +28,7 @@ api.bitbucket.org
 # Python
 pypi.org
 files.pythonhosted.org
+download.pytorch.org
 
 # JavaScript
 registry.npmjs.org
@@ -60,6 +61,12 @@ huggingface.co
 cdn-lfs.huggingface.co
 cas-server.xethub.hf.co
 transfer.xethub.hf.co
+
+# Comfy ecosystem
+api.comfy.org
+registry.comfy.org
+docs.comfy.org
+blog.comfy.org
 
 ollama.ai
 registry.ollama.ai
