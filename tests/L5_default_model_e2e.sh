@@ -15,7 +15,7 @@ assert_cmd curl
 assert_cmd timeout
 assert_cmd python3
 
-default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-llama3.1:8b}}"
+default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-qwen3-coder:30b}}"
 prompt_text="${AGENTIC_DEFAULT_MODEL_SMOKE_PROMPT:-hello}"
 http_timeout="${AGENTIC_DEFAULT_MODEL_SMOKE_TIMEOUT_SECONDS:-180}"
 

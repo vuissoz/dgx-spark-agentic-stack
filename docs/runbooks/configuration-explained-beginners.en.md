@@ -110,10 +110,12 @@ Notes:
 | `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | absolute path (rootless real target) | `${REPO}/.runtime/ollama-models-data` (or value derived from `OLLAMA_MODELS_DIR` when onboarding provides one) | shell, `runtime.env` |
 | `OLLAMA_CONTAINER_MODELS_PATH` | container path | `/root/.ollama/models` | `/tmp/ollama/models` in `rootless-dev` |
 | `OLLAMA_MODELS_MOUNT_MODE` | `rw` or `ro` | `rw` | `runtime.env` |
-| `AGENTIC_DEFAULT_MODEL` | model id string | `llama3.1:8b` | shell, `runtime.env` |
-| `OLLAMA_PRELOAD_GENERATE_MODEL` | model id string | `${AGENTIC_DEFAULT_MODEL}` (fallback `llama3.1:8b`) | `runtime.env` |
+| `AGENTIC_DEFAULT_MODEL` | model id string | `qwen3-coder:30b` | shell, `runtime.env` |
+| `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` | integer `>= 2048` (tokens) | `262144` | shell, `runtime.env` |
+| `OLLAMA_CONTEXT_LENGTH` | integer `>= 2048` (tokens) | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
+| `OLLAMA_PRELOAD_GENERATE_MODEL` | model id string | `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3-coder:30b`) | `runtime.env` |
 | `OLLAMA_PRELOAD_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
-| `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `12` | `runtime.env` |
+| `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `TRTLLM_MODELS` | model route selector string | `qwen3-nvfp4-demo` | shell |
 | `COMFYUI_REF` | git ref for ComfyUI image build | `master` | shell |

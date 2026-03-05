@@ -37,7 +37,8 @@ export COMPOSE_PROFILES=trt
 ```
 
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
-The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `llama3.1:8b`) and reused by Ollama preload.
+The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `qwen3-coder:30b`) and reused by Ollama preload.
+Context window size is controlled by `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (default `262144`) and propagated to `OLLAMA_CONTEXT_LENGTH`.
 
 ## Runtime Layout (summary)
 
@@ -369,6 +370,7 @@ To override the stack default local model (also used by preload):
 
 ```bash
 export AGENTIC_DEFAULT_MODEL=llama3.2:1b
+export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=65536
 ```
 
 Model link rollback:
@@ -382,6 +384,7 @@ Default-model e2e probe (Ollama, gate, agents, OpenWebUI, OpenHands):
 ```bash
 bash tests/L5_default_model_e2e.sh
 bash tests/L6_codex_model_catalog.sh
+bash tests/L7_default_model_tool_call_fs_ops.sh
 ```
 
 ## External LLM Routing (D5)

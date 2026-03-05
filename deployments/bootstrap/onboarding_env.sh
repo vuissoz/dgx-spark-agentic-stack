@@ -19,6 +19,7 @@ network_override=""
 egress_network_override=""
 ollama_models_override=""
 default_model_override=""
+default_model_context_window_override=""
 grafana_admin_user_override=""
 grafana_admin_password_override=""
 limits_default_cpus_override=""
@@ -82,6 +83,7 @@ Runtime options:
   --egress-network <name>
   --ollama-models-dir <path>
   --default-model <name>
+  --default-model-context-window <tokens>
   --grafana-admin-user <name>
   --grafana-admin-password <password>
   --limits-default-cpus <cores>
@@ -267,6 +269,15 @@ default_limits_default_mem_for_profile() {
   fi
 }
 
+default_limits_ollama_mem_for_profile() {
+  local profile="$1"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "64g"
+  else
+    printf '%s\n' "96g"
+  fi
+}
+
 default_limits_stack_cpus_for_profile() {
   local profile="$1"
   local stack="$2"
@@ -382,6 +393,24 @@ validate_model_id_value() {
   }
   [[ "${value}" != *[[:space:]]* ]] || {
     echo "${key} must not contain spaces" >&2
+    return 1
+  }
+  return 0
+}
+
+validate_context_window_value() {
+  local key="$1"
+  local value="$2"
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+  [[ "${value}" =~ ^[0-9]+$ ]] || {
+    echo "${key} must be an integer token count (example: 65536, 262144)" >&2
+    return 1
+  }
+  (( value >= 2048 )) || {
+    echo "${key} must be >= 2048" >&2
     return 1
   }
   return 0
@@ -1044,24 +1073,25 @@ write_env_file() {
   local egress_network="${11}"
   local ollama_models="${12}"
   local default_model="${13}"
-  local grafana_admin_user="${14}"
-  local grafana_admin_password="${15}"
-  local limits_default_cpus="${16}"
-  local limits_default_mem="${17}"
-  local limits_core_cpus="${18}"
-  local limits_core_mem="${19}"
-  local limits_ollama_mem="${20}"
-  local limits_agents_cpus="${21}"
-  local limits_agents_mem="${22}"
-  local limits_ui_cpus="${23}"
-  local limits_ui_mem="${24}"
-  local limits_obs_cpus="${25}"
-  local limits_obs_mem="${26}"
-  local limits_rag_cpus="${27}"
-  local limits_rag_mem="${28}"
-  local limits_optional_cpus="${29}"
-  local limits_optional_mem="${30}"
-  local out_file="${31}"
+  local default_model_context_window="${14}"
+  local grafana_admin_user="${15}"
+  local grafana_admin_password="${16}"
+  local limits_default_cpus="${17}"
+  local limits_default_mem="${18}"
+  local limits_core_cpus="${19}"
+  local limits_core_mem="${20}"
+  local limits_ollama_mem="${21}"
+  local limits_agents_cpus="${22}"
+  local limits_agents_mem="${23}"
+  local limits_ui_cpus="${24}"
+  local limits_ui_mem="${25}"
+  local limits_obs_cpus="${26}"
+  local limits_obs_mem="${27}"
+  local limits_rag_cpus="${28}"
+  local limits_rag_mem="${29}"
+  local limits_optional_cpus="${30}"
+  local limits_optional_mem="${31}"
+  local out_file="${32}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1085,6 +1115,8 @@ export AGENTIC_EGRESS_NETWORK=$(shell_quote "${egress_network}")
 export AGENTIC_DOCKER_USER_SOURCE_NETWORKS=$(shell_quote "${network},${egress_network}")
 export OLLAMA_MODELS_DIR=$(shell_quote "${ollama_models}")
 export AGENTIC_DEFAULT_MODEL=$(shell_quote "${default_model}")
+export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=$(shell_quote "${default_model_context_window}")
+export OLLAMA_CONTEXT_LENGTH=$(shell_quote "${default_model_context_window}")
 export OLLAMA_PRELOAD_GENERATE_MODEL=$(shell_quote "${default_model}")
 export GRAFANA_ADMIN_USER=$(shell_quote "${grafana_admin_user}")
 export GRAFANA_ADMIN_PASSWORD=$(shell_quote "${grafana_admin_password}")
@@ -1270,6 +1302,11 @@ while [[ $# -gt 0 ]]; do
     --default-model)
       [[ $# -ge 2 ]] || die "missing value for --default-model"
       default_model_override="$2"
+      shift 2
+      ;;
+    --default-model-context-window)
+      [[ $# -ge 2 ]] || die "missing value for --default-model-context-window"
+      default_model_context_window_override="$2"
       shift 2
       ;;
     --grafana-admin-user)
@@ -1506,7 +1543,8 @@ collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_ove
 collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_network}" "${egress_network_override}" validate_compose_or_network_name "AGENTIC_EGRESS_NETWORK is dedicated to controlled outbound traffic."
 
 collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_ollama_models_for_profile "${profile}" "${root_path}")" "${ollama_models_override}" "OLLAMA_MODELS_DIR points to the shared Ollama model storage path on host."
-collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
+collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
+collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model."
 grafana_admin_user="${grafana_admin_user_override:-${GRAFANA_ADMIN_USER:-admin}}"
 grafana_admin_password="${grafana_admin_password_override:-${GRAFANA_ADMIN_PASSWORD:-replace-with-strong-password}}"
 if [[ "${non_interactive}" -eq 0 && -z "${grafana_admin_password_override}" ]]; then
@@ -1521,7 +1559,7 @@ collect_mem_limit limits_default_mem "AGENTIC_LIMIT_DEFAULT_MEM" "$(default_limi
 
 collect_cpu_limit limits_core_cpus "AGENTIC_LIMIT_CORE_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "core")" "${limits_core_cpus_override}" "AGENTIC_LIMIT_CORE_CPUS/AGENTIC_LIMIT_CORE_MEM set defaults for core services."
 collect_mem_limit limits_core_mem "AGENTIC_LIMIT_CORE_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "core")" "${limits_core_mem_override}"
-collect_mem_limit limits_ollama_mem "AGENTIC_LIMIT_OLLAMA_MEM" "${AGENTIC_LIMIT_OLLAMA_MEM:-${limits_core_mem}}" "${limits_ollama_mem_override}" "AGENTIC_LIMIT_OLLAMA_MEM overrides Ollama memory only. Increase it for larger local models."
+collect_mem_limit limits_ollama_mem "AGENTIC_LIMIT_OLLAMA_MEM" "$(default_limits_ollama_mem_for_profile "${profile}")" "${limits_ollama_mem_override}" "AGENTIC_LIMIT_OLLAMA_MEM overrides Ollama memory only. Increase it for larger local models."
 
 collect_cpu_limit limits_agents_cpus "AGENTIC_LIMIT_AGENTS_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "agents")" "${limits_agents_cpus_override}" "AGENTIC_LIMIT_AGENTS_CPUS/AGENTIC_LIMIT_AGENTS_MEM set defaults for agent containers."
 collect_mem_limit limits_agents_mem "AGENTIC_LIMIT_AGENTS_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "agents")" "${limits_agents_mem_override}"
@@ -1552,6 +1590,7 @@ write_env_file \
   "${egress_network}" \
   "${ollama_models}" \
   "${default_model}" \
+  "${default_model_context_window}" \
   "${grafana_admin_user}" \
   "${grafana_admin_password}" \
   "${limits_default_cpus}" \

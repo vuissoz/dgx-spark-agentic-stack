@@ -14,7 +14,7 @@ assert_cmd docker
 assert_cmd timeout
 assert_cmd python3
 
-default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-llama3.1:8b}}"
+default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-qwen3-coder:30b}}"
 exec_timeout="${AGENTIC_CODEX_MODEL_SMOKE_TIMEOUT_SECONDS:-240}"
 prompt_text="${AGENTIC_CODEX_MODEL_SMOKE_PROMPT:-Reply with exactly: codex-local-model-ok}"
 

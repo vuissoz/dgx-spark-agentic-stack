@@ -1,41 +1,29 @@
-# Plan - dgx-spark-agentic-stack-l7w
+# Plan - dgx-spark-agentic-stack-5bz
 
 ## Objective
-Add a single user-friendly command that runs the first-start sequence end-to-end:
-`source .runtime/env.generated.sh`, `agent profile`, `init_fs`, `agent up core`, `agent up agents,ui,obs,rag`, `agent doctor`.
+Basculer le modèle local par défaut vers une cible plus fiable pour le tool-calling multi-agents, porter la fenêtre de contexte au maximum du modèle (avec contrôle ressources), et ajouter un test fonctionnel 5 agents sur opérations fichiers.
+
+## Tracking
+- Beads: `dgx-spark-agentic-stack-5bz`
 
 ## Scope
-- Add a new `agent` subcommand for one-shot first startup.
-- Keep behavior deterministic and actionable in both `strict-prod` and `rootless-dev`.
-- Ensure GitHub reachability is explicitly covered for every agent container (`github.com` DNS + egress path).
-- Make tmux persistence explicit when users connect to agent shells.
-- Update first-time setup documentation.
-- Add a focused CLI regression test.
+- Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
+- Ajouter `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (onboarding + runtime) et propagation vers `OLLAMA_CONTEXT_LENGTH`.
+- Vérifier en `agent doctor`:
+  - cohérence contexte demandé vs capacité modèle,
+  - adéquation mémoire locale (budget Ollama) pour le contexte configuré.
+- Ajouter un test `L7` qui valide, via le modèle local par défaut, les 4 opérations suivantes sur 5 agents (`claude`, `codex`, `opencode`, `vibestral`, `openhands`):
+  - écrire un fichier,
+  - lire le fichier,
+  - exécuter un fichier `python.py`,
+  - supprimer le fichier.
+- Mettre à jour docs et tests onboarding/régression liés au modèle par défaut.
 
 ## Steps
-1. Add `agent first-up` command:
-- auto-load onboarding env file when present,
-- run sequence steps in strict order with clear step logging,
-- support a safe `--dry-run` mode for testability.
-
-2. Add failure guidance:
-- on failure, stop immediately with non-zero exit,
-- in `strict-prod` non-root context, print explicit sudo rerun hint.
-
-3. Update docs:
-- `docs/runbooks/first-time-setup.md` with one-command path.
-
-4. Add test:
-- add CLI test covering `first-up --dry-run` flow and env auto-load behavior.
-
-5. GitHub connectivity baseline for each agent:
-- update plan/docs so onboarding allowlist includes required GitHub domains,
-- add validation guidance for each agent (`getent hosts github.com`, optional SSH reachability check).
-
-6. Add a connection notice for persistent tmux shells:
-- display a short message when `agent <tool>` prepares/attaches to explain persistent session behavior,
-- mention detaching shortcut (`Ctrl-b d`) so users do not confuse detach with stop.
-
-7. Validation and delivery:
-- run targeted tests,
-- commit, `bd sync`, and push.
+1. Mettre à jour les defaults runtime/compose/entrypoints.
+2. Étendre l’onboarding (nouvelle option CLI + prompt + export env).
+3. Implémenter les vérifications doctor modèle/contexte/ressources.
+4. Ajouter le test `tests/L7_default_model_tool_call_fs_ops.sh`.
+5. Mettre à jour README/tests existants (`00_onboarding_*`, `L5/L6`, protocol compat).
+6. Valider localement les scripts de test ciblés.
+7. Finaliser avec commit atomique, `bd sync`, push.

@@ -19,7 +19,8 @@ strict_log_file="${work_dir}/strict.log"
 openwebui_email="admin@example.local"
 openwebui_password="S3cure-Pass-123"
 openwebui_secret="webui-secret-xyz"
-default_model="llama3.1:8b"
+default_model="qwen3-coder:30b"
+default_context_window="262144"
 openhands_model="${default_model}"
 grafana_admin_user="grafana-admin"
 grafana_admin_password="grafana-strong-password"
@@ -42,6 +43,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --egress-network agentic-onboard-full-egress \
   --ollama-models-dir "${work_dir}/models" \
   --default-model "${default_model}" \
+  --default-model-context-window "${default_context_window}" \
   --grafana-admin-user "${grafana_admin_user}" \
   --grafana-admin-password "${grafana_admin_password}" \
   --openwebui-admin-email "${openwebui_email}" \
@@ -68,6 +70,10 @@ grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${env_file}" \
   || fail "full setup onboarding env must enable agent sudo-mode by default"
 grep -q "^export AGENTIC_DEFAULT_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_DEFAULT_MODEL"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='${default_context_window}'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='${default_context_window}'$" "${env_file}" \
+  || fail "full setup onboarding env must export OLLAMA_CONTEXT_LENGTH"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export OLLAMA_PRELOAD_GENERATE_MODEL"
 grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${root_dir}/agent-workspaces'$" "${env_file}" \
@@ -94,7 +100,7 @@ grep -q "^export ANTHROPIC_API_KEY='local-ollama'$" "${env_file}" \
   || fail "full setup onboarding env must export ANTHROPIC_API_KEY placeholder"
 grep -q "^export ANTHROPIC_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export ANTHROPIC_MODEL"
-grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='2g'$" "${env_file}" \
+grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='64g'$" "${env_file}" \
   || fail "full setup onboarding env must export default rootless AGENTIC_LIMIT_OLLAMA_MEM"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${env_file}" \
   || fail "full setup onboarding env must export OPENWEBUI_ENABLE_OLLAMA_API"

@@ -18,7 +18,7 @@ gate_cid="$(require_service_container ollama-gate)" || exit 1
 wait_for_container_ready "${toolbox_cid}" 30 || fail "toolbox is not ready"
 wait_for_container_ready "${gate_cid}" 90 || fail "ollama-gate is not ready"
 
-default_model="${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}"
+default_model="${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}"
 
 call_post() {
   local session="$1"

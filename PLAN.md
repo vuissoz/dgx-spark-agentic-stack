@@ -338,10 +338,11 @@ Suivi Beads : `dgx-spark-agentic-stack-39m`
 Suivi Beads : `dgx-spark-agentic-stack-ahh`
 
 **Implémentation**
-- introduire une variable runtime canonique `AGENTIC_DEFAULT_MODEL` (fallback `qwen3:0.6b`) utilisée comme source de vérité pour:
+- introduire une variable runtime canonique `AGENTIC_DEFAULT_MODEL` (fallback `qwen3-coder:30b`) utilisée comme source de vérité pour:
   - preload Ollama (`OLLAMA_PRELOAD_GENERATE_MODEL`),
   - onboarding (`agent onboard --default-model`),
   - bootstrap OpenHands (`LLM_MODEL` par défaut).
+- ajouter `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (onboarding + runtime) et propager vers `OLLAMA_CONTEXT_LENGTH`.
 - conserver la compatibilité avec les variables existantes (`OLLAMA_PRELOAD_GENERATE_MODEL`, `LLM_MODEL`) sans régression.
 - exposer la valeur effective dans `agent profile` et la persister dans `${AGENTIC_ROOT}/deployments/runtime.env`.
 
@@ -1108,9 +1109,20 @@ Cette section regroupe des capacités déjà implémentées mais transverses aux
 **Implémentation**
 - propager `AGENTIC_DEFAULT_MODEL` de bout en bout (Ollama direct, gate, agents, UIs).
 - garantir une réponse non vide sur scénario de smoke `hello`.
+- vérifier la cohérence modèle/contexte/ressources locales dans `agent doctor`.
 
 **Test** : `tests/L5_default_model_e2e.sh`
 - valide le flux `hello` via Ollama, gate, agents et UIs.
+
+### L7 Tool-calling FS ops sur 5 agents (modèle local par défaut)
+Suivi Beads : `dgx-spark-agentic-stack-5bz`
+
+**Implémentation**
+- ajouter un test agentique qui valide, via `ollama-gate`, les opérations tool-calling `write_file`, `read_file`, `run_python`, `delete_file`.
+- exécuter le scénario pour `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral` et `openhands`.
+
+**Test** : `tests/L7_default_model_tool_call_fs_ops.sh`
+- échoue si un des 5 services n’arrive pas à effectuer le workflow fichiers complet avec le modèle local par défaut.
 
 ---
 

@@ -140,6 +140,192 @@ allowlist_has_entry() {
   grep -Fxiq -- "${entry}" "${allowlist_file}"
 }
 
+parse_memory_to_bytes() {
+  local raw="${1:-}"
+  local value unit factor
+
+  [[ -n "${raw}" ]] || return 1
+  raw="${raw,,}"
+  if [[ "${raw}" =~ ^([0-9]+)([kmgt]?i?b?)?$ ]]; then
+    value="${BASH_REMATCH[1]}"
+    unit="${BASH_REMATCH[2]}"
+  else
+    return 1
+  fi
+
+  case "${unit}" in
+    ""|b) factor=1 ;;
+    k|kb|ki|kib) factor=1024 ;;
+    m|mb|mi|mib) factor=$((1024 * 1024)) ;;
+    g|gb|gi|gib) factor=$((1024 * 1024 * 1024)) ;;
+    t|tb|ti|tib) factor=$((1024 * 1024 * 1024 * 1024)) ;;
+    *) return 1 ;;
+  esac
+
+  printf '%s\n' "$((value * factor))"
+}
+
+check_default_model_context_resources() {
+  local default_model="${AGENTIC_DEFAULT_MODEL:-}"
+  local requested_context="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${OLLAMA_CONTEXT_LENGTH:-}}"
+  local mem_limit_raw="${AGENTIC_LIMIT_OLLAMA_MEM:-}"
+  local mem_limit_bytes=""
+  local tags_file show_file report_file
+  local report_line key value
+  local model_max_context=0
+  local kv_bytes_per_token=0
+  local model_size_bytes=0
+  local estimated_required_bytes=0
+  local cleanup_context_check_files
+
+  [[ -n "${default_model}" ]] || {
+    doctor_fail_or_warn "AGENTIC_DEFAULT_MODEL is empty"
+    return 0
+  }
+
+  if ! [[ "${requested_context}" =~ ^[0-9]+$ ]]; then
+    doctor_fail_or_warn "default model context window must be numeric (AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW/OLLAMA_CONTEXT_LENGTH)"
+    return 0
+  fi
+  (( requested_context >= 2048 )) || {
+    doctor_fail_or_warn "default model context window must be >= 2048 tokens (got ${requested_context})"
+    return 0
+  }
+
+  tags_file="$(mktemp)"
+  show_file="$(mktemp)"
+  report_file="$(mktemp)"
+  cleanup_context_check_files() {
+    rm -f "${tags_file}" "${show_file}" "${report_file}"
+  }
+
+  if ! curl -fsS --max-time 20 "http://127.0.0.1:11434/api/tags" >"${tags_file}"; then
+    doctor_fail_or_warn "unable to read ollama tags from http://127.0.0.1:11434/api/tags"
+    cleanup_context_check_files
+    return 0
+  fi
+
+  if ! curl -fsS --max-time 20 \
+    -H 'Content-Type: application/json' \
+    -d "{\"model\":\"${default_model}\"}" \
+    "http://127.0.0.1:11434/api/show" >"${show_file}"; then
+    doctor_fail_or_warn "unable to read ollama model metadata for '${default_model}' from /api/show"
+    cleanup_context_check_files
+    return 0
+  fi
+
+  if ! python3 - "${tags_file}" "${show_file}" "${default_model}" "${requested_context}" >"${report_file}" <<'PY'
+import json
+import sys
+
+tags_path, show_path, default_model, requested_context_raw = sys.argv[1:5]
+requested_context = int(requested_context_raw)
+
+
+def first_suffix_number(payload, suffix):
+    for key, value in payload.items():
+        if key.endswith(suffix) and isinstance(value, (int, float)):
+            return int(value)
+    return 0
+
+
+with open(tags_path, "r", encoding="utf-8") as fh:
+    tags_payload = json.load(fh)
+with open(show_path, "r", encoding="utf-8") as fh:
+    show_payload = json.load(fh)
+
+if isinstance(show_payload, dict) and show_payload.get("error"):
+    raise SystemExit(f"api/show returned error for {default_model}: {show_payload.get('error')}")
+
+models = tags_payload.get("models") or []
+model_size_bytes = 0
+exact_match = None
+base_match = None
+base_slug = default_model.split(":", 1)[0]
+
+for entry in models:
+    if not isinstance(entry, dict):
+        continue
+    name = str(entry.get("name", ""))
+    if name == default_model:
+        exact_match = entry
+        break
+    if name.split(":", 1)[0] == base_slug and base_match is None:
+        base_match = entry
+
+if exact_match is None:
+    exact_match = base_match
+
+if isinstance(exact_match, dict):
+    size_raw = exact_match.get("size")
+    if isinstance(size_raw, (int, float)):
+        model_size_bytes = int(size_raw)
+
+model_info = show_payload.get("model_info") or {}
+model_max_context = first_suffix_number(model_info, ".context_length")
+if model_max_context <= 0:
+    model_max_context = requested_context
+
+block_count = first_suffix_number(model_info, ".block_count")
+kv_head_count = first_suffix_number(model_info, ".attention.head_count_kv")
+if kv_head_count <= 0:
+    kv_head_count = first_suffix_number(model_info, ".attention.head_count")
+key_length = first_suffix_number(model_info, ".attention.key_length")
+if key_length <= 0:
+    embed_dim = first_suffix_number(model_info, ".embedding_length")
+    head_count = first_suffix_number(model_info, ".attention.head_count")
+    if embed_dim > 0 and head_count > 0:
+        key_length = embed_dim // head_count
+
+if block_count > 0 and kv_head_count > 0 and key_length > 0:
+    # 2 (K+V) * layers * kv_heads * key_length * 2 bytes(fp16 cache)
+    kv_bytes_per_token = 2 * block_count * kv_head_count * key_length * 2
+else:
+    # Conservative fallback when architecture metadata is not exposed.
+    kv_bytes_per_token = 131072
+
+estimated_required_bytes = model_size_bytes + (requested_context * kv_bytes_per_token) + (1024 * 1024 * 1024)
+
+print(f"model_max_context={model_max_context}")
+print(f"kv_bytes_per_token={kv_bytes_per_token}")
+print(f"model_size_bytes={model_size_bytes}")
+print(f"estimated_required_bytes={estimated_required_bytes}")
+PY
+  then
+    doctor_fail_or_warn "unable to compute model/context resource estimate for '${default_model}'"
+    cleanup_context_check_files
+    return 0
+  fi
+
+  while IFS='=' read -r key value; do
+    [[ -n "${key}" ]] || continue
+    case "${key}" in
+      model_max_context) model_max_context="${value}" ;;
+      kv_bytes_per_token) kv_bytes_per_token="${value}" ;;
+      model_size_bytes) model_size_bytes="${value}" ;;
+      estimated_required_bytes) estimated_required_bytes="${value}" ;;
+      *) ;;
+    esac
+  done <"${report_file}"
+
+  if (( requested_context > model_max_context )); then
+    doctor_fail_or_warn "configured context (${requested_context}) exceeds model max (${model_max_context}) for ${default_model}"
+    cleanup_context_check_files
+    return 0
+  fi
+
+  if mem_limit_bytes="$(parse_memory_to_bytes "${mem_limit_raw}")"; then
+    if (( mem_limit_bytes < estimated_required_bytes )); then
+      doctor_fail_or_warn "AGENTIC_LIMIT_OLLAMA_MEM=${mem_limit_raw} is likely insufficient for ${default_model} with context ${requested_context} (estimated >= $((estimated_required_bytes / 1024 / 1024 / 1024))GiB)"
+      cleanup_context_check_files
+      return 0
+    fi
+  fi
+
+  ok "default model '${default_model}' context=${requested_context} (max=${model_max_context}, kv_bytes/token=${kv_bytes_per_token}, est_mem=$((estimated_required_bytes / 1024 / 1024 / 1024))GiB)"
+  cleanup_context_check_files
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fix-net)
@@ -292,6 +478,19 @@ for row in "${running_services[@]}"; do
     fi
   fi
 
+  if [[ "${service}" == "ollama" ]]; then
+    env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    runtime_ctx="$(printf '%s\n' "${env_dump}" | sed -n 's/^OLLAMA_CONTEXT_LENGTH=//p' | head -n 1)"
+    expected_ctx="${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-}}"
+    if [[ -z "${runtime_ctx}" ]]; then
+      doctor_fail_or_warn "ollama missing OLLAMA_CONTEXT_LENGTH env"
+    elif [[ -n "${expected_ctx}" && "${runtime_ctx}" != "${expected_ctx}" ]]; then
+      doctor_fail_or_warn "ollama context mismatch: runtime=${runtime_ctx} expected=${expected_ctx}"
+    else
+      ok "ollama context length is configured (${runtime_ctx} tokens)"
+    fi
+  fi
+
   if [[ "${service}" == "gate-mcp" ]]; then
     published="$(docker port "${cid}" 8123/tcp 2>/dev/null || true)"
     [[ -z "${published}" ]] || doctor_fail "gate-mcp must not publish host port 8123 (got: ${published})"
@@ -394,6 +593,8 @@ fi
 if [[ ! -d "${AGENTIC_ROOT}/gate/mcp/logs" ]]; then
   doctor_fail "gate MCP audit log directory is missing: ${AGENTIC_ROOT}/gate/mcp/logs"
 fi
+
+check_default_model_context_resources
 
 comfyui_cid="$(service_container_id comfyui)"
 if [[ -n "${comfyui_cid}" ]]; then

@@ -59,6 +59,7 @@ ${custom_egress_network}
 ${custom_models}
 ${custom_default_model}
 
+
 0.55
 640m
 
@@ -120,7 +121,7 @@ run_openclaw_secret_answers() {
       --network agentic-openclaw-net \
       --egress-network agentic-openclaw-egress \
       --ollama-models-dir "${work_dir}/openclaw-models" \
-      --default-model llama3.1:8b \
+      --default-model qwen3-coder:30b \
       --grafana-admin-user admin \
       --grafana-admin-password replace-with-strong-password \
       --limits-default-cpus 0.60 \
@@ -195,10 +196,14 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-egress'$" "${default_env_file}"
   || fail "default AGENTIC_EGRESS_NETWORK is not agentic-egress"
 grep -q "^export OLLAMA_MODELS_DIR='/srv/agentic/ollama/models'$" "${default_env_file}" \
   || fail "default OLLAMA_MODELS_DIR is not /srv/agentic/ollama/models"
-grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${default_env_file}" \
-  || fail "default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
-grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.1:8b'$" "${default_env_file}" \
-  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not llama3.1:8b"
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3-coder:30b'$" "${default_env_file}" \
+  || fail "default AGENTIC_DEFAULT_MODEL is not qwen3-coder:30b"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${default_env_file}" \
+  || fail "default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 262144"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${default_env_file}" \
+  || fail "default OLLAMA_CONTEXT_LENGTH is not 262144"
+grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='qwen3-coder:30b'$" "${default_env_file}" \
+  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not qwen3-coder:30b"
 grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${default_env_file}" \
   || fail "default GRAFANA_ADMIN_USER is not admin"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'$" "${default_env_file}" \
@@ -215,8 +220,8 @@ grep -q "^export AGENTIC_LIMIT_CORE_CPUS='1.50'$" "${default_env_file}" \
   || fail "default AGENTIC_LIMIT_CORE_CPUS is not 1.50"
 grep -q "^export AGENTIC_LIMIT_CORE_MEM='3g'$" "${default_env_file}" \
   || fail "default AGENTIC_LIMIT_CORE_MEM is not 3g"
-grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='3g'$" "${default_env_file}" \
-  || fail "default AGENTIC_LIMIT_OLLAMA_MEM must follow core memory when unset"
+grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='96g'$" "${default_env_file}" \
+  || fail "default AGENTIC_LIMIT_OLLAMA_MEM is not 96g for strict-prod"
 
 assert_git_ignored "${default_env_file}"
 ok "wizard default Enter flow generates expected defaults"
@@ -250,6 +255,10 @@ grep -q "^export OLLAMA_MODELS_DIR='${work_dir}/custom-ollama-models'$" "${overr
   || fail "override OLLAMA_MODELS_DIR is not applied"
 grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override AGENTIC_DEFAULT_MODEL is not applied"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${override_env_file}" \
+  || fail "override default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW should remain 262144 when not overridden"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${override_env_file}" \
+  || fail "override default OLLAMA_CONTEXT_LENGTH should remain 262144 when not overridden"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override OLLAMA_PRELOAD_GENERATE_MODEL is not applied"
 grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${override_env_file}" \
@@ -268,8 +277,8 @@ grep -q "^export AGENTIC_LIMIT_OBS_CPUS='0.50'$" "${override_env_file}" \
   || fail "rootless default AGENTIC_LIMIT_OBS_CPUS is not applied"
 grep -q "^export AGENTIC_LIMIT_OBS_MEM='512m'$" "${override_env_file}" \
   || fail "rootless default AGENTIC_LIMIT_OBS_MEM is not applied"
-grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='2g'$" "${override_env_file}" \
-  || fail "override flow default AGENTIC_LIMIT_OLLAMA_MEM should follow rootless core memory"
+grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='64g'$" "${override_env_file}" \
+  || fail "override flow default AGENTIC_LIMIT_OLLAMA_MEM is not 64g for rootless-dev"
 
 assert_git_ignored "${override_env_file}"
 ok "wizard override flow writes custom values"
@@ -299,8 +308,12 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/rootless-default-
   || fail "rootless default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not <root>/agent-workspaces/vibestral/workspaces"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/rootless-default-root/openhands/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_OPENHANDS_WORKSPACES_DIR is not <root>/openhands/workspaces"
-grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.1:8b'$" "${rootless_default_env_file}" \
-  || fail "rootless default AGENTIC_DEFAULT_MODEL is not llama3.1:8b"
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3-coder:30b'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_DEFAULT_MODEL is not qwen3-coder:30b"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 262144"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${rootless_default_env_file}" \
+  || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 262144"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${rootless_default_env_file}" \
   || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be True"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
@@ -332,6 +345,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --egress-network agentic-ni-egress \
   --ollama-models-dir "${work_dir}/ni-models" \
   --default-model tinyllama:latest \
+  --default-model-context-window 32768 \
   --grafana-admin-user grafana-admin \
   --grafana-admin-password grafana-strong-password \
   --limits-default-cpus 0.60 \
@@ -357,6 +371,10 @@ grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.60'$" "${non_interactive_env_file
   || fail "non-interactive AGENTIC_LIMIT_DEFAULT_CPUS is not applied"
 grep -q "^export AGENTIC_DEFAULT_MODEL='tinyllama:latest'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_DEFAULT_MODEL is not applied"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='32768'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not applied"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='32768'$" "${non_interactive_env_file}" \
+  || fail "non-interactive OLLAMA_CONTEXT_LENGTH is not applied"
 grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${work_dir}/ni-agent-workspaces'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_AGENT_WORKSPACES_ROOT is not applied"
 grep -q "^export AGENTIC_CLAUDE_WORKSPACES_DIR='${work_dir}/ni-workspaces/claude'$" "${non_interactive_env_file}" \

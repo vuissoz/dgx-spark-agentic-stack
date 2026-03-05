@@ -94,7 +94,7 @@ write_openhands_settings_if_missing() {
   api_key="$(env_value "${env_file}" "LLM_API_KEY")"
   base_url="$(env_value "${env_file}" "LLM_BASE_URL")"
 
-  [[ -n "${model}" ]] || model="${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}"
+  [[ -n "${model}" ]] || model="${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}"
   [[ -n "${api_key}" ]] || api_key="local-ollama"
   [[ -n "${base_url}" ]] || base_url="http://ollama-gate:11435/v1"
   effective_model="$(normalize_openhands_model "${model}")"
@@ -154,7 +154,7 @@ main() {
   ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "WEBUI_SECRET_KEY" "change-me-openwebui-secret"
   ensure_env_key "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "OPENWEBUI_ENABLE_OLLAMA_API" "True"
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_API_KEY" "local-ollama"
-  ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_MODEL" "${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}"
+  ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}"
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_BASE_URL" "http://ollama-gate:11435/v1"
   write_openhands_settings_if_missing \
     "${AGENTIC_ROOT}/openhands/config/openhands.env" \

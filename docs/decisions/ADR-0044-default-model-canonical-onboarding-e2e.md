@@ -12,7 +12,7 @@ The stack had several hardcoded defaults for the local chat model (`qwen3:0.6b`)
 This made first-run behavior drift-prone when operators wanted another baseline model.
 
 ## Decision
-1. Introduce `AGENTIC_DEFAULT_MODEL` as canonical runtime default model variable (fallback `llama3.1:8b`).
+1. Introduce `AGENTIC_DEFAULT_MODEL` as canonical runtime default model variable (fallback `qwen3-coder:30b`).
 2. Reuse it as default source for:
    - `OLLAMA_PRELOAD_GENERATE_MODEL`,
    - onboarding `LLM_MODEL` default for OpenHands,

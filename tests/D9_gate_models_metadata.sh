@@ -44,7 +44,7 @@ trap 'rm -f "${models_file}" "${tags_file}"' EXIT
 printf '%s\n' "${models_body}" >"${models_file}"
 printf '%s\n' "${tags_body}" >"${tags_file}"
 
-default_model="${AGENTIC_DEFAULT_MODEL:-llama3.1:8b}"
+default_model="${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}"
 
 python3 - "${models_file}" "${tags_file}" "${default_model}" <<'PY'
 import json

@@ -2,13 +2,13 @@
 
 ## Goal
 - Preload one small chat model plus one embedding model.
-- Keep model storage under a 12 GB budget.
+- Keep model storage under a 32 GB budget.
 - Preserve the initial mount mode (`rw` or `ro`) after preload.
 
 ## Defaults
-- Generate model: `${AGENTIC_DEFAULT_MODEL}` (fallback `llama3.1:8b`)
+- Generate model: `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3-coder:30b`)
 - Embedding model: `qwen3-embedding:0.6b`
-- Budget: `12` GB
+- Budget: `32` GB
 
 Global default model override (used by preload and onboarding defaults):
 
@@ -26,7 +26,7 @@ Preload with automatic mode preservation:
 Custom models/budget:
 
 ```bash
-./agent ollama-preload --generate-model llama3.1:8b --embed-model qwen3-embedding:0.6b --budget-gb 12
+./agent ollama-preload --generate-model qwen3-coder:30b --embed-model qwen3-embedding:0.6b --budget-gb 32
 ```
 
 Switch mount mode manually:
