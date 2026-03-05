@@ -902,11 +902,9 @@ def extract_usage_from_upstream(protocol: str, payload: Dict[str, Any]) -> Dict[
     if not isinstance(payload, dict):
         return None
 
-    protocol_name = protocol.strip().lower()
-    if protocol_name != "ollama":
-        usage = parse_normalized_usage(payload.get("usage"))
-        if usage is not None:
-            return usage
+    usage = parse_normalized_usage(payload.get("usage"))
+    if usage is not None:
+        return usage
 
     input_tokens = parse_non_negative_int(payload.get("prompt_eval_count"))
     output_tokens = parse_non_negative_int(payload.get("eval_count"))
@@ -1715,7 +1713,14 @@ async def v1_models(request: Request) -> JSONResponse:
         )
 
 
-async def backend_chat_completion(backend: str, model: str, messages: Any) -> tuple[int, dict[str, Any], str]:
+async def backend_chat_completion(
+    backend: str,
+    model: str,
+    messages: Any,
+    *,
+    tools: Any = None,
+    tool_choice: Any = None,
+) -> tuple[int, dict[str, Any], str]:
     cfg = state.backend_config(backend)
     if cfg is None:
         raise RuntimeError(f"backend '{backend}' is not configured")
@@ -1723,15 +1728,23 @@ async def backend_chat_completion(backend: str, model: str, messages: Any) -> tu
     protocol = cfg["protocol"]
 
     if protocol == "ollama":
-        upstream_payload = {
+        use_openai_compat = isinstance(tools, list) or tool_choice is not None
+        upstream_payload: Dict[str, Any] = {
             "model": model,
             "messages": messages if isinstance(messages, list) else [],
             "stream": False,
         }
+        if isinstance(tools, list):
+            upstream_payload["tools"] = tools
+        if isinstance(tool_choice, (str, dict)):
+            upstream_payload["tool_choice"] = tool_choice
 
         try:
             async with httpx.AsyncClient(timeout=60, trust_env=True) as client:
-                upstream = await client.post(f"{cfg['base_url']}/api/chat", json=upstream_payload)
+                upstream = await client.post(
+                    f"{cfg['base_url']}/v1/chat/completions" if use_openai_compat else f"{cfg['base_url']}/api/chat",
+                    json=upstream_payload,
+                )
         except httpx.RequestError as exc:
             raise ConnectionError(str(exc)) from exc
 
@@ -1743,11 +1756,15 @@ async def backend_chat_completion(backend: str, model: str, messages: Any) -> tu
 
     if protocol == "openai":
         api_key = resolve_backend_api_key(backend, cfg)
-        upstream_payload = {
+        upstream_payload: Dict[str, Any] = {
             "model": model,
             "messages": messages if isinstance(messages, list) else [],
             "stream": False,
         }
+        if isinstance(tools, list):
+            upstream_payload["tools"] = tools
+        if isinstance(tool_choice, (str, dict)):
+            upstream_payload["tool_choice"] = tool_choice
         headers = backend_request_headers(cfg, api_key)
 
         try:
@@ -1814,7 +1831,57 @@ async def backend_embedding(backend: str, model: str, prompt: str) -> tuple[int,
     raise RuntimeError(f"unsupported backend protocol '{protocol}'")
 
 
+def json_dumps_compact(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+
+
+def normalize_tool_arguments(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list, int, float, bool)) or value is None:
+        return json_dumps_compact(value)
+    return "{}"
+
+
+def normalize_tool_call_item(value: Any, index: int = 0) -> Dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+
+    function = value.get("function")
+    if not isinstance(function, dict):
+        return None
+
+    name = function.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+
+    call_id = value.get("id")
+    if not isinstance(call_id, str) or not call_id.strip():
+        call_id = f"call_{uuid.uuid4().hex[:24]}_{index}"
+
+    return {
+        "id": call_id.strip(),
+        "type": "function",
+        "function": {
+            "name": name.strip(),
+            "arguments": normalize_tool_arguments(function.get("arguments", {})),
+        },
+    }
+
+
 def chat_content_from_upstream(protocol: str, payload: Dict[str, Any]) -> str:
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        if isinstance(first, dict):
+            message = first.get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, str):
+                    return content
+                if content is None:
+                    return ""
+
     if protocol == "ollama":
         message = payload.get("message")
         if isinstance(message, dict):
@@ -1824,21 +1891,61 @@ def chat_content_from_upstream(protocol: str, payload: Dict[str, Any]) -> str:
         return ""
 
     if protocol == "openai":
-        choices = payload.get("choices")
-        if not isinstance(choices, list) or not choices:
-            return ""
-        first = choices[0]
-        if not isinstance(first, dict):
-            return ""
-        message = first.get("message")
-        if not isinstance(message, dict):
-            return ""
-        content = message.get("content")
-        if isinstance(content, str):
-            return content
         return ""
 
     return ""
+
+
+def chat_tool_calls_from_upstream(payload: Dict[str, Any]) -> list[Dict[str, Any]] | None:
+    tool_calls_raw: Any = None
+
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        if isinstance(first, dict):
+            message = first.get("message")
+            if isinstance(message, dict):
+                tool_calls_raw = message.get("tool_calls")
+
+    if not isinstance(tool_calls_raw, list):
+        message = payload.get("message")
+        if isinstance(message, dict):
+            tool_calls_raw = message.get("tool_calls")
+
+    if not isinstance(tool_calls_raw, list) or not tool_calls_raw:
+        return None
+
+    normalized: list[Dict[str, Any]] = []
+    for idx, item in enumerate(tool_calls_raw):
+        tool_call = normalize_tool_call_item(item, idx)
+        if tool_call is not None:
+            normalized.append(tool_call)
+    return normalized if normalized else None
+
+
+def chat_finish_reason_from_upstream(payload: Dict[str, Any], has_tool_calls: bool) -> str:
+    candidate: Any = None
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        if isinstance(first, dict):
+            candidate = first.get("finish_reason")
+
+    if not isinstance(candidate, str) or not candidate.strip():
+        candidate = payload.get("done_reason")
+
+    normalized = str(candidate).strip().lower() if isinstance(candidate, str) else ""
+    if normalized in ("tool_call", "tool_calls"):
+        return "tool_calls"
+    if normalized in ("length", "max_tokens"):
+        return "length"
+    if normalized in ("content_filter",):
+        return "content_filter"
+    if normalized in ("stop", "end_turn"):
+        return "stop"
+    if has_tool_calls:
+        return "tool_calls"
+    return "stop"
 
 
 def embedding_from_upstream(protocol: str, payload: Dict[str, Any]) -> list[float] | None:
@@ -1871,7 +1978,11 @@ async def handle_chat_completion_endpoint(
     messages: Any,
     requested_model: str | None,
     session: str,
-    response_builder: Callable[[str, str, Dict[str, int] | None], Dict[str, Any]],
+    tools: Any = None,
+    tool_choice: Any = None,
+    response_builder: Callable[
+        [str, str, Dict[str, int] | None, list[Dict[str, Any]] | None, str], Dict[str, Any]
+    ],
     stream: bool = False,
     stream_builder: Callable[[str, str, Dict[str, int] | None], str] | None = None,
 ) -> Response:
@@ -1925,6 +2036,8 @@ async def handle_chat_completion_endpoint(
     external_tokens_used = 0
     usage: Dict[str, int] | None = None
     quota_detail: Dict[str, Any] = {}
+    response_tool_calls: list[Dict[str, Any]] | None = None
+    finish_reason = "stop"
     try:
         try:
             model_served, model_switch = await resolve_model(
@@ -1974,6 +2087,8 @@ async def handle_chat_completion_endpoint(
                     backend,
                     model_served,
                     messages,
+                    tools=tools,
+                    tool_choice=tool_choice,
                 )
             except BackendAuthError as exc:
                 status_code = 503
@@ -2025,6 +2140,8 @@ async def handle_chat_completion_endpoint(
             backend_cfg = state.backend_config(backend) or {}
             protocol = str(backend_cfg.get("protocol", ""))
             content = chat_content_from_upstream(protocol, upstream_json)
+            response_tool_calls = chat_tool_calls_from_upstream(upstream_json)
+            finish_reason = chat_finish_reason_from_upstream(upstream_json, response_tool_calls is not None)
             usage = extract_usage_from_upstream(protocol, upstream_json)
             if is_external_provider:
                 external_tokens_used = usage["total_tokens"] if usage is not None else extract_total_tokens(upstream_json)
@@ -2048,7 +2165,7 @@ async def handle_chat_completion_endpoint(
                 headers=headers,
             )
 
-        response_payload = response_builder(effective_model, content, usage)
+        response_payload = response_builder(effective_model, content, usage, response_tool_calls, finish_reason)
         return JSONResponse(
             status_code=200,
             content=response_payload,
@@ -2119,6 +2236,8 @@ def normalize_chat_role(value: Any) -> str:
         return "system"
     if role == "assistant":
         return "assistant"
+    if role == "tool":
+        return "tool"
     return "user"
 
 
@@ -2128,8 +2247,109 @@ def normalize_session_name(value: Any, fallback: str) -> str:
     return fallback
 
 
-def messages_from_responses_payload(payload: Dict[str, Any]) -> list[Dict[str, str]]:
-    messages: list[Dict[str, str]] = []
+def normalize_tools_payload(value: Any) -> list[Dict[str, Any]] | None:
+    if not isinstance(value, list) or not value:
+        return None
+
+    normalized: list[Dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+
+        item_type = item.get("type")
+        function = item.get("function")
+        if item_type == "function" and isinstance(function, dict):
+            name = function.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            normalized_function: Dict[str, Any] = {"name": name.strip()}
+            description = function.get("description")
+            if isinstance(description, str) and description.strip():
+                normalized_function["description"] = description.strip()
+            parameters = function.get("parameters")
+            if isinstance(parameters, dict):
+                normalized_function["parameters"] = parameters
+            normalized.append({"type": "function", "function": normalized_function})
+            continue
+
+        # Anthropic /messages tool schema -> OpenAI tools schema.
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        normalized_function = {"name": name.strip()}
+        description = item.get("description")
+        if isinstance(description, str) and description.strip():
+            normalized_function["description"] = description.strip()
+        input_schema = item.get("input_schema")
+        if isinstance(input_schema, dict):
+            normalized_function["parameters"] = input_schema
+        normalized.append({"type": "function", "function": normalized_function})
+
+    return normalized if normalized else None
+
+
+def normalize_tool_choice_payload(value: Any) -> str | Dict[str, Any] | None:
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("none", "auto", "required"):
+            return lowered
+        if lowered == "any":
+            return "required"
+        return None
+
+    if not isinstance(value, dict):
+        return None
+
+    choice_type = value.get("type")
+    if isinstance(choice_type, str):
+        choice_type = choice_type.strip().lower()
+        if choice_type in ("none", "auto"):
+            return choice_type
+        if choice_type in ("any", "required"):
+            return "required"
+        if choice_type == "tool":
+            name = value.get("name")
+            if isinstance(name, str) and name.strip():
+                return {"type": "function", "function": {"name": name.strip()}}
+        if choice_type == "function":
+            function = value.get("function")
+            if isinstance(function, dict):
+                name = function.get("name")
+                if isinstance(name, str) and name.strip():
+                    return {"type": "function", "function": {"name": name.strip()}}
+
+    function = value.get("function")
+    if isinstance(function, dict):
+        name = function.get("name")
+        if isinstance(name, str) and name.strip():
+            return {"type": "function", "function": {"name": name.strip()}}
+
+    return None
+
+
+def responses_tool_call_from_item(item: Dict[str, Any], index: int = 0) -> Dict[str, Any] | None:
+    name = item.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    call_id = item.get("call_id")
+    if not isinstance(call_id, str) or not call_id.strip():
+        item_id = item.get("id")
+        if isinstance(item_id, str) and item_id.strip():
+            call_id = item_id.strip()
+        else:
+            call_id = f"call_{uuid.uuid4().hex[:24]}_{index}"
+    return {
+        "id": call_id,
+        "type": "function",
+        "function": {
+            "name": name.strip(),
+            "arguments": normalize_tool_arguments(item.get("arguments", {})),
+        },
+    }
+
+
+def messages_from_responses_payload(payload: Dict[str, Any]) -> list[Dict[str, Any]]:
+    messages: list[Dict[str, Any]] = []
 
     instructions = payload.get("instructions")
     if isinstance(instructions, str) and instructions.strip():
@@ -2142,31 +2362,80 @@ def messages_from_responses_payload(payload: Dict[str, Any]) -> list[Dict[str, s
         return messages
 
     if isinstance(input_value, dict):
-        role = normalize_chat_role(input_value.get("role"))
-        text = extract_text_content(input_value)
-        if text:
-            messages.append({"role": role, "content": text})
-        return messages
+        input_value = [input_value]
 
     if isinstance(input_value, list):
-        for item in input_value:
+        for idx, item in enumerate(input_value):
             if isinstance(item, str):
                 if item.strip():
                     messages.append({"role": "user", "content": item})
                 continue
             if not isinstance(item, dict):
                 continue
+
+            item_type = item.get("type")
+            if item_type == "function_call_output":
+                call_id = item.get("call_id")
+                if not isinstance(call_id, str) or not call_id.strip():
+                    continue
+                output_text = extract_text_content(item.get("output"))
+                if not output_text:
+                    output_text = extract_text_content(item.get("content"))
+                messages.append({"role": "tool", "tool_call_id": call_id.strip(), "content": output_text})
+                continue
+
+            if item_type == "function_call":
+                tool_call = responses_tool_call_from_item(item, idx)
+                if tool_call is not None:
+                    messages.append({"role": "assistant", "content": "", "tool_calls": [tool_call]})
+                continue
+
+            if item_type == "message":
+                role = normalize_chat_role(item.get("role"))
+                content_value = item.get("content")
+                text = extract_text_content(content_value)
+                nested_tool_calls: list[Dict[str, Any]] = []
+                if isinstance(content_value, list):
+                    for nested_idx, block in enumerate(content_value):
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") != "function_call":
+                            continue
+                        tool_call = responses_tool_call_from_item(block, nested_idx)
+                        if tool_call is not None:
+                            nested_tool_calls.append(tool_call)
+                if nested_tool_calls:
+                    messages.append({"role": "assistant", "content": text if text else "", "tool_calls": nested_tool_calls})
+                elif role == "tool":
+                    call_id = item.get("tool_call_id")
+                    if not isinstance(call_id, str) or not call_id.strip():
+                        call_id = item.get("call_id")
+                    if isinstance(call_id, str) and call_id.strip():
+                        messages.append({"role": "tool", "tool_call_id": call_id.strip(), "content": text})
+                elif text:
+                    messages.append({"role": role, "content": text})
+                continue
+
             role = normalize_chat_role(item.get("role"))
             text = extract_text_content(item.get("content"))
             if not text:
                 text = extract_text_content(item)
+            if role == "tool":
+                call_id = item.get("tool_call_id")
+                if not isinstance(call_id, str) or not call_id.strip():
+                    call_id = item.get("call_id")
+                if isinstance(call_id, str) and call_id.strip():
+                    messages.append({"role": "tool", "tool_call_id": call_id.strip(), "content": text})
+                    continue
             if text:
                 messages.append({"role": role, "content": text})
+        return messages
+
     return messages
 
 
-def messages_from_anthropic_payload(payload: Dict[str, Any]) -> list[Dict[str, str]]:
-    messages: list[Dict[str, str]] = []
+def messages_from_anthropic_payload(payload: Dict[str, Any]) -> list[Dict[str, Any]]:
+    messages: list[Dict[str, Any]] = []
 
     system_text = extract_text_content(payload.get("system"))
     if system_text:
@@ -2182,7 +2451,57 @@ def messages_from_anthropic_payload(payload: Dict[str, Any]) -> list[Dict[str, s
         role = normalize_chat_role(item.get("role"))
         if role == "system":
             role = "user"
-        text = extract_text_content(item.get("content"))
+        content_value = item.get("content")
+        text = extract_text_content(content_value)
+        if isinstance(content_value, list) and role == "assistant":
+            tool_calls: list[Dict[str, Any]] = []
+            for idx, block in enumerate(content_value):
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") != "tool_use":
+                    continue
+                name = block.get("name")
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                call_id = block.get("id")
+                if not isinstance(call_id, str) or not call_id.strip():
+                    call_id = f"toolu_{uuid.uuid4().hex[:24]}_{idx}"
+                tool_calls.append(
+                    {
+                        "id": call_id.strip(),
+                        "type": "function",
+                        "function": {
+                            "name": name.strip(),
+                            "arguments": normalize_tool_arguments(block.get("input", {})),
+                        },
+                    }
+                )
+            if tool_calls:
+                messages.append({"role": "assistant", "content": text if text else "", "tool_calls": tool_calls})
+                continue
+
+        if isinstance(content_value, list) and role == "user":
+            user_text_parts: list[str] = []
+            for block in content_value:
+                if not isinstance(block, dict):
+                    block_text = extract_text_content(block)
+                    if block_text:
+                        user_text_parts.append(block_text)
+                    continue
+                if block.get("type") != "tool_result":
+                    block_text = extract_text_content(block)
+                    if block_text:
+                        user_text_parts.append(block_text)
+                    continue
+                tool_call_id = block.get("tool_use_id")
+                if not isinstance(tool_call_id, str) or not tool_call_id.strip():
+                    continue
+                tool_content = extract_text_content(block.get("content"))
+                messages.append({"role": "tool", "tool_call_id": tool_call_id.strip(), "content": tool_content})
+            if user_text_parts:
+                messages.append({"role": "user", "content": "\n".join(user_text_parts)})
+            continue
+
         if text:
             messages.append({"role": role, "content": text})
     return messages
@@ -2218,7 +2537,20 @@ def anthropic_usage_from_normalized(usage: Dict[str, int] | None) -> Dict[str, i
     return {"input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"]}
 
 
-def build_chat_completion_payload(model: str, content: str, usage: Dict[str, int] | None = None) -> Dict[str, Any]:
+def build_chat_completion_payload(
+    model: str,
+    content: str,
+    usage: Dict[str, int] | None = None,
+    tool_calls: list[Dict[str, Any]] | None = None,
+    finish_reason: str = "stop",
+) -> Dict[str, Any]:
+    message: Dict[str, Any] = {"role": "assistant"}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+        message["content"] = content if content else None
+    else:
+        message["content"] = content
+
     payload = {
         "id": f"chatcmpl-{uuid.uuid4().hex}",
         "object": "chat.completion",
@@ -2227,8 +2559,8 @@ def build_chat_completion_payload(model: str, content: str, usage: Dict[str, int
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": content},
-                "finish_reason": "stop",
+                "message": message,
+                "finish_reason": finish_reason,
             }
         ],
     }
@@ -2238,9 +2570,67 @@ def build_chat_completion_payload(model: str, content: str, usage: Dict[str, int
     return payload
 
 
-def build_responses_payload(model: str, content: str, usage: Dict[str, int] | None = None) -> Dict[str, Any]:
+def parse_tool_arguments_json(arguments_raw: str) -> Any:
+    try:
+        return json.loads(arguments_raw)
+    except Exception:
+        return {}
+
+
+def build_responses_payload(
+    model: str,
+    content: str,
+    usage: Dict[str, int] | None = None,
+    tool_calls: list[Dict[str, Any]] | None = None,
+    finish_reason: str = "stop",
+) -> Dict[str, Any]:
     response_id = f"resp_{uuid.uuid4().hex}"
     message_id = f"msg_{uuid.uuid4().hex}"
+    output: list[Dict[str, Any]] = []
+
+    if content:
+        output.append(
+            {
+                "id": message_id,
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": content, "annotations": []}],
+            }
+        )
+
+    if tool_calls:
+        for tool_call in tool_calls:
+            fn = tool_call.get("function") if isinstance(tool_call, dict) else None
+            name = fn.get("name") if isinstance(fn, dict) else None
+            arguments = fn.get("arguments") if isinstance(fn, dict) else None
+            call_id = tool_call.get("id") if isinstance(tool_call, dict) else None
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if not isinstance(call_id, str) or not call_id.strip():
+                call_id = f"call_{uuid.uuid4().hex[:24]}"
+            output.append(
+                {
+                    "id": f"fc_{uuid.uuid4().hex}",
+                    "type": "function_call",
+                    "status": "completed",
+                    "name": name.strip(),
+                    "arguments": normalize_tool_arguments(arguments),
+                    "call_id": call_id.strip(),
+                }
+            )
+
+    if not output:
+        output.append(
+            {
+                "id": message_id,
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": content, "annotations": []}],
+            }
+        )
+
     payload = {
         "id": response_id,
         "object": "response",
@@ -2249,16 +2639,10 @@ def build_responses_payload(model: str, content: str, usage: Dict[str, int] | No
         "model": model,
         "output_text": content,
         "error": None,
-        "output": [
-            {
-                "id": message_id,
-                "type": "message",
-                "status": "completed",
-                "role": "assistant",
-                "content": [{"type": "output_text", "text": content, "annotations": []}],
-            }
-        ],
+        "output": output,
     }
+    if finish_reason:
+        payload["finish_reason"] = finish_reason
     usage_payload = responses_usage_from_normalized(usage)
     if usage_payload is not None:
         payload["usage"] = usage_payload
@@ -2268,9 +2652,24 @@ def build_responses_payload(model: str, content: str, usage: Dict[str, int] | No
 def build_responses_stream(model: str, content: str, usage: Dict[str, int] | None = None) -> str:
     final_payload = build_responses_payload(model, content, usage)
     response_id = final_payload["id"]
-    output_item = final_payload["output"][0]
+    output_item: Dict[str, Any] | None = None
+    for item in final_payload.get("output", []):
+        if isinstance(item, dict) and item.get("type") == "message":
+            output_item = item
+            break
+    if output_item is None:
+        output_item = {
+            "id": f"msg_{uuid.uuid4().hex}",
+            "type": "message",
+            "status": "completed",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": content, "annotations": []}],
+        }
     output_item_id = output_item["id"]
-    output_part = output_item["content"][0]
+    output_content = output_item.get("content")
+    if not isinstance(output_content, list) or not output_content:
+        output_content = [{"type": "output_text", "text": content, "annotations": []}]
+    output_part = output_content[0]
     created_payload = {
         "type": "response.created",
         "response": {
@@ -2358,14 +2757,55 @@ def build_responses_stream(model: str, content: str, usage: Dict[str, int] | Non
     )
 
 
-def build_anthropic_message_payload(model: str, content: str, usage: Dict[str, int] | None = None) -> Dict[str, Any]:
+def anthropic_stop_reason_from_finish_reason(finish_reason: str, has_tool_calls: bool) -> str:
+    if has_tool_calls:
+        return "tool_use"
+    normalized = finish_reason.strip().lower() if isinstance(finish_reason, str) else ""
+    if normalized in ("length", "max_tokens"):
+        return "max_tokens"
+    return "end_turn"
+
+
+def build_anthropic_message_payload(
+    model: str,
+    content: str,
+    usage: Dict[str, int] | None = None,
+    tool_calls: list[Dict[str, Any]] | None = None,
+    finish_reason: str = "stop",
+) -> Dict[str, Any]:
+    content_blocks: list[Dict[str, Any]] = []
+    if content:
+        content_blocks.append({"type": "text", "text": content})
+
+    if tool_calls:
+        for item in tool_calls:
+            function = item.get("function") if isinstance(item, dict) else None
+            name = function.get("name") if isinstance(function, dict) else None
+            arguments = function.get("arguments") if isinstance(function, dict) else None
+            call_id = item.get("id") if isinstance(item, dict) else None
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if not isinstance(call_id, str) or not call_id.strip():
+                call_id = f"toolu_{uuid.uuid4().hex[:24]}"
+            content_blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": call_id.strip(),
+                    "name": name.strip(),
+                    "input": parse_tool_arguments_json(normalize_tool_arguments(arguments)),
+                }
+            )
+
+    if not content_blocks:
+        content_blocks = [{"type": "text", "text": ""}]
+
     payload = {
         "id": f"msg_{uuid.uuid4().hex}",
         "type": "message",
         "role": "assistant",
         "model": model,
-        "content": [{"type": "text", "text": content}],
-        "stop_reason": "end_turn",
+        "content": content_blocks,
+        "stop_reason": anthropic_stop_reason_from_finish_reason(finish_reason, bool(tool_calls)),
         "stop_sequence": None,
     }
     usage_payload = anthropic_usage_from_normalized(usage)
@@ -2412,6 +2852,8 @@ async def v1_chat_completions(request: Request) -> Response:
     requested_model = payload.get("model") if isinstance(payload.get("model"), str) else None
     session = normalize_session_name(request.headers.get("X-Agent-Session") or payload.get("user"), "anonymous")
     messages = payload.get("messages", [])
+    tools = normalize_tools_payload(payload.get("tools"))
+    tool_choice = normalize_tool_choice_payload(payload.get("tool_choice"))
 
     return await handle_chat_completion_endpoint(
         request,
@@ -2420,6 +2862,8 @@ async def v1_chat_completions(request: Request) -> Response:
         messages=messages,
         requested_model=requested_model,
         session=session,
+        tools=tools,
+        tool_choice=tool_choice,
         response_builder=build_chat_completion_payload,
         stream=False,
     )
@@ -2435,6 +2879,8 @@ async def v1_responses(request: Request) -> Response:
     requested_model = payload.get("model") if isinstance(payload.get("model"), str) else None
     session = normalize_session_name(request.headers.get("X-Agent-Session") or payload.get("user"), "responses")
     messages = messages_from_responses_payload(payload)
+    tools = normalize_tools_payload(payload.get("tools"))
+    tool_choice = normalize_tool_choice_payload(payload.get("tool_choice"))
     if not messages:
         return JSONResponse(
             status_code=400,
@@ -2455,6 +2901,8 @@ async def v1_responses(request: Request) -> Response:
         messages=messages,
         requested_model=requested_model,
         session=session,
+        tools=tools,
+        tool_choice=tool_choice,
         response_builder=build_responses_payload,
         stream=stream,
         stream_builder=build_responses_stream,
@@ -2473,6 +2921,8 @@ async def v1_messages(request: Request) -> Response:
     metadata_user = metadata.get("user_id") if isinstance(metadata, dict) else None
     session = normalize_session_name(request.headers.get("X-Agent-Session") or metadata_user, "messages")
     messages = messages_from_anthropic_payload(payload)
+    tools = normalize_tools_payload(payload.get("tools"))
+    tool_choice = normalize_tool_choice_payload(payload.get("tool_choice"))
     if not messages:
         return JSONResponse(
             status_code=400,
@@ -2493,6 +2943,8 @@ async def v1_messages(request: Request) -> Response:
         messages=messages,
         requested_model=requested_model,
         session=session,
+        tools=tools,
+        tool_choice=tool_choice,
         response_builder=build_anthropic_message_payload,
         stream=stream,
         stream_builder=build_anthropic_message_stream,
