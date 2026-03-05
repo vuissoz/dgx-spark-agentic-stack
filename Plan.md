@@ -6,15 +6,15 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 ## Tracking
 - Beads: `dgx-spark-agentic-stack-5bz`
 - Beads (compat agents Ollama):
-  - `dgx-spark-agentic-stack-3xx` (gate tools/tool_choice + tool_calls)
-  - `dgx-spark-agentic-stack-eta` (usages/tokens réels sur endpoints compat)
-  - `dgx-spark-agentic-stack-p1i` (Claude env `ANTHROPIC_AUTH_TOKEN`)
-  - `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut)
-  - `dgx-spark-agentic-stack-ygu` (veille drift upstream Ollama)
-  - `dgx-spark-agentic-stack-7gw` (matrice opencode/openclaw/openhands/vibestral)
-  - `dgx-spark-agentic-stack-a5m` (enforcement opencode/vibestral via gate)
-  - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch)
-  - `dgx-spark-agentic-stack-b32` (run D8/E2 sur stack compose démarrée)
+  - `dgx-spark-agentic-stack-3xx` (gate tools/tool_choice + tool_calls) [OPEN]
+  - `dgx-spark-agentic-stack-eta` (usages/tokens réels sur endpoints compat) [CLOSED]
+  - `dgx-spark-agentic-stack-p1i` (Claude env `ANTHROPIC_AUTH_TOKEN`) [CLOSED]
+  - `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut) [OPEN]
+  - `dgx-spark-agentic-stack-ygu` (veille drift upstream Ollama) [OPEN]
+  - `dgx-spark-agentic-stack-7gw` (matrice opencode/openclaw/openhands/vibestral) [OPEN]
+  - `dgx-spark-agentic-stack-a5m` (enforcement opencode/vibestral via gate) [CLOSED]
+  - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch) [OPEN]
+  - `dgx-spark-agentic-stack-b32` (run D8/E2 sur stack compose démarrée) [CLOSED]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -63,9 +63,25 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 14. Ajouter une veille automatisée de drift (job planifié + issue Beads auto en cas d'écart contractuel upstream).
 15. Finaliser avec tests ciblés, commit atomique, `bd sync`, push.
 
-## Progress (2026-03-05)
-- Step 9 (partiel): endpoints compat gate migrés vers `usage` calculé depuis upstream (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`) + suppression des `usage` synthétiques `0`.
-- Step 9 (partiel): `/v1/embeddings` n’expose plus de `usage` synthétique; `usage` renvoyé uniquement si observé upstream.
-- Step 10 (fait): bootstrap/env Claude aligné avec `ANTHROPIC_AUTH_TOKEN` (`entrypoint`, onboarding, tests).
-- Step 12 (partiel): vérifications renforcées `opencode`/`vibestral` via `ollama-gate` dans `doctor` et `E2_agents_confinement`.
-- Reste à faire: exécution des tests d’intégration `D8`/`E2` sur stack démarrée (non exécutable ici car services compose absents).
+## Progress (2026-03-05, etat reel)
+- Step 1-6: completes (baseline `qwen3-coder`, onboarding/context, doctor checks, L7, updates docs/tests, validations ciblees).
+- Step 9: complete via `dgx-spark-agentic-stack-eta`:
+  - `/v1/chat/completions`, `/v1/responses`, `/v1/messages` exposent des usages derives de l'upstream.
+  - suppression des usages synthetiques silencieux a `0`.
+  - `/v1/embeddings` n'expose `usage` que si observe upstream.
+- Step 10: complete via `dgx-spark-agentic-stack-p1i`:
+  - `ANTHROPIC_AUTH_TOKEN` ajoute au bootstrap/onboarding et verifie dans tests/doctor.
+- Step 12: complete via `dgx-spark-agentic-stack-a5m`:
+  - enforcement opencode/vibestral via gate dans doctor + E2.
+  - preuve automatisee de trafic dans `/gate/logs/gate.jsonl` (session unique, endpoint, statut 2xx).
+- Validation integration associee complete via `dgx-spark-agentic-stack-b32`:
+  - `D8_gate_protocol_compat`: PASS
+  - `E2_agents_confinement`: PASS (runtime rootless-dev avec `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false`).
+
+## Remaining Work (open)
+- Step 7 -> `dgx-spark-agentic-stack-7gw` (matrice agents/integrations + tests de contrat).
+- Step 8 -> `dgx-spark-agentic-stack-3xx` (tools/tool_choice/tool_calls end-to-end).
+- Step 11 -> `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut, direct Ollama en opt-in explicite).
+- Step 13 -> `dgx-spark-agentic-stack-ik6` (implementation OpenClaw complete inspiree launch).
+- Step 14 -> `dgx-spark-agentic-stack-ygu` (veille drift automatisee docs/integrations Ollama).
+- Step 15: finalisation globale apres fermeture des steps 7/8/11/13/14.
