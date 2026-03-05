@@ -9,6 +9,7 @@ AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
 AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
 AGENTIC_OPENHANDS_WORKSPACES_DIR="${AGENTIC_OPENHANDS_WORKSPACES_DIR:-${AGENTIC_ROOT}/openhands/workspaces}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/ui"
+WORKSPACE_SEED_DIR="${AGENTIC_WORKSPACE_SEED_DIR:-${REPO_ROOT}/examples/workspace-default-python}"
 
 log() {
   echo "INFO: $*"
@@ -122,6 +123,30 @@ PY
   log "created runtime file: ${settings_file}"
 }
 
+seed_openhands_workspace_if_missing() {
+  local seed_basename destination
+
+  [[ -d "${WORKSPACE_SEED_DIR}" ]] || {
+    log "workspace seed skipped, source folder missing: ${WORKSPACE_SEED_DIR}"
+    return 0
+  }
+
+  seed_basename="$(basename "${WORKSPACE_SEED_DIR}")"
+  destination="${AGENTIC_OPENHANDS_WORKSPACES_DIR}/${seed_basename}"
+
+  if [[ -e "${destination}" ]]; then
+    log "preserve existing workspace seed: ${destination}"
+    return 0
+  fi
+
+  cp -a "${WORKSPACE_SEED_DIR}" "${destination}"
+  chmod -R u+rwX "${destination}" 2>/dev/null || true
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${destination}" || true
+  fi
+  log "seeded workspace folder: ${destination}"
+}
+
 main() {
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui"
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui/config"
@@ -156,6 +181,7 @@ main() {
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_API_KEY" "local-ollama"
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}"
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_BASE_URL" "http://ollama-gate:11435/v1"
+  seed_openhands_workspace_if_missing
   write_openhands_settings_if_missing \
     "${AGENTIC_ROOT}/openhands/config/openhands.env" \
     "${AGENTIC_ROOT}/openhands/state/settings.json"

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
 AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
 if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
@@ -14,6 +16,7 @@ AGENTIC_OPENCODE_WORKSPACES_DIR="${AGENTIC_OPENCODE_WORKSPACES_DIR:-${AGENTIC_AG
 AGENTIC_VIBESTRAL_WORKSPACES_DIR="${AGENTIC_VIBESTRAL_WORKSPACES_DIR:-${AGENTIC_AGENT_WORKSPACES_ROOT}/vibestral/workspaces}"
 AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
 AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
+WORKSPACE_SEED_DIR="${AGENTIC_WORKSPACE_SEED_DIR:-${REPO_ROOT}/examples/workspace-default-python}"
 
 log() {
   echo "INFO: $*"
@@ -46,6 +49,32 @@ ensure_gate_mcp_token() {
   if [[ "${EUID}" -eq 0 ]]; then
     chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${token_file}" || true
   fi
+}
+
+seed_workspace_if_missing() {
+  local workspace_dir="$1"
+  local seed_basename
+  local destination
+
+  [[ -d "${WORKSPACE_SEED_DIR}" ]] || {
+    log "workspace seed skipped, source folder missing: ${WORKSPACE_SEED_DIR}"
+    return 0
+  }
+
+  seed_basename="$(basename "${WORKSPACE_SEED_DIR}")"
+  destination="${workspace_dir}/${seed_basename}"
+
+  if [[ -e "${destination}" ]]; then
+    log "preserve existing workspace seed: ${destination}"
+    return 0
+  fi
+
+  cp -a "${WORKSPACE_SEED_DIR}" "${destination}"
+  chmod -R u+rwX "${destination}" 2>/dev/null || true
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${destination}" || true
+  fi
+  log "seeded workspace folder: ${destination}"
 }
 
 main() {
@@ -81,6 +110,11 @@ main() {
   for dir in "${writable_dirs[@]}"; do
     ensure_dir "${dir}" 0770
   done
+
+  seed_workspace_if_missing "${AGENTIC_CLAUDE_WORKSPACES_DIR}"
+  seed_workspace_if_missing "${AGENTIC_CODEX_WORKSPACES_DIR}"
+  seed_workspace_if_missing "${AGENTIC_OPENCODE_WORKSPACES_DIR}"
+  seed_workspace_if_missing "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}"
 
   ensure_gate_mcp_token
 
