@@ -56,10 +56,26 @@ assert_ollama_gate_defaults() {
       test \"\${OPENAI_API_BASE}\" = 'http://ollama-gate:11435/v1'; \
       test \"\${OPENAI_API_KEY}\" = 'local-ollama'; \
       test \"\${ANTHROPIC_BASE_URL}\" = 'http://ollama-gate:11435'; \
+      test \"\${ANTHROPIC_AUTH_TOKEN}\" = 'local-ollama'; \
       test \"\${ANTHROPIC_API_KEY}\" = 'local-ollama'" \
     || fail "${container_id}: defaults file does not resolve to ollama-gate endpoint"
 
   ok "${container_id}: first-run LLM defaults target ollama-gate"
+}
+
+assert_runtime_gate_routing() {
+  local container_id="$1"
+  local label="$2"
+
+  timeout 20 docker exec "${container_id}" sh -lc \
+    "test \"\${OLLAMA_BASE_URL}\" = 'http://ollama-gate:11435'" \
+    || fail "${container_id}: ${label} runtime OLLAMA_BASE_URL must point to ollama-gate"
+
+  timeout 20 docker exec "${container_id}" sh -lc \
+    "test \"\${OPENAI_BASE_URL}\" = 'http://ollama-gate:11435/v1'" \
+    || fail "${container_id}: ${label} runtime OPENAI_BASE_URL must point to ollama-gate /v1"
+
+  ok "${container_id}: ${label} runtime routes LLM traffic through ollama-gate"
 }
 
 assert_write_boundaries() {
@@ -165,6 +181,9 @@ for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}"; 
     ok "${cid}: sudo is usable in sudo mode"
   fi
 done
+
+assert_runtime_gate_routing "${opencode_cid}" "opencode"
+assert_runtime_gate_routing "${vibestral_cid}" "vibestral"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
 agentic_profile="${AGENTIC_PROFILE:-strict-prod}"

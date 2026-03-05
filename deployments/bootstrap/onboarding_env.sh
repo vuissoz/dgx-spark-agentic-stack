@@ -1123,6 +1123,7 @@ export GRAFANA_ADMIN_PASSWORD=$(shell_quote "${grafana_admin_password}")
 export AGENTIC_OLLAMA_GATE_BASE_URL='http://ollama-gate:11435'
 export AGENTIC_OLLAMA_GATE_V1_URL='http://ollama-gate:11435/v1'
 export ANTHROPIC_BASE_URL='http://ollama-gate:11435'
+export ANTHROPIC_AUTH_TOKEN='local-ollama'
 export ANTHROPIC_API_KEY='local-ollama'
 export ANTHROPIC_MODEL=$(shell_quote "${default_model}")
 export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'

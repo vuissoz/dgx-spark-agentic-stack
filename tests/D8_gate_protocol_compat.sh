@@ -57,6 +57,13 @@ assert isinstance(content, list) and content, payload
 text_item = content[0]
 assert isinstance(text_item, dict), payload
 assert isinstance(text_item.get('text'), str) and text_item['text'].strip(), payload
+usage = payload.get('usage')
+assert isinstance(usage, dict), payload
+for key in ('input_tokens', 'output_tokens', 'total_tokens'):
+    assert isinstance(usage.get(key), int) and usage[key] >= 0, payload
+assert usage['total_tokens'] >= usage['input_tokens'], payload
+assert usage['total_tokens'] >= usage['output_tokens'], payload
+assert usage['total_tokens'] > 0, payload
 PY
 }
 
@@ -78,6 +85,11 @@ assert isinstance(first, dict), payload
 assert first.get('type') == 'text', payload
 text = first.get('text')
 assert isinstance(text, str) and text.strip(), payload
+usage = payload.get('usage')
+assert isinstance(usage, dict), payload
+for key in ('input_tokens', 'output_tokens'):
+    assert isinstance(usage.get(key), int) and usage[key] >= 0, payload
+assert usage['input_tokens'] + usage['output_tokens'] > 0, payload
 PY
 }
 
@@ -162,6 +174,32 @@ printf '%s\n' "${messages_stream_body}" >"${stream_file}"
 }
 grep -q 'event: content_block_delta' "${stream_file}" || fail "/v1/messages stream missing content_block_delta event"
 grep -q 'event: message_stop' "${stream_file}" || fail "/v1/messages stream missing message_stop event"
+python3 - "${stream_file}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+message_delta_seen = False
+usage_seen = False
+with open(path, 'r', encoding='utf-8') as fh:
+    for line in fh:
+        if not line.startswith('data: '):
+            continue
+        payload = line[len('data: '):].strip()
+        if payload in ('', '[DONE]'):
+            continue
+        obj = json.loads(payload)
+        if obj.get('type') != 'message_delta':
+            continue
+        message_delta_seen = True
+        usage = obj.get('usage')
+        if isinstance(usage, dict) and isinstance(usage.get('output_tokens'), int):
+            if usage['output_tokens'] > 0:
+                usage_seen = True
+                break
+assert message_delta_seen, 'message_delta event not found'
+assert usage_seen, 'message_delta usage.output_tokens missing or not positive'
+PY
 ok "gate /v1/messages streaming compatibility is operational"
 
 ok "D8_gate_protocol_compat passed"

@@ -852,16 +852,91 @@ def extract_test_tokens(request: Request) -> int:
     return max(0, value)
 
 
-def extract_total_tokens(payload: Dict[str, Any]) -> int:
-    usage = payload.get("usage")
-    if not isinstance(usage, dict):
-        return 0
-    value = usage.get("total_tokens")
+def parse_non_negative_int(value: Any) -> int | None:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return parsed
+
+
+def parse_normalized_usage(value: Any) -> Dict[str, int] | None:
+    if not isinstance(value, dict):
+        return None
+
+    input_tokens = parse_non_negative_int(value.get("input_tokens"))
+    if input_tokens is None:
+        input_tokens = parse_non_negative_int(value.get("prompt_tokens"))
+
+    output_tokens = parse_non_negative_int(value.get("output_tokens"))
+    if output_tokens is None:
+        output_tokens = parse_non_negative_int(value.get("completion_tokens"))
+
+    total_tokens = parse_non_negative_int(value.get("total_tokens"))
+
+    if input_tokens is None and output_tokens is None and total_tokens is None:
+        return None
+
+    if input_tokens is None and total_tokens is not None and output_tokens is not None:
+        input_tokens = max(0, total_tokens - output_tokens)
+    if output_tokens is None and total_tokens is not None and input_tokens is not None:
+        output_tokens = max(0, total_tokens - input_tokens)
+
+    if input_tokens is None:
+        input_tokens = 0
+    if output_tokens is None:
+        output_tokens = 0
+    if total_tokens is None:
+        total_tokens = input_tokens + output_tokens
+
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def extract_usage_from_upstream(protocol: str, payload: Dict[str, Any]) -> Dict[str, int] | None:
+    if not isinstance(payload, dict):
+        return None
+
+    protocol_name = protocol.strip().lower()
+    if protocol_name != "ollama":
+        usage = parse_normalized_usage(payload.get("usage"))
+        if usage is not None:
+            return usage
+
+    input_tokens = parse_non_negative_int(payload.get("prompt_eval_count"))
+    output_tokens = parse_non_negative_int(payload.get("eval_count"))
+    total_tokens = parse_non_negative_int(payload.get("total_tokens"))
+    if input_tokens is None and output_tokens is None and total_tokens is None:
+        return None
+
+    if input_tokens is None and total_tokens is not None and output_tokens is not None:
+        input_tokens = max(0, total_tokens - output_tokens)
+    if output_tokens is None and total_tokens is not None and input_tokens is not None:
+        output_tokens = max(0, total_tokens - input_tokens)
+    if input_tokens is None:
+        input_tokens = 0
+    if output_tokens is None:
+        output_tokens = 0
+    if total_tokens is None:
+        total_tokens = input_tokens + output_tokens
+
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def extract_total_tokens(payload: Dict[str, Any]) -> int:
+    usage = extract_usage_from_upstream("", payload)
+    if usage is None:
         return 0
-    return max(0, parsed)
+    return usage["total_tokens"]
 
 
 def extract_requested_model(payload: Any) -> str | None:
@@ -1796,9 +1871,9 @@ async def handle_chat_completion_endpoint(
     messages: Any,
     requested_model: str | None,
     session: str,
-    response_builder: Callable[[str, str], Dict[str, Any]],
+    response_builder: Callable[[str, str, Dict[str, int] | None], Dict[str, Any]],
     stream: bool = False,
-    stream_builder: Callable[[str, str], str] | None = None,
+    stream_builder: Callable[[str, str, Dict[str, int] | None], str] | None = None,
 ) -> Response:
     project = request.headers.get("X-Agent-Project", "-")
     allow_switch = header_bool(request.headers.get("X-Model-Switch"))
@@ -1848,6 +1923,7 @@ async def handle_chat_completion_endpoint(
     reason = None
     is_external_provider = False
     external_tokens_used = 0
+    usage: Dict[str, int] | None = None
     quota_detail: Dict[str, Any] = {}
     try:
         try:
@@ -1886,6 +1962,12 @@ async def handle_chat_completion_endpoint(
             content = f"gate dry-run response for session={session} model={model_served} backend={backend}"
             if is_external_provider:
                 external_tokens_used = extract_test_tokens(request)
+                if external_tokens_used > 0:
+                    usage = {
+                        "input_tokens": external_tokens_used,
+                        "output_tokens": 0,
+                        "total_tokens": external_tokens_used,
+                    }
         else:
             try:
                 upstream_status, upstream_json, upstream_text = await backend_chat_completion(
@@ -1943,8 +2025,9 @@ async def handle_chat_completion_endpoint(
             backend_cfg = state.backend_config(backend) or {}
             protocol = str(backend_cfg.get("protocol", ""))
             content = chat_content_from_upstream(protocol, upstream_json)
+            usage = extract_usage_from_upstream(protocol, upstream_json)
             if is_external_provider:
-                external_tokens_used = extract_total_tokens(upstream_json)
+                external_tokens_used = usage["total_tokens"] if usage is not None else extract_total_tokens(upstream_json)
 
         if is_external_provider:
             await state.external_quota_record(provider, project, external_tokens_used)
@@ -1961,11 +2044,11 @@ async def handle_chat_completion_endpoint(
             headers["Content-Type"] = "text/event-stream; charset=utf-8"
             return Response(
                 status_code=200,
-                content=stream_builder(effective_model, content),
+                content=stream_builder(effective_model, content, usage),
                 headers=headers,
             )
 
-        response_payload = response_builder(effective_model, content)
+        response_payload = response_builder(effective_model, content, usage)
         return JSONResponse(
             status_code=200,
             content=response_payload,
@@ -2109,8 +2192,34 @@ def sse_event(event: str, payload: Dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
 
 
-def build_chat_completion_payload(model: str, content: str) -> Dict[str, Any]:
+def chat_completion_usage_from_normalized(usage: Dict[str, int] | None) -> Dict[str, int] | None:
+    if usage is None:
+        return None
     return {
+        "prompt_tokens": usage["input_tokens"],
+        "completion_tokens": usage["output_tokens"],
+        "total_tokens": usage["total_tokens"],
+    }
+
+
+def responses_usage_from_normalized(usage: Dict[str, int] | None) -> Dict[str, int] | None:
+    if usage is None:
+        return None
+    return {
+        "input_tokens": usage["input_tokens"],
+        "output_tokens": usage["output_tokens"],
+        "total_tokens": usage["total_tokens"],
+    }
+
+
+def anthropic_usage_from_normalized(usage: Dict[str, int] | None) -> Dict[str, int] | None:
+    if usage is None:
+        return None
+    return {"input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"]}
+
+
+def build_chat_completion_payload(model: str, content: str, usage: Dict[str, int] | None = None) -> Dict[str, Any]:
+    payload = {
         "id": f"chatcmpl-{uuid.uuid4().hex}",
         "object": "chat.completion",
         "created": int(time.time()),
@@ -2123,12 +2232,16 @@ def build_chat_completion_payload(model: str, content: str) -> Dict[str, Any]:
             }
         ],
     }
+    usage_payload = chat_completion_usage_from_normalized(usage)
+    if usage_payload is not None:
+        payload["usage"] = usage_payload
+    return payload
 
 
-def build_responses_payload(model: str, content: str) -> Dict[str, Any]:
+def build_responses_payload(model: str, content: str, usage: Dict[str, int] | None = None) -> Dict[str, Any]:
     response_id = f"resp_{uuid.uuid4().hex}"
     message_id = f"msg_{uuid.uuid4().hex}"
-    return {
+    payload = {
         "id": response_id,
         "object": "response",
         "created_at": now_iso(),
@@ -2145,12 +2258,15 @@ def build_responses_payload(model: str, content: str) -> Dict[str, Any]:
                 "content": [{"type": "output_text", "text": content, "annotations": []}],
             }
         ],
-        "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
     }
+    usage_payload = responses_usage_from_normalized(usage)
+    if usage_payload is not None:
+        payload["usage"] = usage_payload
+    return payload
 
 
-def build_responses_stream(model: str, content: str) -> str:
-    final_payload = build_responses_payload(model, content)
+def build_responses_stream(model: str, content: str, usage: Dict[str, int] | None = None) -> str:
+    final_payload = build_responses_payload(model, content, usage)
     response_id = final_payload["id"]
     output_item = final_payload["output"][0]
     output_item_id = output_item["id"]
@@ -2242,8 +2358,8 @@ def build_responses_stream(model: str, content: str) -> str:
     )
 
 
-def build_anthropic_message_payload(model: str, content: str) -> Dict[str, Any]:
-    return {
+def build_anthropic_message_payload(model: str, content: str, usage: Dict[str, int] | None = None) -> Dict[str, Any]:
+    payload = {
         "id": f"msg_{uuid.uuid4().hex}",
         "type": "message",
         "role": "assistant",
@@ -2251,15 +2367,25 @@ def build_anthropic_message_payload(model: str, content: str) -> Dict[str, Any]:
         "content": [{"type": "text", "text": content}],
         "stop_reason": "end_turn",
         "stop_sequence": None,
-        "usage": {"input_tokens": 0, "output_tokens": 0},
     }
+    usage_payload = anthropic_usage_from_normalized(usage)
+    if usage_payload is not None:
+        payload["usage"] = usage_payload
+    return payload
 
 
-def build_anthropic_message_stream(model: str, content: str) -> str:
-    payload = build_anthropic_message_payload(model, content)
+def build_anthropic_message_stream(model: str, content: str, usage: Dict[str, int] | None = None) -> str:
+    payload = build_anthropic_message_payload(model, content, usage)
     message_start = dict(payload)
     message_start["content"] = []
     message_start["stop_reason"] = None
+    message_delta_payload = {
+        "type": "message_delta",
+        "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+    }
+    usage_payload = anthropic_usage_from_normalized(usage)
+    if usage_payload is not None:
+        message_delta_payload["usage"] = {"output_tokens": usage_payload["output_tokens"]}
     events = [
         sse_event("message_start", {"type": "message_start", "message": message_start}),
         sse_event(
@@ -2271,10 +2397,7 @@ def build_anthropic_message_stream(model: str, content: str) -> str:
             {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": content}},
         ),
         sse_event("content_block_stop", {"type": "content_block_stop", "index": 0}),
-        sse_event(
-            "message_delta",
-            {"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": None}, "usage": {"output_tokens": 0}},
-        ),
+        sse_event("message_delta", message_delta_payload),
         sse_event("message_stop", {"type": "message_stop"}),
     ]
     return "".join(events)
@@ -2452,6 +2575,9 @@ async def v1_embeddings(request: Request) -> JSONResponse:
     reason = None
     is_external_provider = False
     external_tokens_used = 0
+    embedding_prompt_tokens = 0
+    embedding_total_tokens = 0
+    embedding_usage_observed = False
     quota_detail: Dict[str, Any] = {}
     try:
         try:
@@ -2489,6 +2615,10 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 vectors.append(deterministic_embedding_vector(f"{model_served}:{item}:{backend}"))
             if is_external_provider:
                 external_tokens_used = extract_test_tokens(request)
+                if external_tokens_used > 0:
+                    embedding_prompt_tokens = external_tokens_used
+                    embedding_total_tokens = external_tokens_used
+                    embedding_usage_observed = True
         else:
             for item in inputs:
                 try:
@@ -2562,8 +2692,13 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                         },
                     )
                 vectors.append(embedding)
+                usage = extract_usage_from_upstream(protocol, upstream_json)
+                if usage is not None:
+                    embedding_prompt_tokens += usage["input_tokens"]
+                    embedding_total_tokens += usage["total_tokens"]
+                    embedding_usage_observed = True
                 if is_external_provider:
-                    external_tokens_used += extract_total_tokens(upstream_json)
+                    external_tokens_used += usage["total_tokens"] if usage is not None else extract_total_tokens(upstream_json)
 
         if is_external_provider:
             await state.external_quota_record(provider, project, external_tokens_used)
@@ -2575,8 +2710,12 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 for idx, vector in enumerate(vectors)
             ],
             "model": model_served,
-            "usage": {"prompt_tokens": 0, "total_tokens": 0},
         }
+        if embedding_usage_observed:
+            response_payload["usage"] = {
+                "prompt_tokens": embedding_prompt_tokens,
+                "total_tokens": embedding_total_tokens,
+            }
         return JSONResponse(
             status_code=200,
             content=response_payload,

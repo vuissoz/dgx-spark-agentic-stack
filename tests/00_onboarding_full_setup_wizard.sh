@@ -96,6 +96,8 @@ grep -q "^export AGENTIC_OLLAMA_GATE_BASE_URL='http://ollama-gate:11435'$" "${en
   || fail "full setup onboarding env must export AGENTIC_OLLAMA_GATE_BASE_URL"
 grep -q "^export ANTHROPIC_BASE_URL='http://ollama-gate:11435'$" "${env_file}" \
   || fail "full setup onboarding env must export ANTHROPIC_BASE_URL"
+grep -q "^export ANTHROPIC_AUTH_TOKEN='local-ollama'$" "${env_file}" \
+  || fail "full setup onboarding env must export ANTHROPIC_AUTH_TOKEN placeholder"
 grep -q "^export ANTHROPIC_API_KEY='local-ollama'$" "${env_file}" \
   || fail "full setup onboarding env must export ANTHROPIC_API_KEY placeholder"
 grep -q "^export ANTHROPIC_MODEL='${default_model}'$" "${env_file}" \

@@ -549,6 +549,9 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
   if ! echo "${env_dump}" | grep -q '^HOME=/state/home$'; then
     doctor_fail "agent '${service}' must set HOME=/state/home"
   fi
+  if ! echo "${env_dump}" | grep -q '^OLLAMA_BASE_URL=http://ollama-gate:11435$'; then
+    doctor_fail "agent '${service}' must set OLLAMA_BASE_URL=http://ollama-gate:11435"
+  fi
 
   if ! mount_destination_present "${cid}" "/run/secrets/gate_mcp.token"; then
     doctor_fail "agent '${service}' must mount /run/secrets/gate_mcp.token read-only"
@@ -567,6 +570,14 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
 
   if ! timeout 15 docker exec "${cid}" sh -lc 'test -d /state/home && test -w /state/home'; then
     doctor_fail "agent '${service}' home directory is not writable (/state/home)"
+  fi
+  if ! timeout 15 docker exec "${cid}" sh -lc ". /state/bootstrap/ollama-gate-defaults.env && \
+    test \"\${OPENAI_BASE_URL}\" = 'http://ollama-gate:11435/v1' && \
+    test \"\${OPENAI_API_BASE_URL}\" = 'http://ollama-gate:11435/v1' && \
+    test \"\${OPENAI_API_BASE}\" = 'http://ollama-gate:11435/v1' && \
+    test \"\${ANTHROPIC_BASE_URL}\" = 'http://ollama-gate:11435' && \
+    test \"\${ANTHROPIC_AUTH_TOKEN}\" = 'local-ollama'"; then
+    doctor_fail "agent '${service}' bootstrap defaults must route OpenAI/Anthropic endpoints to ollama-gate"
   fi
 
   if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES}" == "false" ]]; then

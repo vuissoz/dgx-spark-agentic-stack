@@ -14,6 +14,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-7gw` (matrice opencode/openclaw/openhands/vibestral)
   - `dgx-spark-agentic-stack-a5m` (enforcement opencode/vibestral via gate)
   - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch)
+  - `dgx-spark-agentic-stack-b32` (run D8/E2 sur stack compose démarrée)
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -61,3 +62,10 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 13. Implémenter la trajectoire OpenClaw complète inspirée `ollama launch openclaw` (profil + runtime + tests + docs).
 14. Ajouter une veille automatisée de drift (job planifié + issue Beads auto en cas d'écart contractuel upstream).
 15. Finaliser avec tests ciblés, commit atomique, `bd sync`, push.
+
+## Progress (2026-03-05)
+- Step 9 (partiel): endpoints compat gate migrés vers `usage` calculé depuis upstream (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`) + suppression des `usage` synthétiques `0`.
+- Step 9 (partiel): `/v1/embeddings` n’expose plus de `usage` synthétique; `usage` renvoyé uniquement si observé upstream.
+- Step 10 (fait): bootstrap/env Claude aligné avec `ANTHROPIC_AUTH_TOKEN` (`entrypoint`, onboarding, tests).
+- Step 12 (partiel): vérifications renforcées `opencode`/`vibestral` via `ollama-gate` dans `doctor` et `E2_agents_confinement`.
+- Reste à faire: exécution des tests d’intégration `D8`/`E2` sur stack démarrée (non exécutable ici car services compose absents).
