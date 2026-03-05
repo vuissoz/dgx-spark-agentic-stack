@@ -73,6 +73,65 @@ assert_runtime_gate_routing() {
   ok "${container_id}: ${label} runtime routes OLLAMA traffic through ollama-gate"
 }
 
+assert_gate_log_traffic_proof() {
+  local container_id="$1"
+  local label="$2"
+  local gate_container_id="$3"
+  local session_id="e2-gate-proof-${label}-$$-$(date +%s)"
+  local found=0
+  local attempt
+
+  timeout 20 docker exec "${container_id}" sh -lc \
+    "curl -fsS --max-time 12 -H 'X-Agent-Project: e2-gate-proof' -H 'X-Agent-Session: ${session_id}' \
+      'http://ollama-gate:11435/api/version' >/dev/null" \
+    || fail "${container_id}: ${label} could not reach ollama-gate /api/version for traffic proof"
+
+  for attempt in $(seq 1 10); do
+    if timeout 20 docker exec "${gate_container_id}" sh -lc \
+      "python3 - \"${session_id}\" <<'PY'
+import json
+import sys
+
+session = sys.argv[1]
+found = False
+with open('/gate/logs/gate.jsonl', 'r', encoding='utf-8') as fh:
+    for line in fh:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get('session') != session:
+            continue
+        if event.get('project') != 'e2-gate-proof':
+            continue
+        if event.get('endpoint') != '/api/version':
+            continue
+        status = event.get('status_code')
+        try:
+            status_code = int(status)
+        except (TypeError, ValueError):
+            continue
+        if 200 <= status_code < 300:
+            found = True
+            break
+
+if not found:
+    raise SystemExit(1)
+PY"; then
+      found=1
+      break
+    fi
+    sleep 1
+  done
+
+  [[ "${found}" -eq 1 ]] \
+    || fail "${gate_container_id}: missing gate log evidence for ${label} session=${session_id}"
+  ok "${gate_container_id}: gate log proves ${label} traffic (session=${session_id})"
+}
+
 assert_write_boundaries() {
   local container_id="$1"
 
@@ -143,12 +202,14 @@ codex_cid="$(require_service_container agentic-codex)" || exit 1
 opencode_cid="$(require_service_container agentic-opencode)" || exit 1
 vibestral_cid="$(require_service_container agentic-vibestral)" || exit 1
 proxy_cid="$(require_service_container egress-proxy)" || exit 1
+gate_cid="$(require_service_container ollama-gate)" || exit 1
 
 wait_for_container_ready "${claude_cid}" 60 || fail "agentic-claude is not ready"
 wait_for_container_ready "${codex_cid}" 60 || fail "agentic-codex is not ready"
 wait_for_container_ready "${opencode_cid}" 60 || fail "agentic-opencode is not ready"
 wait_for_container_ready "${vibestral_cid}" 60 || fail "agentic-vibestral is not ready"
 wait_for_container_ready "${proxy_cid}" 60 || fail "egress-proxy is not ready"
+wait_for_container_ready "${gate_cid}" 60 || fail "ollama-gate is not ready"
 
 assert_tmux_session "${claude_cid}" "claude"
 assert_tmux_session "${codex_cid}" "codex"
@@ -179,6 +240,8 @@ done
 
 assert_runtime_gate_routing "${opencode_cid}" "opencode"
 assert_runtime_gate_routing "${vibestral_cid}" "vibestral"
+assert_gate_log_traffic_proof "${opencode_cid}" "opencode" "${gate_cid}"
+assert_gate_log_traffic_proof "${vibestral_cid}" "vibestral" "${gate_cid}"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
 agentic_profile="${AGENTIC_PROFILE:-strict-prod}"
