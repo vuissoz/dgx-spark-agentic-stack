@@ -16,6 +16,8 @@ AGENT_ONBOARD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/bootstrap/onboarding_env.
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
+AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch.sh"
+AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_drift_watch_schedule.sh"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
@@ -50,6 +52,8 @@ Usage:
   agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
   agent ollama-link
+  agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--timeout-sec <int>] [--quiet]
+  agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
   agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
   agent ollama-models [status|rw|ro]
   agent sudo-mode [status|on|off]
@@ -1867,6 +1871,27 @@ cmd_ollama_link() {
   "${AGENT_OLLAMA_LINK_SCRIPT}"
 }
 
+cmd_ollama_drift() {
+  local action="${1:-watch}"
+  shift || true
+
+  case "${action}" in
+    watch)
+      [[ -x "${AGENT_OLLAMA_DRIFT_WATCH_SCRIPT}" ]] || die "missing script: ${AGENT_OLLAMA_DRIFT_WATCH_SCRIPT}"
+      ensure_runtime_env
+      "${AGENT_OLLAMA_DRIFT_WATCH_SCRIPT}" "$@"
+      ;;
+    schedule)
+      [[ -x "${AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT}" ]] || die "missing script: ${AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT}"
+      ensure_runtime_env
+      "${AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT}" "$@"
+      ;;
+    *)
+      die "Usage: agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--timeout-sec <int>] [--quiet] | agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]"
+      ;;
+  esac
+}
+
 run_first_up_step() {
   local step_name="$1"
   local dry_run="$2"
@@ -2654,6 +2679,10 @@ case "$cmd" in
     ;;
   ollama-link)
     cmd_ollama_link
+    ;;
+  ollama-drift)
+    shift
+    cmd_ollama_drift "${1:-watch}" "${@:2}"
     ;;
   ollama-models)
     [[ $# -le 2 ]] || die "Usage: agent ollama-models [status|rw|ro]"

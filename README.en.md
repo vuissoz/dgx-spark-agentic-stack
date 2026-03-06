@@ -308,6 +308,8 @@ agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
+agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--timeout-sec <int>] [--quiet]
+agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
 agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
 agent ollama-models [status|rw|ro]
 agent sudo-mode [status|on|off]
@@ -417,6 +419,37 @@ Runtime state:
 - mode: `${AGENTIC_ROOT}/gate/state/llm_mode.json`
 - quota counters: `${AGENTIC_ROOT}/gate/state/quotas_state.json`
 - metrics: `external_requests_total`, `external_tokens_total`, `external_quota_remaining`
+
+## Ollama Drift Watch (Step 14)
+
+Automated upstream contract watch for Ollama launch/integrations/API-compat docs (`codex`, `claude`, `opencode`, `openclaw`, OpenAI compatibility, Anthropic compatibility):
+
+```bash
+./agent ollama-drift watch
+```
+
+Behavior:
+- fetches official upstream docs from `raw.githubusercontent.com/ollama/ollama/main/docs/...`,
+- validates key contract invariants (env vars, endpoints, integration commands),
+- compares against local baseline files in `${AGENTIC_ROOT}/deployments/ollama-drift/baseline/*.mdx`,
+- on drift: exits with code `2`, writes a detailed report under `${AGENTIC_ROOT}/deployments/ollama-drift/reports/`, and auto-creates/updates a Beads issue (default `dgx-spark-agentic-stack-ygu`).
+
+Useful options:
+- accept a non-breaking upstream evolution by refreshing baseline snapshots:
+  - `./agent ollama-drift watch --ack-baseline`
+- disable Beads automation for a specific run:
+  - `./agent ollama-drift watch --no-beads`
+
+Weekly scheduling (`rootless-dev`):
+
+```bash
+export AGENTIC_PROFILE=rootless-dev
+./agent ollama-drift schedule
+```
+
+- preferred backend: weekly `systemd --user` timer,
+- automatic fallback: user `crontab`,
+- removal: `./agent ollama-drift schedule --disable`.
 
 ## Local MCP `gate-mcp` (D7)
 

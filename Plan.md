@@ -10,7 +10,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-eta` (usages/tokens réels sur endpoints compat) [CLOSED]
   - `dgx-spark-agentic-stack-p1i` (Claude env `ANTHROPIC_AUTH_TOKEN`) [CLOSED]
   - `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut) [OPEN]
-  - `dgx-spark-agentic-stack-ygu` (veille drift upstream Ollama) [OPEN]
+  - `dgx-spark-agentic-stack-ygu` (veille drift upstream Ollama) [CLOSED]
   - `dgx-spark-agentic-stack-7gw` (matrice opencode/openclaw/openhands/vibestral) [OPEN]
   - `dgx-spark-agentic-stack-a5m` (enforcement opencode/vibestral via gate) [CLOSED]
   - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch) [OPEN]
@@ -74,6 +74,11 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Step 12: complete via `dgx-spark-agentic-stack-a5m`:
   - enforcement opencode/vibestral via gate dans doctor + E2.
   - preuve automatisee de trafic dans `/gate/logs/gate.jsonl` (session unique, endpoint, statut 2xx).
+- Step 14: complete via `dgx-spark-agentic-stack-ygu`:
+  - ajout du watcher `agent ollama-drift watch` (invariants + hash drift sur docs upstream Ollama),
+  - rapport runtime + code retour explicite en cas de drift,
+  - flux Beads automatique (issue create/update + commentaire dedupe),
+  - planification hebdo rootless (`agent ollama-drift schedule`, systemd user timer avec fallback cron).
 - Validation integration associee complete via `dgx-spark-agentic-stack-b32`:
   - `D8_gate_protocol_compat`: PASS
   - `E2_agents_confinement`: PASS (runtime rootless-dev avec `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false`).
@@ -83,5 +88,4 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Step 8 -> `dgx-spark-agentic-stack-3xx` (tools/tool_choice/tool_calls end-to-end).
 - Step 11 -> `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut, direct Ollama en opt-in explicite).
 - Step 13 -> `dgx-spark-agentic-stack-ik6` (implementation OpenClaw complete inspiree launch).
-- Step 14 -> `dgx-spark-agentic-stack-ygu` (veille drift automatisee docs/integrations Ollama).
 - Step 15: finalisation globale apres fermeture des steps 7/8/11/13/14.

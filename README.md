@@ -308,6 +308,8 @@ agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
+agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--timeout-sec <int>] [--quiet]
+agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
 agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
 agent ollama-models [status|rw|ro]
 agent sudo-mode [status|on|off]
@@ -417,6 +419,37 @@ State runtime:
 - mode: `${AGENTIC_ROOT}/gate/state/llm_mode.json`
 - compteurs quotas: `${AGENTIC_ROOT}/gate/state/quotas_state.json`
 - métriques: `external_requests_total`, `external_tokens_total`, `external_quota_remaining`
+
+## Veille drift Ollama (Step 14)
+
+Veille automatisée des contrats upstream Ollama (CLI `launch`, intégrations `codex/claude/opencode/openclaw`, compat API `openai/anthropic`):
+
+```bash
+./agent ollama-drift watch
+```
+
+Comportement:
+- récupère les sources officielles Ollama depuis `raw.githubusercontent.com/ollama/ollama/main/docs/...`,
+- vérifie des invariants contractuels (variables/env/endpoints),
+- compare avec une baseline locale `${AGENTIC_ROOT}/deployments/ollama-drift/baseline/*.mdx`,
+- en cas de drift: code retour `2`, rapport détaillé dans `${AGENTIC_ROOT}/deployments/ollama-drift/reports/`, et mise à jour automatique d'une issue Beads (par défaut `dgx-spark-agentic-stack-ygu`).
+
+Options utiles:
+- accepter une évolution upstream non-breaking en rafraîchissant la baseline:
+  - `./agent ollama-drift watch --ack-baseline`
+- désactiver l'automatisation Beads ponctuellement:
+  - `./agent ollama-drift watch --no-beads`
+
+Planification hebdomadaire (rootless-dev):
+
+```bash
+export AGENTIC_PROFILE=rootless-dev
+./agent ollama-drift schedule
+```
+
+- backend préféré: timer `systemd --user` hebdomadaire,
+- fallback automatique: `crontab` utilisateur,
+- retrait: `./agent ollama-drift schedule --disable`.
 
 ## MCP local `gate-mcp` (D7)
 
