@@ -442,6 +442,7 @@ Activation explicite:
 ```bash
 AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
+AGENTIC_OPTIONAL_MODULES=openclaw,mcp,pi-mono,goose,portainer ./agent up optional
 ```
 
 Préconditions (runtime):
