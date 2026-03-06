@@ -292,6 +292,9 @@ Baseline files (created by runtime init scripts):
 - `WEBUI_ADMIN_PASSWORD`
 - `OPENAI_API_KEY`
 - `WEBUI_SECRET_KEY`
+- `ENABLE_OLLAMA_API` (default `False`, gate-only mode)
+- `OLLAMA_BASE_URL` (default `http://ollama-gate:11435`; explicit direct opt-in: `http://ollama:11434` with `ENABLE_OLLAMA_API=True`)
+- Onboarding compatibility keys are also written for auditability: `OPENWEBUI_ENABLE_OLLAMA_API`, `OPENWEBUI_OLLAMA_BASE_URL`.
 
 `openhands.env` keys (sensitive file, mode `600`):
 - `LLM_MODEL`

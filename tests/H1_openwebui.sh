@@ -42,8 +42,36 @@ done
 [[ "${auth_ok}" -eq 1 ]] || fail "openwebui unauthenticated access is not explicitly denied (expected 401/403 on protected endpoint)"
 ok "openwebui protected endpoint rejects unauthenticated access"
 
+openwebui_env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${openwebui_cid}" 2>/dev/null || true)"
+openai_api_base_url="$(printf '%s\n' "${openwebui_env_dump}" | sed -n 's/^OPENAI_API_BASE_URL=//p' | head -n 1)"
+enable_ollama_api_raw="$(printf '%s\n' "${openwebui_env_dump}" | sed -n 's/^ENABLE_OLLAMA_API=//p' | head -n 1)"
+ollama_base_url="$(printf '%s\n' "${openwebui_env_dump}" | sed -n 's/^OLLAMA_BASE_URL=//p' | head -n 1)"
+
+[[ "${openai_api_base_url}" == "http://ollama-gate:11435/v1" ]] \
+  || fail "openwebui OPENAI_API_BASE_URL must be pinned to gate (/v1), got: ${openai_api_base_url:-<unset>}"
+
+case "${enable_ollama_api_raw,,}" in
+  0|false|no|off|"")
+    [[ "${ollama_base_url}" == "http://ollama-gate:11435" ]] \
+      || fail "openwebui gate-only mode must keep OLLAMA_BASE_URL=http://ollama-gate:11435 when ENABLE_OLLAMA_API is disabled (got: ${ollama_base_url:-<unset>})"
+    ;;
+  1|true|yes|on)
+    [[ "${ollama_base_url}" == "http://ollama:11434" || "${ollama_base_url}" == "http://ollama-gate:11435" ]] \
+      || fail "openwebui ENABLE_OLLAMA_API=true must use OLLAMA_BASE_URL=http://ollama:11434 (direct opt-in) or http://ollama-gate:11435 (gate-only), got: ${ollama_base_url:-<unset>}"
+    ;;
+  *)
+    fail "openwebui has invalid ENABLE_OLLAMA_API value: ${enable_ollama_api_raw:-<unset>}"
+    ;;
+esac
+ok "openwebui runtime OpenAI/Ollama routing env is coherent"
+
+gate_env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${gate_cid}" 2>/dev/null || true)"
+gate_test_mode_raw="$(printf '%s\n' "${gate_env_dump}" | sed -n 's/^GATE_ENABLE_TEST_MODE=//p' | head -n 1)"
+
 session="h1-openwebui-$RANDOM-$$"
-timeout 20 docker exec "${openwebui_cid}" sh -lc "python3 - <<'PY'
+case "${gate_test_mode_raw,,}" in
+  1|true|yes|on)
+    timeout 20 docker exec "${openwebui_cid}" sh -lc "python3 - <<'PY'
 import json
 import urllib.request
 
@@ -65,7 +93,26 @@ req = urllib.request.Request(
 with urllib.request.urlopen(req, timeout=10) as resp:
   if resp.status != 200:
     raise SystemExit(1)
-PY" || fail "openwebui container failed to call ollama-gate"
+PY" || fail "openwebui container failed to call ollama-gate /v1/chat/completions in dry-run mode"
+    ;;
+  *)
+    timeout 20 docker exec "${openwebui_cid}" sh -lc "python3 - <<'PY'
+import urllib.request
+
+req = urllib.request.Request(
+  'http://ollama-gate:11435/api/version',
+  headers={
+    'X-Agent-Session': '${session}',
+    'X-Agent-Project': 'openwebui',
+  },
+  method='GET'
+)
+with urllib.request.urlopen(req, timeout=10) as resp:
+  if resp.status != 200:
+    raise SystemExit(1)
+PY" || fail "openwebui container failed to call ollama-gate /api/version"
+    ;;
+esac
 
 gate_log="${AGENTIC_ROOT:-/srv/agentic}/gate/logs/gate.jsonl"
 [[ -s "${gate_log}" ]] || fail "gate log file missing or empty: ${gate_log}"

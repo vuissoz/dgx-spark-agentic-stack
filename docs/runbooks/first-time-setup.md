@@ -180,6 +180,8 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
   - `WEBUI_ADMIN_PASSWORD`
   - `OPENAI_API_KEY`
   - `WEBUI_SECRET_KEY`
+  - `ENABLE_OLLAMA_API` (default: `False`)
+  - `OLLAMA_BASE_URL` (default: `http://ollama-gate:11435`)
 - **must be set before your first real login attempt on OpenWebUI**
 - these values are bootstrap credentials for first setup; if OpenWebUI already initialized its DB, changing this file alone does not reset existing users
 

@@ -513,6 +513,38 @@ for row in "${running_services[@]}"; do
       doctor_fail "gate-mcp must mount /logs for audit persistence"
     fi
   fi
+
+  if [[ "${service}" == "openwebui" ]]; then
+    env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    openai_api_base_url="$(printf '%s\n' "${env_dump}" | sed -n 's/^OPENAI_API_BASE_URL=//p' | head -n 1)"
+    ollama_base_url="$(printf '%s\n' "${env_dump}" | sed -n 's/^OLLAMA_BASE_URL=//p' | head -n 1)"
+    enable_ollama_api_raw="$(printf '%s\n' "${env_dump}" | sed -n 's/^ENABLE_OLLAMA_API=//p' | head -n 1)"
+    enable_ollama_api_norm="${enable_ollama_api_raw,,}"
+
+    if [[ "${openai_api_base_url}" != "http://ollama-gate:11435/v1" ]]; then
+      doctor_fail "openwebui must set OPENAI_API_BASE_URL=http://ollama-gate:11435/v1 (got: ${openai_api_base_url:-<unset>})"
+    fi
+
+    case "${enable_ollama_api_norm}" in
+      1|true|yes|on)
+        if [[ "${ollama_base_url}" == "http://ollama:11434" ]]; then
+          warn "openwebui direct Ollama API is enabled (ENABLE_OLLAMA_API=true, OLLAMA_BASE_URL=http://ollama:11434): gate bypass is explicit and auditable"
+        elif [[ "${ollama_base_url}" == "http://ollama-gate:11435" ]]; then
+          warn "openwebui has ENABLE_OLLAMA_API=true but OLLAMA_BASE_URL points to ollama-gate; native model pull remains disabled"
+        else
+          doctor_fail_or_warn "openwebui ENABLE_OLLAMA_API=true uses unsupported OLLAMA_BASE_URL='${ollama_base_url:-<unset>}' (expected http://ollama:11434 for explicit direct mode)"
+        fi
+        ;;
+      0|false|no|off|"")
+        if [[ "${ollama_base_url}" != "http://ollama-gate:11435" ]]; then
+          doctor_fail_or_warn "openwebui must keep OLLAMA_BASE_URL=http://ollama-gate:11435 when ENABLE_OLLAMA_API is disabled (got: ${ollama_base_url:-<unset>})"
+        fi
+        ;;
+      *)
+        doctor_fail_or_warn "openwebui has invalid ENABLE_OLLAMA_API='${enable_ollama_api_raw:-<unset>}'"
+        ;;
+    esac
+  fi
 done
 
 rag_retriever_cid="$(service_container_id rag-retriever)"

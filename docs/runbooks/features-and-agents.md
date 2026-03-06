@@ -192,6 +192,10 @@ Primary CLI contract per baseline service:
 - Role: browser UI for interacting with model-backed chat workflows.
 - Backend model API target:
   - `http://ollama-gate:11435/v1`
+- Gate-only default:
+  - `ENABLE_OLLAMA_API=False`
+  - `OLLAMA_BASE_URL=http://ollama-gate:11435`
+  - direct Ollama mode is explicit opt-in (`ENABLE_OLLAMA_API=True` + `OLLAMA_BASE_URL=http://ollama:11434`) and bypasses gate policies/logging.
 - Persistence:
   - `${AGENTIC_ROOT}/openwebui/data`
 

@@ -288,6 +288,9 @@ Cles `openwebui.env` (fichier sensible en `600`):
 - `WEBUI_ADMIN_PASSWORD`
 - `OPENAI_API_KEY`
 - `WEBUI_SECRET_KEY`
+- `ENABLE_OLLAMA_API` (defaut `False`, mode gate-only)
+- `OLLAMA_BASE_URL` (defaut `http://ollama-gate:11435`; opt-in direct: `http://ollama:11434` avec `ENABLE_OLLAMA_API=True`)
+- Compatibilite onboarding: `OPENWEBUI_ENABLE_OLLAMA_API` et `OPENWEBUI_OLLAMA_BASE_URL` sont aussi ecrites pour audit/traceabilite.
 
 Cles `openhands.env` (fichier sensible en `600`):
 - `LLM_MODEL`

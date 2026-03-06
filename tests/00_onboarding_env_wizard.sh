@@ -208,8 +208,10 @@ grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${default_env_file}" \
   || fail "default GRAFANA_ADMIN_USER is not admin"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'$" "${default_env_file}" \
   || fail "default GRAFANA_ADMIN_PASSWORD is not replace-with-strong-password"
-grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${default_env_file}" \
-  || fail "default OPENWEBUI_ENABLE_OLLAMA_API must be True (allow model pull)"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${default_env_file}" \
+  || fail "default OPENWEBUI_ENABLE_OLLAMA_API must be False (gate-only mode)"
+grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama-gate:11435'$" "${default_env_file}" \
+  || fail "default OPENWEBUI_OLLAMA_BASE_URL must be http://ollama-gate:11435"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${default_env_file}" \
   || fail "onboarding default must enable agent sudo-mode (AGENTIC_AGENT_NO_NEW_PRIVILEGES=false)"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='1.00'$" "${default_env_file}" \
@@ -265,8 +267,10 @@ grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${override_env_file}" \
   || fail "override flow default GRAFANA_ADMIN_USER must be admin unless explicitly overridden"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'$" "${override_env_file}" \
   || fail "override flow default GRAFANA_ADMIN_PASSWORD must be replace-with-strong-password unless explicitly overridden"
-grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${override_env_file}" \
-  || fail "override flow default OPENWEBUI_ENABLE_OLLAMA_API must remain True unless explicitly disabled"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${override_env_file}" \
+  || fail "override flow default OPENWEBUI_ENABLE_OLLAMA_API must remain False unless explicitly enabled"
+grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama-gate:11435'$" "${override_env_file}" \
+  || fail "override flow default OPENWEBUI_OLLAMA_BASE_URL must remain http://ollama-gate:11435"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${override_env_file}" \
   || fail "override flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_DEFAULT_CPUS='0.55'$" "${override_env_file}" \
@@ -314,8 +318,10 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${rootless_def
   || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 262144"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 262144"
-grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${rootless_default_env_file}" \
-  || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be True"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${rootless_default_env_file}" \
+  || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be False"
+grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama-gate:11435'$" "${rootless_default_env_file}" \
+  || fail "rootless default OPENWEBUI_OLLAMA_BASE_URL must be http://ollama-gate:11435"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
 
 run_openclaw_secret_answers
@@ -391,8 +397,10 @@ grep -q "^export GRAFANA_ADMIN_USER='grafana-admin'$" "${non_interactive_env_fil
   || fail "non-interactive GRAFANA_ADMIN_USER is not applied"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='grafana-strong-password'$" "${non_interactive_env_file}" \
   || fail "non-interactive GRAFANA_ADMIN_PASSWORD is not applied"
-grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${non_interactive_env_file}" \
-  || fail "non-interactive default OPENWEBUI_ENABLE_OLLAMA_API must be True"
+grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${non_interactive_env_file}" \
+  || fail "non-interactive default OPENWEBUI_ENABLE_OLLAMA_API must be False"
+grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama-gate:11435'$" "${non_interactive_env_file}" \
+  || fail "non-interactive default OPENWEBUI_OLLAMA_BASE_URL must be http://ollama-gate:11435"
 grep -q "^export AGENTIC_AGENT_NO_NEW_PRIVILEGES='false'$" "${non_interactive_env_file}" \
   || fail "non-interactive flow must keep onboarding sudo-mode default enabled"
 grep -q "^export AGENTIC_LIMIT_OPTIONAL_MEM='512m'$" "${non_interactive_env_file}" \

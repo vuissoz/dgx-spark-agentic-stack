@@ -106,6 +106,8 @@ grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='64g'$" "${env_file}" \
   || fail "full setup onboarding env must export default rootless AGENTIC_LIMIT_OLLAMA_MEM"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${env_file}" \
   || fail "full setup onboarding env must export OPENWEBUI_ENABLE_OLLAMA_API"
+grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama:11434'$" "${env_file}" \
+  || fail "full setup onboarding env must export OPENWEBUI_OLLAMA_BASE_URL direct opt-in"
 
 openwebui_env="${root_dir}/openwebui/config/openwebui.env"
 openhands_env="${root_dir}/openhands/config/openhands.env"
@@ -158,6 +160,12 @@ grep -q "^WEBUI_SECRET_KEY=${openwebui_secret}$" "${openwebui_env}" \
   || fail "WEBUI_SECRET_KEY was not written"
 grep -q '^OPENWEBUI_ENABLE_OLLAMA_API=True$' "${openwebui_env}" \
   || fail "OPENWEBUI_ENABLE_OLLAMA_API=True was not written"
+grep -q '^ENABLE_OLLAMA_API=True$' "${openwebui_env}" \
+  || fail "ENABLE_OLLAMA_API=True was not written"
+grep -q '^OLLAMA_BASE_URL=http://ollama:11434$' "${openwebui_env}" \
+  || fail "OLLAMA_BASE_URL=http://ollama:11434 was not written for direct opt-in"
+grep -q '^OPENWEBUI_OLLAMA_BASE_URL=http://ollama:11434$' "${openwebui_env}" \
+  || fail "OPENWEBUI_OLLAMA_BASE_URL=http://ollama:11434 was not written for direct opt-in"
 grep -q "^LLM_MODEL=${openhands_model}$" "${openhands_env}" \
   || fail "LLM_MODEL was not written"
 grep -q "^LLM_API_KEY=${openhands_api_key}$" "${openhands_env}" \
