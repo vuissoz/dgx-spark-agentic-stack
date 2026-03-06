@@ -120,6 +120,7 @@ openclaw_webhook_file="${root_dir}/secrets/runtime/openclaw.webhook_secret"
 mcp_token_file="${root_dir}/secrets/runtime/mcp.token"
 openclaw_request_file="${root_dir}/deployments/optional/openclaw.request"
 mcp_request_file="${root_dir}/deployments/optional/mcp.request"
+openclaw_profile_file="${root_dir}/optional/openclaw/config/integration-profile.current.json"
 
 [[ -s "${openwebui_env}" ]] || fail "openwebui env file missing: ${openwebui_env}"
 [[ -s "${openhands_env}" ]] || fail "openhands env file missing: ${openhands_env}"
@@ -151,6 +152,11 @@ for request_file in \
   grep -Eq '^success=[^[:space:]].+$' "${request_file}" \
     || fail "optional request success= must be non-empty: ${request_file}"
 done
+
+[[ -s "${openclaw_profile_file}" ]] || fail "openclaw integration profile file missing: ${openclaw_profile_file}"
+openclaw_profile_perm="$(stat -c '%a' "${openclaw_profile_file}")"
+[[ "${openclaw_profile_perm}" == "644" ]] \
+  || fail "openclaw integration profile file permissions must be 644: ${openclaw_profile_file} (got ${openclaw_profile_perm})"
 
 grep -q "^WEBUI_ADMIN_EMAIL=${openwebui_email}$" "${openwebui_env}" \
   || fail "WEBUI_ADMIN_EMAIL was not written"

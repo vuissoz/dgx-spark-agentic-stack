@@ -175,6 +175,8 @@ main() {
 
   copy_if_missing "${TEMPLATE_DIR}/openclaw.dm_allowlist.txt" "${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt" 0640
   copy_if_missing "${TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt" 0640
+  copy_if_missing "${TEMPLATE_DIR}/openclaw.integration-profile.v1.json" "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" 0640
+  copy_if_missing "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json" 0640
   copy_if_missing "${TEMPLATE_DIR}/mcp.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt" 0640
   ensure_optional_request_file "openclaw"
   ensure_optional_request_file "mcp"
@@ -184,6 +186,8 @@ main() {
 
   chmod 0644 "${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt" \
     "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt" \
+    "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" \
+    "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json" \
     "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
 
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"

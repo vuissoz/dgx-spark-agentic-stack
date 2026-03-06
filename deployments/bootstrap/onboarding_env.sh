@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=scripts/lib/runtime.sh
 source "${REPO_ROOT}/scripts/lib/runtime.sh"
+OPTIONAL_TEMPLATE_DIR="${REPO_ROOT}/examples/optional"
 
 profile_override=""
 root_override=""
@@ -1031,6 +1032,45 @@ expires_at=
   return 0
 }
 
+ensure_openclaw_integration_profile_file() {
+  local root_path="$1"
+  local template_path="${OPTIONAL_TEMPLATE_DIR}/openclaw.integration-profile.v1.json"
+  local versioned_path="${root_path}/optional/openclaw/config/integration-profile.v1.json"
+  local current_path="${root_path}/optional/openclaw/config/integration-profile.current.json"
+  local created=0
+  local profile_content
+
+  if [[ ! -f "${template_path}" ]]; then
+    summary_add_blocker "missing OpenClaw integration profile template: ${template_path}"
+    return 1
+  fi
+
+  profile_content="$(cat "${template_path}")"$'\n'
+
+  if [[ ! -f "${versioned_path}" ]]; then
+    if ! write_file_atomic "${versioned_path}" 0644 "${profile_content}"; then
+      summary_add_blocker "failed to write ${versioned_path}"
+      return 1
+    fi
+    created=1
+  fi
+
+  if [[ ! -f "${current_path}" ]]; then
+    if ! write_file_atomic "${current_path}" 0644 "${profile_content}"; then
+      summary_add_blocker "failed to write ${current_path}"
+      return 1
+    fi
+    created=1
+  fi
+
+  if [[ "${created}" -eq 1 ]]; then
+    summary_add_generated "${versioned_path}"
+    summary_add_generated "${current_path}"
+  fi
+
+  return 0
+}
+
 write_secret_file() {
   local root_path="$1"
   local file_name="$2"
@@ -1950,6 +1990,9 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     summary_add_deferred "secret values were collected but not written because ${root_path} is not writable"
     if [[ "${normalized_modules}" != "none" ]]; then
       summary_add_deferred "optional request files were not written because ${root_path} is not writable"
+      if printf '%s\n' "${optional_modules_list[@]:-}" | grep -qx 'openclaw'; then
+        summary_add_deferred "openclaw integration profile was not written because ${root_path} is not writable"
+      fi
     fi
     if [[ "${require_complete}" -eq 1 ]]; then
       summary_add_blocker "secret bootstrap requested but runtime root is not writable"
@@ -1965,6 +2008,9 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
       for module in "${optional_modules_list[@]}"; do
         [[ -n "${module}" && "${module}" != "none" ]] || continue
         ensure_optional_request_file "${root_path}" "${module}" || true
+        if [[ "${module}" == "openclaw" ]]; then
+          ensure_openclaw_integration_profile_file "${root_path}" || true
+        fi
       done
     fi
   fi

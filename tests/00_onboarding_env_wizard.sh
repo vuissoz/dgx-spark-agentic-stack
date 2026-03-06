@@ -328,10 +328,13 @@ run_openclaw_secret_answers
 assert_generated_file_baseline "${openclaw_env_file}"
 openclaw_token_file="${work_dir}/openclaw-root/secrets/runtime/openclaw.token"
 openclaw_webhook_secret_file="${work_dir}/openclaw-root/secrets/runtime/openclaw.webhook_secret"
+openclaw_profile_file="${work_dir}/openclaw-root/optional/openclaw/config/integration-profile.current.json"
 [[ -s "${openclaw_token_file}" ]] \
   || fail "openclaw token file must be generated when optional module openclaw is selected"
 [[ -s "${openclaw_webhook_secret_file}" ]] \
   || fail "openclaw webhook secret file must be generated when optional module openclaw is selected"
+[[ -s "${openclaw_profile_file}" ]] \
+  || fail "openclaw integration profile file must be generated when optional module openclaw is selected"
 grep -q "ERROR: input aborted" "${openclaw_log}" \
   && fail "openclaw secret bootstrap should not abort input in interactive mode"
 ok "wizard openclaw secret bootstrap works with interactive stdin"

@@ -56,6 +56,7 @@ services:
       OPENCLAW_DM_ALLOWLIST_FILE: /config/dm_allowlist.txt
       OPENCLAW_TOOL_ALLOWLIST_FILE: /config/tool_allowlist.txt
       OPENCLAW_WEBHOOK_SECRET_FILE: /run/secrets/openclaw.webhook_secret
+      OPENCLAW_PROFILE_FILE: /config/integration-profile.current.json
       OPENCLAW_SANDBOX_URL: http://optional-openclaw-sandbox:8112
       OPENCLAW_SANDBOX_TIMEOUT_SEC: 3
       OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
@@ -113,6 +114,7 @@ services:
       AUDIT_LOG_PATH: /logs/audit.jsonl
       OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
       OPENCLAW_SANDBOX_TOOL_ALLOWLIST_FILE: /config/tool_allowlist.txt
+      OPENCLAW_SANDBOX_PROFILE_FILE: /config/integration-profile.current.json
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,optional-openclaw,optional-openclaw-sandbox,localhost,127.0.0.1

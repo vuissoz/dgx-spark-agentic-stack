@@ -13,7 +13,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-ygu` (veille drift upstream Ollama) [CLOSED]
   - `dgx-spark-agentic-stack-7gw` (matrice opencode/openclaw/openhands/vibestral) [CLOSED]
   - `dgx-spark-agentic-stack-a5m` (enforcement opencode/vibestral via gate) [CLOSED]
-  - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch) [OPEN]
+  - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch) [CLOSED]
   - `dgx-spark-agentic-stack-b32` (run D8/E2 sur stack compose démarrée) [CLOSED]
 
 ## Scope
@@ -85,6 +85,12 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - rapport runtime + code retour explicite en cas de drift,
   - flux Beads automatique (issue create/update + commentaire dedupe),
   - planification hebdo rootless (`agent ollama-drift schedule`, systemd user timer avec fallback cron).
+- Step 13: complete via `dgx-spark-agentic-stack-ik6`:
+  - profil OpenClaw versionne bootstrappe (`integration-profile.v1/current`) et consomme par runtime OpenClaw/sandbox,
+  - enforcement runtime des preconditions profile (env requis, policy proxy/allowlist, endpoints launch-inspired),
+  - extension des endpoints de contrat (`/v1/profile`, aliases DM/webhook/tool execute) + audit/correlation conserves,
+  - validations renforcees dans `agent up optional` et `agent doctor`,
+  - extension E2 `K1_openclaw` (setup profile, appel nominal, refus non autorise, drift de contrat OpenClaw).
 - Validation integration associee complete via `dgx-spark-agentic-stack-b32`:
   - `D8_gate_protocol_compat`: PASS
   - `E2_agents_confinement`: PASS (runtime rootless-dev avec `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false`).
@@ -92,5 +98,4 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 ## Remaining Work (open)
 - Step 8 -> `dgx-spark-agentic-stack-3xx` (tools/tool_choice/tool_calls end-to-end).
 - Step 11 -> `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut, direct Ollama en opt-in explicite).
-- Step 13 -> `dgx-spark-agentic-stack-ik6` (implementation OpenClaw complete inspiree launch).
-- Step 15: finalisation globale apres fermeture des steps 8/11/13/14.
+- Step 15: finalisation globale apres fermeture des steps 8/11.

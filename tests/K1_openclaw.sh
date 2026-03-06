@@ -24,8 +24,32 @@ assert_cmd python3
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
 webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+fixture_src="${SCRIPT_DIR}/fixtures/ollama-drift"
 install -d -m 0700 "${agentic_root}/secrets/runtime"
 install -d -m 0750 "${agentic_root}/deployments/optional"
+[[ -d "${fixture_src}" ]] || fail "fixture directory missing: ${fixture_src}"
+
+openclaw_profile_file="${agentic_root}/optional/openclaw/config/integration-profile.current.json"
+[[ -s "${openclaw_profile_file}" ]] || fail "openclaw integration profile file is missing after init_runtime: ${openclaw_profile_file}"
+python3 - "${openclaw_profile_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+runtime = payload.get("runtime") or {}
+endpoints = runtime.get("endpoints") or {}
+
+assert payload.get("profile_id"), "profile_id is required"
+assert payload.get("profile_version"), "profile_version is required"
+for key in ("dm", "webhook_dm", "tool_execute", "sandbox_execute", "profile"):
+    assert isinstance(endpoints.get(key), list) and endpoints.get(key), f"runtime.endpoints.{key} must be non-empty"
+assert "/v1/dm" in endpoints.get("dm", []), "runtime.endpoints.dm must include /v1/dm"
+assert "/v1/webhooks/dm" in endpoints.get("webhook_dm", []), "runtime.endpoints.webhook_dm must include /v1/webhooks/dm"
+assert "/v1/tools/execute" in endpoints.get("tool_execute", []), "runtime.endpoints.tool_execute must include /v1/tools/execute"
+assert "/v1/profile" in endpoints.get("profile", []), "runtime.endpoints.profile must include /v1/profile"
+PY
 
 cat >"${agentic_root}/deployments/optional/openclaw.request" <<'REQ'
 need=Enable controlled outbound DM notifications for maintenance alerts.
@@ -83,11 +107,21 @@ toolbox_cid="$(require_service_container toolbox)" || exit 1
 sandbox_health_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-sandbox-health.out -w '%{http_code}' http://optional-openclaw:8111/v1/sandbox/health")"
 [[ "${sandbox_health_status}" == "200" ]] || fail "openclaw must report sandbox reachable (status=${sandbox_health_status})"
 
+profile_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-profile.out -w '%{http_code}' http://optional-openclaw:8111/v1/profile")"
+[[ "${profile_status}" == "200" ]] || fail "openclaw profile endpoint must be reachable (status=${profile_status})"
+docker exec "${toolbox_cid}" sh -lc "grep -q '\"profile_id\":\"openclaw.launch-inspired\"' /tmp/k1-profile.out" \
+  || fail "openclaw profile endpoint must expose profile_id"
+docker exec "${toolbox_cid}" sh -lc "grep -q '\"capabilities\":' /tmp/k1-profile.out" \
+  || fail "openclaw profile endpoint must expose capabilities"
+
 no_auth_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-noauth.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{\"target\":\"discord:user:test\",\"message\":\"hello\"}' http://optional-openclaw:8111/v1/dm")"
 [[ "${no_auth_status}" == "401" ]] || fail "openclaw endpoint must reject requests without token (status=${no_auth_status})"
 
 allow_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-allow.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer ${claw_token}' -d '{\"target\":\"discord:user:test\",\"message\":\"hello\"}' http://optional-openclaw:8111/v1/dm")"
 [[ "${allow_status}" == "202" ]] || fail "openclaw allowlisted request must be accepted (status=${allow_status})"
+
+allow_alias_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-allow-alias.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer ${claw_token}' -d '{\"target\":\"discord:user:test\",\"message\":\"hello alias\"}' http://optional-openclaw:8111/v1/dm/send")"
+[[ "${allow_alias_status}" == "202" ]] || fail "openclaw DM alias endpoint must be accepted (status=${allow_alias_status})"
 
 tool_deny_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-tool-deny.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer ${claw_token}' -d '{\"tool\":\"filesystem.read\"}' http://optional-openclaw:8111/v1/tools/execute")"
 [[ "${tool_deny_status}" == "403" ]] || fail "non-allowlisted openclaw tool must be denied (status=${tool_deny_status})"
@@ -147,6 +181,41 @@ grep -q '"decision":"deny"' "${audit_log}" || fail "openclaw audit log must incl
 grep -q '"module":"openclaw-sandbox"' "${audit_log}" || fail "audit log must include openclaw-sandbox records"
 grep -q '"action":"webhook_dm"' "${audit_log}" || fail "audit log must include webhook actions"
 grep -q '"request_id":"k1-allow-tool"' "${audit_log}" || fail "audit log must include request_id correlation"
+
+drift_fixture_tmp="$(mktemp -d)"
+drift_state_dir="${agentic_root}/deployments/ollama-drift-k1-openclaw"
+cp -R "${fixture_src}/." "${drift_fixture_tmp}/"
+
+set +e
+"${agent_bin}" ollama-drift watch \
+  --no-beads \
+  --sources openclaw \
+  --sources-dir "${drift_fixture_tmp}" \
+  --state-dir "${drift_state_dir}" >/tmp/agent-k1-drift-ok.out 2>&1
+drift_ok_rc=$?
+set -e
+[[ "${drift_ok_rc}" -eq 0 ]] || {
+  cat /tmp/agent-k1-drift-ok.out >&2
+  fail "openclaw drift watch must pass with baseline fixtures"
+}
+
+sed -i '/openclaw gateway stop/d' "${drift_fixture_tmp}/openclaw.mdx"
+
+set +e
+"${agent_bin}" ollama-drift watch \
+  --no-beads \
+  --sources openclaw \
+  --sources-dir "${drift_fixture_tmp}" \
+  --state-dir "${drift_state_dir}" >/tmp/agent-k1-drift-fail.out 2>&1
+drift_fail_rc=$?
+set -e
+rm -rf "${drift_fixture_tmp}" >/dev/null 2>&1 || true
+[[ "${drift_fail_rc}" -eq 2 ]] || {
+  cat /tmp/agent-k1-drift-fail.out >&2
+  fail "openclaw drift watch must fail (exit=2) when invariant drifts"
+}
+grep -q 'openclaw:missing:openclaw gateway stop' "${drift_state_dir}/latest-report.txt" \
+  || fail "drift report must include missing openclaw gateway stop invariant"
 
 if [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" ]]; then
   warn "skip strict direct-egress assertion in rootless-dev profile"

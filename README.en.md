@@ -490,6 +490,9 @@ Runtime prerequisites:
   - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
   - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
   - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
+- versioned OpenClaw profile (runtime bootstrap):
+  - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json`
+  - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`
 
 ## Validation
 

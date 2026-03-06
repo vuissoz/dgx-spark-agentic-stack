@@ -211,6 +211,49 @@ optional_module_secret_files() {
   esac
 }
 
+optional_module_config_files() {
+  case "$1" in
+    openclaw)
+      printf '%s\n' "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json"
+      ;;
+    mcp|pi-mono|goose|portainer) ;;
+    *) return 1 ;;
+  esac
+}
+
+validate_openclaw_profile_file_contract() {
+  local profile_file="$1"
+  python3 - "${profile_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit("profile must be an object")
+
+runtime = payload.get("runtime")
+if not isinstance(runtime, dict):
+    raise SystemExit("missing runtime object")
+required_env = runtime.get("required_env")
+if not isinstance(required_env, dict):
+    raise SystemExit("missing runtime.required_env object")
+
+for key in ("openclaw", "openclaw_sandbox"):
+    values = required_env.get(key)
+    if not isinstance(values, list) or not values:
+        raise SystemExit(f"runtime.required_env.{key} must be a non-empty array")
+
+endpoints = runtime.get("endpoints")
+if not isinstance(endpoints, dict):
+    raise SystemExit("missing runtime.endpoints object")
+for key in ("dm", "webhook_dm", "tool_execute", "sandbox_execute", "profile"):
+    values = endpoints.get(key)
+    if not isinstance(values, list) or not values:
+        raise SystemExit(f"runtime.endpoints.{key} must be a non-empty array")
+PY
+}
+
 parse_optional_modules() {
   local raw="${AGENTIC_OPTIONAL_MODULES:-}"
   local module
@@ -248,7 +291,9 @@ validate_optional_module_prereqs() {
   local module="$1"
   local secret_file
   local secret_mode
+  local config_file
   local -a secret_files=()
+  local -a config_files=()
 
   validate_optional_request_file "${module}"
   mapfile -t secret_files < <(optional_module_secret_files "${module}") || return 1
@@ -259,6 +304,20 @@ validate_optional_module_prereqs() {
     secret_mode="$(stat -c '%a' "${secret_file}" 2>/dev/null || echo "")"
     if [[ "${secret_mode}" != "600" && "${secret_mode}" != "640" ]]; then
       die "Optional module '${module}' secret must use restrictive permissions (600/640): ${secret_file} (mode=${secret_mode:-unknown})"
+    fi
+  done
+
+  mapfile -t config_files < <(optional_module_config_files "${module}") || return 1
+  for config_file in "${config_files[@]}"; do
+    [[ -n "${config_file}" ]] || continue
+    [[ -s "${config_file}" ]] \
+      || die "Optional module '${module}' requires runtime config file: ${config_file}"
+    if [[ "${module}" == "openclaw" ]]; then
+      command -v python3 >/dev/null 2>&1 \
+        || die "python3 is required to validate OpenClaw integration profile"
+      if ! validate_openclaw_profile_file_contract "${config_file}" >/dev/null 2>&1; then
+        die "Optional module '${module}' has invalid integration profile: ${config_file}"
+      fi
     fi
   done
 }

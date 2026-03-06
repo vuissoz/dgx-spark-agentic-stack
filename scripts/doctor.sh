@@ -140,6 +140,53 @@ allowlist_has_entry() {
   grep -Fxiq -- "${entry}" "${allowlist_file}"
 }
 
+validate_openclaw_profile_file() {
+  local profile_file="$1"
+  python3 - "${profile_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+
+if not isinstance(payload, dict):
+    raise SystemExit("profile must be a JSON object")
+for key in ("profile_id", "profile_version", "runtime", "upstream_contract"):
+    if not payload.get(key):
+        raise SystemExit(f"missing top-level key: {key}")
+
+runtime = payload.get("runtime")
+if not isinstance(runtime, dict):
+    raise SystemExit("runtime must be an object")
+
+required_env = runtime.get("required_env")
+if not isinstance(required_env, dict):
+    raise SystemExit("runtime.required_env must be an object")
+
+for key in ("openclaw", "openclaw_sandbox"):
+    values = required_env.get(key)
+    if not isinstance(values, list) or not values:
+        raise SystemExit(f"runtime.required_env.{key} must be a non-empty array")
+
+endpoints = runtime.get("endpoints")
+if not isinstance(endpoints, dict):
+    raise SystemExit("runtime.endpoints must be an object")
+
+required_endpoints = {
+    "dm": "/v1/dm",
+    "webhook_dm": "/v1/webhooks/dm",
+    "tool_execute": "/v1/tools/execute",
+    "sandbox_execute": "/v1/tools/execute",
+    "profile": "/v1/profile",
+}
+for key, required_value in required_endpoints.items():
+    values = endpoints.get(key)
+    if not isinstance(values, list) or required_value not in values:
+        raise SystemExit(f"runtime.endpoints.{key} must include {required_value}")
+PY
+}
+
 parse_memory_to_bytes() {
   local raw="${1:-}"
   local value unit factor
@@ -654,9 +701,35 @@ if [[ -n "${comfyui_cid}" ]]; then
 fi
 
 optional_openclaw_cid="$(service_container_id optional-openclaw)"
+optional_openclaw_sandbox_cid="$(service_container_id optional-openclaw-sandbox)"
+optional_openclaw_profile_file="${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json"
 if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
     doctor_fail "optional openclaw webhook bind must stay loopback-only on port ${openclaw_webhook_host_port}"
+  fi
+
+  if [[ ! -s "${optional_openclaw_profile_file}" ]]; then
+    doctor_fail "optional openclaw integration profile is missing: ${optional_openclaw_profile_file}"
+  elif ! validate_openclaw_profile_file "${optional_openclaw_profile_file}" >/dev/null 2>&1; then
+    doctor_fail "optional openclaw integration profile is invalid: ${optional_openclaw_profile_file}"
+  fi
+
+  optional_openclaw_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_cid}" 2>/dev/null || true)"
+  if ! grep -q '^OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "optional-openclaw must set OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json"
+  fi
+fi
+
+if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
+  if [[ ! -s "${optional_openclaw_profile_file}" ]]; then
+    doctor_fail "optional openclaw sandbox requires integration profile: ${optional_openclaw_profile_file}"
+  elif ! validate_openclaw_profile_file "${optional_openclaw_profile_file}" >/dev/null 2>&1; then
+    doctor_fail "optional openclaw sandbox profile is invalid: ${optional_openclaw_profile_file}"
+  fi
+
+  optional_openclaw_sandbox_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_sandbox_cid}" 2>/dev/null || true)"
+  if ! grep -q '^OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_sandbox_env}"; then
+    doctor_fail "optional-openclaw-sandbox must set OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json"
   fi
 fi
 

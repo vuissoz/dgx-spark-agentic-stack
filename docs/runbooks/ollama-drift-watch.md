@@ -23,6 +23,7 @@ Source origin:
 For each source, the watcher verifies:
 
 - key integration/launch commands,
+- OpenClaw contract markers (`ollama launch openclaw --config`, `ollama launch openclaw --model`, `openclaw configure --section channels`, `openclaw gateway stop`),
 - key endpoint paths (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/embeddings`),
 - key env variable names used by integrations (`OLLAMA_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`),
 - content hash drift versus local baseline snapshots.

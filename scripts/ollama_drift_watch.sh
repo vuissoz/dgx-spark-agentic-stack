@@ -108,7 +108,10 @@ EOF_PATTERNS
       cat <<'EOF_PATTERNS'
 ollama launch openclaw
 ollama launch openclaw --config
+ollama launch openclaw --model
 ollama launch clawdbot
+openclaw configure --section channels
+openclaw gateway stop
 EOF_PATTERNS
       ;;
     openai)

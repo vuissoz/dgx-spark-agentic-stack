@@ -1,0 +1,80 @@
+{
+  "profile_id": "openclaw.launch-inspired",
+  "profile_version": "2026-03-06.step13.v1",
+  "contract_kind": "launch-inspired",
+  "upstream_contract": {
+    "source_id": "openclaw",
+    "upstream_doc_url": "https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/openclaw.mdx",
+    "upstream_launch_commands": [
+      "ollama launch openclaw",
+      "ollama launch openclaw --config",
+      "ollama launch openclaw --model",
+      "ollama launch clawdbot"
+    ],
+    "recommended_context_tokens_min": 65536
+  },
+  "runtime": {
+    "auth": {
+      "bearer_token_required": true,
+      "webhook_hmac_sha256_required": true,
+      "webhook_signature_header": "X-Webhook-Signature",
+      "webhook_timestamp_header": "X-Webhook-Timestamp",
+      "webhook_max_skew_sec_default": 300
+    },
+    "required_env": {
+      "openclaw": [
+        "OPENCLAW_AUTH_TOKEN_FILE",
+        "OPENCLAW_WEBHOOK_SECRET_FILE",
+        "OPENCLAW_SANDBOX_URL",
+        "OPENCLAW_SANDBOX_AUTH_TOKEN_FILE",
+        "OPENCLAW_PROFILE_FILE"
+      ],
+      "openclaw_sandbox": [
+        "OPENCLAW_SANDBOX_AUTH_TOKEN_FILE",
+        "OPENCLAW_SANDBOX_TOOL_ALLOWLIST_FILE",
+        "OPENCLAW_SANDBOX_PROFILE_FILE"
+      ]
+    },
+    "endpoints": {
+      "health": [
+        "/healthz"
+      ],
+      "profile": [
+        "/v1/profile",
+        "/v1/capabilities"
+      ],
+      "sandbox_health": [
+        "/v1/sandbox/health"
+      ],
+      "dm": [
+        "/v1/dm",
+        "/v1/dm/send"
+      ],
+      "webhook_dm": [
+        "/v1/webhooks/dm",
+        "/v1/webhooks/channels/dm"
+      ],
+      "tool_execute": [
+        "/v1/tools/execute",
+        "/v1/sandbox/tools/execute"
+      ],
+      "sandbox_execute": [
+        "/v1/tools/execute",
+        "/v1/sandbox/tools/execute"
+      ]
+    },
+    "sandbox_policy": {
+      "require_proxy_env": true,
+      "tool_allowlist_required": true,
+      "healthcheck_required": true
+    },
+    "capabilities": [
+      "dm_allowlist",
+      "webhook_signature_hmac_sha256",
+      "tool_allowlist",
+      "sandbox_forwarding",
+      "jsonl_audit",
+      "request_id_correlation"
+    ]
+  }
+}

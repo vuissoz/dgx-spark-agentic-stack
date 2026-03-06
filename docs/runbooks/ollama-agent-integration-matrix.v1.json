@@ -1,5 +1,5 @@
 {
-  "matrix_version": "2026-03-06.step7.v1",
+  "matrix_version": "2026-03-06.step13.v2",
   "scope": [
     "rootless-dev",
     "strict-prod"
@@ -56,21 +56,28 @@
           "ollama launch clawdbot"
         ]
       },
-      "config_mode": "launch-inspired-optional-adapter",
+      "config_mode": "launch-inspired-profile-v1-optional-adapter",
       "target_endpoint": "http://optional-openclaw:8111",
       "target_protocol_paths": [
         "/v1/dm",
+        "/v1/dm/send",
         "/v1/webhooks/dm",
+        "/v1/webhooks/channels/dm",
+        "/v1/profile",
         "/v1/tools/execute"
       ],
       "required_variables": [
         "OPENCLAW_AUTH_TOKEN_FILE",
         "OPENCLAW_WEBHOOK_SECRET_FILE",
+        "OPENCLAW_PROFILE_FILE",
         "OPENCLAW_SANDBOX_URL",
-        "OPENCLAW_SANDBOX_AUTH_TOKEN_FILE"
+        "OPENCLAW_SANDBOX_AUTH_TOKEN_FILE",
+        "OPENCLAW_SANDBOX_PROFILE_FILE"
       ],
       "stack_sources": [
         "compose/compose.optional.yml",
+        "examples/optional/openclaw.integration-profile.v1.json",
+        "deployments/optional/init_runtime.sh",
         "deployments/optional/optional_service.py"
       ],
       "contract_tests": [
@@ -79,8 +86,7 @@
         "tests/F10_ollama_drift_watch.sh"
       ],
       "assumed_gaps": [
-        "The stack does not invoke 'ollama launch openclaw' directly.",
-        "Full upstream parity is tracked separately in dgx-spark-agentic-stack-ik6."
+        "The stack does not invoke 'ollama launch openclaw' directly."
       ]
     },
     {

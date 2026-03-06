@@ -25,7 +25,15 @@ For that reason, activation requires:
 - Current repo behavior:
   - internal API listener `:8111` on Docker network,
   - dedicated sandbox runtime `:8112` on Docker network,
+  - versioned integration profile bootstrap:
+    - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json`
+    - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`,
   - signed webhook ingress on host loopback only (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`).
+  - launch-inspired endpoint contract:
+    - DM: `/v1/dm`, `/v1/dm/send`
+    - webhook DM: `/v1/webhooks/dm`, `/v1/webhooks/channels/dm`
+    - profile/capabilities: `/v1/profile`, `/v1/capabilities`
+    - tool execution: `/v1/tools/execute`, `/v1/sandbox/tools/execute`
 - Sandbox and egress hardening blueprint for upstream OpenClaw gateway deployments:
   - `docs/security/openclaw-sandbox-egress.md`
 - If replaced by upstream OpenClaw gateway, default listeners are typically:
