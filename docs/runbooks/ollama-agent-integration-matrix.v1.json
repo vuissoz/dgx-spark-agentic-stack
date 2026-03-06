@@ -1,0 +1,160 @@
+{
+  "matrix_version": "2026-03-06.step7.v1",
+  "scope": [
+    "rootless-dev",
+    "strict-prod"
+  ],
+  "entries": [
+    {
+      "agent": "opencode",
+      "upstream_launch_support": "launch-supported",
+      "contract_source": {
+        "kind": "upstream-ollama",
+        "source_id": "opencode",
+        "upstream_doc_url": "https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/opencode.mdx",
+        "upstream_launch_commands": [
+          "ollama launch opencode",
+          "ollama launch opencode --config"
+        ],
+        "upstream_config_path": "~/.config/opencode/opencode.json"
+      },
+      "config_mode": "launch-compatible-through-stack-defaults",
+      "target_endpoint": "http://ollama-gate:11435",
+      "target_protocol_paths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ],
+      "required_variables": [
+        "OLLAMA_BASE_URL",
+        "OPENAI_BASE_URL",
+        "OPENAI_API_BASE_URL",
+        "OPENAI_API_BASE",
+        "OPENAI_API_KEY",
+        "AGENTIC_DEFAULT_MODEL"
+      ],
+      "stack_sources": [
+        "compose/compose.agents.yml",
+        "deployments/images/agent-cli-base/entrypoint.sh"
+      ],
+      "contract_tests": [
+        "tests/L8_ollama_launch_alignment_contracts.sh",
+        "tests/E2_agents_confinement.sh",
+        "tests/F10_ollama_drift_watch.sh"
+      ],
+      "assumed_gaps": []
+    },
+    {
+      "agent": "openclaw",
+      "upstream_launch_support": "launch-supported",
+      "contract_source": {
+        "kind": "upstream-ollama",
+        "source_id": "openclaw",
+        "upstream_doc_url": "https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/openclaw.mdx",
+        "upstream_launch_commands": [
+          "ollama launch openclaw",
+          "ollama launch openclaw --config",
+          "ollama launch clawdbot"
+        ]
+      },
+      "config_mode": "launch-inspired-optional-adapter",
+      "target_endpoint": "http://optional-openclaw:8111",
+      "target_protocol_paths": [
+        "/v1/dm",
+        "/v1/webhooks/dm",
+        "/v1/tools/execute"
+      ],
+      "required_variables": [
+        "OPENCLAW_AUTH_TOKEN_FILE",
+        "OPENCLAW_WEBHOOK_SECRET_FILE",
+        "OPENCLAW_SANDBOX_URL",
+        "OPENCLAW_SANDBOX_AUTH_TOKEN_FILE"
+      ],
+      "stack_sources": [
+        "compose/compose.optional.yml",
+        "deployments/optional/optional_service.py"
+      ],
+      "contract_tests": [
+        "tests/L8_ollama_launch_alignment_contracts.sh",
+        "tests/K1_openclaw.sh",
+        "tests/F10_ollama_drift_watch.sh"
+      ],
+      "assumed_gaps": [
+        "The stack does not invoke 'ollama launch openclaw' directly.",
+        "Full upstream parity is tracked separately in dgx-spark-agentic-stack-ik6."
+      ]
+    },
+    {
+      "agent": "openhands",
+      "upstream_launch_support": "adapter-internal",
+      "contract_source": {
+        "kind": "stack-internal-adapter",
+        "source_id": "openhands-adapter",
+        "stack_contract_files": [
+          "compose/compose.ui.yml",
+          "deployments/bootstrap/onboarding_env.sh"
+        ]
+      },
+      "config_mode": "openhands-env-and-settings-bootstrap",
+      "target_endpoint": "http://ollama-gate:11435/v1",
+      "target_protocol_paths": [
+        "/v1/chat/completions",
+        "/v1/responses",
+        "/v1/messages"
+      ],
+      "required_variables": [
+        "LLM_BASE_URL",
+        "LLM_MODEL",
+        "LLM_API_KEY",
+        "AGENTIC_DEFAULT_MODEL"
+      ],
+      "stack_sources": [
+        "compose/compose.ui.yml",
+        "deployments/bootstrap/onboarding_env.sh"
+      ],
+      "contract_tests": [
+        "tests/L9_ollama_internal_adapter_contracts.sh",
+        "tests/H2_openhands.sh"
+      ],
+      "assumed_gaps": [
+        "No upstream 'ollama launch openhands' contract is available.",
+        "Compatibility is guaranteed by the internal adapter contract and tests."
+      ]
+    },
+    {
+      "agent": "vibestral",
+      "upstream_launch_support": "adapter-internal",
+      "contract_source": {
+        "kind": "stack-internal-adapter",
+        "source_id": "vibestral-adapter",
+        "stack_contract_files": [
+          "deployments/images/agent-cli-base/entrypoint.sh",
+          "compose/compose.agents.yml"
+        ]
+      },
+      "config_mode": "vibe-config-adapter-openai-compatible",
+      "target_endpoint": "http://ollama-gate:11435/v1",
+      "target_protocol_paths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ],
+      "required_variables": [
+        "AGENTIC_OLLAMA_GATE_V1_URL",
+        "AGENTIC_DEFAULT_MODEL",
+        "OLLAMA_BASE_URL"
+      ],
+      "stack_sources": [
+        "deployments/images/agent-cli-base/entrypoint.sh",
+        "compose/compose.agents.yml"
+      ],
+      "contract_tests": [
+        "tests/L9_ollama_internal_adapter_contracts.sh",
+        "tests/E2_agents_confinement.sh",
+        "tests/F1_agent_cli.sh"
+      ],
+      "assumed_gaps": [
+        "No upstream 'ollama launch vibestral' contract is available.",
+        "Compatibility is guaranteed by the internal adapter contract and tests."
+      ]
+    }
+  ]
+}

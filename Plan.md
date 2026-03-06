@@ -11,7 +11,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-p1i` (Claude env `ANTHROPIC_AUTH_TOKEN`) [CLOSED]
   - `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut) [OPEN]
   - `dgx-spark-agentic-stack-ygu` (veille drift upstream Ollama) [CLOSED]
-  - `dgx-spark-agentic-stack-7gw` (matrice opencode/openclaw/openhands/vibestral) [OPEN]
+  - `dgx-spark-agentic-stack-7gw` (matrice opencode/openclaw/openhands/vibestral) [CLOSED]
   - `dgx-spark-agentic-stack-a5m` (enforcement opencode/vibestral via gate) [CLOSED]
   - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch) [OPEN]
   - `dgx-spark-agentic-stack-b32` (run D8/E2 sur stack compose démarrée) [CLOSED]
@@ -63,8 +63,14 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 14. Ajouter une veille automatisée de drift (job planifié + issue Beads auto en cas d'écart contractuel upstream).
 15. Finaliser avec tests ciblés, commit atomique, `bd sync`, push.
 
-## Progress (2026-03-05, etat reel)
+## Progress (2026-03-06, etat reel)
 - Step 1-6: completes (baseline `qwen3-coder`, onboarding/context, doctor checks, L7, updates docs/tests, validations ciblees).
+- Step 7: complete via `dgx-spark-agentic-stack-7gw`:
+  - matrice versionnee publiee: `docs/runbooks/ollama-agent-integration-matrix.md` + `docs/runbooks/ollama-agent-integration-matrix.v1.json`,
+  - ecarts assumes explicites (`launch-supported` vs `adapter-internal`),
+  - tests dedies ajoutes:
+    - `tests/L8_ollama_launch_alignment_contracts.sh` (opencode/openclaw),
+    - `tests/L9_ollama_internal_adapter_contracts.sh` (openhands/vibestral).
 - Step 9: complete via `dgx-spark-agentic-stack-eta`:
   - `/v1/chat/completions`, `/v1/responses`, `/v1/messages` exposent des usages derives de l'upstream.
   - suppression des usages synthetiques silencieux a `0`.
@@ -84,8 +90,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `E2_agents_confinement`: PASS (runtime rootless-dev avec `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false`).
 
 ## Remaining Work (open)
-- Step 7 -> `dgx-spark-agentic-stack-7gw` (matrice agents/integrations + tests de contrat).
 - Step 8 -> `dgx-spark-agentic-stack-3xx` (tools/tool_choice/tool_calls end-to-end).
 - Step 11 -> `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut, direct Ollama en opt-in explicite).
 - Step 13 -> `dgx-spark-agentic-stack-ik6` (implementation OpenClaw complete inspiree launch).
-- Step 15: finalisation globale apres fermeture des steps 7/8/11/13/14.
+- Step 15: finalisation globale apres fermeture des steps 8/11/13/14.

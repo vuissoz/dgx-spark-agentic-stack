@@ -14,6 +14,9 @@ For configuration variables, accepted values, storage locations, and secrets han
 - `docs/runbooks/configuration-expliquee-debutants.md`
 - `docs/runbooks/configuration-explained-beginners.en.md`
 
+For the versioned Ollama integration compatibility matrix (launch-supported vs internal adapters):
+- `docs/runbooks/ollama-agent-integration-matrix.md`
+
 ## Platform Features (Cross-Cutting)
 
 ### Loopback-only host exposure

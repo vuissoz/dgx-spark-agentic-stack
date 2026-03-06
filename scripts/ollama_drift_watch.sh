@@ -8,10 +8,12 @@ source "${SCRIPT_DIR}/lib/runtime.sh"
 usage() {
   cat <<'USAGE'
 Usage:
-  agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--timeout-sec <int>] [--quiet]
+  agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
 
 Description:
   Watch upstream Ollama contract drift for launch/integrations/API compatibility docs.
+  --sources limits verification to a comma-separated subset among:
+  cli,codex,claude,opencode,openclaw,openai,anthropic
 
 Exit codes:
   0  no drift detected
@@ -130,6 +132,46 @@ EOF_PATTERNS
   esac
 }
 
+parse_sources_csv() {
+  local raw_csv="$1"
+  local -a parsed=()
+  local -a tokens=()
+  local token=""
+  local normalized=""
+  local -A allowed=(
+    [cli]=1
+    [codex]=1
+    [claude]=1
+    [opencode]=1
+    [openclaw]=1
+    [openai]=1
+    [anthropic]=1
+  )
+  local -A seen=()
+
+  if [[ -z "${raw_csv}" ]]; then
+    printf '%s\n' cli codex claude opencode openclaw openai anthropic
+    return 0
+  fi
+
+  IFS=',' read -r -a tokens <<<"${raw_csv}"
+  for token in "${tokens[@]}"; do
+    normalized="${token// /}"
+    [[ -n "${normalized}" ]] || continue
+    if [[ -z "${allowed[${normalized}]:-}" ]]; then
+      die "unknown source id for --sources: ${normalized} (allowed: cli,codex,claude,opencode,openclaw,openai,anthropic)"
+    fi
+    if [[ -n "${seen[${normalized}]:-}" ]]; then
+      continue
+    fi
+    parsed+=("${normalized}")
+    seen["${normalized}"]=1
+  done
+
+  [[ "${#parsed[@]}" -gt 0 ]] || die "--sources must include at least one valid source id"
+  printf '%s\n' "${parsed[@]}"
+}
+
 source_input_path() {
   local source_id="$1"
   local candidate=""
@@ -226,6 +268,7 @@ NO_BEADS=0
 QUIET=0
 TIMEOUT_SEC="20"
 SOURCES_DIR="${AGENTIC_OLLAMA_DRIFT_SOURCES_DIR:-}"
+SOURCES_CSV="${AGENTIC_OLLAMA_DRIFT_SOURCES:-}"
 STATE_DIR="${AGENTIC_OLLAMA_DRIFT_STATE_DIR:-${AGENTIC_ROOT}/deployments/ollama-drift}"
 BEADS_ISSUE_ID="${AGENTIC_OLLAMA_DRIFT_BEADS_ISSUE_ID:-dgx-spark-agentic-stack-ygu}"
 
@@ -252,6 +295,11 @@ while [[ $# -gt 0 ]]; do
     --sources-dir)
       [[ $# -ge 2 ]] || die "missing value for --sources-dir"
       SOURCES_DIR="$2"
+      shift 2
+      ;;
+    --sources)
+      [[ $# -ge 2 ]] || die "missing value for --sources"
+      SOURCES_CSV="$2"
       shift 2
       ;;
     --timeout-sec)
@@ -294,7 +342,11 @@ report_file="${STATE_DIR}/reports/${timestamp}-report.txt"
 latest_report_link="${STATE_DIR}/latest-report.txt"
 latest_json="${STATE_DIR}/latest-report.json"
 
-source_ids=(cli codex claude opencode openclaw openai anthropic)
+source_ids=()
+while IFS= read -r source_id; do
+  [[ -n "${source_id}" ]] || continue
+  source_ids+=("${source_id}")
+done < <(parse_sources_csv "${SOURCES_CSV}")
 
 summary_lines=()
 drift_events=()
@@ -311,6 +363,7 @@ updated_baselines=()
   else
     printf 'sources=upstream\n'
   fi
+  printf 'source_ids=%s\n' "${source_ids[*]}"
   printf '\n'
 
   for source_id in "${source_ids[@]}"; do

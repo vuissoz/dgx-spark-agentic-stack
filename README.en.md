@@ -308,7 +308,7 @@ agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
 agent ollama-link
-agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--timeout-sec <int>] [--quiet]
+agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
 agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
 agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
 agent ollama-models [status|rw|ro]
@@ -439,6 +439,8 @@ Useful options:
   - `./agent ollama-drift watch --ack-baseline`
 - disable Beads automation for a specific run:
   - `./agent ollama-drift watch --no-beads`
+- target only a subset of sources (Step 7 example for opencode/openclaw):
+  - `./agent ollama-drift watch --sources opencode,openclaw`
 
 Weekly scheduling (`rootless-dev`):
 
@@ -509,6 +511,8 @@ Runtime prerequisites:
   - `docs/runbooks/strict-prod-vm.md`
 - Feature and implemented agent catalog:
   - `docs/runbooks/features-and-agents.md`
+- Versioned Ollama agent integration matrix (launch-supported vs internal adapters):
+  - `docs/runbooks/ollama-agent-integration-matrix.md`
 - Beginner service-by-service guide (French):
   - `docs/runbooks/services-expliques-debutants.md`
 - Beginner service-by-service guide (English):
