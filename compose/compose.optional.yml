@@ -252,12 +252,25 @@ services:
     image: ghcr.io/block/goose:latest
     profiles:
       - optional-goose
+    init: true
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    working_dir: /workspace
     entrypoint:
       - /bin/sh
       - -lc
     command:
       - |
-        mkdir -p /workspace /logs /home/goose/.config/goose
+        set -eu
+        mkdir -p \
+          /workspace \
+          /logs \
+          /state/home/.config/goose \
+          /state/home/.cache \
+          /state/home/.local/share/goose/sessions \
+          /state/home/.local/state/goose/logs
+        if [ -f /state/config.yaml ] && [ ! -f /state/home/.config/goose/config.yaml ]; then
+          cp -a /state/config.yaml /state/home/.config/goose/config.yaml
+        fi
         sleep infinity
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_OPTIONAL_GOOSE_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
@@ -270,11 +283,19 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
+      HOME: /state/home
+      XDG_CONFIG_HOME: /state/home/.config
+      XDG_CACHE_HOME: /state/home/.cache
+      XDG_DATA_HOME: /state/home/.local/share
+      XDG_STATE_HOME: /state/home/.local/state
+      GOOSE_PROVIDER: ${AGENTIC_GOOSE_PROVIDER:-ollama}
+      GOOSE_MODEL: ${AGENTIC_GOOSE_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}}
+      OLLAMA_HOST: http://ollama-gate:11435
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
     volumes:
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/state:/home/goose/.config/goose
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/logs:/logs
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/workspaces:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
@@ -282,7 +303,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - goose --version >/dev/null 2>&1
+        - goose session list >/dev/null 2>&1
       interval: 30s
       timeout: 10s
       retries: 5

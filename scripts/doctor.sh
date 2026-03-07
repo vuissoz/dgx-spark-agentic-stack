@@ -871,6 +871,48 @@ for row in "${running_services[@]}"; do
       doctor_fail "optional-pi-mono home directory is not writable (/state/home)"
     fi
   fi
+
+  if [[ "${service}" == "optional-goose" ]]; then
+    env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    if ! echo "${env_dump}" | grep -q '^HOME=/state/home$'; then
+      doctor_fail "optional-goose must set HOME=/state/home"
+    fi
+    if ! echo "${env_dump}" | grep -q '^XDG_CONFIG_HOME=/state/home/.config$'; then
+      doctor_fail "optional-goose must set XDG_CONFIG_HOME=/state/home/.config"
+    fi
+    if ! echo "${env_dump}" | grep -q '^XDG_DATA_HOME=/state/home/.local/share$'; then
+      doctor_fail "optional-goose must set XDG_DATA_HOME=/state/home/.local/share"
+    fi
+    if ! echo "${env_dump}" | grep -q '^XDG_STATE_HOME=/state/home/.local/state$'; then
+      doctor_fail "optional-goose must set XDG_STATE_HOME=/state/home/.local/state"
+    fi
+    if ! echo "${env_dump}" | grep -q '^OLLAMA_HOST=http://ollama-gate:11435$'; then
+      doctor_fail "optional-goose must set OLLAMA_HOST=http://ollama-gate:11435"
+    fi
+
+    if ! mount_destination_present "${cid}" "/state"; then
+      doctor_fail "optional-goose must mount /state"
+    fi
+    if ! mount_destination_present "${cid}" "/logs"; then
+      doctor_fail "optional-goose must mount /logs"
+    fi
+    if ! mount_destination_present "${cid}" "/workspace"; then
+      doctor_fail "optional-goose must mount /workspace"
+    fi
+
+    if ! timeout 20 docker exec "${cid}" sh -lc 'goose session list >/dev/null 2>&1'; then
+      doctor_fail "optional-goose goose session storage is not operational"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc 'test -d /state/home && test -w /state/home'; then
+      doctor_fail "optional-goose home directory is not writable (/state/home)"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc 'test -d /state/home/.local/share/goose/sessions && test -w /state/home/.local/share/goose/sessions'; then
+      doctor_fail "optional-goose sessions directory must be writable (/state/home/.local/share/goose/sessions)"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc 'test -d /state/home/.local/state/goose/logs && test -w /state/home/.local/state/goose/logs'; then
+      doctor_fail "optional-goose logs directory must be writable (/state/home/.local/state/goose/logs)"
+    fi
+  fi
 done
 
 rag_retriever_cid="$(service_container_id rag-retriever)"

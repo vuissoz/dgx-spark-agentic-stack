@@ -75,6 +75,10 @@ For that reason, activation requires:
 - Service: `optional-goose`
 - Profile: `optional-goose`
 - Purpose: optional Goose CLI workspace container for specific workflows.
+- Runtime contract:
+  - explicit non-root user mapping (`AGENT_RUNTIME_UID:AGENT_RUNTIME_GID`),
+  - `HOME=/state/home` with XDG dirs under `/state/home/.config`, `/state/home/.local/share`, `/state/home/.local/state`,
+  - default provider wiring: `GOOSE_PROVIDER=ollama`, `OLLAMA_HOST=http://ollama-gate:11435`.
 - Runtime data:
   - `${AGENTIC_ROOT}/optional/goose/state`
   - `${AGENTIC_ROOT}/optional/goose/logs`
