@@ -9,6 +9,7 @@ source "${AGENTIC_REPO_ROOT}/tests/lib/common.sh"
 
 status=0
 fix_net=0
+check_tool_stream_e2e=0
 
 warn() {
   echo "WARN: $*" >&2
@@ -31,10 +32,13 @@ doctor_fail_or_warn() {
 usage() {
   cat <<USAGE
 Usage:
-  agent doctor [--fix-net]
+  agent doctor [--fix-net] [--check-tool-stream-e2e]
 
 Environment:
   AGENTIC_PROFILE=strict-prod|rootless-dev
+  AGENTIC_DOCTOR_STREAM_MODEL=<model> (default: AGENTIC_DEFAULT_MODEL)
+  AGENTIC_DOCTOR_STREAM_TIMEOUT_SEC=<seconds> (default: 90)
+  AGENTIC_DOCTOR_STREAM_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 20)
 USAGE
 }
 
@@ -373,10 +377,259 @@ PY
   cleanup_context_check_files
 }
 
+doctor_stream_payload() {
+  local model="$1"
+  local tool_name="$2"
+  python3 - "${model}" "${tool_name}" <<'PY'
+import json
+import sys
+
+model = sys.argv[1]
+tool_name = sys.argv[2]
+payload = {
+    "model": model,
+    "input": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        f"Doctor stream probe for {tool_name}. "
+                        "Call doctor_probe exactly once and return no prose."
+                    ),
+                }
+            ],
+        }
+    ],
+    "tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "doctor_probe",
+                "description": "Internal doctor stream probe tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tool": {"type": "string"},
+                        "check": {"type": "string"},
+                    },
+                    "required": ["tool", "check"],
+                    "additionalProperties": False,
+                },
+            },
+        }
+    ],
+    "tool_choice": {"type": "function", "function": {"name": "doctor_probe"}},
+    "temperature": 0,
+    "max_output_tokens": 64,
+    "stream": True,
+}
+print(json.dumps(payload, separators=(",", ":")))
+PY
+}
+
+doctor_validate_stream_response() {
+  local stream_file="$1"
+  python3 - "${stream_file}" <<'PY'
+import json
+import sys
+
+stream_file = sys.argv[1]
+function_done_seen = False
+completed_seen = False
+completed_has_function_call = False
+for raw_line in open(stream_file, "r", encoding="utf-8"):
+    line = raw_line.strip()
+    if not line.startswith("data: "):
+        continue
+    payload = line[len("data: "):].strip()
+    if payload in ("", "[DONE]"):
+        continue
+    event = json.loads(payload)
+    event_type = event.get("type")
+    if event_type == "response.function_call_arguments.done":
+        arguments = event.get("arguments")
+        if not isinstance(arguments, str) or not arguments.strip():
+            raise SystemExit("function_call_arguments.done contains empty arguments")
+        parsed = json.loads(arguments)
+        if not isinstance(parsed, dict):
+            raise SystemExit("function_call_arguments.done arguments must decode to object")
+        function_done_seen = True
+    elif event_type == "response.completed":
+        completed_seen = True
+        response = event.get("response")
+        if not isinstance(response, dict):
+            raise SystemExit("response.completed missing response payload")
+        output = response.get("output")
+        if not isinstance(output, list):
+            raise SystemExit("response.completed output must be a list")
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "function_call":
+                continue
+            if item.get("name") != "doctor_probe":
+                continue
+            args = item.get("arguments")
+            if not isinstance(args, str) or not args.strip():
+                raise SystemExit("response.completed function_call arguments are empty")
+            decoded = json.loads(args)
+            if not isinstance(decoded, dict):
+                raise SystemExit("response.completed function_call arguments must decode to object")
+            completed_has_function_call = True
+
+if not function_done_seen:
+    raise SystemExit("missing response.function_call_arguments.done event")
+if not completed_seen:
+    raise SystemExit("missing response.completed event")
+if not completed_has_function_call:
+    raise SystemExit("response.completed missing doctor_probe function_call for expected tool")
+PY
+}
+
+check_streamed_tool_call_health() {
+  local probe_model="${AGENTIC_DOCTOR_STREAM_MODEL:-${AGENTIC_DEFAULT_MODEL:-}}"
+  local timeout_sec="${AGENTIC_DOCTOR_STREAM_TIMEOUT_SEC:-90}"
+  local queue_timeout_sec="${AGENTIC_DOCTOR_STREAM_GATE_QUEUE_TIMEOUT_SEC:-20}"
+  local tool service cid payload stream_file
+  local -a targets=(
+    "codex|agentic-codex"
+    "claude|agentic-claude"
+    "openhands|openhands"
+    "opencode|agentic-opencode"
+    "openclaw|optional-openclaw"
+    "pi-mono|optional-pi-mono"
+    "goose|optional-goose"
+  )
+
+  if [[ -z "${probe_model}" ]]; then
+    doctor_fail "streamed tool-call check requires AGENTIC_DEFAULT_MODEL or AGENTIC_DOCTOR_STREAM_MODEL"
+    return 0
+  fi
+
+  if ! [[ "${timeout_sec}" =~ ^[0-9]+$ ]] || (( timeout_sec < 10 )); then
+    doctor_fail "AGENTIC_DOCTOR_STREAM_TIMEOUT_SEC must be an integer >= 10 (got: ${timeout_sec})"
+    return 0
+  fi
+  if ! [[ "${queue_timeout_sec}" =~ ^[0-9]+$ ]] || (( queue_timeout_sec < 1 )); then
+    doctor_fail "AGENTIC_DOCTOR_STREAM_GATE_QUEUE_TIMEOUT_SEC must be an integer >= 1 (got: ${queue_timeout_sec})"
+    return 0
+  fi
+
+  for target in "${targets[@]}"; do
+    tool="${target%%|*}"
+    service="${target#*|}"
+    cid="$(service_container_id "${service}")"
+    if [[ -z "${cid}" ]]; then
+      doctor_fail "streamed tool-call check requires running service '${service}' for '${tool}'"
+      continue
+    fi
+
+    if ! payload="$(doctor_stream_payload "${probe_model}" "${tool}")"; then
+      doctor_fail "unable to build streamed tool-call probe payload for '${tool}'"
+      continue
+    fi
+
+    stream_file="$(mktemp)"
+    stream_err_file="$(mktemp)"
+    if ! printf '%s' "${payload}" | timeout "${timeout_sec}" docker exec -i \
+      -e AGENT_DOCTOR_SESSION="doctor-${tool}-$$" \
+      -e AGENT_DOCTOR_QUEUE_TIMEOUT_SEC="${queue_timeout_sec}" \
+      -e AGENT_DOCTOR_HTTP_TIMEOUT_SEC="${timeout_sec}" \
+      "${cid}" sh -lc '
+        set -eu
+        request_file="$(mktemp)"
+        trap "rm -f \"${request_file}\"" EXIT
+        cat >"${request_file}"
+
+        if command -v curl >/dev/null 2>&1; then
+          curl -fsS --max-time "${AGENT_DOCTOR_HTTP_TIMEOUT_SEC}" \
+            -H "Content-Type: application/json" \
+            -H "X-Agent-Project: doctor" \
+            -H "X-Agent-Session: ${AGENT_DOCTOR_SESSION}" \
+            -H "X-Gate-Queue-Timeout-Seconds: ${AGENT_DOCTOR_QUEUE_TIMEOUT_SEC}" \
+            --data-binary @"${request_file}" \
+            "http://ollama-gate:11435/v1/responses"
+          exit 0
+        fi
+
+        if command -v wget >/dev/null 2>&1; then
+          wget -q -O- --timeout="${AGENT_DOCTOR_HTTP_TIMEOUT_SEC}" \
+            --header="Content-Type: application/json" \
+            --header="X-Agent-Project: doctor" \
+            --header="X-Agent-Session: ${AGENT_DOCTOR_SESSION}" \
+            --header="X-Gate-Queue-Timeout-Seconds: ${AGENT_DOCTOR_QUEUE_TIMEOUT_SEC}" \
+            --post-file="${request_file}" \
+            "http://ollama-gate:11435/v1/responses"
+          exit 0
+        fi
+
+        if command -v python3 >/dev/null 2>&1; then
+          python3 - "${request_file}" <<'"'"'PY'"'"'
+import os
+import pathlib
+import sys
+import urllib.request
+
+request_file = pathlib.Path(sys.argv[1])
+payload = request_file.read_bytes()
+request = urllib.request.Request(
+    "http://ollama-gate:11435/v1/responses",
+    data=payload,
+    headers={
+        "Content-Type": "application/json",
+        "X-Agent-Project": "doctor",
+        "X-Agent-Session": os.environ.get("AGENT_DOCTOR_SESSION", "doctor"),
+        "X-Gate-Queue-Timeout-Seconds": os.environ.get("AGENT_DOCTOR_QUEUE_TIMEOUT_SEC", "20"),
+    },
+    method="POST",
+)
+with urllib.request.urlopen(request, timeout=int(os.environ.get("AGENT_DOCTOR_HTTP_TIMEOUT_SEC", "90"))) as response:
+    sys.stdout.buffer.write(response.read())
+PY
+          exit 0
+        fi
+
+        echo "missing curl/wget/python3 in service container" >&2
+        exit 91
+      ' >"${stream_file}" 2>"${stream_err_file}"; then
+      err_hint="$(tr '\n' ' ' <"${stream_err_file}" | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+      if [[ -n "${err_hint}" ]]; then
+        doctor_fail "streamed tool-call probe failed for '${tool}' (${service}): ${err_hint}"
+      else
+        doctor_fail "streamed tool-call probe failed for '${tool}' (${service})"
+      fi
+      rm -f "${stream_file}"
+      rm -f "${stream_err_file}"
+      continue
+    fi
+
+    if ! validation_err="$(doctor_validate_stream_response "${stream_file}" 2>&1)"; then
+      if [[ -n "${validation_err}" ]]; then
+        doctor_fail "streamed tool-call probe returned invalid events for '${tool}' (${service}): ${validation_err}"
+      else
+        doctor_fail "streamed tool-call probe returned invalid events for '${tool}' (${service})"
+      fi
+      rm -f "${stream_file}"
+      rm -f "${stream_err_file}"
+      continue
+    fi
+
+    ok "streamed tool-call probe passed for '${tool}' (${service})"
+    rm -f "${stream_file}"
+    rm -f "${stream_err_file}"
+  done
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fix-net)
       fix_net=1
+      shift
+      ;;
+    --check-tool-stream-e2e|--check-tool-stream-health)
+      check_tool_stream_e2e=1
       shift
       ;;
     -h|--help|help)
@@ -764,6 +1017,10 @@ if [[ -n "${optional_portainer_cid}" ]]; then
   if ! assert_no_public_bind "${portainer_host_port}"; then
     doctor_fail "optional portainer host bind must stay loopback-only on port ${portainer_host_port}"
   fi
+fi
+
+if [[ "${check_tool_stream_e2e}" -eq 1 ]]; then
+  check_streamed_tool_call_health
 fi
 
 current_release_dir="${AGENTIC_ROOT}/deployments/current"

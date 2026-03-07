@@ -67,7 +67,7 @@ Usage:
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
   agent vm cleanup [--name ... --yes --dry-run]
   agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all> [--skip-d5-tests]
-  agent doctor [--fix-net]
+  agent doctor [--fix-net] [--check-tool-stream-e2e]
 
 Optional modules (disabled by default):
   AGENTIC_OPTIONAL_MODULES=openclaw,mcp,pi-mono,goose,portainer agent up optional

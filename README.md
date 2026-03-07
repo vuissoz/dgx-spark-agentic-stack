@@ -322,7 +322,7 @@ agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --wor
 agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
 agent vm cleanup [--name ... --yes --dry-run]
 agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all> [--skip-d5-tests]
-agent doctor [--fix-net]
+agent doctor [--fix-net] [--check-tool-stream-e2e]
 ```
 
 Exemples:
@@ -498,6 +498,7 @@ Préconditions (runtime):
 ## Validation
 
 - Diagnostic global: `./agent doctor`
+- Probe explicite stream tool-calls (codex, claude, openhands, opencode, openclaw, pi-mono, goose): `./agent doctor --check-tool-stream-e2e`
 - Campagnes de tests: `./agent test <A..L|V|all>`
 - Campagne VM `strict-prod` (preuves + update/rollback + tests): `./agent vm test --name agentic-strict-prod`
 - Vérifier l'état de la VM: `multipass list` puis `multipass info <vm-name>` (`State: Running` attendu)
