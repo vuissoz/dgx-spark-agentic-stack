@@ -291,6 +291,72 @@ EOF
   log "INFO: vibestral defaults config reconciled (${vibe_config})"
 }
 
+bootstrap_opencode_config() {
+  [[ "${tool}" == "opencode" ]] || return 0
+
+  local opencode_config="${agent_home}/.config/opencode/opencode.json"
+  local tmp_config
+  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+  local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
+
+  mkdir -p "$(dirname "${opencode_config}")"
+  tmp_config="$(mktemp)"
+  python3 - "${opencode_config}" "${default_model}" "${gate_v1_url}" >"${tmp_config}" <<'PY'
+import json
+import pathlib
+import sys
+
+config_path = pathlib.Path(sys.argv[1])
+default_model = sys.argv[2]
+gate_v1_url = sys.argv[3]
+
+base = {}
+if config_path.exists():
+    try:
+      with config_path.open("r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+      if isinstance(payload, dict):
+        base = payload
+    except Exception:
+      base = {}
+
+providers = base.get("provider")
+if not isinstance(providers, dict):
+    providers = {}
+
+ollama_provider = providers.get("ollama")
+if not isinstance(ollama_provider, dict):
+    ollama_provider = {}
+
+options = ollama_provider.get("options")
+if not isinstance(options, dict):
+    options = {}
+options["baseURL"] = gate_v1_url
+
+models = ollama_provider.get("models")
+if not isinstance(models, dict):
+    models = {}
+models[default_model] = {"name": default_model}
+
+ollama_provider["npm"] = "@ai-sdk/openai-compatible"
+ollama_provider["name"] = "Ollama (agentic stack)"
+ollama_provider["options"] = options
+ollama_provider["models"] = models
+providers["ollama"] = ollama_provider
+
+base["$schema"] = "https://opencode.ai/config.json"
+base["provider"] = providers
+base["model"] = f"ollama/{default_model}"
+base["small_model"] = f"ollama/{default_model}"
+
+json.dump(base, sys.stdout, indent=2)
+sys.stdout.write("\n")
+PY
+  write_if_changed "${opencode_config}" "${tmp_config}"
+  chmod 0600 "${opencode_config}" || true
+  log "INFO: opencode defaults config reconciled (${opencode_config})"
+}
+
 maybe_setup_vibestral() {
   [[ "${tool}" == "vibestral" ]] || return 0
 
@@ -353,6 +419,7 @@ report_primary_cli
 bootstrap_shell_home
 bootstrap_ollama_gate_defaults
 bootstrap_codex_config
+bootstrap_opencode_config
 bootstrap_vibestral_config
 
 if ! tmux has-session -t "${session}" 2>/dev/null; then

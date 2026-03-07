@@ -1,5 +1,5 @@
 {
-  "matrix_version": "2026-03-06.step13.v2",
+  "matrix_version": "2026-03-07.step13.v3",
   "scope": [
     "rootless-dev",
     "strict-prod"
@@ -18,7 +18,7 @@
         ],
         "upstream_config_path": "~/.config/opencode/opencode.json"
       },
-      "config_mode": "launch-compatible-through-stack-defaults",
+      "config_mode": "launch-compatible-managed-opencode-config",
       "target_endpoint": "http://ollama-gate:11435",
       "target_protocol_paths": [
         "/v1/chat/completions",

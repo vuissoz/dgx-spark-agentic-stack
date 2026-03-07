@@ -13,7 +13,7 @@ Source versionnee machine-readable:
 
 | Agent | Support upstream `ollama launch` | Source de contrat principale | Mode de configuration stack | Endpoint cible | Variables requises |
 | --- | --- | --- | --- | --- | --- |
-| `opencode` | `launch-supported` | `docs/integrations/opencode.mdx` | Launch-compatible via defaults stack (`ollama-gate-defaults.env`) | `http://ollama-gate:11435` | `OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE_URL`, `OPENAI_API_BASE`, `OPENAI_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
+| `opencode` | `launch-supported` | `docs/integrations/opencode.mdx` | Reconciliation de `~/.config/opencode/opencode.json` + defaults stack (`ollama-gate-defaults.env`) | `http://ollama-gate:11435` | `OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE_URL`, `OPENAI_API_BASE`, `OPENAI_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
 | `openclaw` | `launch-supported` | `docs/integrations/openclaw.mdx` | Adapter optionnel inspire launch avec profil versionne (`optional-openclaw`) | `http://optional-openclaw:8111` | `OPENCLAW_AUTH_TOKEN_FILE`, `OPENCLAW_WEBHOOK_SECRET_FILE`, `OPENCLAW_PROFILE_FILE`, `OPENCLAW_SANDBOX_URL`, `OPENCLAW_SANDBOX_AUTH_TOKEN_FILE`, `OPENCLAW_SANDBOX_PROFILE_FILE` |
 | `openhands` | `adapter-internal` | Contrat stack (`compose.ui` + onboarding) | Bootstrap `openhands.env` + `settings.json` | `http://ollama-gate:11435/v1` | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
 | `vibestral` | `adapter-internal` | Contrat stack (`entrypoint` + `compose.agents`) | Generation de `~/.vibe/config.toml` vers `ollama-gate` | `http://ollama-gate:11435/v1` | `AGENTIC_OLLAMA_GATE_V1_URL`, `AGENTIC_DEFAULT_MODEL`, `OLLAMA_BASE_URL` |
@@ -24,7 +24,8 @@ Source versionnee machine-readable:
 - `tests/L8_ollama_launch_alignment_contracts.sh`
   - valide que la matrice marque `opencode` et `openclaw` en `launch-supported`;
   - valide les sources upstream et commandes launch attendues;
-  - execute un drift-watch cible (`--sources opencode,openclaw`) et detecte explicitement une regression d'invariant.
+  - execute un drift-watch cible (`--sources opencode,openclaw`) et detecte explicitement une regression d'invariant;
+  - valide le contrat de bootstrap opencode (`opencode.json` reconcile sur `ollama/<AGENTIC_DEFAULT_MODEL>` quand le service est lance).
 
 ### OpenHands/Vibestral: adapters internes + non-regression
 - `tests/L9_ollama_internal_adapter_contracts.sh`
