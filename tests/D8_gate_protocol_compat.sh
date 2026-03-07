@@ -224,6 +224,39 @@ print(json.dumps({
 PY
 )"
 
+responses_tool_stream_payload="$(python3 - <<PY
+import json
+print(json.dumps({
+    'model': '${default_model}',
+    'input': [
+        {
+            'role': 'user',
+            'content': [
+                {'type': 'input_text', 'text': 'Use tool get_weather for city Paris and return no prose.'}
+            ],
+        }
+    ],
+    'tools': [
+        {
+            'type': 'function',
+            'function': {
+                'name': 'get_weather',
+                'description': 'Get weather by city',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {'city': {'type': 'string'}},
+                    'required': ['city'],
+                },
+            },
+        }
+    ],
+    'tool_choice': {'type': 'function', 'function': {'name': 'get_weather'}},
+    'temperature': 0,
+    'stream': True,
+}))
+PY
+)"
+
 messages_tool_payload="$(python3 - <<PY
 import json
 print(json.dumps({
@@ -258,10 +291,11 @@ resp_file="$(mktemp)"
 msg_file="$(mktemp)"
 stream_file="$(mktemp)"
 resp_tool_file="$(mktemp)"
+resp_tool_stream_file="$(mktemp)"
 msg_tool_file="$(mktemp)"
 resp_roundtrip_file="$(mktemp)"
 msg_roundtrip_file="$(mktemp)"
-trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${resp_tool_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
+trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${resp_tool_file}" "${resp_tool_stream_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
 
 responses_resp="$(call_post "d8-v1-responses-$$" "http://ollama-gate:11435/v1/responses" "${responses_payload}")"
 responses_code="$(extract_code "${responses_resp}")"
@@ -289,6 +323,48 @@ printf '%s\n' "${responses_tool_body}" >"${resp_tool_file}"
 }
 assert_responses_tool_call_payload "${resp_tool_file}" "get_weather" || fail "/v1/responses tool-call payload is invalid"
 ok "gate /v1/responses returns function_call output when tool_choice is forced"
+
+responses_tool_stream_resp="$(call_post "d8-v1-responses-tool-stream-$$" "http://ollama-gate:11435/v1/responses" "${responses_tool_stream_payload}")"
+responses_tool_stream_code="$(extract_code "${responses_tool_stream_resp}")"
+responses_tool_stream_body="$(extract_body "${responses_tool_stream_resp}")"
+printf '%s\n' "${responses_tool_stream_body}" >"${resp_tool_stream_file}"
+[[ "${responses_tool_stream_code}" == "200" ]] || {
+  cat "${resp_tool_stream_file}" >&2
+  fail "/v1/responses tool-call stream returned status ${responses_tool_stream_code}"
+}
+grep -q 'event: response.function_call_arguments.done' "${resp_tool_stream_file}" || fail "/v1/responses stream missing function_call arguments completion event"
+python3 - "${resp_tool_stream_file}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+fc_done_seen = False
+completed_seen = False
+with open(path, 'r', encoding='utf-8') as fh:
+    for line in fh:
+        if not line.startswith('data: '):
+            continue
+        payload = line[len('data: '):].strip()
+        if payload in ('', '[DONE]'):
+            continue
+        obj = json.loads(payload)
+        event_type = obj.get('type')
+        if event_type == 'response.function_call_arguments.done':
+            arguments = obj.get('arguments')
+            assert isinstance(arguments, str) and arguments.strip(), obj
+            parsed = json.loads(arguments)
+            assert isinstance(parsed, dict), obj
+            fc_done_seen = True
+        if event_type == 'response.completed':
+            completed_seen = True
+            response = obj.get('response') or {}
+            output = response.get('output') or []
+            tool_items = [item for item in output if isinstance(item, dict) and item.get('type') == 'function_call']
+            assert tool_items, obj
+assert fc_done_seen, 'response.function_call_arguments.done event not found'
+assert completed_seen, 'response.completed event not found'
+PY
+ok "gate /v1/responses streaming preserves function_call output"
 
 responses_roundtrip_payload="$(python3 - "${resp_tool_file}" "${default_model}" <<'PY'
 import json

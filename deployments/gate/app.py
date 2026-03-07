@@ -1984,7 +1984,9 @@ async def handle_chat_completion_endpoint(
         [str, str, Dict[str, int] | None, list[Dict[str, Any]] | None, str], Dict[str, Any]
     ],
     stream: bool = False,
-    stream_builder: Callable[[str, str, Dict[str, int] | None], str] | None = None,
+    stream_builder: Callable[
+        [str, str, Dict[str, int] | None, list[Dict[str, Any]] | None, str], str
+    ] | None = None,
 ) -> Response:
     project = request.headers.get("X-Agent-Project", "-")
     allow_switch = header_bool(request.headers.get("X-Model-Switch"))
@@ -2161,7 +2163,7 @@ async def handle_chat_completion_endpoint(
             headers["Content-Type"] = "text/event-stream; charset=utf-8"
             return Response(
                 status_code=200,
-                content=stream_builder(effective_model, content, usage),
+                content=stream_builder(effective_model, content, usage, response_tool_calls, finish_reason),
                 headers=headers,
             )
 
@@ -2649,27 +2651,26 @@ def build_responses_payload(
     return payload
 
 
-def build_responses_stream(model: str, content: str, usage: Dict[str, int] | None = None) -> str:
-    final_payload = build_responses_payload(model, content, usage)
+def build_responses_stream(
+    model: str,
+    content: str,
+    usage: Dict[str, int] | None = None,
+    tool_calls: list[Dict[str, Any]] | None = None,
+    finish_reason: str = "stop",
+) -> str:
+    final_payload = build_responses_payload(model, content, usage, tool_calls, finish_reason)
     response_id = final_payload["id"]
-    output_item: Dict[str, Any] | None = None
-    for item in final_payload.get("output", []):
-        if isinstance(item, dict) and item.get("type") == "message":
-            output_item = item
-            break
-    if output_item is None:
-        output_item = {
-            "id": f"msg_{uuid.uuid4().hex}",
-            "type": "message",
-            "status": "completed",
-            "role": "assistant",
-            "content": [{"type": "output_text", "text": content, "annotations": []}],
-        }
-    output_item_id = output_item["id"]
-    output_content = output_item.get("content")
-    if not isinstance(output_content, list) or not output_content:
-        output_content = [{"type": "output_text", "text": content, "annotations": []}]
-    output_part = output_content[0]
+    output = final_payload.get("output")
+    if not isinstance(output, list) or not output:
+        output = [
+            {
+                "id": f"msg_{uuid.uuid4().hex}",
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": content, "annotations": []}],
+            }
+        ]
     created_payload = {
         "type": "response.created",
         "response": {
@@ -2692,69 +2693,178 @@ def build_responses_stream(model: str, content: str, usage: Dict[str, int] | Non
             "output": [],
         },
     }
-    output_item_added = {
-        "type": "response.output_item.added",
-        "response_id": response_id,
-        "output_index": 0,
-        "item": {
-            "id": output_item_id,
-            "type": "message",
-            "status": "in_progress",
-            "role": "assistant",
-            "content": [],
-        },
-    }
-    content_part_added = {
-        "type": "response.content_part.added",
-        "response_id": response_id,
-        "output_index": 0,
-        "item_id": output_item_id,
-        "content_index": 0,
-        "part": {"type": "output_text", "text": ""},
-    }
-    delta_payload = {
-        "type": "response.output_text.delta",
-        "response_id": response_id,
-        "output_index": 0,
-        "item_id": output_item_id,
-        "content_index": 0,
-        "delta": content,
-    }
-    text_done_payload = {
-        "type": "response.output_text.done",
-        "response_id": response_id,
-        "output_index": 0,
-        "item_id": output_item_id,
-        "content_index": 0,
-        "text": content,
-    }
-    content_part_done = {
-        "type": "response.content_part.done",
-        "response_id": response_id,
-        "output_index": 0,
-        "item_id": output_item_id,
-        "content_index": 0,
-        "part": output_part,
-    }
-    output_item_done = {
-        "type": "response.output_item.done",
-        "response_id": response_id,
-        "output_index": 0,
-        "item": output_item,
-    }
     completed_payload = {"type": "response.completed", "response": final_payload}
-    return (
-        sse_event("response.created", created_payload)
-        + sse_event("response.in_progress", in_progress_payload)
-        + sse_event("response.output_item.added", output_item_added)
-        + sse_event("response.content_part.added", content_part_added)
-        + sse_event("response.output_text.delta", delta_payload)
-        + sse_event("response.output_text.done", text_done_payload)
-        + sse_event("response.content_part.done", content_part_done)
-        + sse_event("response.output_item.done", output_item_done)
-        + sse_event("response.completed", completed_payload)
-        + "data: [DONE]\n\n"
-    )
+    events: list[str] = [
+        sse_event("response.created", created_payload),
+        sse_event("response.in_progress", in_progress_payload),
+    ]
+
+    for output_index, output_item in enumerate(output):
+        if not isinstance(output_item, dict):
+            continue
+        item_type = output_item.get("type")
+        output_item_id = output_item.get("id")
+        if not isinstance(output_item_id, str) or not output_item_id.strip():
+            output_item_id = f"item_{uuid.uuid4().hex}"
+        output_item_id = output_item_id.strip()
+
+        if item_type == "function_call":
+            name = output_item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                name = "function"
+            call_id = output_item.get("call_id")
+            if not isinstance(call_id, str) or not call_id.strip():
+                call_id = f"call_{uuid.uuid4().hex[:24]}"
+            arguments = normalize_tool_arguments(output_item.get("arguments", {}))
+            in_progress_item = {
+                "id": output_item_id,
+                "type": "function_call",
+                "status": "in_progress",
+                "name": name.strip(),
+                "arguments": "",
+                "call_id": call_id.strip(),
+            }
+            events.append(
+                sse_event(
+                    "response.output_item.added",
+                    {
+                        "type": "response.output_item.added",
+                        "response_id": response_id,
+                        "output_index": output_index,
+                        "item": in_progress_item,
+                    },
+                )
+            )
+            if arguments:
+                events.append(
+                    sse_event(
+                        "response.function_call_arguments.delta",
+                        {
+                            "type": "response.function_call_arguments.delta",
+                            "response_id": response_id,
+                            "output_index": output_index,
+                            "item_id": output_item_id,
+                            "delta": arguments,
+                        },
+                    )
+                )
+            events.append(
+                sse_event(
+                    "response.function_call_arguments.done",
+                    {
+                        "type": "response.function_call_arguments.done",
+                        "response_id": response_id,
+                        "output_index": output_index,
+                        "item_id": output_item_id,
+                        "arguments": arguments,
+                    },
+                )
+            )
+            events.append(
+                sse_event(
+                    "response.output_item.done",
+                    {
+                        "type": "response.output_item.done",
+                        "response_id": response_id,
+                        "output_index": output_index,
+                        "item": output_item,
+                    },
+                )
+            )
+            continue
+
+        output_content = output_item.get("content")
+        if not isinstance(output_content, list) or not output_content:
+            output_content = [{"type": "output_text", "text": "", "annotations": []}]
+        in_progress_item = dict(output_item)
+        in_progress_item["status"] = "in_progress"
+        in_progress_item["content"] = []
+        events.append(
+            sse_event(
+                "response.output_item.added",
+                {
+                    "type": "response.output_item.added",
+                    "response_id": response_id,
+                    "output_index": output_index,
+                    "item": in_progress_item,
+                },
+            )
+        )
+        for content_index, output_part in enumerate(output_content):
+            if not isinstance(output_part, dict):
+                continue
+            part_type = output_part.get("type")
+            if part_type != "output_text":
+                continue
+            part_text = output_part.get("text") if isinstance(output_part.get("text"), str) else ""
+            events.append(
+                sse_event(
+                    "response.content_part.added",
+                    {
+                        "type": "response.content_part.added",
+                        "response_id": response_id,
+                        "output_index": output_index,
+                        "item_id": output_item_id,
+                        "content_index": content_index,
+                        "part": {"type": "output_text", "text": ""},
+                    },
+                )
+            )
+            if part_text:
+                events.append(
+                    sse_event(
+                        "response.output_text.delta",
+                        {
+                            "type": "response.output_text.delta",
+                            "response_id": response_id,
+                            "output_index": output_index,
+                            "item_id": output_item_id,
+                            "content_index": content_index,
+                            "delta": part_text,
+                        },
+                    )
+                )
+            events.append(
+                sse_event(
+                    "response.output_text.done",
+                    {
+                        "type": "response.output_text.done",
+                        "response_id": response_id,
+                        "output_index": output_index,
+                        "item_id": output_item_id,
+                        "content_index": content_index,
+                        "text": part_text,
+                    },
+                )
+            )
+            events.append(
+                sse_event(
+                    "response.content_part.done",
+                    {
+                        "type": "response.content_part.done",
+                        "response_id": response_id,
+                        "output_index": output_index,
+                        "item_id": output_item_id,
+                        "content_index": content_index,
+                        "part": output_part,
+                    },
+                )
+            )
+        events.append(
+            sse_event(
+                "response.output_item.done",
+                {
+                    "type": "response.output_item.done",
+                    "response_id": response_id,
+                    "output_index": output_index,
+                    "item": output_item,
+                },
+            )
+        )
+
+    events.append(sse_event("response.completed", completed_payload))
+    events.append("data: [DONE]\n\n")
+    return "".join(events)
 
 
 def anthropic_stop_reason_from_finish_reason(finish_reason: str, has_tool_calls: bool) -> str:
@@ -2814,7 +2924,14 @@ def build_anthropic_message_payload(
     return payload
 
 
-def build_anthropic_message_stream(model: str, content: str, usage: Dict[str, int] | None = None) -> str:
+def build_anthropic_message_stream(
+    model: str,
+    content: str,
+    usage: Dict[str, int] | None = None,
+    tool_calls: list[Dict[str, Any]] | None = None,
+    finish_reason: str = "stop",
+) -> str:
+    del tool_calls, finish_reason
     payload = build_anthropic_message_payload(model, content, usage)
     message_start = dict(payload)
     message_start["content"] = []
