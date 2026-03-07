@@ -6,10 +6,10 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 ## Tracking
 - Beads: `dgx-spark-agentic-stack-5bz`
 - Beads (compat agents Ollama):
-  - `dgx-spark-agentic-stack-3xx` (gate tools/tool_choice + tool_calls) [OPEN]
+  - `dgx-spark-agentic-stack-3xx` (gate tools/tool_choice + tool_calls) [CLOSED]
   - `dgx-spark-agentic-stack-eta` (usages/tokens réels sur endpoints compat) [CLOSED]
   - `dgx-spark-agentic-stack-p1i` (Claude env `ANTHROPIC_AUTH_TOKEN`) [CLOSED]
-  - `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut) [OPEN]
+  - `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut) [CLOSED]
   - `dgx-spark-agentic-stack-ygu` (veille drift upstream Ollama) [CLOSED]
   - `dgx-spark-agentic-stack-7gw` (matrice opencode/openclaw/openhands/vibestral) [CLOSED]
   - `dgx-spark-agentic-stack-a5m` (enforcement opencode/vibestral via gate) [CLOSED]
@@ -96,6 +96,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `E2_agents_confinement`: PASS (runtime rootless-dev avec `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false`).
 
 ## Remaining Work (open)
-- Step 8 -> `dgx-spark-agentic-stack-3xx` (tools/tool_choice/tool_calls end-to-end).
-- Step 11 -> `dgx-spark-agentic-stack-m3z` (OpenWebUI gate-only par defaut, direct Ollama en opt-in explicite).
-- Step 15: finalisation globale apres fermeture des steps 8/11.
+- Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
+
+## Sync Note (2026-03-07)
+- Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
+- Step 11 (`dgx-spark-agentic-stack-m3z`) ferme le 2026-03-06.
