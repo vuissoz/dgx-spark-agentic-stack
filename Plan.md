@@ -97,6 +97,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 
 ## Remaining Work (open)
 - Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
+- Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
