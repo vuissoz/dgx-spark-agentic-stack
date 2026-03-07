@@ -35,6 +35,10 @@ echo "${env_dump}" | grep -q '^LLM_MODEL=' \
   || fail "openhands LLM_MODEL is missing"
 echo "${env_dump}" | grep -q '^LLM_API_KEY=' \
   || fail "openhands LLM_API_KEY is missing"
+echo "${env_dump}" | grep -q '^HOME=/.openhands/home$' \
+  || fail "openhands HOME must be set to /.openhands/home"
+echo "${env_dump}" | grep -q '^AGENT_HOME=/.openhands/home$' \
+  || fail "openhands AGENT_HOME must be set to /.openhands/home"
 ok "openhands model/api key env is present"
 
 settings_payload="$(curl -fsS --max-time 10 "http://127.0.0.1:${openhands_port}/api/settings" || true)"

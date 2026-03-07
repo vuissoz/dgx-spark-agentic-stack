@@ -66,6 +66,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    extra_hosts:
+      - host.docker.internal:127.0.0.1
     ports:
       - 127.0.0.1:${OPENHANDS_HOST_PORT:-3000}:3000
     env_file:
@@ -76,16 +78,25 @@ services:
       RUNTIME: cli
       OH_SANDBOX_KIND: ProcessSandboxServiceInjector
       OH_SANDBOX_SPEC_KIND: ProcessSandboxSpecServiceInjector
+      OH_APP_CONVERSATION_SANDBOX_STARTUP_POLL_FREQUENCY: "0"
+      OH_APP_CONVERSATION_INIT_GIT_IN_EMPTY_WORKSPACE: "0"
+      OH_SANDBOX_SPEC_SPECS_0: '{"id":"ghcr.io/openhands/agent-server:c775ff6-python","command":["python","-m","openhands.agent_server"],"initial_env":{"OH_ENABLE_VS_CODE":"0","OH_CONVERSATIONS_PATH":"/workspace/conversations"},"working_dir":"/workspace"}'
       LLM_BASE_URL: http://ollama-gate:11435/v1
       AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
+      AGENT_HOME: /.openhands/home
+      HOME: /.openhands/home
+      XDG_CONFIG_HOME: /.openhands/home/.config
+      XDG_CACHE_HOME: /.openhands/home/.cache
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,unbound,egress-proxy,host.docker.internal,localhost,127.0.0.1
       OH_PERSISTENCE_DIR: /.openhands
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openhands/state:/.openhands
       - ${AGENTIC_ROOT:-/srv/agentic}/openhands/logs:/logs
       - ${AGENTIC_OPENHANDS_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openhands/workspaces}:/workspace
+      - ${AGENTIC_REPO_ROOT:-.}/deployments/patches/openhands/process_sandbox_service.py:/app/openhands/app_server/sandbox/process_sandbox_service.py:ro
+      - ${AGENTIC_REPO_ROOT:-.}/deployments/patches/openhands/live_status_app_conversation_service.py:/app/openhands/app_server/app_conversation/live_status_app_conversation_service.py:ro
     healthcheck:
       test:
         - CMD-SHELL
