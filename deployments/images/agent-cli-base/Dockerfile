@@ -3,6 +3,7 @@ FROM ${AGENT_BASE_IMAGE}
 
 ARG AGENT_UID=10001
 ARG AGENT_GID=10001
+ARG AGENT_NODE_MAJOR=22
 ARG AGENT_CLI_INSTALL_MODE=best-effort
 ARG AGENT_NPM_PREFIX=/opt/agentic/npm-global
 ARG AGENT_CLI_INSTALL_HOME=/opt/agentic/install-home
@@ -18,13 +19,23 @@ ARG VIBE_INSTALL_SCRIPT=https://mistral.ai/vibe/install.sh
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+  && install -d -m 0755 /etc/apt/keyrings \
+  && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+  && chmod 0644 /etc/apt/keyrings/nodesource.gpg \
+  && printf 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_%s.x nodistro main\n' "${AGENT_NODE_MAJOR}" \
+    >/etc/apt/sources.list.d/nodesource.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
     autoconf \
     automake \
     bash \
     bear \
     build-essential \
     cargo \
-    ca-certificates \
     ccache \
     clang \
     clang-format \
@@ -32,7 +43,6 @@ RUN apt-get update \
     clangd \
     cmake \
     cppcheck \
-    curl \
     direnv \
     fd-find \
     gdb \
@@ -54,7 +64,6 @@ RUN apt-get update \
     meson \
     ninja-build \
     nodejs \
-    npm \
     openssh-client \
     pkg-config \
     python3 \
@@ -74,6 +83,7 @@ RUN apt-get update \
     xz-utils \
     zip \
     zlib1g-dev \
+  && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 20 || (major === 20 && minor < 6)) { console.error(`Node ${process.versions.node} is below required 20.6.0`); process.exit(1); }' \
   && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid "${AGENT_GID}" agent \

@@ -39,6 +39,40 @@ fail_or_warn() {
   warn "${message}"
 }
 
+version_lt() {
+  local lhs="$1"
+  local rhs="$2"
+  local smallest
+
+  smallest="$(printf '%s\n%s\n' "${lhs}" "${rhs}" | sort -V | head -n 1)"
+  [[ "${smallest}" == "${lhs}" && "${lhs}" != "${rhs}" ]]
+}
+
+node_version() {
+  local raw
+  raw="$(node --version 2>/dev/null || true)"
+  raw="${raw#v}"
+  printf '%s\n' "${raw}"
+}
+
+ensure_node_version_at_least() {
+  local minimum="$1"
+  local current
+
+  current="$(node_version)"
+  if [[ -z "${current}" ]]; then
+    fail_or_warn "node runtime is unavailable (required >= ${minimum} for pi CLI)"
+    return 1
+  fi
+
+  if version_lt "${current}" "${minimum}"; then
+    fail_or_warn "node runtime ${current} is below required ${minimum} for pi CLI"
+    return 1
+  fi
+
+  return 0
+}
+
 record_cli_path() {
   local cli="$1"
   local real_path="${2:-}"
@@ -118,7 +152,11 @@ export PATH="${npm_prefix}/bin:${PATH}"
 install_npm_cli codex "${codex_spec}"
 install_npm_cli claude "${claude_spec}"
 install_npm_cli opencode "${opencode_spec}"
-install_npm_cli pi "${pi_spec}"
+if ensure_node_version_at_least "20.6.0"; then
+  install_npm_cli pi "${pi_spec}"
+else
+  record_cli_path pi "" "missing"
+fi
 
 if run_script_install "${vibe_install_script}"; then
   track_cli_after_install vibe \

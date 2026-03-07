@@ -60,6 +60,22 @@ timeout 20 docker exec "${pi_mono_cid}" sh -lc 'test -d /state/home && test -w /
   || fail "optional-pi-mono home must be writable at /state/home"
 timeout 20 docker exec "${pi_mono_cid}" tmux has-session -t pi-mono \
   || fail "optional-pi-mono tmux session must exist"
+timeout 20 docker exec "${pi_mono_cid}" node -e '
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  if (major < 20 || (major === 20 && minor < 6)) process.exit(1);
+' || fail "optional-pi-mono must provide Node.js >=20.6.0 (required by pi CLI)"
+
+pi_real_path="$(timeout 20 docker exec "${pi_mono_cid}" sh -lc 'cat /etc/agentic/pi-real-path 2>/dev/null || true')"
+if [[ -z "${pi_real_path}" || "${pi_real_path}" == "none" ]]; then
+  warn "optional-pi-mono pi CLI binary unavailable (best-effort install); skipping runtime probe"
+else
+  timeout 20 docker exec "${pi_mono_cid}" sh -lc '
+    set -e
+    test -x "$(cat /etc/agentic/pi-real-path)"
+    pi --version >/tmp/pi-cli.out 2>&1 || pi --help >/tmp/pi-cli.out 2>&1
+    ! grep -Eq "Invalid regular expression flags|wrapper fallback" /tmp/pi-cli.out
+  ' || fail "pi CLI runtime probe failed in optional-pi-mono"
+fi
 
 project_name="k4-pi-mono-${USER:-agent}-$$"
 AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${project_name}" "${agent_bin}" pi-mono >/tmp/agent-k4-pi-mono.out
