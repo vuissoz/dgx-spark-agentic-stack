@@ -94,7 +94,7 @@ Agent services (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-
 
 By default, `deployments/images/agent-cli-base/Dockerfile` builds a CUDA-based (NVIDIA) development image with a multi-language toolchain (C/C++, Python, Node, Go, Rust).
 
-This shared image also installs these agent CLIs: `codex`, `claude`, `opencode`, `vibe`, `openhands`, `openclaw`.
+This shared image also installs these agent CLIs: `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`.
 - default mode: `AGENT_CLI_INSTALL_MODE=best-effort` (explicit wrappers if an install fails),
 - strict mode: `AGENT_CLI_INSTALL_MODE=required` (build fails when a CLI install is missing).
 
@@ -108,7 +108,7 @@ Supported variables:
 - `AGENTIC_AGENT_BASE_DOCKERFILE` (default: `deployments/images/agent-cli-base/Dockerfile`)
 - `AGENTIC_AGENT_CLI_INSTALL_MODE` (`best-effort` by default, `required` for strict builds)
 - `AGENTIC_AGENT_NO_NEW_PRIVILEGES` (`true` by default; set to `false` to enable in-container sudo mode for agent services)
-- `AGENTIC_CODEX_CLI_NPM_SPEC`, `AGENTIC_CLAUDE_CODE_NPM_SPEC`, `AGENTIC_OPENCODE_NPM_SPEC`
+- `AGENTIC_CODEX_CLI_NPM_SPEC`, `AGENTIC_CLAUDE_CODE_NPM_SPEC`, `AGENTIC_OPENCODE_NPM_SPEC`, `AGENTIC_PI_CODING_AGENT_NPM_SPEC`
 - `AGENTIC_OPENHANDS_INSTALL_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_VERSION`, `AGENTIC_VIBE_INSTALL_SCRIPT`
 
 Minimal custom Dockerfile contract:
@@ -290,7 +290,7 @@ agent first-up [--env-file <path>] [--no-env] [--dry-run]
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
 agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-agent <claude|codex|opencode|vibestral> [project]
+agent <claude|codex|opencode|vibestral|pi-mono> [project]
 agent ls
 agent ps
 agent llm mode [local|hybrid|remote]
@@ -344,7 +344,7 @@ Examples:
 ```
 
 Notes:
-- `agent stop` handles `claude|codex|opencode|vibestral` tools.
+- `agent stop` handles `claude|codex|opencode|vibestral|pi-mono` tools.
 - `agent <tool> [project]` attaches to a persistent tmux session (existing shell inside the container): `Ctrl-b d` detaches without stopping the session, and attach sends `Ctrl-c` then `cd /workspace/<project>` (which can interrupt a running foreground command in that pane).
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.
 - `agent rollback all` requires a `release_id`.

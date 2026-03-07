@@ -8,6 +8,7 @@ openclaw_prefix="${OPENCLAW_PREFIX:-/opt/agentic/openclaw}"
 codex_spec="${CODEX_CLI_NPM_SPEC:-@openai/codex@latest}"
 claude_spec="${CLAUDE_CODE_NPM_SPEC:-@anthropic-ai/claude-code@latest}"
 opencode_spec="${OPENCODE_NPM_SPEC:-opencode-ai@latest}"
+pi_spec="${PI_CODING_AGENT_NPM_SPEC:-@mariozechner/pi-coding-agent@latest}"
 openhands_install_script="${OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.dev/install.sh}"
 openclaw_install_script="${OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}"
 openclaw_install_version="${OPENCLAW_INSTALL_VERSION:-latest}"
@@ -117,6 +118,7 @@ export PATH="${npm_prefix}/bin:${PATH}"
 install_npm_cli codex "${codex_spec}"
 install_npm_cli claude "${claude_spec}"
 install_npm_cli opencode "${opencode_spec}"
+install_npm_cli pi "${pi_spec}"
 
 if run_script_install "${vibe_install_script}"; then
   track_cli_after_install vibe \
@@ -151,7 +153,7 @@ else
   fail_or_warn "unable to install openclaw from ${openclaw_install_script}"
 fi
 
-for cli in codex claude opencode vibe openhands openclaw; do
+for cli in codex claude opencode pi vibe openhands openclaw; do
   if [[ ! -f "/etc/agentic/${cli}-real-path" ]]; then
     record_cli_path "${cli}" "" "missing"
   fi

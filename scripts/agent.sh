@@ -21,7 +21,7 @@ AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
-AGENT_TOOLS=(claude codex opencode vibestral)
+AGENT_TOOLS=(claude codex opencode vibestral pi-mono)
 OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
@@ -36,7 +36,7 @@ Usage:
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-  agent <claude|codex|opencode|vibestral> [project]
+  agent <claude|codex|opencode|vibestral|pi-mono> [project]
   agent ls
   agent ps
   agent llm mode [local|hybrid|remote]
@@ -118,6 +118,7 @@ agent_workspace_dir() {
     codex) printf '%s\n' "${AGENTIC_CODEX_WORKSPACES_DIR}" ;;
     opencode) printf '%s\n' "${AGENTIC_OPENCODE_WORKSPACES_DIR}" ;;
     vibestral) printf '%s\n' "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}" ;;
+    pi-mono) printf '%s\n' "${AGENTIC_ROOT}/optional/pi-mono/workspaces" ;;
     *) return 1 ;;
   esac
 }
@@ -128,7 +129,15 @@ tool_to_service() {
     codex) echo "agentic-codex" ;;
     opencode) echo "agentic-opencode" ;;
     vibestral) echo "agentic-vibestral" ;;
+    pi-mono) echo "optional-pi-mono" ;;
     *) return 1 ;;
+  esac
+}
+
+service_start_hint() {
+  case "$1" in
+    optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
+    *) echo "agent up agents" ;;
   esac
 }
 
@@ -206,7 +215,8 @@ optional_module_secret_files() {
         "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
       ;;
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
-    pi-mono|goose|portainer) ;;
+    pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
+    goose|portainer) ;;
     *) return 1 ;;
   esac
 }
@@ -664,11 +674,11 @@ assert_agent_base_image_contract() {
     || die "agent base image must include bash/tmux/git/curl: ${image_ref}"
 
   timeout 45 docker run --rm --entrypoint sh "${image_ref}" -lc '
-    command -v codex claude opencode vibe openhands openclaw >/dev/null
-    for cli in codex claude opencode vibe openhands openclaw; do
+    command -v codex claude opencode pi vibe openhands openclaw >/dev/null
+    for cli in codex claude opencode pi vibe openhands openclaw; do
       test -f "/etc/agentic/${cli}-real-path"
     done
-  ' || die "agent base image must expose codex/claude/opencode/vibe/openhands/openclaw command contract: ${image_ref}"
+  ' || die "agent base image must expose codex/claude/opencode/pi/vibe/openhands/openclaw command contract: ${image_ref}"
 }
 
 build_agents_local_images() {
@@ -747,7 +757,7 @@ load_runtime_env() {
           export "${key}=${value}"
         fi
         ;;
-      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|AGENTIC_AGENT_WORKSPACES_ROOT|AGENTIC_CLAUDE_WORKSPACES_DIR|AGENTIC_CODEX_WORKSPACES_DIR|AGENTIC_OPENCODE_WORKSPACES_DIR|AGENTIC_VIBESTRAL_WORKSPACES_DIR|AGENTIC_OPENHANDS_WORKSPACES_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|AGENTIC_DEFAULT_MODEL|AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|OLLAMA_CONTEXT_LENGTH|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_AGENT_NO_NEW_PRIVILEGES|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
+      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|AGENTIC_AGENT_WORKSPACES_ROOT|AGENTIC_CLAUDE_WORKSPACES_DIR|AGENTIC_CODEX_WORKSPACES_DIR|AGENTIC_OPENCODE_WORKSPACES_DIR|AGENTIC_VIBESTRAL_WORKSPACES_DIR|AGENTIC_OPENHANDS_WORKSPACES_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|AGENTIC_DEFAULT_MODEL|AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|OLLAMA_CONTEXT_LENGTH|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_AGENT_NO_NEW_PRIVILEGES|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_PI_CODING_AGENT_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
         export "${key}=${value}"
         ;;
       *)
@@ -810,6 +820,7 @@ ensure_runtime_env() {
     "AGENTIC_CODEX_CLI_NPM_SPEC=${AGENTIC_CODEX_CLI_NPM_SPEC}"
     "AGENTIC_CLAUDE_CODE_NPM_SPEC=${AGENTIC_CLAUDE_CODE_NPM_SPEC}"
     "AGENTIC_OPENCODE_NPM_SPEC=${AGENTIC_OPENCODE_NPM_SPEC}"
+    "AGENTIC_PI_CODING_AGENT_NPM_SPEC=${AGENTIC_PI_CODING_AGENT_NPM_SPEC}"
     "AGENTIC_OPENHANDS_INSTALL_SCRIPT=${AGENTIC_OPENHANDS_INSTALL_SCRIPT}"
     "AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT=${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT}"
     "AGENTIC_OPENCLAW_INSTALL_VERSION=${AGENTIC_OPENCLAW_INSTALL_VERSION}"
@@ -904,6 +915,7 @@ cmd_profile() {
   printf 'codex_cli_npm_spec=%s\n' "${AGENTIC_CODEX_CLI_NPM_SPEC}"
   printf 'claude_code_npm_spec=%s\n' "${AGENTIC_CLAUDE_CODE_NPM_SPEC}"
   printf 'opencode_npm_spec=%s\n' "${AGENTIC_OPENCODE_NPM_SPEC}"
+  printf 'pi_coding_agent_npm_spec=%s\n' "${AGENTIC_PI_CODING_AGENT_NPM_SPEC}"
   printf 'openhands_install_script=%s\n' "${AGENTIC_OPENHANDS_INSTALL_SCRIPT}"
   printf 'openclaw_install_cli_script=%s\n' "${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT}"
   printf 'openclaw_install_version=%s\n' "${AGENTIC_OPENCLAW_INSTALL_VERSION}"
@@ -1085,7 +1097,7 @@ prepare_tool_session() {
 
   service="$(tool_to_service "${tool}")" || die "Unknown tool '${tool}'"
   container_id="$(service_container_id "${service}")"
-  [[ -n "${container_id}" ]] || die "Service '${service}' is not running. Start it with: agent up agents"
+  [[ -n "${container_id}" ]] || die "Service '${service}' is not running. Start it with: $(service_start_hint "${service}")"
 
   workspace="/workspace/${project}"
   defaults_file="/state/bootstrap/ollama-gate-defaults.env"
@@ -1194,8 +1206,11 @@ cmd_stop_tool() {
   [[ -n "${tool}" ]] || die "Usage: agent stop <tool>"
 
   service="$(tool_to_service "${tool}")" || die "Unknown tool '${tool}'. Expected one of: ${AGENT_TOOLS[*]}"
-  compose_file="$(stack_to_compose_file agents)"
-  [[ -f "${compose_file}" ]] || die "Compose file not found for agents stack: ${compose_file}"
+  case "${service}" in
+    optional-pi-mono) compose_file="$(stack_to_compose_file optional)" ;;
+    *) compose_file="$(stack_to_compose_file agents)" ;;
+  esac
+  [[ -f "${compose_file}" ]] || die "Compose file not found for tool stack: ${compose_file}"
 
   require_cmd docker
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" stop "${service}"
@@ -2452,7 +2467,7 @@ cmd_rollback() {
 normalize_logs_target() {
   local target="$1"
   case "${target}" in
-    claude|codex|opencode|vibestral) tool_to_service "${target}" ;;
+    claude|codex|opencode|vibestral|pi-mono) tool_to_service "${target}" ;;
     *) printf '%s\n' "${target}" ;;
   esac
 }
@@ -2662,7 +2677,7 @@ case "$cmd" in
     [[ $# -ge 2 ]] || die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
     cmd_stack "$2" "${3:-all}"
     ;;
-  claude|codex|opencode|vibestral)
+  claude|codex|opencode|vibestral|pi-mono)
     shift
     cmd_tool_attach "${cmd}" "${1:-}"
     ;;

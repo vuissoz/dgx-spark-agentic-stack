@@ -27,6 +27,7 @@ ls_output="$("${agent_bin}" ls)"
 printf '%s\n' "${ls_output}" | grep -q '^tool' || fail "agent ls output is missing header"
 printf '%s\n' "${ls_output}" | grep -q '^claude' || fail "agent ls output is missing claude row"
 printf '%s\n' "${ls_output}" | grep -q '^vibestral' || fail "agent ls output is missing vibestral row"
+printf '%s\n' "${ls_output}" | grep -q '^pi-mono' || fail "agent ls output is missing pi-mono row"
 ok "agent ls returns a structured output"
 
 project_name="f1-${USER:-agent}-$$"

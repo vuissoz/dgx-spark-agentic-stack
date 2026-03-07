@@ -68,7 +68,8 @@ For that reason, activation requires:
   - `${AGENTIC_ROOT}/optional/pi-mono/state`
   - `${AGENTIC_ROOT}/optional/pi-mono/logs`
   - `${AGENTIC_ROOT}/optional/pi-mono/workspaces`
-- Secret required: no dedicated token file.
+- Secret required: shared gate token `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token`.
+- Session access: `./agent pi-mono <project>`
 
 ### `goose`
 - Service: `optional-goose`
@@ -112,6 +113,7 @@ Each request file must include non-empty:
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
+- `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (required by `pi-mono`)
 
 4. OpenClaw policy files are reviewed:
 - `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`

@@ -193,6 +193,7 @@ services:
         CODEX_CLI_NPM_SPEC: ${AGENTIC_CODEX_CLI_NPM_SPEC:-@openai/codex@latest}
         CLAUDE_CODE_NPM_SPEC: ${AGENTIC_CLAUDE_CODE_NPM_SPEC:-@anthropic-ai/claude-code@latest}
         OPENCODE_NPM_SPEC: ${AGENTIC_OPENCODE_NPM_SPEC:-opencode-ai@latest}
+        PI_CODING_AGENT_NPM_SPEC: ${AGENTIC_PI_CODING_AGENT_NPM_SPEC:-@mariozechner/pi-coding-agent@latest}
         OPENHANDS_INSTALL_SCRIPT: ${AGENTIC_OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.dev/install.sh}
         OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
         OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
@@ -213,20 +214,29 @@ services:
       - no-new-privileges:true
     environment:
       AGENT_TOOL: pi-mono
+      AGENT_PRIMARY_CLI: pi
       AGENT_SESSION: pi-mono
+      AGENT_HOME: /state/home
       AGENT_WORKSPACE: /workspace
       AGENT_STATE_DIR: /state
       AGENT_LOGS_DIR: /logs
+      HOME: /state/home
+      XDG_CONFIG_HOME: /state/home/.config
+      XDG_CACHE_HOME: /state/home/.cache
       OLLAMA_BASE_URL: http://ollama-gate:11435
+      GATE_MCP_URL: http://gate-mcp:8123
+      GATE_MCP_AUTH_TOKEN_FILE: /run/secrets/gate_mcp.token
+      AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,gate-mcp,unbound,egress-proxy,localhost,127.0.0.1
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/logs:/logs
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/workspaces:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
     healthcheck:
       test:
         - CMD-SHELL

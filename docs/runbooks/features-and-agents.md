@@ -360,6 +360,7 @@ Key implemented capabilities:
   - `agent codex <project>`
   - `agent opencode <project>`
   - `agent vibestral <project>`
+  - `agent pi-mono <project>` (when `optional-pi-mono` is enabled)
 - operational controls:
   - `agent logs <service>`
   - `agent ls`

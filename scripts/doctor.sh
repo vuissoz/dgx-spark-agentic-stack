@@ -592,6 +592,32 @@ for row in "${running_services[@]}"; do
         ;;
     esac
   fi
+
+  if [[ "${service}" == "optional-pi-mono" ]]; then
+    env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    if ! echo "${env_dump}" | grep -q '^HOME=/state/home$'; then
+      doctor_fail "optional-pi-mono must set HOME=/state/home"
+    fi
+    if ! echo "${env_dump}" | grep -q '^AGENT_HOME=/state/home$'; then
+      doctor_fail "optional-pi-mono must set AGENT_HOME=/state/home"
+    fi
+    if ! echo "${env_dump}" | grep -q '^GATE_MCP_URL=http://gate-mcp:8123$'; then
+      doctor_fail "optional-pi-mono must set GATE_MCP_URL=http://gate-mcp:8123"
+    fi
+    if ! echo "${env_dump}" | grep -q '^GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token$'; then
+      doctor_fail "optional-pi-mono must set GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token"
+    fi
+
+    if ! mount_destination_present "${cid}" "/run/secrets/gate_mcp.token"; then
+      doctor_fail "optional-pi-mono must mount /run/secrets/gate_mcp.token read-only"
+    elif ! mount_destination_read_only "${cid}" "/run/secrets/gate_mcp.token"; then
+      doctor_fail "optional-pi-mono must mount /run/secrets/gate_mcp.token read-only"
+    fi
+
+    if ! timeout 15 docker exec "${cid}" sh -lc 'test -d /state/home && test -w /state/home'; then
+      doctor_fail "optional-pi-mono home directory is not writable (/state/home)"
+    fi
+  fi
 done
 
 rag_retriever_cid="$(service_container_id rag-retriever)"

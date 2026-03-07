@@ -232,6 +232,7 @@ Host firewall/egress advanced options:
 | `AGENTIC_CODEX_CLI_NPM_SPEC` | npm package spec | `@openai/codex@latest` | shell, `runtime.env` |
 | `AGENTIC_CLAUDE_CODE_NPM_SPEC` | npm package spec | `@anthropic-ai/claude-code@latest` | shell, `runtime.env` |
 | `AGENTIC_OPENCODE_NPM_SPEC` | npm package spec | `opencode-ai@latest` | shell, `runtime.env` |
+| `AGENTIC_PI_CODING_AGENT_NPM_SPEC` | npm package spec | `@mariozechner/pi-coding-agent@latest` | shell, `runtime.env` |
 | `AGENTIC_OPENHANDS_INSTALL_SCRIPT` | installer script URL | `https://install.openhands.dev/install.sh` | shell, `runtime.env` |
 | `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT` | installer script URL | `https://openclaw.ai/install-cli.sh` | shell, `runtime.env` |
 | `AGENTIC_OPENCLAW_INSTALL_VERSION` | OpenClaw CLI version | `latest` | shell, `runtime.env` |

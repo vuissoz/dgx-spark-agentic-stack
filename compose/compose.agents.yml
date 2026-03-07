@@ -9,6 +9,7 @@ services:
         CODEX_CLI_NPM_SPEC: ${AGENTIC_CODEX_CLI_NPM_SPEC:-@openai/codex@latest}
         CLAUDE_CODE_NPM_SPEC: ${AGENTIC_CLAUDE_CODE_NPM_SPEC:-@anthropic-ai/claude-code@latest}
         OPENCODE_NPM_SPEC: ${AGENTIC_OPENCODE_NPM_SPEC:-opencode-ai@latest}
+        PI_CODING_AGENT_NPM_SPEC: ${AGENTIC_PI_CODING_AGENT_NPM_SPEC:-@mariozechner/pi-coding-agent@latest}
         OPENHANDS_INSTALL_SCRIPT: ${AGENTIC_OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.dev/install.sh}
         OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
         OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
@@ -74,6 +75,7 @@ services:
         CODEX_CLI_NPM_SPEC: ${AGENTIC_CODEX_CLI_NPM_SPEC:-@openai/codex@latest}
         CLAUDE_CODE_NPM_SPEC: ${AGENTIC_CLAUDE_CODE_NPM_SPEC:-@anthropic-ai/claude-code@latest}
         OPENCODE_NPM_SPEC: ${AGENTIC_OPENCODE_NPM_SPEC:-opencode-ai@latest}
+        PI_CODING_AGENT_NPM_SPEC: ${AGENTIC_PI_CODING_AGENT_NPM_SPEC:-@mariozechner/pi-coding-agent@latest}
         OPENHANDS_INSTALL_SCRIPT: ${AGENTIC_OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.dev/install.sh}
         OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
         OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
@@ -139,6 +141,7 @@ services:
         CODEX_CLI_NPM_SPEC: ${AGENTIC_CODEX_CLI_NPM_SPEC:-@openai/codex@latest}
         CLAUDE_CODE_NPM_SPEC: ${AGENTIC_CLAUDE_CODE_NPM_SPEC:-@anthropic-ai/claude-code@latest}
         OPENCODE_NPM_SPEC: ${AGENTIC_OPENCODE_NPM_SPEC:-opencode-ai@latest}
+        PI_CODING_AGENT_NPM_SPEC: ${AGENTIC_PI_CODING_AGENT_NPM_SPEC:-@mariozechner/pi-coding-agent@latest}
         OPENHANDS_INSTALL_SCRIPT: ${AGENTIC_OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.dev/install.sh}
         OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
         OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
@@ -205,6 +208,7 @@ services:
         CODEX_CLI_NPM_SPEC: ${AGENTIC_CODEX_CLI_NPM_SPEC:-@openai/codex@latest}
         CLAUDE_CODE_NPM_SPEC: ${AGENTIC_CLAUDE_CODE_NPM_SPEC:-@anthropic-ai/claude-code@latest}
         OPENCODE_NPM_SPEC: ${AGENTIC_OPENCODE_NPM_SPEC:-opencode-ai@latest}
+        PI_CODING_AGENT_NPM_SPEC: ${AGENTIC_PI_CODING_AGENT_NPM_SPEC:-@mariozechner/pi-coding-agent@latest}
         OPENHANDS_INSTALL_SCRIPT: ${AGENTIC_OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.dev/install.sh}
         OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
         OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}

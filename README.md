@@ -94,7 +94,7 @@ Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `age
 
 Par défaut, `deployments/images/agent-cli-base/Dockerfile` construit une image de développement basée sur CUDA (NVIDIA) avec une toolchain multi-langages (C/C++, Python, Node, Go, Rust).
 
-Cette image commune installe aussi les CLIs agents suivants: `codex`, `claude`, `opencode`, `vibe`, `openhands`, `openclaw`.
+Cette image commune installe aussi les CLIs agents suivants: `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`.
 - mode par défaut: `AGENT_CLI_INSTALL_MODE=best-effort` (wrappers explicites si un install échoue),
 - mode strict: `AGENT_CLI_INSTALL_MODE=required` (build en échec si un CLI manque).
 
@@ -108,7 +108,7 @@ Variables supportées:
 - `AGENTIC_AGENT_BASE_DOCKERFILE` (défaut: `deployments/images/agent-cli-base/Dockerfile`)
 - `AGENTIC_AGENT_CLI_INSTALL_MODE` (`best-effort` par défaut, `required` pour un build strict)
 - `AGENTIC_AGENT_NO_NEW_PRIVILEGES` (`true` par défaut; passer à `false` active le mode sudo intra-conteneur des agents)
-- `AGENTIC_CODEX_CLI_NPM_SPEC`, `AGENTIC_CLAUDE_CODE_NPM_SPEC`, `AGENTIC_OPENCODE_NPM_SPEC`
+- `AGENTIC_CODEX_CLI_NPM_SPEC`, `AGENTIC_CLAUDE_CODE_NPM_SPEC`, `AGENTIC_OPENCODE_NPM_SPEC`, `AGENTIC_PI_CODING_AGENT_NPM_SPEC`
 - `AGENTIC_OPENHANDS_INSTALL_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_VERSION`, `AGENTIC_VIBE_INSTALL_SCRIPT`
 
 Contrat minimal du Dockerfile custom:
@@ -290,7 +290,7 @@ agent first-up [--env-file <path>] [--no-env] [--dry-run]
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
 agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-agent <claude|codex|opencode|vibestral> [project]
+agent <claude|codex|opencode|vibestral|pi-mono> [project]
 agent ls
 agent ps
 agent llm mode [local|hybrid|remote]
@@ -344,7 +344,7 @@ Exemples:
 ```
 
 Notes:
-- `agent stop` gère les tools `claude|codex|opencode|vibestral`.
+- `agent stop` gère les tools `claude|codex|opencode|vibestral|pi-mono`.
 - `agent <tool> [project]` attache une session tmux persistante (shell déjà existant dans le conteneur): `Ctrl-b d` détache sans arrêter la session, et l'attache envoie un `Ctrl-c` puis `cd /workspace/<project>` (peut interrompre une commande en cours dans ce pane).
 - `agent sudo-mode on` active `sudo` dans les conteneurs agents (en relachant uniquement `no-new-privileges` pour ces services); `agent sudo-mode off` revient au mode durci.
 - `agent rollback all` exige un `release_id`.

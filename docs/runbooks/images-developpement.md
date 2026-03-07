@@ -44,7 +44,7 @@ Apres build, un contrat minimum est verifie:
 - `bash`, `tmux`, `git`, `curl` presents.
 
 Le Dockerfile agents fournit aussi une matrice de CLIs:
-- `codex`, `claude`, `opencode`, `vibe`, `openhands`, `openclaw`.
+- `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`.
 
 Mode d'installation des CLIs:
 - `AGENT_CLI_INSTALL_MODE=best-effort` (defaut): build resilient, wrappers explicites en fallback.
