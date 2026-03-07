@@ -2764,6 +2764,89 @@ def build_chat_completion_payload(
     return payload
 
 
+def build_chat_completion_stream(
+    model: str,
+    content: str,
+    usage: Dict[str, int] | None = None,
+    tool_calls: list[Dict[str, Any]] | None = None,
+    finish_reason: str = "stop",
+) -> str:
+    stream_id = f"chatcmpl-{uuid.uuid4().hex}"
+    created = int(time.time())
+    events: list[str] = []
+
+    def append_chunk(choice_delta: Dict[str, Any], chunk_finish_reason: str | None = None) -> None:
+        payload: Dict[str, Any] = {
+            "id": stream_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": choice_delta,
+                    "finish_reason": chunk_finish_reason,
+                }
+            ],
+        }
+        events.append(f"data: {json.dumps(payload, separators=(',', ':'))}\n\n")
+
+    # Start with assistant role marker to stay compatible with OpenAI-style chat streaming clients.
+    append_chunk({"role": "assistant"})
+
+    if tool_calls:
+        tool_call_deltas: list[Dict[str, Any]] = []
+        for index, tool_call in enumerate(tool_calls):
+            if not isinstance(tool_call, dict):
+                continue
+            function = tool_call.get("function")
+            if not isinstance(function, dict):
+                continue
+            name = function.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            raw_arguments = function.get("arguments")
+            arguments = raw_arguments if isinstance(raw_arguments, str) else normalize_tool_arguments(raw_arguments)
+            tool_call_id = tool_call.get("id")
+            if not isinstance(tool_call_id, str) or not tool_call_id.strip():
+                tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+            tool_call_deltas.append(
+                {
+                    "index": index,
+                    "id": tool_call_id.strip(),
+                    "type": "function",
+                    "function": {
+                        "name": name.strip(),
+                        "arguments": arguments,
+                    },
+                }
+            )
+        if tool_call_deltas:
+            append_chunk({"tool_calls": tool_call_deltas})
+    elif isinstance(content, str) and content:
+        append_chunk({"content": content})
+
+    final_payload: Dict[str, Any] = {
+        "id": stream_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {},
+                "finish_reason": finish_reason,
+            }
+        ],
+    }
+    usage_payload = chat_completion_usage_from_normalized(usage)
+    if usage_payload is not None:
+        final_payload["usage"] = usage_payload
+    events.append(f"data: {json.dumps(final_payload, separators=(',', ':'))}\n\n")
+    events.append("data: [DONE]\n\n")
+    return "".join(events)
+
+
 def parse_tool_arguments_json(arguments_raw: str) -> Any:
     try:
         return json.loads(arguments_raw)
@@ -3221,6 +3304,7 @@ async def v1_chat_completions(request: Request) -> Response:
     messages = payload.get("messages", [])
     tools = normalize_tools_payload(payload.get("tools"))
     tool_choice = normalize_tool_choice_payload(payload.get("tool_choice"))
+    stream = bool(payload.get("stream"))
 
     return await handle_chat_completion_endpoint(
         request,
@@ -3232,7 +3316,8 @@ async def v1_chat_completions(request: Request) -> Response:
         tools=tools,
         tool_choice=tool_choice,
         response_builder=build_chat_completion_payload,
-        stream=False,
+        stream=stream,
+        stream_builder=build_chat_completion_stream,
     )
 
 

@@ -167,6 +167,18 @@ print(json.dumps({
 PY
 )"
 
+chat_stream_payload="$(python3 - <<PY
+import json
+print(json.dumps({
+    'model': '${default_model}',
+    'stream': True,
+    'messages': [
+        {'role': 'user', 'content': 'D8 chat stream compatibility check'}
+    ],
+}))
+PY
+)"
+
 messages_payload="$(python3 - <<PY
 import json
 print(json.dumps({
@@ -290,12 +302,13 @@ PY
 resp_file="$(mktemp)"
 msg_file="$(mktemp)"
 stream_file="$(mktemp)"
+chat_stream_file="$(mktemp)"
 resp_tool_file="$(mktemp)"
 resp_tool_stream_file="$(mktemp)"
 msg_tool_file="$(mktemp)"
 resp_roundtrip_file="$(mktemp)"
 msg_roundtrip_file="$(mktemp)"
-trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${resp_tool_file}" "${resp_tool_stream_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
+trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${chat_stream_file}" "${resp_tool_file}" "${resp_tool_stream_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
 
 responses_resp="$(call_post "d8-v1-responses-$$" "http://ollama-gate:11435/v1/responses" "${responses_payload}")"
 responses_code="$(extract_code "${responses_resp}")"
@@ -312,6 +325,53 @@ responses_alias_resp="$(call_post "d8-responses-alias-$$" "http://ollama-gate:11
 responses_alias_code="$(extract_code "${responses_alias_resp}")"
 [[ "${responses_alias_code}" == "200" ]] || fail "/responses alias returned status ${responses_alias_code}"
 ok "gate /responses alias is operational"
+
+chat_stream_resp="$(call_post "d8-v1-chat-stream-$$" "http://ollama-gate:11435/v1/chat/completions" "${chat_stream_payload}")"
+chat_stream_code="$(extract_code "${chat_stream_resp}")"
+chat_stream_body="$(extract_body "${chat_stream_resp}")"
+printf '%s\n' "${chat_stream_body}" >"${chat_stream_file}"
+[[ "${chat_stream_code}" == "200" ]] || {
+  cat "${chat_stream_file}" >&2
+  fail "/v1/chat/completions stream returned status ${chat_stream_code}"
+}
+grep -q '^data: {' "${chat_stream_file}" || fail "/v1/chat/completions stream missing JSON data frames"
+grep -q '^data: \[DONE\]$' "${chat_stream_file}" || fail "/v1/chat/completions stream missing [DONE] terminator"
+python3 - "${chat_stream_file}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+delta_content_seen = False
+finish_reason_seen = False
+done_seen = False
+with open(path, 'r', encoding='utf-8') as fh:
+    for line in fh:
+        stripped = line.strip()
+        if stripped == 'data: [DONE]':
+            done_seen = True
+            continue
+        if not stripped.startswith('data: '):
+            continue
+        payload = stripped[len('data: '):]
+        if not payload:
+            continue
+        obj = json.loads(payload)
+        assert obj.get('object') == 'chat.completion.chunk', obj
+        choices = obj.get('choices')
+        assert isinstance(choices, list) and choices, obj
+        first = choices[0]
+        assert isinstance(first, dict), obj
+        delta = first.get('delta')
+        assert isinstance(delta, dict), obj
+        if isinstance(delta.get('content'), str) and delta['content'].strip():
+            delta_content_seen = True
+        if isinstance(first.get('finish_reason'), str):
+            finish_reason_seen = True
+assert delta_content_seen, 'chat stream did not emit content delta'
+assert finish_reason_seen, 'chat stream did not emit terminal finish_reason chunk'
+assert done_seen, 'chat stream did not emit [DONE] marker'
+PY
+ok "gate /v1/chat/completions streaming compatibility is operational"
 
 responses_tool_resp="$(call_post "d8-v1-responses-tool-$$" "http://ollama-gate:11435/v1/responses" "${responses_tool_payload}")"
 responses_tool_code="$(extract_code "${responses_tool_resp}")"
