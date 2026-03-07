@@ -101,3 +101,12 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
 - Step 11 (`dgx-spark-agentic-stack-m3z`) ferme le 2026-03-06.
+
+## Addendum (2026-03-07, rootless-dev UI fiabilisation)
+- Beads `dgx-spark-agentic-stack-3yi` (OpenHands): nouvelle conversation peut redémarrer le conteneur (`oom`/`exit 137`) quand les process sandboxes s'accumulent.
+  - Correctif: garde-fou de capacité sur sandboxes process (`OH_PROCESS_SANDBOX_MAX_ACTIVE`, défaut 2), poll startup non nul, et limite mémoire OpenHands dédiée relevée (`AGENTIC_LIMIT_OPENHANDS_MEM`).
+  - Vérif: `tests/H2_openhands.sh` étendu pour créer plusieurs conversations et détecter tout restart pendant le flux.
+- Beads `dgx-spark-agentic-stack-8cx` (ComfyUI/Flux): journal terminal bloqué et bootstrap Flux.1-dev non guidé.
+  - Correctif: proxy loopback WebSocket (`/ws`) corrigé, image ComfyUI alignée PyTorch CUDA, commande opérateur `agent comfyui flux-1-dev` + manifeste/layout/téléchargement HF.
+  - Correctif complémentaire: `scripts/comfyui_flux_setup.sh` exécute désormais les blocs Python via `docker exec -i` (stdin attaché) pour garantir l'exécution réelle des probes/downloads.
+  - Vérif: `tests/I1_comfyui.sh` vérifie handshake WebSocket 101, `tests/I2_comfyui_flux_bootstrap.sh` couvre bootstrap Flux + exécution effective du chemin `--download` (erreur HF token attendue sans secret).

@@ -295,6 +295,7 @@ agent ls
 agent ps
 agent llm mode [local|hybrid|remote]
 agent llm test-mode [on|off]
+agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
 agent logs <service>
 agent stop <tool>
 agent stop service <service...>
@@ -341,6 +342,7 @@ Exemples:
 ./agent rollback all <release_id>
 ./agent test all --skip-d5-tests
 ./agent vm test --name agentic-strict-prod --allow-no-gpu --skip-d5-tests
+./agent comfyui flux-1-dev --no-egress-check
 ```
 
 Notes:
@@ -380,6 +382,24 @@ Rollback du lien:
 ```bash
 ./agent rollback ollama-link <backup_id|latest>
 ```
+
+## ComfyUI: bootstrap Flux.1-dev
+
+Prépare la structure modèles + manifeste local:
+
+```bash
+./agent comfyui flux-1-dev
+```
+
+Téléchargement distant (Hugging Face):
+
+```bash
+./agent comfyui flux-1-dev --download --hf-token-file /chemin/token_hf
+```
+
+Notes:
+- Flux.1-dev est un dépôt gated (licence HF + token requis).
+- Le Journal ComfyUI passe par WebSocket `/ws` via `comfyui-loopback`.
 
 Test e2e du modèle par défaut (Ollama, gate, agents, OpenWebUI, OpenHands):
 

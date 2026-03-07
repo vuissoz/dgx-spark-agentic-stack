@@ -18,6 +18,7 @@ AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch.sh"
 AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_drift_watch_schedule.sh"
+AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
@@ -41,6 +42,7 @@ Usage:
   agent ps
   agent llm mode [local|hybrid|remote]
   agent llm test-mode [on|off]
+  agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
   agent logs <service>
   agent stop <tool>
   agent stop service <service...>
@@ -876,6 +878,8 @@ ensure_runtime_env() {
     "AGENTIC_LIMIT_AGENTS_MEM=${AGENTIC_LIMIT_AGENTS_MEM}"
     "AGENTIC_LIMIT_UI_CPUS=${AGENTIC_LIMIT_UI_CPUS}"
     "AGENTIC_LIMIT_UI_MEM=${AGENTIC_LIMIT_UI_MEM}"
+    "AGENTIC_LIMIT_OPENHANDS_MEM=${AGENTIC_LIMIT_OPENHANDS_MEM}"
+    "AGENTIC_LIMIT_COMFYUI_MEM=${AGENTIC_LIMIT_COMFYUI_MEM}"
     "AGENTIC_LIMIT_OBS_CPUS=${AGENTIC_LIMIT_OBS_CPUS}"
     "AGENTIC_LIMIT_OBS_MEM=${AGENTIC_LIMIT_OBS_MEM}"
     "AGENTIC_LIMIT_RAG_CPUS=${AGENTIC_LIMIT_RAG_CPUS}"
@@ -971,6 +975,8 @@ cmd_profile() {
   printf 'limit_agents_mem=%s\n' "${AGENTIC_LIMIT_AGENTS_MEM}"
   printf 'limit_ui_cpus=%s\n' "${AGENTIC_LIMIT_UI_CPUS}"
   printf 'limit_ui_mem=%s\n' "${AGENTIC_LIMIT_UI_MEM}"
+  printf 'limit_openhands_mem=%s\n' "${AGENTIC_LIMIT_OPENHANDS_MEM}"
+  printf 'limit_comfyui_mem=%s\n' "${AGENTIC_LIMIT_COMFYUI_MEM}"
   printf 'limit_obs_cpus=%s\n' "${AGENTIC_LIMIT_OBS_CPUS}"
   printf 'limit_obs_mem=%s\n' "${AGENTIC_LIMIT_OBS_MEM}"
   printf 'limit_rag_cpus=%s\n' "${AGENTIC_LIMIT_RAG_CPUS}"
@@ -2271,6 +2277,22 @@ JSON
   esac
 }
 
+cmd_comfyui() {
+  local action="${1:-}"
+  shift || true
+
+  case "${action}" in
+    flux-1-dev|flux1-dev|flux-dev)
+      [[ -x "${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}" ]] \
+        || die "comfyui flux setup script missing or not executable: ${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}"
+      "${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}" "$@"
+      ;;
+    *)
+      die "Usage: agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]"
+      ;;
+  esac
+}
+
 cmd_backup() {
   [[ -x "${AGENT_BACKUP_SCRIPT}" ]] || die "backup script missing or not executable: ${AGENT_BACKUP_SCRIPT}"
 
@@ -2693,6 +2715,10 @@ case "$cmd" in
   llm)
     shift
     cmd_llm "$@"
+    ;;
+  comfyui)
+    shift
+    cmd_comfyui "$@"
     ;;
   logs)
     [[ $# -ge 2 ]] || die "Usage: agent logs <service>"

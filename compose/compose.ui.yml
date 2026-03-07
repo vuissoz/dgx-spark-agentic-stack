@@ -48,7 +48,7 @@ services:
     image: docker.openhands.dev/openhands/openhands:1.3
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_OPENHANDS_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
-    mem_limit: ${AGENTIC_LIMIT_OPENHANDS_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    mem_limit: ${AGENTIC_LIMIT_OPENHANDS_MEM:-2g}
     user: "42420:42420"
     group_add:
       - "${AGENT_RUNTIME_GID:-1000}"
@@ -78,7 +78,8 @@ services:
       RUNTIME: cli
       OH_SANDBOX_KIND: ProcessSandboxServiceInjector
       OH_SANDBOX_SPEC_KIND: ProcessSandboxSpecServiceInjector
-      OH_APP_CONVERSATION_SANDBOX_STARTUP_POLL_FREQUENCY: "0"
+      OH_APP_CONVERSATION_SANDBOX_STARTUP_POLL_FREQUENCY: "1"
+      OH_PROCESS_SANDBOX_MAX_ACTIVE: "${OH_PROCESS_SANDBOX_MAX_ACTIVE:-2}"
       OH_APP_CONVERSATION_INIT_GIT_IN_EMPTY_WORKSPACE: "0"
       OH_SANDBOX_SPEC_SPECS_0: '{"id":"ghcr.io/openhands/agent-server:c775ff6-python","command":["python","-m","openhands.agent_server"],"initial_env":{"OH_ENABLE_VS_CODE":"0","OH_CONVERSATIONS_PATH":"/workspace/conversations"},"working_dir":"/workspace"}'
       LLM_BASE_URL: http://ollama-gate:11435/v1
@@ -121,6 +122,8 @@ services:
         COMFYUI_REF: ${COMFYUI_REF:-master}
         COMFYUI_MANAGER_REPO: ${COMFYUI_MANAGER_REPO:-https://github.com/ltdrdata/ComfyUI-Manager.git}
         COMFYUI_MANAGER_REF: ${COMFYUI_MANAGER_REF:-main}
+        COMFYUI_ENABLE_CUDA_TORCH: ${COMFYUI_ENABLE_CUDA_TORCH:-1}
+        COMFYUI_TORCH_INDEX_URL: ${COMFYUI_TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu124}
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_COMFYUI_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_COMFYUI_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
@@ -187,6 +190,10 @@ services:
         pid /tmp/nginx.pid;
         events {}
         http {
+          map $$http_upgrade $$connection_upgrade {
+            default upgrade;
+            '' close;
+          }
           client_body_temp_path /tmp/client_temp;
           proxy_temp_path /tmp/proxy_temp;
           fastcgi_temp_path /tmp/fastcgi_temp;
@@ -198,6 +205,11 @@ services:
               proxy_pass http://comfyui:8188;
               proxy_http_version 1.1;
               proxy_set_header Host comfyui;
+              proxy_set_header Upgrade $$http_upgrade;
+              proxy_set_header Connection $$connection_upgrade;
+              proxy_read_timeout 3600s;
+              proxy_send_timeout 3600s;
+              proxy_buffering off;
             }
           }
         }

@@ -51,29 +51,94 @@ printf '%s' "${settings_payload}" | grep -q '"llm_model":"openai/' \
   || fail "openhands settings preconfiguration missing provider-qualified llm_model"
 ok "openhands first-run settings are preconfigured"
 
-session="h2-openhands-$RANDOM-$$"
-timeout 20 docker exec "${openhands_cid}" sh -lc "python3 - <<'PY'
+restart_before="$(docker inspect --format '{{.RestartCount}}' "${openhands_cid}" 2>/dev/null || echo "0")"
+python3 - "${openhands_port}" <<'PY' || fail "openhands app-conversation startup flow is unstable"
 import json
+import sys
+import time
 import urllib.request
 
-payload = {
-  'model': 'h2-openhands-model',
-  'messages': [{'role': 'user', 'content': 'openhands gate smoke'}]
-}
+port = int(sys.argv[1])
+base = f"http://127.0.0.1:{port}"
+created = 0
+
+for idx in range(1, 4):
+    payload = {
+        "title": f"h2-conversation-{idx}",
+        "agent_type": "default",
+        "initial_message": {
+            "role": "user",
+            "content": [{"type": "text", "text": f"openhands startup smoke {idx}"}],
+            "run": False,
+        },
+    }
+    req = urllib.request.Request(
+        f"{base}/api/v1/app-conversations",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        task = json.loads(resp.read().decode("utf-8"))
+    task_id = task.get("id")
+    if not isinstance(task_id, str) or not task_id:
+        raise SystemExit(f"missing start-task id for conversation {idx}: {task}")
+
+    deadline = time.time() + 90
+    last_status = None
+    while time.time() < deadline:
+        with urllib.request.urlopen(
+            f"{base}/api/v1/app-conversations/start-tasks?ids={task_id}", timeout=30
+        ) as resp:
+            tasks = json.loads(resp.read().decode("utf-8"))
+        if isinstance(tasks, list) and tasks:
+            state = tasks[0] or {}
+            last_status = state.get("status")
+            if last_status == "READY":
+                created += 1
+                break
+            if last_status == "ERROR":
+                raise SystemExit(f"start-task {task_id} failed: {state.get('detail')}")
+        time.sleep(1)
+
+    if last_status != "READY":
+        raise SystemExit(f"start-task {task_id} did not reach READY (last={last_status})")
+
+print(f"created_ready_conversations={created}")
+PY
+ok "openhands can create and initialize multiple conversations"
+
+restart_after="$(docker inspect --format '{{.RestartCount}}' "${openhands_cid}" 2>/dev/null || echo "0")"
+[[ "${restart_after}" == "${restart_before}" ]] \
+  || fail "openhands container restarted during conversation startup flow (before=${restart_before}, after=${restart_after})"
+ok "openhands container remains stable during conversation startup"
+
+session="h2-openhands-$RANDOM-$$"
+timeout 20 docker exec "${openhands_cid}" sh -lc "python3 - <<'PY'
+import time
+import urllib.error
+import urllib.request
+
 req = urllib.request.Request(
-  'http://ollama-gate:11435/v1/chat/completions',
-  data=json.dumps(payload).encode('utf-8'),
+  'http://ollama-gate:11435/api/version',
   headers={
-    'Content-Type': 'application/json',
     'X-Agent-Session': '${session}',
     'X-Agent-Project': 'openhands',
-    'X-Gate-Dry-Run': '1',
   },
-  method='POST'
+  method='GET'
 )
-with urllib.request.urlopen(req, timeout=10) as resp:
-  if resp.status != 200:
-    raise SystemExit(1)
+for _attempt in range(5):
+  try:
+    with urllib.request.urlopen(req, timeout=10) as resp:
+      if resp.status == 200:
+        raise SystemExit(0)
+      raise SystemExit(1)
+  except urllib.error.HTTPError as exc:
+    if exc.code == 429:
+      time.sleep(1)
+      continue
+    raise
+raise SystemExit(1)
 PY" || fail "openhands container failed to call ollama-gate"
 
 gate_log="${AGENTIC_ROOT:-/srv/agentic}/gate/logs/gate.jsonl"

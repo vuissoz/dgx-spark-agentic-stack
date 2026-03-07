@@ -4,6 +4,8 @@ ARG COMFYUI_REPO=https://github.com/comfyanonymous/ComfyUI.git
 ARG COMFYUI_REF=master
 ARG COMFYUI_MANAGER_REPO=https://github.com/ltdrdata/ComfyUI-Manager.git
 ARG COMFYUI_MANAGER_REF=main
+ARG COMFYUI_ENABLE_CUDA_TORCH=1
+ARG COMFYUI_TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -31,6 +33,9 @@ WORKDIR ${COMFYUI_HOME}
 
 RUN python3 -m pip install --upgrade pip setuptools wheel \
   && python3 -m pip install -r requirements.txt \
+  && if [ "${COMFYUI_ENABLE_CUDA_TORCH}" = "1" ]; then \
+    python3 -m pip install --index-url "${COMFYUI_TORCH_INDEX_URL}" torch torchvision torchaudio; \
+  fi \
   && if [ -n "${COMFYUI_MANAGER_REPO}" ]; then \
     git clone --depth 1 --branch "${COMFYUI_MANAGER_REF}" "${COMFYUI_MANAGER_REPO}" "${COMFYUI_HOME}/custom_nodes/ComfyUI-Manager"; \
     if [ -f "${COMFYUI_HOME}/custom_nodes/ComfyUI-Manager/requirements.txt" ]; then \

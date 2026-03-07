@@ -142,6 +142,34 @@ fi
 assert_no_public_bind "${comfy_port}" || fail "comfyui host bind is not loopback-only"
 ok "comfyui host bind is loopback-only"
 
+python3 - "${comfy_port}" <<'PY' || fail "comfyui websocket endpoint /ws is not upgrade-compatible via loopback proxy"
+import base64
+import os
+import socket
+import sys
+
+port = int(sys.argv[1])
+key = base64.b64encode(os.urandom(16)).decode("ascii")
+request = (
+    f"GET /ws HTTP/1.1\r\n"
+    f"Host: 127.0.0.1:{port}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
+
+with socket.create_connection(("127.0.0.1", port), timeout=10) as sock:
+    sock.sendall(request.encode("ascii"))
+    response = sock.recv(4096).decode("latin-1", errors="replace")
+
+status_line = response.splitlines()[0] if response.splitlines() else ""
+if " 101 " not in status_line:
+    raise SystemExit(f"unexpected websocket handshake status: {status_line!r}")
+PY
+ok "comfyui websocket endpoint /ws upgrades correctly via loopback proxy"
+
 curl -fsS "http://127.0.0.1:${comfy_port}/system_stats" >/dev/null \
   || fail "comfyui /system_stats endpoint is unavailable"
 ok "comfyui API responds on /system_stats"

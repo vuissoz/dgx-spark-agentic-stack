@@ -80,12 +80,49 @@ class ProcessSandboxService(SandboxService):
     python_executable: str
     agent_server_module: str
     health_check_path: str
+    max_active_sandboxes: int
     httpx_client: httpx.AsyncClient
 
     def __post_init__(self):
         """Initialize the service after dataclass creation."""
         # Ensure base working directory exists
         os.makedirs(self.base_working_dir, exist_ok=True)
+        # Keep a bounded number of per-user process sandboxes to avoid
+        # unbounded memory growth and container OOM when users create many
+        # conversations in a row.
+        raw_cap = os.getenv('OH_PROCESS_SANDBOX_MAX_ACTIVE')
+        if raw_cap:
+            try:
+                self.max_active_sandboxes = max(1, int(raw_cap))
+            except ValueError:
+                _logger.warning(
+                    'Invalid OH_PROCESS_SANDBOX_MAX_ACTIVE=%r, using configured default=%s',
+                    raw_cap,
+                    self.max_active_sandboxes,
+                )
+
+    async def _enforce_sandbox_capacity(self) -> None:
+        """Delete oldest user sandboxes when reaching max_active_sandboxes."""
+        if self.max_active_sandboxes <= 0:
+            return
+
+        active = [
+            (sandbox_id, info)
+            for sandbox_id, info in _processes.items()
+            if info.user_id == self.user_id
+        ]
+        if len(active) < self.max_active_sandboxes:
+            return
+
+        active.sort(key=lambda item: item[1].created_at)
+        to_delete_count = len(active) - self.max_active_sandboxes + 1
+        for sandbox_id, _ in active[:to_delete_count]:
+            _logger.warning(
+                'Process sandbox capacity reached for user=%s; deleting oldest sandbox id=%s',
+                self.user_id,
+                sandbox_id,
+            )
+            await self.delete_sandbox(sandbox_id)
 
     def _find_unused_port(self) -> int:
         """Find an unused port starting from base_port."""
@@ -308,6 +345,8 @@ class ProcessSandboxService(SandboxService):
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
         """Start a new sandbox."""
+        await self._enforce_sandbox_capacity()
+
         # Get sandbox spec
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
@@ -447,6 +486,10 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
     health_check_path: str = Field(
         default='/alive', description='Health check endpoint path'
     )
+    max_active_sandboxes: int = Field(
+        default=2,
+        description='Maximum number of active process sandboxes kept per user',
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -472,5 +515,6 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
                 python_executable=self.python_executable,
                 agent_server_module=self.agent_server_module,
                 health_check_path=self.health_check_path,
+                max_active_sandboxes=self.max_active_sandboxes,
                 httpx_client=httpx_client,
             )
