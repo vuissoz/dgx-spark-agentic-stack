@@ -67,6 +67,39 @@ assert usage['total_tokens'] > 0, payload
 PY
 }
 
+assert_responses_tool_call_payload() {
+  local body_file="$1"
+  local expected_tool="$2"
+  python3 - "${body_file}" "${expected_tool}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+expected_tool = sys.argv[2]
+with open(path, 'r', encoding='utf-8') as fh:
+    payload = json.load(fh)
+assert payload.get('object') == 'response', payload
+assert payload.get('finish_reason') == 'tool_calls', payload
+output = payload.get('output')
+assert isinstance(output, list) and output, payload
+tool_calls = [item for item in output if isinstance(item, dict) and item.get('type') == 'function_call']
+assert tool_calls, payload
+first = tool_calls[0]
+assert first.get('name') == expected_tool, payload
+call_id = first.get('call_id')
+assert isinstance(call_id, str) and call_id.strip(), payload
+arguments = first.get('arguments')
+assert isinstance(arguments, str) and arguments.strip(), payload
+parsed_args = json.loads(arguments)
+assert isinstance(parsed_args, dict), payload
+usage = payload.get('usage')
+assert isinstance(usage, dict), payload
+for key in ('input_tokens', 'output_tokens', 'total_tokens'):
+    assert isinstance(usage.get(key), int) and usage[key] >= 0, payload
+assert usage['total_tokens'] > 0, payload
+PY
+}
+
 assert_anthropic_message_payload() {
   local body_file="$1"
   python3 - "${body_file}" <<'PY'
@@ -85,6 +118,38 @@ assert isinstance(first, dict), payload
 assert first.get('type') == 'text', payload
 text = first.get('text')
 assert isinstance(text, str) and text.strip(), payload
+usage = payload.get('usage')
+assert isinstance(usage, dict), payload
+for key in ('input_tokens', 'output_tokens'):
+    assert isinstance(usage.get(key), int) and usage[key] >= 0, payload
+assert usage['input_tokens'] + usage['output_tokens'] > 0, payload
+PY
+}
+
+assert_anthropic_tool_use_payload() {
+  local body_file="$1"
+  local expected_tool="$2"
+  python3 - "${body_file}" "${expected_tool}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+expected_tool = sys.argv[2]
+with open(path, 'r', encoding='utf-8') as fh:
+    payload = json.load(fh)
+assert payload.get('type') == 'message', payload
+assert payload.get('role') == 'assistant', payload
+assert payload.get('stop_reason') == 'tool_use', payload
+content = payload.get('content')
+assert isinstance(content, list) and content, payload
+tool_items = [item for item in content if isinstance(item, dict) and item.get('type') == 'tool_use']
+assert tool_items, payload
+first = tool_items[0]
+assert first.get('name') == expected_tool, payload
+tool_id = first.get('id')
+assert isinstance(tool_id, str) and tool_id.strip(), payload
+tool_input = first.get('input')
+assert isinstance(tool_input, dict), payload
 usage = payload.get('usage')
 assert isinstance(usage, dict), payload
 for key in ('input_tokens', 'output_tokens'):
@@ -127,10 +192,76 @@ print(json.dumps({
 PY
 )"
 
+responses_tool_payload="$(python3 - <<PY
+import json
+print(json.dumps({
+    'model': '${default_model}',
+    'input': [
+        {
+            'role': 'user',
+            'content': [
+                {'type': 'input_text', 'text': 'Use tool get_weather for city Paris and return no prose.'}
+            ],
+        }
+    ],
+    'tools': [
+        {
+            'type': 'function',
+            'function': {
+                'name': 'get_weather',
+                'description': 'Get weather by city',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {'city': {'type': 'string'}},
+                    'required': ['city'],
+                },
+            },
+        }
+    ],
+    'tool_choice': {'type': 'function', 'function': {'name': 'get_weather'}},
+    'temperature': 0,
+}))
+PY
+)"
+
+messages_tool_payload="$(python3 - <<PY
+import json
+print(json.dumps({
+    'model': '${default_model}',
+    'max_tokens': 256,
+    'messages': [
+        {
+            'role': 'user',
+            'content': [
+                {'type': 'text', 'text': 'Use tool get_weather for city Paris and return no prose.'}
+            ],
+        }
+    ],
+    'tools': [
+        {
+            'name': 'get_weather',
+            'description': 'Get weather by city',
+            'input_schema': {
+                'type': 'object',
+                'properties': {'city': {'type': 'string'}},
+                'required': ['city'],
+            },
+        }
+    ],
+    'tool_choice': {'type': 'tool', 'name': 'get_weather'},
+    'temperature': 0,
+}))
+PY
+)"
+
 resp_file="$(mktemp)"
 msg_file="$(mktemp)"
 stream_file="$(mktemp)"
-trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}"' EXIT
+resp_tool_file="$(mktemp)"
+msg_tool_file="$(mktemp)"
+resp_roundtrip_file="$(mktemp)"
+msg_roundtrip_file="$(mktemp)"
+trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${resp_tool_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
 
 responses_resp="$(call_post "d8-v1-responses-$$" "http://ollama-gate:11435/v1/responses" "${responses_payload}")"
 responses_code="$(extract_code "${responses_resp}")"
@@ -148,6 +279,63 @@ responses_alias_code="$(extract_code "${responses_alias_resp}")"
 [[ "${responses_alias_code}" == "200" ]] || fail "/responses alias returned status ${responses_alias_code}"
 ok "gate /responses alias is operational"
 
+responses_tool_resp="$(call_post "d8-v1-responses-tool-$$" "http://ollama-gate:11435/v1/responses" "${responses_tool_payload}")"
+responses_tool_code="$(extract_code "${responses_tool_resp}")"
+responses_tool_body="$(extract_body "${responses_tool_resp}")"
+printf '%s\n' "${responses_tool_body}" >"${resp_tool_file}"
+[[ "${responses_tool_code}" == "200" ]] || {
+  cat "${resp_tool_file}" >&2
+  fail "/v1/responses tool-call returned status ${responses_tool_code}"
+}
+assert_responses_tool_call_payload "${resp_tool_file}" "get_weather" || fail "/v1/responses tool-call payload is invalid"
+ok "gate /v1/responses returns function_call output when tool_choice is forced"
+
+responses_roundtrip_payload="$(python3 - "${resp_tool_file}" "${default_model}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+model = sys.argv[2]
+with open(path, 'r', encoding='utf-8') as fh:
+    payload = json.load(fh)
+call_id = None
+for item in payload.get('output', []):
+    if isinstance(item, dict) and item.get('type') == 'function_call':
+        candidate = item.get('call_id')
+        if isinstance(candidate, str) and candidate.strip():
+            call_id = candidate.strip()
+            break
+if not call_id:
+    raise SystemExit('missing function_call call_id in /v1/responses tool output')
+print(json.dumps({
+    'model': model,
+    'input': [
+        {
+            'type': 'function_call_output',
+            'call_id': call_id,
+            'output': 'weather result: Paris 18C clear sky',
+        },
+        {
+            'role': 'user',
+            'content': [{'type': 'input_text', 'text': 'Summarize weather in one short sentence.'}],
+        },
+    ],
+    'temperature': 0,
+}))
+PY
+)"
+
+responses_roundtrip_resp="$(call_post "d8-v1-responses-roundtrip-$$" "http://ollama-gate:11435/v1/responses" "${responses_roundtrip_payload}")"
+responses_roundtrip_code="$(extract_code "${responses_roundtrip_resp}")"
+responses_roundtrip_body="$(extract_body "${responses_roundtrip_resp}")"
+printf '%s\n' "${responses_roundtrip_body}" >"${resp_roundtrip_file}"
+[[ "${responses_roundtrip_code}" == "200" ]] || {
+  cat "${resp_roundtrip_file}" >&2
+  fail "/v1/responses function_call_output round-trip returned status ${responses_roundtrip_code}"
+}
+assert_response_api_payload "${resp_roundtrip_file}" || fail "/v1/responses function_call_output round-trip payload is invalid"
+ok "gate /v1/responses function_call_output round-trip is operational"
+
 messages_resp="$(call_post "d8-v1-messages-$$" "http://ollama-gate:11435/v1/messages" "${messages_payload}")"
 messages_code="$(extract_code "${messages_resp}")"
 messages_body="$(extract_body "${messages_resp}")"
@@ -163,6 +351,66 @@ messages_alias_resp="$(call_post "d8-messages-alias-$$" "http://ollama-gate:1143
 messages_alias_code="$(extract_code "${messages_alias_resp}")"
 [[ "${messages_alias_code}" == "200" ]] || fail "/messages alias returned status ${messages_alias_code}"
 ok "gate /messages alias is operational"
+
+messages_tool_resp="$(call_post "d8-v1-messages-tool-$$" "http://ollama-gate:11435/v1/messages" "${messages_tool_payload}")"
+messages_tool_code="$(extract_code "${messages_tool_resp}")"
+messages_tool_body="$(extract_body "${messages_tool_resp}")"
+printf '%s\n' "${messages_tool_body}" >"${msg_tool_file}"
+[[ "${messages_tool_code}" == "200" ]] || {
+  cat "${msg_tool_file}" >&2
+  fail "/v1/messages tool-use returned status ${messages_tool_code}"
+}
+assert_anthropic_tool_use_payload "${msg_tool_file}" "get_weather" || fail "/v1/messages tool-use payload is invalid"
+ok "gate /v1/messages returns tool_use content when tool_choice is forced"
+
+messages_roundtrip_payload="$(python3 - "${msg_tool_file}" "${default_model}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+model = sys.argv[2]
+with open(path, 'r', encoding='utf-8') as fh:
+    payload = json.load(fh)
+tool_use_id = None
+for item in payload.get('content', []):
+    if isinstance(item, dict) and item.get('type') == 'tool_use':
+        candidate = item.get('id')
+        if isinstance(candidate, str) and candidate.strip():
+            tool_use_id = candidate.strip()
+            break
+if not tool_use_id:
+    raise SystemExit('missing tool_use id in /v1/messages tool output')
+print(json.dumps({
+    'model': model,
+    'max_tokens': 256,
+    'messages': [
+        {
+            'role': 'user',
+            'content': [
+                {
+                    'type': 'tool_result',
+                    'tool_use_id': tool_use_id,
+                    'content': [{'type': 'text', 'text': 'weather result: Paris 18C clear sky'}],
+                },
+                {'type': 'text', 'text': 'Summarize weather in one short sentence.'},
+            ],
+        }
+    ],
+    'temperature': 0,
+}))
+PY
+)"
+
+messages_roundtrip_resp="$(call_post "d8-v1-messages-roundtrip-$$" "http://ollama-gate:11435/v1/messages" "${messages_roundtrip_payload}")"
+messages_roundtrip_code="$(extract_code "${messages_roundtrip_resp}")"
+messages_roundtrip_body="$(extract_body "${messages_roundtrip_resp}")"
+printf '%s\n' "${messages_roundtrip_body}" >"${msg_roundtrip_file}"
+[[ "${messages_roundtrip_code}" == "200" ]] || {
+  cat "${msg_roundtrip_file}" >&2
+  fail "/v1/messages tool_result round-trip returned status ${messages_roundtrip_code}"
+}
+assert_anthropic_message_payload "${msg_roundtrip_file}" || fail "/v1/messages tool_result round-trip payload is invalid"
+ok "gate /v1/messages tool_result round-trip is operational"
 
 messages_stream_resp="$(call_post "d8-v1-messages-stream-$$" "http://ollama-gate:11435/v1/messages" "${messages_stream_payload}")"
 messages_stream_code="$(extract_code "${messages_stream_resp}")"
