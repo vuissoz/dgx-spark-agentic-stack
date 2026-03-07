@@ -257,8 +257,11 @@ bootstrap_vibestral_config() {
   [[ "${tool}" == "vibestral" ]] || return 0
 
   local vibe_config="${agent_home}/.vibe/config.toml"
-  write_vibestral_defaults() {
-    cat >"${vibe_config}" <<EOF
+  local tmp_config
+
+  mkdir -p "$(dirname "${vibe_config}")"
+  tmp_config="$(mktemp)"
+  cat >"${tmp_config}" <<EOF
 active_model = "local-gate"
 enable_telemetry = false
 enable_update_checks = false
@@ -267,7 +270,7 @@ enable_auto_update = false
 [[providers]]
 name = "ollama-gate"
 api_base = "${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
-api_key_env_var = ""
+api_key_env_var = "OPENAI_API_KEY"
 api_style = "openai"
 backend = "generic"
 reasoning_field_name = "reasoning_content"
@@ -283,23 +286,9 @@ input_price = 0.0
 output_price = 0.0
 thinking = "off"
 EOF
-  }
-
-  if [[ -f "${vibe_config}" ]]; then
-    if grep -Eq '^active_model[[:space:]]*=[[:space:]]*"devstral-2"' "${vibe_config}" \
-      && grep -Eq '^name[[:space:]]*=[[:space:]]*"mistral"' "${vibe_config}" \
-      && grep -Eq '^name[[:space:]]*=[[:space:]]*"llamacpp"' "${vibe_config}" \
-      && ! grep -Eq '^name[[:space:]]*=[[:space:]]*"ollama-gate"' "${vibe_config}"; then
-      write_vibestral_defaults
-      chmod 0600 "${vibe_config}" || true
-      log "INFO: migrated stock vibestral config to ollama-gate defaults (${vibe_config})"
-    fi
-    return 0
-  fi
-
-  write_vibestral_defaults
+  write_if_changed "${vibe_config}" "${tmp_config}"
   chmod 0600 "${vibe_config}" || true
-  log "INFO: created vibestral defaults config (${vibe_config})"
+  log "INFO: vibestral defaults config reconciled (${vibe_config})"
 }
 
 maybe_setup_vibestral() {

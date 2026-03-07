@@ -77,6 +77,8 @@ rg -nF 'bootstrap_vibestral_config() {' "${entrypoint}" >/dev/null \
   || fail "entrypoint must define vibestral bootstrap adapter"
 rg -nF 'api_base = "${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"' "${entrypoint}" >/dev/null \
   || fail "vibestral adapter must target AGENTIC_OLLAMA_GATE_V1_URL default"
+rg -n '^api_key_env_var = \"OPENAI_API_KEY\"$' "${entrypoint}" >/dev/null \
+  || fail "vibestral adapter must route API key through OPENAI_API_KEY env"
 rg -n '^active_model = \"local-gate\"$' "${entrypoint}" >/dev/null \
   || fail "vibestral adapter must force local-gate profile"
 ok "vibestral adapter contract is pinned in entrypoint"
@@ -100,6 +102,9 @@ if command -v docker >/dev/null 2>&1; then
   vibestral_cid="$(service_container_id agentic-vibestral || true)"
   if [[ -n "${vibestral_cid}" ]]; then
     wait_for_container_ready "${vibestral_cid}" 120 || fail "agentic-vibestral container is not ready"
+    vibestral_default_model="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${vibestral_cid}" \
+      | awk -F= '$1=="AGENTIC_DEFAULT_MODEL"{print substr($0, index($0, "=")+1); exit}')"
+    [[ -n "${vibestral_default_model}" ]] || fail "agentic-vibestral env is missing AGENTIC_DEFAULT_MODEL"
     vibestral_cfg="$(mktemp)"
     docker exec "${vibestral_cid}" sh -lc 'cat /state/home/.vibe/config.toml' >"${vibestral_cfg}" \
       || fail "unable to read vibestral runtime config"
@@ -107,6 +112,10 @@ if command -v docker >/dev/null 2>&1; then
       || fail "vibestral runtime config must define provider ollama-gate"
     grep -q '^api_base = "http://ollama-gate:11435/v1"$' "${vibestral_cfg}" \
       || fail "vibestral runtime config must target ollama-gate /v1"
+    grep -q '^api_key_env_var = "OPENAI_API_KEY"$' "${vibestral_cfg}" \
+      || fail "vibestral runtime config must use OPENAI_API_KEY for local gate auth"
+    grep -q "^name = \"${vibestral_default_model}\"$" "${vibestral_cfg}" \
+      || fail "vibestral runtime config model must match AGENTIC_DEFAULT_MODEL (${vibestral_default_model})"
     rm -f "${vibestral_cfg}" >/dev/null 2>&1 || true
     ok "running vibestral container keeps adapter endpoint contract"
   else
