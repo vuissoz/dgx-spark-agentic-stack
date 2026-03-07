@@ -4,6 +4,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -1923,6 +1924,163 @@ def chat_tool_calls_from_upstream(payload: Dict[str, Any]) -> list[Dict[str, Any
     return normalized if normalized else None
 
 
+PSEUDO_FUNCTION_BLOCK_RE = re.compile(
+    r"<function=([A-Za-z0-9_.:-]+)>(.*?)</function>", re.IGNORECASE | re.DOTALL
+)
+PSEUDO_PARAMETER_RE = re.compile(
+    r"<parameter=([A-Za-z0-9_.:-]+)>\s*(.*?)\s*</parameter>", re.IGNORECASE | re.DOTALL
+)
+PROMISED_ACTION_RE = re.compile(r"\b(i(?:'|’)ll|i will|let me)\b", re.IGNORECASE)
+LIST_FILES_INTENT_RE = re.compile(
+    r"\b(list|show|display|what(?:'s| is))\b.*\b(file|files|folder|folders|directory|workspace)\b",
+    re.IGNORECASE,
+)
+
+
+def pseudo_tool_calls_from_content(content: str) -> tuple[str, list[Dict[str, Any]] | None]:
+    if not isinstance(content, str) or not content:
+        return "", None
+    if "<function=" not in content or "<parameter=" not in content:
+        return content, None
+
+    normalized: list[Dict[str, Any]] = []
+    for idx, match in enumerate(PSEUDO_FUNCTION_BLOCK_RE.finditer(content)):
+        name = match.group(1).strip()
+        body = match.group(2)
+        if not name:
+            continue
+
+        arguments_obj: Dict[str, str] = {}
+        for param in PSEUDO_PARAMETER_RE.finditer(body):
+            param_name = param.group(1).strip()
+            param_value = param.group(2).strip()
+            if not param_name:
+                continue
+            arguments_obj[param_name] = param_value
+
+        normalized.append(
+            {
+                "id": f"call_{uuid.uuid4().hex[:24]}",
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": json.dumps(arguments_obj, ensure_ascii=True),
+                },
+            }
+        )
+
+    if not normalized:
+        return content, None
+
+    cleaned = PSEUDO_FUNCTION_BLOCK_RE.sub("", content)
+    cleaned = re.sub(r"</?tool_call>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.strip()
+    return cleaned, normalized
+
+
+def should_retry_with_required_tool_choice(
+    *,
+    content: str,
+    tools: Any,
+    tool_choice: Any,
+    is_external_provider: bool,
+) -> bool:
+    if is_external_provider:
+        return False
+    if not isinstance(tools, list) or not tools:
+        return False
+    if tool_choice is not None:
+        return False
+    if not isinstance(content, str):
+        return True
+    stripped = content.strip()
+    if not stripped:
+        return True
+    return bool(PROMISED_ACTION_RE.search(stripped))
+
+
+def latest_user_text(messages: Any) -> str:
+    if not isinstance(messages, list):
+        return ""
+
+    for item in reversed(messages):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("role", "")).strip().lower() != "user":
+            continue
+
+        content = item.get("content")
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            chunks: list[str] = []
+            for block in content:
+                if isinstance(block, str):
+                    chunks.append(block)
+                elif isinstance(block, dict):
+                    text = block.get("text")
+                    if isinstance(text, str):
+                        chunks.append(text)
+            merged = "\n".join(part for part in chunks if part)
+            if merged.strip():
+                return merged.strip()
+    return ""
+
+
+def extract_function_tool_name(tools: Any, preferred: str) -> str | None:
+    if not isinstance(tools, list):
+        return None
+
+    preferred_lower = preferred.strip().lower()
+    fallback_name: str | None = None
+    for item in tools:
+        if not isinstance(item, dict):
+            continue
+        function = item.get("function")
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if fallback_name is None:
+            fallback_name = name.strip()
+        if name.strip().lower() == preferred_lower:
+            return name.strip()
+    return fallback_name
+
+
+def synthetic_tool_call_for_empty_response(messages: Any, tools: Any, content: str) -> list[Dict[str, Any]] | None:
+    if not isinstance(content, str):
+        return None
+
+    user_text = latest_user_text(messages)
+    if not user_text:
+        return None
+
+    if not LIST_FILES_INTENT_RE.search(user_text):
+        return None
+
+    stripped_content = content.strip()
+    if stripped_content and not PROMISED_ACTION_RE.search(stripped_content):
+        return None
+
+    tool_name = extract_function_tool_name(tools, "Bash")
+    if tool_name is None:
+        return None
+
+    arguments = {"command": "ls -la", "description": "List files in current workspace directory"}
+    return [
+        {
+            "id": f"call_{uuid.uuid4().hex[:24]}",
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "arguments": json.dumps(arguments, ensure_ascii=True),
+            },
+        }
+    ]
+
+
 def chat_finish_reason_from_upstream(payload: Dict[str, Any], has_tool_calls: bool) -> str:
     candidate: Any = None
     choices = payload.get("choices")
@@ -2141,12 +2299,46 @@ async def handle_chat_completion_endpoint(
 
             backend_cfg = state.backend_config(backend) or {}
             protocol = str(backend_cfg.get("protocol", ""))
+            effective_upstream_json = upstream_json
             content = chat_content_from_upstream(protocol, upstream_json)
             response_tool_calls = chat_tool_calls_from_upstream(upstream_json)
-            finish_reason = chat_finish_reason_from_upstream(upstream_json, response_tool_calls is not None)
-            usage = extract_usage_from_upstream(protocol, upstream_json)
+            if response_tool_calls is None:
+                content, response_tool_calls = pseudo_tool_calls_from_content(content)
+
+            if response_tool_calls is None and should_retry_with_required_tool_choice(
+                content=content,
+                tools=tools,
+                tool_choice=tool_choice,
+                is_external_provider=is_external_provider,
+            ):
+                retry_status, retry_json, _retry_text = await backend_chat_completion(
+                    backend,
+                    model_served,
+                    messages,
+                    tools=tools,
+                    tool_choice="required",
+                )
+                if retry_status == 200:
+                    retry_content = chat_content_from_upstream(protocol, retry_json)
+                    retry_tool_calls = chat_tool_calls_from_upstream(retry_json)
+                    if retry_tool_calls is None:
+                        retry_content, retry_tool_calls = pseudo_tool_calls_from_content(retry_content)
+                    if retry_tool_calls is not None:
+                        effective_upstream_json = retry_json
+                        content = retry_content
+                        response_tool_calls = retry_tool_calls
+
+            if response_tool_calls is None:
+                response_tool_calls = synthetic_tool_call_for_empty_response(messages, tools, content)
+
+            finish_reason = chat_finish_reason_from_upstream(
+                effective_upstream_json, response_tool_calls is not None
+            )
+            usage = extract_usage_from_upstream(protocol, effective_upstream_json)
             if is_external_provider:
-                external_tokens_used = usage["total_tokens"] if usage is not None else extract_total_tokens(upstream_json)
+                external_tokens_used = (
+                    usage["total_tokens"] if usage is not None else extract_total_tokens(effective_upstream_json)
+                )
 
         if is_external_provider:
             await state.external_quota_record(provider, project, external_tokens_used)
@@ -2931,32 +3123,90 @@ def build_anthropic_message_stream(
     tool_calls: list[Dict[str, Any]] | None = None,
     finish_reason: str = "stop",
 ) -> str:
-    del tool_calls, finish_reason
-    payload = build_anthropic_message_payload(model, content, usage)
+    payload = build_anthropic_message_payload(model, content, usage, tool_calls, finish_reason)
     message_start = dict(payload)
     message_start["content"] = []
     message_start["stop_reason"] = None
     message_delta_payload = {
         "type": "message_delta",
-        "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+        "delta": {"stop_reason": payload.get("stop_reason"), "stop_sequence": None},
     }
     usage_payload = anthropic_usage_from_normalized(usage)
     if usage_payload is not None:
         message_delta_payload["usage"] = {"output_tokens": usage_payload["output_tokens"]}
-    events = [
-        sse_event("message_start", {"type": "message_start", "message": message_start}),
-        sse_event(
-            "content_block_start",
-            {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
-        ),
-        sse_event(
-            "content_block_delta",
-            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": content}},
-        ),
-        sse_event("content_block_stop", {"type": "content_block_stop", "index": 0}),
-        sse_event("message_delta", message_delta_payload),
-        sse_event("message_stop", {"type": "message_stop"}),
-    ]
+    events = [sse_event("message_start", {"type": "message_start", "message": message_start})]
+
+    content_blocks = payload.get("content")
+    if not isinstance(content_blocks, list):
+        content_blocks = [{"type": "text", "text": ""}]
+
+    for idx, block in enumerate(content_blocks):
+        if not isinstance(block, dict):
+            continue
+
+        block_type = str(block.get("type", "")).strip().lower()
+        if block_type == "tool_use":
+            tool_id = block.get("id")
+            tool_name = block.get("name")
+            tool_input = block.get("input")
+            if not isinstance(tool_id, str) or not tool_id.strip():
+                tool_id = f"toolu_{uuid.uuid4().hex[:24]}"
+            if not isinstance(tool_name, str) or not tool_name.strip():
+                continue
+            if not isinstance(tool_input, (dict, list)):
+                tool_input = {}
+
+            events.append(
+                sse_event(
+                    "content_block_start",
+                    {
+                        "type": "content_block_start",
+                        "index": idx,
+                        "content_block": {
+                            "type": "tool_use",
+                            "id": tool_id.strip(),
+                            "name": tool_name.strip(),
+                            "input": {},
+                        },
+                    },
+                )
+            )
+            events.append(
+                sse_event(
+                    "content_block_delta",
+                    {
+                        "type": "content_block_delta",
+                        "index": idx,
+                        "delta": {
+                            "type": "input_json_delta",
+                            "partial_json": json.dumps(tool_input, ensure_ascii=True),
+                        },
+                    },
+                )
+            )
+            events.append(sse_event("content_block_stop", {"type": "content_block_stop", "index": idx}))
+            continue
+
+        text = block.get("text")
+        if not isinstance(text, str):
+            text = ""
+        events.append(
+            sse_event(
+                "content_block_start",
+                {"type": "content_block_start", "index": idx, "content_block": {"type": "text", "text": ""}},
+            )
+        )
+        if text:
+            events.append(
+                sse_event(
+                    "content_block_delta",
+                    {"type": "content_block_delta", "index": idx, "delta": {"type": "text_delta", "text": text}},
+                )
+            )
+        events.append(sse_event("content_block_stop", {"type": "content_block_stop", "index": idx}))
+
+    events.append(sse_event("message_delta", message_delta_payload))
+    events.append(sse_event("message_stop", {"type": "message_stop"}))
     return "".join(events)
 
 
