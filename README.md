@@ -409,6 +409,7 @@ Test e2e du modèle par défaut (Ollama, gate, agents, OpenWebUI, OpenHands):
 bash tests/L5_default_model_e2e.sh
 bash tests/L6_codex_model_catalog.sh
 bash tests/L7_default_model_tool_call_fs_ops.sh
+bash tests/L10_codex_exec_tool_runtime.sh
 ```
 
 ## Routage LLM externe (D5)

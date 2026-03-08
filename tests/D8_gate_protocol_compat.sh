@@ -236,6 +236,36 @@ print(json.dumps({
 PY
 )"
 
+responses_tool_codex_schema_payload="$(python3 - <<PY
+import json
+print(json.dumps({
+    'model': '${default_model}',
+    'input': [
+        {
+            'role': 'user',
+            'content': [
+                {'type': 'input_text', 'text': 'Use tool exec_command to print working directory and return no prose.'}
+            ],
+        }
+    ],
+    'tools': [
+        {
+            'type': 'function',
+            'name': 'exec_command',
+            'description': 'Run a shell command and return output',
+            'parameters': {
+                'type': 'object',
+                'properties': {'cmd': {'type': 'string'}},
+                'required': ['cmd'],
+            },
+        }
+    ],
+    'tool_choice': {'type': 'function', 'function': {'name': 'exec_command'}},
+    'temperature': 0,
+}))
+PY
+)"
+
 responses_tool_stream_payload="$(python3 - <<PY
 import json
 print(json.dumps({
@@ -304,11 +334,12 @@ msg_file="$(mktemp)"
 stream_file="$(mktemp)"
 chat_stream_file="$(mktemp)"
 resp_tool_file="$(mktemp)"
+resp_tool_codex_schema_file="$(mktemp)"
 resp_tool_stream_file="$(mktemp)"
 msg_tool_file="$(mktemp)"
 resp_roundtrip_file="$(mktemp)"
 msg_roundtrip_file="$(mktemp)"
-trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${chat_stream_file}" "${resp_tool_file}" "${resp_tool_stream_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
+trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${chat_stream_file}" "${resp_tool_file}" "${resp_tool_codex_schema_file}" "${resp_tool_stream_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
 
 responses_resp="$(call_post "d8-v1-responses-$$" "http://ollama-gate:11435/v1/responses" "${responses_payload}")"
 responses_code="$(extract_code "${responses_resp}")"
@@ -383,6 +414,18 @@ printf '%s\n' "${responses_tool_body}" >"${resp_tool_file}"
 }
 assert_responses_tool_call_payload "${resp_tool_file}" "get_weather" || fail "/v1/responses tool-call payload is invalid"
 ok "gate /v1/responses returns function_call output when tool_choice is forced"
+
+responses_tool_codex_schema_resp="$(call_post "d8-v1-responses-tool-codex-schema-$$" "http://ollama-gate:11435/v1/responses" "${responses_tool_codex_schema_payload}")"
+responses_tool_codex_schema_code="$(extract_code "${responses_tool_codex_schema_resp}")"
+responses_tool_codex_schema_body="$(extract_body "${responses_tool_codex_schema_resp}")"
+printf '%s\n' "${responses_tool_codex_schema_body}" >"${resp_tool_codex_schema_file}"
+[[ "${responses_tool_codex_schema_code}" == "200" ]] || {
+  cat "${resp_tool_codex_schema_file}" >&2
+  fail "/v1/responses codex-style tool schema returned status ${responses_tool_codex_schema_code}"
+}
+assert_responses_tool_call_payload "${resp_tool_codex_schema_file}" "exec_command" \
+  || fail "/v1/responses codex-style tool schema payload is invalid"
+ok "gate /v1/responses accepts codex-style top-level function tools schema"
 
 responses_tool_stream_resp="$(call_post "d8-v1-responses-tool-stream-$$" "http://ollama-gate:11435/v1/responses" "${responses_tool_stream_payload}")"
 responses_tool_stream_code="$(extract_code "${responses_tool_stream_resp}")"

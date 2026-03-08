@@ -2452,15 +2452,29 @@ def normalize_tools_payload(value: Any) -> list[Dict[str, Any]] | None:
 
         item_type = item.get("type")
         function = item.get("function")
-        if item_type == "function" and isinstance(function, dict):
-            name = function.get("name")
+        if item_type == "function":
+            # Accept both OpenAI chat-style nested function tools and
+            # Responses-style top-level function tools.
+            function_payload = function if isinstance(function, dict) else item
+
+            name = function_payload.get("name")
             if not isinstance(name, str) or not name.strip():
                 continue
             normalized_function: Dict[str, Any] = {"name": name.strip()}
-            description = function.get("description")
+
+            description = function_payload.get("description")
+            if not isinstance(description, str) or not description.strip():
+                description = item.get("description")
             if isinstance(description, str) and description.strip():
                 normalized_function["description"] = description.strip()
-            parameters = function.get("parameters")
+
+            parameters = function_payload.get("parameters")
+            if not isinstance(parameters, dict):
+                parameters = item.get("parameters")
+            if not isinstance(parameters, dict):
+                parameters = function_payload.get("input_schema")
+            if not isinstance(parameters, dict):
+                parameters = item.get("input_schema")
             if isinstance(parameters, dict):
                 normalized_function["parameters"] = parameters
             normalized.append({"type": "function", "function": normalized_function})
