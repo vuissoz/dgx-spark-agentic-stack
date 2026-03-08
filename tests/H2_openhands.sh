@@ -108,6 +108,63 @@ print(f"created_ready_conversations={created}")
 PY
 ok "openhands can create and initialize multiple conversations"
 
+python3 - "${openhands_port}" <<'PY' || fail "openhands V1 message bridge is broken"
+import json
+import sys
+import time
+import urllib.request
+
+port = int(sys.argv[1])
+base = f"http://127.0.0.1:{port}"
+
+req = urllib.request.Request(
+    f"{base}/api/v1/app-conversations",
+    data=json.dumps({"title": "h2-message-bridge", "agent_type": "default"}).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(req, timeout=30) as resp:
+    task = json.loads(resp.read().decode("utf-8"))
+task_id = task.get("id")
+if not isinstance(task_id, str) or not task_id:
+    raise SystemExit(f"missing start-task id for message bridge: {task}")
+
+deadline = time.time() + 90
+conversation_id = None
+while time.time() < deadline:
+    with urllib.request.urlopen(
+        f"{base}/api/v1/app-conversations/start-tasks?ids={task_id}", timeout=30
+    ) as resp:
+        tasks = json.loads(resp.read().decode("utf-8"))
+    if isinstance(tasks, list) and tasks:
+        state = tasks[0] or {}
+        status = state.get("status")
+        if status == "READY":
+            conversation_id = state.get("app_conversation_id")
+            break
+        if status == "ERROR":
+            raise SystemExit(f"start-task {task_id} failed before message bridge: {state.get('detail')}")
+    time.sleep(1)
+
+if not conversation_id:
+    raise SystemExit(f"message bridge conversation did not reach READY (task={task_id})")
+
+message_req = urllib.request.Request(
+    f"{base}/api/conversations/{conversation_id}/message",
+    data=json.dumps({"message": "openhands v1 message bridge smoke"}).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(message_req, timeout=30) as resp:
+    if resp.status != 200:
+        raise SystemExit(f"unexpected /message status={resp.status}")
+    body = json.loads(resp.read().decode("utf-8"))
+
+if not isinstance(body, dict) or body.get("success") is not True:
+    raise SystemExit(f"unexpected /message response: {body}")
+PY
+ok "openhands V1 message bridge is operational"
+
 restart_after="$(docker inspect --format '{{.RestartCount}}' "${openhands_cid}" 2>/dev/null || echo "0")"
 [[ "${restart_after}" == "${restart_before}" ]] \
   || fail "openhands container restarted during conversation startup flow (before=${restart_before}, after=${restart_after})"
