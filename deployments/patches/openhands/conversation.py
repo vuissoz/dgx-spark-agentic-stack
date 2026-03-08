@@ -14,10 +14,19 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationStartTaskStatus,
+)
+from openhands.app_server.app_conversation.app_conversation_start_task_service import (
+    AppConversationStartTaskService,
+)
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
-from openhands.app_server.config import depends_app_conversation_service
+from openhands.app_server.config import (
+    depends_app_conversation_service,
+    depends_app_conversation_start_task_service,
+)
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action.message import MessageAction
 from openhands.events.event_filter import EventFilter
@@ -39,6 +48,34 @@ app = APIRouter(
 
 # Dependency for app conversation service
 app_conversation_service_dependency = depends_app_conversation_service()
+app_conversation_start_task_service_dependency = (
+    depends_app_conversation_start_task_service()
+)
+
+
+async def _lookup_v1_agent_server_url(
+    conversation_uuid: uuid.UUID,
+    app_conversation_start_task_service: AppConversationStartTaskService,
+) -> str | None:
+    """Resolve V1 runtime endpoint from start-task metadata.
+
+    The browser-facing conversation URL can be a same-origin bridge path
+    (/api/conversations/<id>) and should not be used for runtime forwarding.
+    """
+    tasks = await app_conversation_start_task_service.search_app_conversation_start_tasks(
+        conversation_id__eq=conversation_uuid,
+        limit=20,
+    )
+    for task in tasks.items:
+        if (
+            task.status == AppConversationStartTaskStatus.READY
+            and task.agent_server_url
+        ):
+            return task.agent_server_url.rstrip('/')
+    for task in tasks.items:
+        if task.agent_server_url:
+            return task.agent_server_url.rstrip('/')
+    return None
 
 
 async def _is_v1_conversation(
@@ -94,7 +131,9 @@ async def _get_v1_conversation_config(
 
 
 async def _resolve_v1_runtime_endpoint(
-    conversation_id: str, app_conversation_service: AppConversationService
+    conversation_id: str,
+    app_conversation_service: AppConversationService,
+    app_conversation_start_task_service: AppConversationStartTaskService,
 ) -> tuple[str, str | None] | None:
     """Resolve V1 runtime endpoint + session key for forwarding legacy routes.
 
@@ -113,11 +152,29 @@ async def _resolve_v1_runtime_endpoint(
     if app_conversation is None:
         return None
 
+    runtime_base_url = await _lookup_v1_agent_server_url(
+        conversation_uuid, app_conversation_start_task_service
+    )
+    if runtime_base_url:
+        return (
+            f'{runtime_base_url}/api/conversations/{conversation_id}',
+            app_conversation.session_api_key,
+        )
+
     if not app_conversation.conversation_url:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f'V1 conversation {conversation_id} has no runtime URL yet; '
+                'wait until startup reaches READY'
+            ),
+        )
+
+    if app_conversation.conversation_url.startswith('/'):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f'V1 conversation {conversation_id} runtime URL is not yet available; '
                 'wait until startup reaches READY'
             ),
         )
@@ -129,10 +186,11 @@ async def _forward_v1_event(
     conversation_id: str,
     event_payload: dict[str, Any],
     app_conversation_service: AppConversationService,
+    app_conversation_start_task_service: AppConversationStartTaskService,
 ) -> bool:
     """Forward an event payload to the V1 runtime when conversation is V1."""
     resolved = await _resolve_v1_runtime_endpoint(
-        conversation_id, app_conversation_service
+        conversation_id, app_conversation_service, app_conversation_start_task_service
     )
     if resolved is None:
         return False
@@ -371,6 +429,7 @@ async def add_event(
     conversation_id: str,
     request: Request,
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
+    app_conversation_start_task_service: AppConversationStartTaskService = app_conversation_start_task_service_dependency,
     user_id: str | None = Depends(get_user_id),
 ):
     """Add an event to a conversation.
@@ -380,7 +439,12 @@ async def add_event(
     """
     data = await request.json()
 
-    if await _forward_v1_event(conversation_id, data, app_conversation_service):
+    if await _forward_v1_event(
+        conversation_id,
+        data,
+        app_conversation_service,
+        app_conversation_start_task_service,
+    ):
         return JSONResponse({'success': True})
 
     conversation = await conversation_manager.attach_to_conversation(
@@ -409,6 +473,7 @@ async def add_message(
     conversation_id: str,
     data: AddMessageRequest,
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
+    app_conversation_start_task_service: AppConversationStartTaskService = app_conversation_start_task_service_dependency,
     user_id: str | None = Depends(get_user_id),
 ):
     """Add a message to an existing conversation.
@@ -434,7 +499,10 @@ async def add_message(
         message_data = event_to_dict(message_action)
 
         if await _forward_v1_event(
-            conversation_id, message_data, app_conversation_service
+            conversation_id,
+            message_data,
+            app_conversation_service,
+            app_conversation_start_task_service,
         ):
             return JSONResponse({'success': True})
 

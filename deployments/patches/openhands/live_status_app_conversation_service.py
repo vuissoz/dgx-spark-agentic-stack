@@ -8,6 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Sequence
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 import httpx
@@ -444,8 +445,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         conversation_url = None
         session_api_key = None
+        runtime_base_url = None
         if sandbox and sandbox.exposed_urls:
-            conversation_url = next(
+            runtime_base_url = next(
                 (
                     exposed_url.url
                     for exposed_url in sandbox.exposed_urls
@@ -453,9 +455,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 ),
                 None,
             )
-            if conversation_url:
-                conversation_url += f'/api/conversations/{app_conversation_info.id.hex}'
             session_api_key = sandbox.session_api_key
+        conversation_url = self._build_public_conversation_url(
+            runtime_base_url, app_conversation_info.id
+        )
 
         return AppConversation(
             **app_conversation_info.model_dump(),
@@ -464,6 +467,34 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_url=conversation_url,
             session_api_key=session_api_key,
         )
+
+    def _build_public_conversation_url(
+        self, runtime_base_url: str | None, conversation_id: UUID
+    ) -> str | None:
+        """Build a browser-reachable conversation URL.
+
+        Process sandboxes expose agent URLs like http://localhost:<port> that are
+        reachable only inside the OpenHands container namespace. Returning those URLs
+        to the browser leaves V1 conversations permanently "disconnected". In that
+        case, route clients through the OpenHands API bridge instead.
+        """
+        bridge_path = f'/api/conversations/{conversation_id.hex}'
+        if not runtime_base_url:
+            return (
+                f'{self.web_url.rstrip("/")}{bridge_path}'
+                if self.web_url
+                else bridge_path
+            )
+
+        runtime_base_url = runtime_base_url.rstrip('/')
+        hostname = (urlparse(runtime_base_url).hostname or '').lower()
+        if hostname in {'localhost', '127.0.0.1', '0.0.0.0'}:
+            return (
+                f'{self.web_url.rstrip("/")}{bridge_path}'
+                if self.web_url
+                else bridge_path
+            )
+        return f'{runtime_base_url}{bridge_path}'
 
     def _get_sandbox_id_to_conversation_ids(
         self, stored_conversations: Sequence[AppConversationInfo | None]

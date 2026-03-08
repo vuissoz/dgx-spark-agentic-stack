@@ -112,6 +112,7 @@ python3 - "${openhands_port}" <<'PY' || fail "openhands V1 message bridge is bro
 import json
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 port = int(sys.argv[1])
@@ -149,8 +150,20 @@ while time.time() < deadline:
 if not conversation_id:
     raise SystemExit(f"message bridge conversation did not reach READY (task={task_id})")
 
+with urllib.request.urlopen(
+    f"{base}/api/conversations/{conversation_id}", timeout=30
+) as resp:
+    conversation_info = json.loads(resp.read().decode("utf-8"))
+
+conversation_url = conversation_info.get("url")
+if not isinstance(conversation_url, str) or not conversation_url:
+    raise SystemExit(f"conversation URL missing from legacy payload: {conversation_info}")
+if conversation_url.startswith("http://localhost:8000/"):
+    raise SystemExit(f"conversation URL still points to internal runtime localhost: {conversation_url}")
+
+bridge_url = urllib.parse.urljoin(f"{base}/", conversation_url.lstrip("/"))
 message_req = urllib.request.Request(
-    f"{base}/api/conversations/{conversation_id}/message",
+    f"{bridge_url.rstrip('/')}/message",
     data=json.dumps({"message": "openhands v1 message bridge smoke"}).encode("utf-8"),
     headers={"Content-Type": "application/json"},
     method="POST",
