@@ -22,7 +22,7 @@ AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
-AGENT_TOOLS=(claude codex opencode vibestral pi-mono)
+AGENT_TOOLS=(claude codex opencode vibestral pi-mono goose)
 OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
@@ -37,7 +37,7 @@ Usage:
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-  agent <claude|codex|opencode|vibestral|pi-mono> [project]
+  agent <claude|codex|opencode|vibestral|pi-mono|goose> [project]
   agent ls
   agent ps
   agent llm mode [local|hybrid|remote]
@@ -121,6 +121,7 @@ agent_workspace_dir() {
     opencode) printf '%s\n' "${AGENTIC_OPENCODE_WORKSPACES_DIR}" ;;
     vibestral) printf '%s\n' "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/optional/pi-mono/workspaces" ;;
+    goose) printf '%s\n' "${AGENTIC_ROOT}/optional/goose/workspaces" ;;
     *) return 1 ;;
   esac
 }
@@ -132,6 +133,7 @@ tool_to_service() {
     opencode) echo "agentic-opencode" ;;
     vibestral) echo "agentic-vibestral" ;;
     pi-mono) echo "optional-pi-mono" ;;
+    goose) echo "optional-goose" ;;
     *) return 1 ;;
   esac
 }
@@ -139,6 +141,7 @@ tool_to_service() {
 service_start_hint() {
   case "$1" in
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
+    optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
     *) echo "agent up agents" ;;
   esac
 }
@@ -1213,7 +1216,7 @@ cmd_stop_tool() {
 
   service="$(tool_to_service "${tool}")" || die "Unknown tool '${tool}'. Expected one of: ${AGENT_TOOLS[*]}"
   case "${service}" in
-    optional-pi-mono) compose_file="$(stack_to_compose_file optional)" ;;
+    optional-pi-mono|optional-goose) compose_file="$(stack_to_compose_file optional)" ;;
     *) compose_file="$(stack_to_compose_file agents)" ;;
   esac
   [[ -f "${compose_file}" ]] || die "Compose file not found for tool stack: ${compose_file}"
@@ -2489,7 +2492,7 @@ cmd_rollback() {
 normalize_logs_target() {
   local target="$1"
   case "${target}" in
-    claude|codex|opencode|vibestral|pi-mono) tool_to_service "${target}" ;;
+    claude|codex|opencode|vibestral|pi-mono|goose) tool_to_service "${target}" ;;
     *) printf '%s\n' "${target}" ;;
   esac
 }
@@ -2699,7 +2702,7 @@ case "$cmd" in
     [[ $# -ge 2 ]] || die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
     cmd_stack "$2" "${3:-all}"
     ;;
-  claude|codex|opencode|vibestral|pi-mono)
+  claude|codex|opencode|vibestral|pi-mono|goose)
     shift
     cmd_tool_attach "${cmd}" "${1:-}"
     ;;

@@ -84,6 +84,7 @@ For that reason, activation requires:
   - `${AGENTIC_ROOT}/optional/goose/logs`
   - `${AGENTIC_ROOT}/optional/goose/workspaces`
 - Secret required: no dedicated token file.
+- Session access: `./agent goose <project>`
 
 ### `portainer`
 - Service: `optional-portainer`

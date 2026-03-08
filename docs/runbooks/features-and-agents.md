@@ -361,6 +361,7 @@ Key implemented capabilities:
   - `agent opencode <project>`
   - `agent vibestral <project>`
   - `agent pi-mono <project>` (when `optional-pi-mono` is enabled)
+  - `agent goose <project>` (when `optional-goose` is enabled)
 - operational controls:
   - `agent logs <service>`
   - `agent ls`

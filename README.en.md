@@ -290,7 +290,7 @@ agent first-up [--env-file <path>] [--no-env] [--dry-run]
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
 agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-agent <claude|codex|opencode|vibestral|pi-mono> [project]
+agent <claude|codex|opencode|vibestral|pi-mono|goose> [project]
 agent ls
 agent ps
 agent llm mode [local|hybrid|remote]
@@ -346,7 +346,7 @@ Examples:
 ```
 
 Notes:
-- `agent stop` handles `claude|codex|opencode|vibestral|pi-mono` tools.
+- `agent stop` handles `claude|codex|opencode|vibestral|pi-mono|goose` tools.
 - `agent <tool> [project]` attaches to a persistent tmux session (existing shell inside the container): `Ctrl-b d` detaches without stopping the session, and attach sends `Ctrl-c` then `cd /workspace/<project>` (which can interrupt a running foreground command in that pane).
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.
 - `agent rollback all` requires a `release_id`.

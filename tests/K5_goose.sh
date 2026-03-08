@@ -77,6 +77,19 @@ goose_pwd="$(timeout 20 docker exec "${goose_cid}" sh -lc 'pwd')"
 [[ "${goose_pwd}" == "/workspace" ]] \
   || fail "optional-goose working directory mismatch (expected=/workspace, actual=${goose_pwd})"
 
+goose_project="k5-goose-${USER:-agent}-$$"
+AGENT_NO_ATTACH=1 "${agent_bin}" goose "${goose_project}" >/tmp/agent-k5-goose.out \
+  || fail "agent goose attach contract failed"
+grep -q 'persistent tmux session' /tmp/agent-k5-goose.out \
+  || fail "agent goose output is missing tmux persistence notice"
+timeout 20 docker exec "${goose_cid}" tmux has-session -t goose \
+  || fail "agent goose did not create/keep tmux session"
+timeout 20 docker exec "${goose_cid}" sh -lc "test -d '/workspace/${goose_project}'" \
+  || fail "agent goose did not create project workspace /workspace/${goose_project}"
+goose_path="$(timeout 20 docker exec "${goose_cid}" tmux display-message -p -t goose '#{pane_current_path}')"
+[[ "${goose_path}" == "/workspace/${goose_project}" ]] \
+  || fail "agent goose tmux pane path mismatch (expected=/workspace/${goose_project}, actual=${goose_path})"
+
 assert_no_public_bind || fail "goose activation must not introduce non-loopback listeners"
 
 ok "K5_goose passed"
