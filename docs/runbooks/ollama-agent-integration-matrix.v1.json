@@ -1,5 +1,5 @@
 {
-  "matrix_version": "2026-03-07.step13.v3",
+  "matrix_version": "2026-03-08.step13.v4",
   "scope": [
     "rootless-dev",
     "strict-prod"
@@ -159,6 +159,40 @@
       ],
       "assumed_gaps": [
         "No upstream 'ollama launch vibestral' contract is available.",
+        "Compatibility is guaranteed by the internal adapter contract and tests."
+      ]
+    },
+    {
+      "agent": "pi-mono",
+      "upstream_launch_support": "adapter-internal",
+      "contract_source": {
+        "kind": "stack-internal-adapter",
+        "source_id": "pi-adapter",
+        "stack_contract_files": [
+          "compose/compose.optional.yml",
+          "deployments/images/agent-cli-base/entrypoint.sh"
+        ]
+      },
+      "config_mode": "pi-managed-config-openai-compatible",
+      "target_endpoint": "http://ollama-gate:11435/v1",
+      "target_protocol_paths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ],
+      "required_variables": [
+        "OPENAI_BASE_URL",
+        "OPENAI_API_KEY",
+        "AGENTIC_DEFAULT_MODEL"
+      ],
+      "stack_sources": [
+        "compose/compose.optional.yml",
+        "deployments/images/agent-cli-base/entrypoint.sh"
+      ],
+      "contract_tests": [
+        "tests/K4_pi_mono.sh"
+      ],
+      "assumed_gaps": [
+        "No upstream 'ollama launch pi' contract is versioned in stack docs.",
         "Compatibility is guaranteed by the internal adapter contract and tests."
       ]
     }

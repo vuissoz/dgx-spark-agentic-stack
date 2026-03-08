@@ -51,6 +51,13 @@ echo "${env_dump}" | grep -q '^GATE_MCP_URL=http://gate-mcp:8123$' \
   || fail "optional-pi-mono must set GATE_MCP_URL"
 echo "${env_dump}" | grep -q '^GATE_MCP_AUTH_TOKEN_FILE=/run/secrets/gate_mcp.token$' \
   || fail "optional-pi-mono must set GATE_MCP_AUTH_TOKEN_FILE"
+echo "${env_dump}" | grep -q '^OPENAI_BASE_URL=http://ollama-gate:11435/v1$' \
+  || fail "optional-pi-mono must set OPENAI_BASE_URL=http://ollama-gate:11435/v1"
+echo "${env_dump}" | grep -q '^OPENAI_API_KEY=ollama$' \
+  || fail "optional-pi-mono must set OPENAI_API_KEY=ollama for local provider contract"
+
+default_model="$(printf '%s\n' "${env_dump}" | sed -n 's/^AGENTIC_DEFAULT_MODEL=//p' | head -n 1)"
+[[ -n "${default_model}" ]] || fail "optional-pi-mono must expose AGENTIC_DEFAULT_MODEL"
 
 mount_dump="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%v\n" .Source .Destination .RW}}{{end}}' "${pi_mono_cid}")"
 echo "${mount_dump}" | grep -q '|/run/secrets/gate_mcp.token|false$' \
@@ -76,6 +83,51 @@ else
     ! grep -Eq "Invalid regular expression flags|wrapper fallback" /tmp/pi-cli.out
   ' || fail "pi CLI runtime probe failed in optional-pi-mono"
 fi
+
+timeout 20 docker exec "${pi_mono_cid}" sh -lc "
+  PI_EXPECTED_MODEL='${default_model}' python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+models_path = Path('/state/home/.pi/agent/models.json')
+settings_path = Path('/state/home/.pi/agent/settings.json')
+if not models_path.exists() or not settings_path.exists():
+    raise SystemExit(1)
+
+models_payload = json.loads(models_path.read_text(encoding='utf-8'))
+settings_payload = json.loads(settings_path.read_text(encoding='utf-8'))
+
+providers = models_payload.get('providers')
+if not isinstance(providers, dict):
+    raise SystemExit(1)
+
+provider = providers.get('ollama')
+if not isinstance(provider, dict):
+    raise SystemExit(1)
+if provider.get('baseUrl') != 'http://ollama-gate:11435/v1':
+    raise SystemExit(1)
+if provider.get('api') != 'openai-completions':
+    raise SystemExit(1)
+if provider.get('apiKey') != 'ollama':
+    raise SystemExit(1)
+
+models = provider.get('models')
+if not isinstance(models, list):
+    raise SystemExit(1)
+ids = {
+    item.get('id').strip()
+    for item in models
+    if isinstance(item, dict) and isinstance(item.get('id'), str) and item.get('id').strip()
+}
+if os.environ['PI_EXPECTED_MODEL'] not in ids:
+    raise SystemExit(1)
+if settings_payload.get('defaultProvider') != 'ollama':
+    raise SystemExit(1)
+if settings_payload.get('defaultModel') != os.environ['PI_EXPECTED_MODEL']:
+    raise SystemExit(1)
+PY
+" || fail "optional-pi-mono must reconcile ~/.pi/agent local provider defaults"
 
 project_name="k4-pi-mono-${USER:-agent}-$$"
 AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${project_name}" "${agent_bin}" pi-mono >/tmp/agent-k4-pi-mono.out

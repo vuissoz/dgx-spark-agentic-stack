@@ -5,6 +5,7 @@ Ce runbook formalise la strategie de compatibilite des integrations agents autou
 - `openclaw`
 - `openhands`
 - `vibestral`
+- `pi-mono`
 
 Source versionnee machine-readable:
 - `docs/runbooks/ollama-agent-integration-matrix.v1.json`
@@ -17,6 +18,7 @@ Source versionnee machine-readable:
 | `openclaw` | `launch-supported` | `docs/integrations/openclaw.mdx` | Adapter optionnel inspire launch avec profil versionne (`optional-openclaw`) | `http://optional-openclaw:8111` | `OPENCLAW_AUTH_TOKEN_FILE`, `OPENCLAW_WEBHOOK_SECRET_FILE`, `OPENCLAW_PROFILE_FILE`, `OPENCLAW_SANDBOX_URL`, `OPENCLAW_SANDBOX_AUTH_TOKEN_FILE`, `OPENCLAW_SANDBOX_PROFILE_FILE` |
 | `openhands` | `adapter-internal` | Contrat stack (`compose.ui` + onboarding) | Bootstrap `openhands.env` + `settings.json` | `http://ollama-gate:11435/v1` | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
 | `vibestral` | `adapter-internal` | Contrat stack (`entrypoint` + `compose.agents`) | Generation de `~/.vibe/config.toml` vers `ollama-gate` | `http://ollama-gate:11435/v1` | `AGENTIC_OLLAMA_GATE_V1_URL`, `AGENTIC_DEFAULT_MODEL`, `OLLAMA_BASE_URL` |
+| `pi-mono` | `adapter-internal` | Contrat stack (`compose.optional` + `entrypoint`) | Reconciliation de `~/.pi/agent/{models,settings}.json` vers `ollama-gate` | `http://ollama-gate:11435/v1` | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
 
 ## Tests de contrat dedies
 
@@ -32,6 +34,12 @@ Source versionnee machine-readable:
   - valide que la matrice marque `openhands` et `vibestral` en `adapter-internal`;
   - verifie les invariants de config stack (`compose.ui`, `entrypoint`, onboarding);
   - ajoute des assertions runtime opportunistes si les services sont deja lances.
+
+### Pi-mono: adapter interne + regression runtime
+- `tests/K4_pi_mono.sh`
+  - verifie le contrat runtime `optional-pi-mono` (securite/proxy/mounts),
+  - verifie la reconciliation `~/.pi/agent/{models,settings}.json` vers `ollama-gate`,
+  - detecte une regression explicite sur provider/API key/model par defaut.
 
 ## Ecarts assumes (explicites)
 

@@ -870,6 +870,62 @@ for row in "${running_services[@]}"; do
     if ! timeout 15 docker exec "${cid}" sh -lc 'test -d /state/home && test -w /state/home'; then
       doctor_fail "optional-pi-mono home directory is not writable (/state/home)"
     fi
+    if ! timeout 20 docker exec "${cid}" sh -lc '
+      python3 - <<'"'"'PY'"'"'
+import json
+from pathlib import Path
+
+models_path = Path("/state/home/.pi/agent/models.json")
+settings_path = Path("/state/home/.pi/agent/settings.json")
+
+if not models_path.exists() or not settings_path.exists():
+    raise SystemExit(1)
+
+models_payload = json.loads(models_path.read_text(encoding="utf-8"))
+settings_payload = json.loads(settings_path.read_text(encoding="utf-8"))
+
+if not isinstance(models_payload, dict) or not isinstance(settings_payload, dict):
+    raise SystemExit(1)
+
+providers = models_payload.get("providers")
+if not isinstance(providers, dict):
+    raise SystemExit(1)
+
+provider = providers.get("ollama")
+if not isinstance(provider, dict):
+    raise SystemExit(1)
+
+if provider.get("baseUrl") != "http://ollama-gate:11435/v1":
+    raise SystemExit(1)
+if provider.get("api") != "openai-completions":
+    raise SystemExit(1)
+if not isinstance(provider.get("apiKey"), str) or not provider.get("apiKey").strip():
+    raise SystemExit(1)
+
+models = provider.get("models")
+if not isinstance(models, list) or not models:
+    raise SystemExit(1)
+
+model_ids = {
+    item.get("id").strip()
+    for item in models
+    if isinstance(item, dict) and isinstance(item.get("id"), str) and item.get("id").strip()
+}
+if not model_ids:
+    raise SystemExit(1)
+
+if settings_payload.get("defaultProvider") != "ollama":
+    raise SystemExit(1)
+
+default_model = settings_payload.get("defaultModel")
+if not isinstance(default_model, str) or not default_model.strip():
+    raise SystemExit(1)
+if default_model.strip() not in model_ids:
+    raise SystemExit(1)
+PY
+    '; then
+      doctor_fail "optional-pi-mono must reconcile ~/.pi/agent config to local ollama-gate provider defaults"
+    fi
   fi
 
   if [[ "${service}" == "optional-goose" ]]; then

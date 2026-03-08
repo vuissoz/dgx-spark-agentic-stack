@@ -357,6 +357,115 @@ PY
   log "INFO: opencode defaults config reconciled (${opencode_config})"
 }
 
+bootstrap_pi_config() {
+  [[ "${tool}" == "pi-mono" || "${AGENT_PRIMARY_CLI:-}" == "pi" ]] || return 0
+
+  local pi_config_dir="${agent_home}/.pi/agent"
+  local pi_models_config="${pi_config_dir}/models.json"
+  local pi_settings_config="${pi_config_dir}/settings.json"
+  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+  local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
+  local provider_name="${AGENTIC_PI_PROVIDER_NAME:-ollama}"
+  local provider_api_key="${AGENTIC_PI_API_KEY:-${OPENAI_API_KEY:-ollama}}"
+  local tmp_models
+  local tmp_settings
+
+  mkdir -p "${pi_config_dir}"
+
+  tmp_models="$(mktemp)"
+  python3 - "${pi_models_config}" "${default_model}" "${gate_v1_url}" "${provider_name}" "${provider_api_key}" >"${tmp_models}" <<'PY'
+import json
+import pathlib
+import sys
+
+models_path = pathlib.Path(sys.argv[1])
+default_model = sys.argv[2]
+gate_v1_url = sys.argv[3]
+provider_name = sys.argv[4]
+provider_api_key = sys.argv[5]
+
+payload = {}
+if models_path.exists():
+    try:
+        with models_path.open("r", encoding="utf-8") as fh:
+            parsed = json.load(fh)
+        if isinstance(parsed, dict):
+            payload = parsed
+    except Exception:
+        payload = {}
+
+providers = payload.get("providers")
+if not isinstance(providers, dict):
+    providers = {}
+
+provider = providers.get(provider_name)
+if not isinstance(provider, dict):
+    provider = {}
+
+raw_models = provider.get("models")
+normalized_models = []
+has_default_model = False
+if isinstance(raw_models, list):
+    for model in raw_models:
+        if not isinstance(model, dict):
+            continue
+        model_id = model.get("id")
+        if not isinstance(model_id, str):
+            continue
+        model_id = model_id.strip()
+        if not model_id:
+            continue
+        normalized_models.append({"id": model_id})
+        if model_id == default_model:
+            has_default_model = True
+
+if not has_default_model:
+    normalized_models.insert(0, {"id": default_model})
+
+provider["baseUrl"] = gate_v1_url.rstrip("/")
+provider["api"] = "openai-completions"
+provider["apiKey"] = provider_api_key
+provider["models"] = normalized_models
+providers[provider_name] = provider
+payload["providers"] = providers
+
+json.dump(payload, sys.stdout, indent=2)
+sys.stdout.write("\n")
+PY
+  write_if_changed "${pi_models_config}" "${tmp_models}"
+  chmod 0600 "${pi_models_config}" || true
+
+  tmp_settings="$(mktemp)"
+  python3 - "${pi_settings_config}" "${default_model}" "${provider_name}" >"${tmp_settings}" <<'PY'
+import json
+import pathlib
+import sys
+
+settings_path = pathlib.Path(sys.argv[1])
+default_model = sys.argv[2]
+provider_name = sys.argv[3]
+
+payload = {}
+if settings_path.exists():
+    try:
+        with settings_path.open("r", encoding="utf-8") as fh:
+            parsed = json.load(fh)
+        if isinstance(parsed, dict):
+            payload = parsed
+    except Exception:
+        payload = {}
+
+payload["defaultProvider"] = provider_name
+payload["defaultModel"] = default_model
+
+json.dump(payload, sys.stdout, indent=2)
+sys.stdout.write("\n")
+PY
+  write_if_changed "${pi_settings_config}" "${tmp_settings}"
+  chmod 0600 "${pi_settings_config}" || true
+  log "INFO: pi defaults config reconciled (${pi_config_dir})"
+}
+
 maybe_setup_vibestral() {
   [[ "${tool}" == "vibestral" ]] || return 0
 
@@ -420,6 +529,7 @@ bootstrap_shell_home
 bootstrap_ollama_gate_defaults
 bootstrap_codex_config
 bootstrap_opencode_config
+bootstrap_pi_config
 bootstrap_vibestral_config
 
 if ! tmux has-session -t "${session}" 2>/dev/null; then

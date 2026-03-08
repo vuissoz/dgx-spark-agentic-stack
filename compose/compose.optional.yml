@@ -224,6 +224,12 @@ services:
       XDG_CONFIG_HOME: /state/home/.config
       XDG_CACHE_HOME: /state/home/.cache
       OLLAMA_BASE_URL: http://ollama-gate:11435
+      OPENAI_BASE_URL: http://ollama-gate:11435/v1
+      OPENAI_API_BASE_URL: http://ollama-gate:11435/v1
+      OPENAI_API_BASE: http://ollama-gate:11435/v1
+      OPENAI_API_KEY: ollama
+      ANTHROPIC_AUTH_TOKEN: ollama
+      ANTHROPIC_API_KEY: ollama
       GATE_MCP_URL: http://gate-mcp:8123
       GATE_MCP_AUTH_TOKEN_FILE: /run/secrets/gate_mcp.token
       AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
