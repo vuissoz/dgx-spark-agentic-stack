@@ -175,6 +175,54 @@ with urllib.request.urlopen(message_req, timeout=30) as resp:
 
 if not isinstance(body, dict) or body.get("success") is not True:
     raise SystemExit(f"unexpected /message response: {body}")
+
+deadline = time.time() + 45
+events_page = None
+found_text = False
+while time.time() < deadline:
+    with urllib.request.urlopen(
+        f"{base}/api/v1/conversation/{conversation_id}/events/search?limit=100", timeout=30
+    ) as resp:
+        candidate = json.loads(resp.read().decode("utf-8"))
+    items = candidate.get("items") if isinstance(candidate, dict) else None
+    if isinstance(items, list):
+        events_page = candidate
+        expected_text = "openhands v1 message bridge smoke"
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            llm_message = item.get("llm_message")
+            if not isinstance(llm_message, dict):
+                continue
+            content = llm_message.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") != "text":
+                    continue
+                text = block.get("text")
+                if isinstance(text, str) and expected_text in text:
+                    found_text = True
+                    break
+            if found_text:
+                break
+    if found_text:
+        break
+    time.sleep(1)
+
+if not isinstance(events_page, dict):
+    raise SystemExit("v1 app event stream stayed empty after /message bridge")
+
+items = events_page.get("items")
+if not isinstance(items, list):
+    raise SystemExit(f"unexpected v1 event search payload: {events_page}")
+
+if not found_text:
+    raise SystemExit(
+        f"message bridge text not found in v1 app event stream (items={len(items)})"
+    )
 PY
 ok "openhands V1 message bridge is operational"
 

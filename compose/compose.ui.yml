@@ -82,6 +82,9 @@ services:
       OH_PROCESS_SANDBOX_MAX_ACTIVE: "${OH_PROCESS_SANDBOX_MAX_ACTIVE:-2}"
       OH_APP_CONVERSATION_INIT_GIT_IN_EMPTY_WORKSPACE: "0"
       OH_SANDBOX_SPEC_SPECS_0: '{"id":"ghcr.io/openhands/agent-server:c775ff6-python","command":["python","-m","openhands.agent_server"],"initial_env":{"OH_ENABLE_VS_CODE":"0","OH_CONVERSATIONS_PATH":"/workspace/conversations"},"working_dir":"/workspace"}'
+      OH_WEBHOOKS_0_BASE_URL: "${OH_WEBHOOKS_BASE_URL:-http://127.0.0.1:3000/api/v1/webhooks}"
+      OH_WEBHOOKS_0_EVENT_BUFFER_SIZE: "${OH_WEBHOOKS_EVENT_BUFFER_SIZE:-1}"
+      OH_WEBHOOKS_0_FLUSH_DELAY: "${OH_WEBHOOKS_FLUSH_DELAY:-1.0}"
       LLM_BASE_URL: http://ollama-gate:11435/v1
       AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
       AGENT_HOME: /.openhands/home

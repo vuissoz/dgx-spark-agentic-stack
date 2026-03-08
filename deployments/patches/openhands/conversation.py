@@ -200,11 +200,13 @@ async def _forward_v1_event(
     if session_api_key:
         headers['X-Session-API-Key'] = session_api_key
 
+    payload = _normalize_v1_event_payload(event_payload)
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f'{conversation_url}/events',
-                json=event_payload,
+                json=payload,
                 headers=headers,
                 timeout=30.0,
             )
@@ -228,6 +230,40 @@ async def _forward_v1_event(
         )
 
     return True
+
+
+def _build_v1_send_message_payload(message: str, run: bool = True) -> dict[str, Any]:
+    """Build V1 agent-server payload for sending a user message."""
+    return {
+        'role': 'user',
+        'content': [{'type': 'text', 'text': message}],
+        'run': run,
+    }
+
+
+def _normalize_v1_event_payload(event_payload: dict[str, Any]) -> dict[str, Any]:
+    """Translate legacy event payloads to the V1 send-message schema.
+
+    Legacy `/api/conversations/{id}/message` payloads (and some `/events` payloads)
+    use keys like `message`/`action`/`args`. V1 agent-server expects
+    `{role, content, run}`. Without translation, messages become empty content.
+    """
+    if 'role' in event_payload and 'content' in event_payload:
+        normalized = dict(event_payload)
+        normalized.setdefault('run', True)
+        return normalized
+
+    message = event_payload.get('message')
+    if isinstance(message, str):
+        return _build_v1_send_message_payload(message=message, run=True)
+
+    args = event_payload.get('args')
+    if isinstance(args, dict):
+        legacy_content = args.get('content')
+        if isinstance(legacy_content, str):
+            return _build_v1_send_message_payload(message=legacy_content, run=True)
+
+    return event_payload
 
 
 def _get_v0_conversation_config(
@@ -492,19 +528,19 @@ async def add_message(
         Use the sandbox's exposed agent server URL to send messages.
     """
     try:
+        if await _forward_v1_event(
+            conversation_id,
+            _build_v1_send_message_payload(message=data.message, run=True),
+            app_conversation_service,
+            app_conversation_start_task_service,
+        ):
+            return JSONResponse({'success': True})
+
         # Create a MessageAction from the provided message text
         message_action = MessageAction(content=data.message)
 
         # Convert the action to a dictionary for sending to the conversation
         message_data = event_to_dict(message_action)
-
-        if await _forward_v1_event(
-            conversation_id,
-            message_data,
-            app_conversation_service,
-            app_conversation_start_task_service,
-        ):
-            return JSONResponse({'success': True})
 
         conversation = await conversation_manager.attach_to_conversation(
             conversation_id, user_id
