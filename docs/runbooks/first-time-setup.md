@@ -217,6 +217,7 @@ Required files:
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 - `${AGENTIC_ROOT}/secrets/runtime/openai.api_key` (if OpenAI routing enabled)
 - `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key` (if OpenRouter routing enabled)
+- `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` (optional, for ComfyUI Flux gated downloads)
 
 Permissions must be restrictive (`600` or `640`).
 

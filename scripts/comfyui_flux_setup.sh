@@ -18,6 +18,7 @@ Usage:
 Behavior:
   - Always bootstraps Flux.1-dev model layout + manifest under ${AGENTIC_ROOT}/comfyui/models.
   - Optionally downloads required files from Hugging Face when --download is set.
+  - If --hf-token-file is not provided, uses ${AGENTIC_ROOT}/secrets/runtime/huggingface.token when present.
 USAGE
 }
 
@@ -142,6 +143,10 @@ fi
 
 if [[ "${download_models}" == "1" ]]; then
   hf_token="${HF_TOKEN:-}"
+  default_hf_token_file="${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
+  if [[ -z "${hf_token}" && -z "${hf_token_file}" && -f "${default_hf_token_file}" ]]; then
+    hf_token_file="${default_hf_token_file}"
+  fi
   if [[ -z "${hf_token}" && -n "${hf_token_file}" ]]; then
     [[ -f "${hf_token_file}" ]] || die "HF token file not found: ${hf_token_file}"
     hf_token="$(tr -d '\r\n' <"${hf_token_file}")"

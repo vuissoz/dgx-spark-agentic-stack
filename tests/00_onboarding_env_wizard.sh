@@ -112,7 +112,7 @@ EOF
 run_openclaw_secret_answers() {
   local openclaw_root="${work_dir}/openclaw-root"
 
-  if ! printf '\n\n\n\n\n\n\n\n\n\n\n\n' \
+  if ! printf '\n%.0s' {1..20} \
     | AGENTIC_PROFILE=strict-prod "${wizard_script}" \
       --profile rootless-dev \
       --root "${openclaw_root}" \
@@ -153,7 +153,7 @@ assert_generated_file_baseline() {
   [[ -s "${file_path}" ]] || fail "generated file is missing or empty: ${file_path}"
   bash -n "${file_path}" || fail "generated file is not valid bash syntax: ${file_path}"
 
-  if grep -Eq '^export (WEBUI_ADMIN_PASSWORD|OPENAI_API_KEY|OPENROUTER_API_KEY|OPENCLAW_TOKEN|MCP_TOKEN)=' "${file_path}"; then
+  if grep -Eq '^export (WEBUI_ADMIN_PASSWORD|OPENAI_API_KEY|OPENROUTER_API_KEY|HUGGINGFACE_TOKEN|OPENCLAW_TOKEN|MCP_TOKEN)=' "${file_path}"; then
     fail "generated onboarding env must not contain application bootstrap secrets: ${file_path}"
   fi
 }

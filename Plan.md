@@ -15,6 +15,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-a5m` (enforcement opencode/vibestral via gate) [CLOSED]
   - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch) [CLOSED]
   - `dgx-spark-agentic-stack-b32` (run D8/E2 sur stack compose démarrée) [CLOSED]
+  - `dgx-spark-agentic-stack-p94` (onboarding secret `huggingface.token` pour Flux/ComfyUI) [CLOSED]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -111,3 +112,10 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - Correctif: proxy loopback WebSocket (`/ws`) corrigé, image ComfyUI alignée PyTorch CUDA, commande opérateur `agent comfyui flux-1-dev` + manifeste/layout/téléchargement HF.
   - Correctif complémentaire: `scripts/comfyui_flux_setup.sh` exécute désormais les blocs Python via `docker exec -i` (stdin attaché) pour garantir l'exécution réelle des probes/downloads.
   - Vérif: `tests/I1_comfyui.sh` vérifie handshake WebSocket 101, `tests/I2_comfyui_flux_bootstrap.sh` couvre bootstrap Flux + exécution effective du chemin `--download` (erreur HF token attendue sans secret).
+
+## Addendum (2026-03-08, onboarding secret Hugging Face)
+- Beads `dgx-spark-agentic-stack-p94`: ajout du token HF dans le bootstrap secrets onboarding.
+  - Correctif: `agent onboard` accepte `--huggingface-token` et, en interactif, propose `huggingface.token (optional, for ComfyUI gated HF models)`.
+  - Stockage: `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` (mode `0600`).
+  - Ergonomie Flux: `agent comfyui flux-1-dev --download` consomme automatiquement ce fichier si `--hf-token-file` n'est pas fourni.
+  - Vérif: extensions tests onboarding (`00_onboarding_env_wizard`, `00_onboarding_full_setup_wizard`) pour couvrir le secret HF.

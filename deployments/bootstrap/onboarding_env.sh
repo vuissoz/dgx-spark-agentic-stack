@@ -48,6 +48,7 @@ openhands_llm_api_key_override=""
 allowlist_domains_override=""
 openai_api_key_override=""
 openrouter_api_key_override=""
+huggingface_token_override=""
 optional_modules_override=""
 openclaw_token_override=""
 openclaw_webhook_secret_override=""
@@ -113,6 +114,7 @@ First-run bootstrap options:
   --allowlist-domains <csv>
   --openai-api-key <key>
   --openrouter-api-key <key>
+  --huggingface-token <token>
   --optional-modules <csv>
   --openclaw-token <token>
   --openclaw-webhook-secret <secret>
@@ -1480,6 +1482,11 @@ while [[ $# -gt 0 ]]; do
       openrouter_api_key_override="$2"
       shift 2
       ;;
+    --huggingface-token)
+      [[ $# -ge 2 ]] || die "missing value for --huggingface-token"
+      huggingface_token_override="$2"
+      shift 2
+      ;;
     --optional-modules)
       [[ $# -ge 2 ]] || die "missing value for --optional-modules"
       optional_modules_override="$2"
@@ -1896,6 +1903,7 @@ fi
 
 openai_api_key="${openai_api_key_override:-}"
 openrouter_api_key="${openrouter_api_key_override:-}"
+huggingface_token="${huggingface_token_override:-}"
 optional_modules_raw="${optional_modules_override:-none}"
 optional_modules_list=()
 openclaw_token="${openclaw_token_override:-}"
@@ -1909,6 +1917,9 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     fi
     if [[ -z "${openrouter_api_key_override}" ]]; then
       openrouter_api_key="$(prompt_secret_with_default "openrouter.api_key (optional)" "${openrouter_api_key}")"
+    fi
+    if [[ -z "${huggingface_token_override}" ]]; then
+      huggingface_token="$(prompt_secret_with_default "huggingface.token (optional, for ComfyUI gated HF models)" "${huggingface_token}")"
     fi
 
     if [[ -z "${optional_modules_override}" ]]; then
@@ -2000,6 +2011,7 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
   else
     write_secret_file "${root_path}" "openai.api_key" "${openai_api_key}" || true
     write_secret_file "${root_path}" "openrouter.api_key" "${openrouter_api_key}" || true
+    write_secret_file "${root_path}" "huggingface.token" "${huggingface_token}" || true
     write_secret_file "${root_path}" "openclaw.token" "${openclaw_token}" || true
     write_secret_file "${root_path}" "openclaw.webhook_secret" "${openclaw_webhook_secret}" || true
     write_secret_file "${root_path}" "mcp.token" "${mcp_token}" || true

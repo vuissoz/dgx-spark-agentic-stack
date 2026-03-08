@@ -27,6 +27,7 @@ grafana_admin_password="grafana-strong-password"
 openhands_api_key="openhands-api-key"
 openai_key="openai-api-key"
 openrouter_key="openrouter-api-key"
+huggingface_token="hf_token_read_abc123"
 openclaw_token="openclaw-token"
 openclaw_webhook="openclaw-webhook"
 mcp_token="mcp-token"
@@ -55,6 +56,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --allowlist-domains 'example.com,api.openai.com,10.1.0.0/24' \
   --openai-api-key "${openai_key}" \
   --openrouter-api-key "${openrouter_key}" \
+  --huggingface-token "${huggingface_token}" \
   --optional-modules 'openclaw,mcp' \
   --openclaw-token "${openclaw_token}" \
   --openclaw-webhook-secret "${openclaw_webhook}" \
@@ -115,6 +117,7 @@ openhands_settings="${root_dir}/openhands/state/settings.json"
 allowlist_file="${root_dir}/proxy/allowlist.txt"
 openai_secret_file="${root_dir}/secrets/runtime/openai.api_key"
 openrouter_secret_file="${root_dir}/secrets/runtime/openrouter.api_key"
+huggingface_secret_file="${root_dir}/secrets/runtime/huggingface.token"
 openclaw_token_file="${root_dir}/secrets/runtime/openclaw.token"
 openclaw_webhook_file="${root_dir}/secrets/runtime/openclaw.webhook_secret"
 mcp_token_file="${root_dir}/secrets/runtime/mcp.token"
@@ -133,6 +136,7 @@ openhands_settings_perm="$(stat -c '%a' "${openhands_settings}")"
 for secret_file in \
   "${openai_secret_file}" \
   "${openrouter_secret_file}" \
+  "${huggingface_secret_file}" \
   "${openclaw_token_file}" \
   "${openclaw_webhook_file}" \
   "${mcp_token_file}"; do
@@ -198,6 +202,9 @@ if grep -Fq "${openwebui_password}" "${log_file}"; then
 fi
 if grep -Fq "${openai_key}" "${log_file}"; then
   fail "log leaked openai key"
+fi
+if grep -Fq "${huggingface_token}" "${log_file}"; then
+  fail "log leaked huggingface token"
 fi
 
 if AGENTIC_PROFILE=strict-prod "${wizard_script}" \
