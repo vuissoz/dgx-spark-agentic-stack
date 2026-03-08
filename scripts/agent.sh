@@ -138,6 +138,13 @@ tool_to_service() {
   esac
 }
 
+tool_session_mode() {
+  case "$1" in
+    goose) echo "goose-direct" ;;
+    *) echo "tmux" ;;
+  esac
+}
+
 service_start_hint() {
   case "$1" in
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
@@ -1102,7 +1109,7 @@ detect_project_name() {
 prepare_tool_session() {
   local tool="$1"
   local project="$2"
-  local service container_id workspace defaults_file
+  local service container_id workspace defaults_file session_mode
 
   service="$(tool_to_service "${tool}")" || die "Unknown tool '${tool}'"
   container_id="$(service_container_id "${service}")"
@@ -1110,36 +1117,69 @@ prepare_tool_session() {
 
   workspace="/workspace/${project}"
   defaults_file="/state/bootstrap/ollama-gate-defaults.env"
+  session_mode="$(tool_session_mode "${tool}")"
   docker exec "${container_id}" sh -lc "mkdir -p '${workspace}'"
 
-  if ! docker exec "${container_id}" tmux has-session -t "${tool}" >/dev/null 2>&1; then
-    docker exec "${container_id}" tmux new-session -d -s "${tool}" -c "${workspace}" \
-      "bash -lc 'if [ -f \"${defaults_file}\" ]; then source \"${defaults_file}\"; fi; exec bash -l'"
-  fi
-  docker exec "${container_id}" sh -lc "tmux send-keys -t '${tool}' C-c"
-  docker exec "${container_id}" sh -lc "tmux send-keys -t '${tool}' 'cd \"${workspace}\"' C-m"
+  case "${session_mode}" in
+    tmux)
+      if ! docker exec "${container_id}" tmux has-session -t "${tool}" >/dev/null 2>&1; then
+        docker exec "${container_id}" tmux new-session -d -s "${tool}" -c "${workspace}" \
+          "bash -lc 'if [ -f \"${defaults_file}\" ]; then source \"${defaults_file}\"; fi; exec bash -l'"
+      fi
+      docker exec "${container_id}" sh -lc "tmux send-keys -t '${tool}' C-c"
+      docker exec "${container_id}" sh -lc "tmux send-keys -t '${tool}' 'cd \"${workspace}\"' C-m"
+      ;;
+    goose-direct)
+      ;;
+    *)
+      die "Unknown session mode '${session_mode}' for tool '${tool}'"
+      ;;
+  esac
 }
 
 cmd_tool_attach() {
   local tool="$1"
   local project="${2:-$(detect_project_name)}"
-  local service container_id
+  local service container_id session_mode workspace
 
   prepare_tool_session "${tool}" "${project}"
   service="$(tool_to_service "${tool}")"
   container_id="$(service_container_id "${service}")"
+  session_mode="$(tool_session_mode "${tool}")"
+  workspace="/workspace/${project}"
 
-  printf 'INFO: %s uses a persistent tmux session. Detach with Ctrl-b d (session keeps running).\n' "${tool}"
-  printf 'INFO: you are attaching to an existing shell in-container (not auto-running %s).\n' "${tool}"
-  printf 'INFO: attach reset sends Ctrl-c, then cd to /workspace/%s; a running foreground command in that pane will be interrupted.\n' "${project}"
-  printf 'INFO: use "exit" to close the pane/session; entrypoint will recreate an empty shell session automatically.\n'
+  case "${session_mode}" in
+    tmux)
+      printf 'INFO: %s uses a persistent tmux session. Detach with Ctrl-b d (session keeps running).\n' "${tool}"
+      printf 'INFO: you are attaching to an existing shell in-container (not auto-running %s).\n' "${tool}"
+      printf 'INFO: attach reset sends Ctrl-c, then cd to /workspace/%s; a running foreground command in that pane will be interrupted.\n' "${project}"
+      printf 'INFO: use "exit" to close the pane/session; entrypoint will recreate an empty shell session automatically.\n'
+      ;;
+    goose-direct)
+      printf 'INFO: goose uses a direct Goose CLI session (no tmux in optional-goose image).\n'
+      printf 'INFO: launching goose in %s; stop with Ctrl-c.\n' "${workspace}"
+      ;;
+    *)
+      die "Unknown session mode '${session_mode}' for tool '${tool}'"
+      ;;
+  esac
 
   if [[ "${AGENT_NO_ATTACH:-0}" == "1" ]]; then
     printf 'prepared tool=%s project=%s container=%s\n' "${tool}" "${project}" "${container_id}"
     return 0
   fi
 
-  exec docker exec -it "${container_id}" tmux attach-session -t "${tool}"
+  case "${session_mode}" in
+    tmux)
+      exec docker exec -it "${container_id}" tmux attach-session -t "${tool}"
+      ;;
+    goose-direct)
+      exec docker exec -it "${container_id}" sh -lc "cd '${workspace}' && exec goose"
+      ;;
+    *)
+      die "Unknown session mode '${session_mode}' for tool '${tool}'"
+      ;;
+  esac
 }
 
 sticky_model_for_session() {
@@ -1178,19 +1218,26 @@ cmd_ls() {
 
   printf 'tool\tservice\tstatus\ttmux\tworkspace\tsticky_model\n'
 
-  local tool service container_id status tmux_status workspace_size sticky
+  local tool service container_id status tmux_status workspace_size sticky session_mode
   for tool in "${AGENT_TOOLS[@]}"; do
     service="$(tool_to_service "${tool}")"
     container_id="$(service_container_id "${service}")"
+    session_mode="$(tool_session_mode "${tool}")"
 
     status="down"
-    tmux_status="-"
+    if [[ "${session_mode}" == "tmux" ]]; then
+      tmux_status="-"
+    else
+      tmux_status="n/a"
+    fi
     if [[ -n "${container_id}" ]]; then
       status="$(docker inspect --format '{{.State.Status}}' "${container_id}" 2>/dev/null || echo unknown)"
-      if docker exec "${container_id}" tmux has-session -t "${tool}" >/dev/null 2>&1; then
-        tmux_status="up"
-      else
-        tmux_status="missing"
+      if [[ "${session_mode}" == "tmux" ]]; then
+        if docker exec "${container_id}" tmux has-session -t "${tool}" >/dev/null 2>&1; then
+          tmux_status="up"
+        else
+          tmux_status="missing"
+        fi
       fi
     fi
 
