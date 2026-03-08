@@ -226,6 +226,99 @@ if not found_text:
 PY
 ok "openhands V1 message bridge is operational"
 
+ws_bridge_conversation_id="$(
+python3 - "${openhands_port}" <<'PY'
+import json
+import sys
+import time
+import urllib.request
+
+port = int(sys.argv[1])
+base = f"http://127.0.0.1:{port}"
+
+req = urllib.request.Request(
+    f"{base}/api/v1/app-conversations",
+    data=json.dumps({"title": "h2-websocket-bridge", "agent_type": "default"}).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(req, timeout=30) as resp:
+    task = json.loads(resp.read().decode("utf-8"))
+task_id = task.get("id")
+if not isinstance(task_id, str) or not task_id:
+    raise SystemExit(f"missing start-task id for websocket bridge: {task}")
+
+deadline = time.time() + 90
+conversation_id = None
+while time.time() < deadline:
+    with urllib.request.urlopen(
+        f"{base}/api/v1/app-conversations/start-tasks?ids={task_id}", timeout=30
+    ) as resp:
+        tasks = json.loads(resp.read().decode("utf-8"))
+    if isinstance(tasks, list) and tasks:
+        state = tasks[0] or {}
+        status = state.get("status")
+        if status == "READY":
+            conversation_id = state.get("app_conversation_id")
+            break
+        if status == "ERROR":
+            raise SystemExit(f"start-task {task_id} failed before websocket bridge: {state.get('detail')}")
+    time.sleep(1)
+
+if not conversation_id:
+    raise SystemExit(f"websocket bridge conversation did not reach READY (task={task_id})")
+
+print(conversation_id)
+PY
+)" || fail "unable to create V1 conversation for websocket bridge smoke"
+
+[[ -n "${ws_bridge_conversation_id}" ]] || fail "websocket bridge smoke conversation id is empty"
+timeout 60 docker exec -i "${openhands_cid}" /app/.venv/bin/python - "${openhands_port}" "${ws_bridge_conversation_id}" <<'PY' || fail "openhands V1 websocket bridge is broken"
+import asyncio
+import json
+import sys
+import urllib.request
+
+import websockets
+
+port = int(sys.argv[1])
+conversation_id = sys.argv[2]
+expected_text = "openhands v1 websocket bridge smoke"
+
+
+async def run_smoke() -> None:
+    ws_url = f"ws://127.0.0.1:{port}/sockets/events/{conversation_id}"
+    async with websockets.connect(ws_url, open_timeout=15, close_timeout=5) as ws:
+        pong_waiter = await ws.ping()
+        await asyncio.wait_for(pong_waiter, timeout=10)
+
+        message_req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/conversations/{conversation_id}/message",
+            data=json.dumps({"message": expected_text}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(message_req, timeout=30) as resp:
+            if resp.status != 200:
+                raise SystemExit(f"unexpected /message status={resp.status}")
+            body = json.loads(resp.read().decode("utf-8"))
+        if not isinstance(body, dict) or body.get("success") is not True:
+            raise SystemExit(f"unexpected /message response during websocket smoke: {body}")
+
+        deadline = asyncio.get_running_loop().time() + 30
+        while asyncio.get_running_loop().time() < deadline:
+            remaining = deadline - asyncio.get_running_loop().time()
+            payload = await asyncio.wait_for(ws.recv(), timeout=remaining)
+            text = payload.decode("utf-8", errors="ignore") if isinstance(payload, bytes) else str(payload)
+            if expected_text in text:
+                return
+        raise SystemExit("websocket bridge did not relay the submitted message event")
+
+
+asyncio.run(run_smoke())
+PY
+ok "openhands V1 websocket bridge is operational"
+
 restart_after="$(docker inspect --format '{{.RestartCount}}' "${openhands_cid}" 2>/dev/null || echo "0")"
 [[ "${restart_after}" == "${restart_before}" ]] \
   || fail "openhands container restarted during conversation startup flow (before=${restart_before}, after=${restart_after})"

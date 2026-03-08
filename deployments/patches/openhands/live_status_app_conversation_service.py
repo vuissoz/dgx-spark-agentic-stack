@@ -479,10 +479,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         case, route clients through the OpenHands API bridge instead.
         """
         bridge_path = f'/api/conversations/{conversation_id.hex}'
+        public_base_url = self.web_url
+        if not public_base_url:
+            webhook_base_url = os.getenv('OH_WEBHOOKS_0_BASE_URL', '').strip()
+            if webhook_base_url:
+                public_base_url = webhook_base_url.split('/api/v1/webhooks', 1)[
+                    0
+                ].rstrip('/')
         if not runtime_base_url:
             return (
-                f'{self.web_url.rstrip("/")}{bridge_path}'
-                if self.web_url
+                f'{public_base_url.rstrip("/")}{bridge_path}'
+                if public_base_url
                 else bridge_path
             )
 
@@ -490,8 +497,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         hostname = (urlparse(runtime_base_url).hostname or '').lower()
         if hostname in {'localhost', '127.0.0.1', '0.0.0.0'}:
             return (
-                f'{self.web_url.rstrip("/")}{bridge_path}'
-                if self.web_url
+                f'{public_base_url.rstrip("/")}{bridge_path}'
+                if public_base_url
                 else bridge_path
             )
         return f'{runtime_base_url}{bridge_path}'

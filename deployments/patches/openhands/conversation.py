@@ -232,6 +232,61 @@ async def _forward_v1_event(
     return True
 
 
+async def _forward_v1_generate_title(
+    conversation_id: str,
+    payload: dict[str, Any],
+    app_conversation_service: AppConversationService,
+    app_conversation_start_task_service: AppConversationStartTaskService,
+) -> JSONResponse | None:
+    """Forward legacy generate-title calls to the V1 runtime."""
+    resolved = await _resolve_v1_runtime_endpoint(
+        conversation_id, app_conversation_service, app_conversation_start_task_service
+    )
+    if resolved is None:
+        return None
+
+    conversation_url, session_api_key = resolved
+    headers: dict[str, str] = {}
+    if session_api_key:
+        headers['X-Session-API-Key'] = session_api_key
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f'{conversation_url}/generate_title',
+                json=payload,
+                headers=headers,
+                timeout=30.0,
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                'Failed to contact V1 runtime for generate_title on '
+                f'conversation {conversation_id}: {exc}'
+            ),
+        ) from exc
+
+    if response.status_code >= 400:
+        detail = response.text.strip()
+        if len(detail) > 600:
+            detail = detail[:600] + '...'
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=(
+                f'V1 runtime rejected generate_title for conversation {conversation_id}: {detail}'
+                if detail
+                else f'V1 runtime rejected generate_title for conversation {conversation_id}'
+            ),
+        )
+
+    try:
+        content = response.json()
+    except ValueError:
+        content = {'success': True}
+    return JSONResponse(status_code=response.status_code, content=content)
+
+
 def _build_v1_send_message_payload(message: str, run: bool = True) -> dict[str, Any]:
     """Build V1 agent-server payload for sending a user message."""
     return {
@@ -569,6 +624,30 @@ async def add_message(
                 'error': f'Error adding message to conversation: {e}',
             },
         )
+
+
+@app.post('/generate_title', deprecated=True)
+async def generate_title(
+    conversation_id: str,
+    request: Request,
+    app_conversation_service: AppConversationService = app_conversation_service_dependency,
+    app_conversation_start_task_service: AppConversationStartTaskService = app_conversation_start_task_service_dependency,
+):
+    """Compatibility endpoint used by V1 title callback processors."""
+    payload = await request.json()
+    forwarded = await _forward_v1_generate_title(
+        conversation_id,
+        payload,
+        app_conversation_service,
+        app_conversation_start_task_service,
+    )
+    if forwarded is not None:
+        return forwarded
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f'Conversation {conversation_id} not found',
+    )
 
 
 class MicroagentResponse(BaseModel):
