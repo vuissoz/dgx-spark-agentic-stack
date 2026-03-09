@@ -22,7 +22,7 @@ AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
-AGENT_TOOLS=(claude codex opencode vibestral pi-mono goose)
+AGENT_TOOLS=(claude codex opencode vibestral openclaw pi-mono goose)
 OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
@@ -37,7 +37,7 @@ Usage:
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-  agent <claude|codex|opencode|vibestral|pi-mono|goose> [project]
+  agent <claude|codex|opencode|vibestral|openclaw|pi-mono|goose> [project]
   agent ls
   agent ps
   agent llm mode [local|hybrid|remote]
@@ -120,6 +120,7 @@ agent_workspace_dir() {
     codex) printf '%s\n' "${AGENTIC_CODEX_WORKSPACES_DIR}" ;;
     opencode) printf '%s\n' "${AGENTIC_OPENCODE_WORKSPACES_DIR}" ;;
     vibestral) printf '%s\n' "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}" ;;
+    openclaw) printf '%s\n' "${AGENTIC_ROOT}/optional/openclaw/state" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/optional/pi-mono/workspaces" ;;
     goose) printf '%s\n' "${AGENTIC_ROOT}/optional/goose/workspaces" ;;
     *) return 1 ;;
@@ -132,6 +133,7 @@ tool_to_service() {
     codex) echo "agentic-codex" ;;
     opencode) echo "agentic-opencode" ;;
     vibestral) echo "agentic-vibestral" ;;
+    openclaw) echo "optional-openclaw" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "optional-goose" ;;
     *) return 1 ;;
@@ -140,6 +142,7 @@ tool_to_service() {
 
 tool_session_mode() {
   case "$1" in
+    openclaw) echo "openclaw-shell" ;;
     goose) echo "goose-direct" ;;
     *) echo "tmux" ;;
   esac
@@ -147,6 +150,7 @@ tool_session_mode() {
 
 service_start_hint() {
   case "$1" in
+    optional-openclaw) echo "AGENTIC_OPTIONAL_MODULES=openclaw agent up optional" ;;
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
     *) echo "agent up agents" ;;
@@ -1115,10 +1119,21 @@ prepare_tool_session() {
   container_id="$(service_container_id "${service}")"
   [[ -n "${container_id}" ]] || die "Service '${service}' is not running. Start it with: $(service_start_hint "${service}")"
 
-  workspace="/workspace/${project}"
+  workspace=""
   defaults_file="/state/bootstrap/ollama-gate-defaults.env"
   session_mode="$(tool_session_mode "${tool}")"
-  docker exec "${container_id}" sh -lc "mkdir -p '${workspace}'"
+
+  case "${session_mode}" in
+    tmux|goose-direct)
+      workspace="/workspace/${project}"
+      docker exec "${container_id}" sh -lc "mkdir -p '${workspace}'"
+      ;;
+    openclaw-shell)
+      ;;
+    *)
+      die "Unknown session mode '${session_mode}' for tool '${tool}'"
+      ;;
+  esac
 
   case "${session_mode}" in
     tmux)
@@ -1146,7 +1161,10 @@ cmd_tool_attach() {
   service="$(tool_to_service "${tool}")"
   container_id="$(service_container_id "${service}")"
   session_mode="$(tool_session_mode "${tool}")"
-  workspace="/workspace/${project}"
+  workspace=""
+  if [[ "${session_mode}" == "tmux" || "${session_mode}" == "goose-direct" ]]; then
+    workspace="/workspace/${project}"
+  fi
 
   case "${session_mode}" in
     tmux)
@@ -1158,6 +1176,11 @@ cmd_tool_attach() {
     goose-direct)
       printf 'INFO: goose uses a direct Goose CLI session (no tmux in optional-goose image).\n'
       printf 'INFO: launching goose in %s; stop with Ctrl-c.\n' "${workspace}"
+      ;;
+    openclaw-shell)
+      printf 'INFO: openclaw uses the optional OpenClaw service shell (no tmux).\n'
+      printf 'INFO: OpenClaw API is reachable via host loopback on http://127.0.0.1:%s.\n' "${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+      printf 'INFO: internal docker-network endpoint is http://optional-openclaw:8111.\n'
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -1175,6 +1198,9 @@ cmd_tool_attach() {
       ;;
     goose-direct)
       exec docker exec -it "${container_id}" sh -lc "cd '${workspace}' && exec goose"
+      ;;
+    openclaw-shell)
+      exec docker exec -it "${container_id}" sh
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -1259,17 +1285,25 @@ cmd_ls() {
 cmd_stop_tool() {
   local tool="${1:-}"
   local service compose_file
+  local -a services_to_stop=()
   [[ -n "${tool}" ]] || die "Usage: agent stop <tool>"
 
   service="$(tool_to_service "${tool}")" || die "Unknown tool '${tool}'. Expected one of: ${AGENT_TOOLS[*]}"
+  services_to_stop=("${service}")
   case "${service}" in
-    optional-pi-mono|optional-goose) compose_file="$(stack_to_compose_file optional)" ;;
+    optional-openclaw)
+      compose_file="$(stack_to_compose_file optional)"
+      services_to_stop+=(optional-openclaw-sandbox)
+      ;;
+    optional-pi-mono|optional-goose)
+      compose_file="$(stack_to_compose_file optional)"
+      ;;
     *) compose_file="$(stack_to_compose_file agents)" ;;
   esac
   [[ -f "${compose_file}" ]] || die "Compose file not found for tool stack: ${compose_file}"
 
   require_cmd docker
-  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" stop "${service}"
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" stop "${services_to_stop[@]}"
 }
 
 cmd_service_action() {
@@ -2539,7 +2573,7 @@ cmd_rollback() {
 normalize_logs_target() {
   local target="$1"
   case "${target}" in
-    claude|codex|opencode|vibestral|pi-mono|goose) tool_to_service "${target}" ;;
+    claude|codex|opencode|vibestral|openclaw|pi-mono|goose) tool_to_service "${target}" ;;
     *) printf '%s\n' "${target}" ;;
   esac
 }
@@ -2749,7 +2783,7 @@ case "$cmd" in
     [[ $# -ge 2 ]] || die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
     cmd_stack "$2" "${3:-all}"
     ;;
-  claude|codex|opencode|vibestral|pi-mono|goose)
+  claude|codex|opencode|vibestral|openclaw|pi-mono|goose)
     shift
     cmd_tool_attach "${cmd}" "${1:-}"
     ;;

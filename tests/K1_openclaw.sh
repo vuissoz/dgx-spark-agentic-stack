@@ -95,6 +95,26 @@ assert_container_security "${claw_cid}" || fail "optional-openclaw container sec
 assert_proxy_enforced "${claw_cid}" || fail "optional-openclaw proxy env baseline failed"
 assert_no_docker_sock_mount "${claw_cid}" || fail "optional-openclaw must not mount docker.sock"
 
+AGENT_NO_ATTACH=1 "${agent_bin}" openclaw >/tmp/agent-k1-openclaw-entrypoint.out \
+  || fail "agent openclaw operator entrypoint must be available"
+grep -q 'optional OpenClaw service shell' /tmp/agent-k1-openclaw-entrypoint.out \
+  || fail "agent openclaw output must mention optional OpenClaw service shell"
+grep -q "127.0.0.1:${webhook_host_port}" /tmp/agent-k1-openclaw-entrypoint.out \
+  || fail "agent openclaw output must mention loopback OpenClaw endpoint"
+
+set +e
+timeout 5 "${agent_bin}" logs openclaw >/tmp/agent-k1-openclaw-logs.out 2>&1
+logs_openclaw_rc=$?
+set -e
+if [[ "${logs_openclaw_rc}" -ne 0 && "${logs_openclaw_rc}" -ne 124 ]]; then
+  cat /tmp/agent-k1-openclaw-logs.out >&2
+  fail "agent logs openclaw must resolve to optional-openclaw service"
+fi
+if grep -q "No such container: openclaw" /tmp/agent-k1-openclaw-logs.out; then
+  cat /tmp/agent-k1-openclaw-logs.out >&2
+  fail "agent logs openclaw must not target a non-existent 'openclaw' container"
+fi
+
 sandbox_cid="$(require_service_container optional-openclaw-sandbox)" || exit 1
 wait_for_container_ready "${sandbox_cid}" 90 || fail "optional-openclaw-sandbox did not become ready"
 assert_container_security "${sandbox_cid}" || fail "optional-openclaw-sandbox container security baseline failed"

@@ -290,7 +290,7 @@ agent first-up [--env-file <path>] [--no-env] [--dry-run]
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
 agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-agent <claude|codex|opencode|vibestral|pi-mono|goose> [project]
+agent <claude|codex|opencode|vibestral|openclaw|pi-mono|goose> [project]
 agent ls
 agent ps
 agent llm mode [local|hybrid|remote]
@@ -346,8 +346,8 @@ Examples:
 ```
 
 Notes:
-- `agent stop` handles `claude|codex|opencode|vibestral|pi-mono|goose` tools.
-- `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|vibestral|pi-mono` use tmux (`Ctrl-b d` to detach), while `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image).
+- `agent stop` handles `claude|codex|opencode|vibestral|openclaw|pi-mono|goose` tools.
+- `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|vibestral|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in `optional-openclaw` with loopback API endpoint reminders.
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.
 - `agent rollback all` requires a `release_id`.
 - Use `--skip-d5-tests` (or `AGENTIC_SKIP_D5_TESTS=1`) to skip only `D5_gate_external_providers.sh` with a warning when external API access is unavailable.
