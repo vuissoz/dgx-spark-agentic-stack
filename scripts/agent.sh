@@ -1146,6 +1146,8 @@ prepare_tool_session() {
       ;;
     goose-direct)
       ;;
+    openclaw-shell)
+      ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
       ;;
