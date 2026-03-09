@@ -78,7 +78,8 @@ For that reason, activation requires:
 - Runtime contract:
   - explicit non-root user mapping (`AGENT_RUNTIME_UID:AGENT_RUNTIME_GID`),
   - `HOME=/state/home` with XDG dirs under `/state/home/.config`, `/state/home/.local/share`, `/state/home/.local/state`,
-  - default provider wiring: `GOOSE_PROVIDER=ollama`, `OLLAMA_HOST=http://ollama-gate:11435`.
+  - default provider wiring: `GOOSE_PROVIDER=ollama`, `OLLAMA_HOST=http://ollama-gate:11435`,
+  - explicit Goose client window: `GOOSE_CONTEXT_LIMIT=${AGENTIC_GOOSE_CONTEXT_LIMIT:-128000}` (`/128k` banner by default).
 - Runtime data:
   - `${AGENTIC_ROOT}/optional/goose/state`
   - `${AGENTIC_ROOT}/optional/goose/logs`
@@ -157,6 +158,14 @@ Expected result:
 - optional services are healthy,
 - baseline hardening rules remain true,
 - no forbidden mounts or public binds are introduced.
+
+Goose context verification (`optional-goose` enabled):
+
+```bash
+goose_cid="$(docker ps --filter "name=${AGENTIC_COMPOSE_PROJECT:-agentic}-optional-goose" --format '{{.ID}}' | head -n 1)"
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${goose_cid}" | grep '^GOOSE_CONTEXT_LIMIT='
+timeout 12 docker exec "${goose_cid}" sh -lc 'goose session -n context-check' 2>&1 | grep '/128k'
+```
 
 OpenClaw gateway port check (only applicable if you run the upstream gateway variant):
 

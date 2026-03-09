@@ -20,6 +20,10 @@ assert_cmd docker
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT:-128000}"
+[[ "${goose_context_limit}" =~ ^[0-9]+$ ]] || fail "AGENTIC_GOOSE_CONTEXT_LIMIT must be numeric (got ${goose_context_limit})"
+(( goose_context_limit >= 2048 )) || fail "AGENTIC_GOOSE_CONTEXT_LIMIT must be >= 2048 (got ${goose_context_limit})"
+goose_context_display="$((goose_context_limit / 1000))k"
 install -d -m 0750 "${agentic_root}/deployments/optional"
 
 cat >"${agentic_root}/deployments/optional/goose.request" <<'REQ'
@@ -53,6 +57,8 @@ echo "${env_dump}" | grep -q '^XDG_STATE_HOME=/state/home/.local/state$' \
   || fail "optional-goose must set XDG_STATE_HOME=/state/home/.local/state"
 echo "${env_dump}" | grep -q '^OLLAMA_HOST=http://ollama-gate:11435$' \
   || fail "optional-goose must set OLLAMA_HOST=http://ollama-gate:11435"
+echo "${env_dump}" | grep -q "^GOOSE_CONTEXT_LIMIT=${goose_context_limit}$" \
+  || fail "optional-goose must set GOOSE_CONTEXT_LIMIT=${goose_context_limit}"
 
 mount_dump="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%v\n" .Source .Destination .RW}}{{end}}' "${goose_cid}")"
 echo "${mount_dump}" | grep -q '|/state|true$' \
@@ -72,6 +78,9 @@ timeout 30 docker exec "${goose_cid}" sh -lc 'test -d /state/home/.local/state/g
   || fail "optional-goose logs dir must be writable"
 timeout 30 docker exec "${goose_cid}" sh -lc 'test -f /state/home/.local/share/goose/sessions/sessions.db' \
   || fail "optional-goose sessions database must persist in /state/home/.local/share/goose/sessions/sessions.db"
+goose_banner="$(timeout 20 docker exec "${goose_cid}" sh -lc 'goose session -n k5-context-display-check' 2>&1 || true)"
+printf '%s\n' "${goose_banner}" | grep -q "/${goose_context_display}" \
+  || fail "optional-goose banner must expose context usage '/${goose_context_display}'"
 
 goose_pwd="$(timeout 20 docker exec "${goose_cid}" sh -lc 'pwd')"
 [[ "${goose_pwd}" == "/workspace" ]] \

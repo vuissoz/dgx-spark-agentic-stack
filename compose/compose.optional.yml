@@ -296,6 +296,7 @@ services:
       XDG_STATE_HOME: /state/home/.local/state
       GOOSE_PROVIDER: ${AGENTIC_GOOSE_PROVIDER:-ollama}
       GOOSE_MODEL: ${AGENTIC_GOOSE_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}}
+      GOOSE_CONTEXT_LIMIT: ${AGENTIC_GOOSE_CONTEXT_LIMIT:-128000}
       OLLAMA_HOST: http://ollama-gate:11435
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128

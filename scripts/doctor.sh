@@ -48,6 +48,7 @@ if [[ -n "${AGENTIC_DOCTOR_CRITICAL_PORTS:-}" ]]; then
 fi
 portainer_host_port="${PORTAINER_HOST_PORT:-9001}"
 openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-128000}"
 
 service_requires_proxy_env() {
   local service="$1"
@@ -944,6 +945,14 @@ PY
     fi
     if ! echo "${env_dump}" | grep -q '^OLLAMA_HOST=http://ollama-gate:11435$'; then
       doctor_fail "optional-goose must set OLLAMA_HOST=http://ollama-gate:11435"
+    fi
+    goose_context_limit_runtime="$(printf '%s\n' "${env_dump}" | sed -n 's/^GOOSE_CONTEXT_LIMIT=//p' | head -n 1)"
+    if [[ -z "${goose_context_limit_runtime}" ]]; then
+      doctor_fail "optional-goose must set GOOSE_CONTEXT_LIMIT"
+    elif ! [[ "${goose_context_limit_runtime}" =~ ^[0-9]+$ ]] || (( goose_context_limit_runtime < 2048 )); then
+      doctor_fail "optional-goose GOOSE_CONTEXT_LIMIT must be a numeric value >= 2048 (got: ${goose_context_limit_runtime})"
+    elif [[ "${goose_context_limit_runtime}" != "${goose_context_limit_expected}" ]]; then
+      doctor_fail_or_warn "optional-goose context limit mismatch: runtime=${goose_context_limit_runtime} expected=${goose_context_limit_expected}"
     fi
 
     if ! mount_destination_present "${cid}" "/state"; then

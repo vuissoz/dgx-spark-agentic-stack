@@ -39,6 +39,7 @@ export COMPOSE_PROFILES=trt
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `qwen3-coder:30b`) and reused by Ollama preload.
 Context window size is controlled by `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (default `262144`) and propagated to `OLLAMA_CONTEXT_LENGTH`.
+For Goose (`optional-goose`), the client-side context limit is controlled separately by `AGENTIC_GOOSE_CONTEXT_LIMIT` (default `128000`) and propagated to `GOOSE_CONTEXT_LIMIT` to keep a deterministic CLI meter (`0/128k` by default).
 
 ## Runtime Layout (summary)
 
@@ -521,6 +522,7 @@ Runtime prerequisites:
 
 - Global diagnostics: `./agent doctor`
 - Explicit stream tool-call probe (codex, claude, openhands, opencode, openclaw, pi-mono, goose): `./agent doctor --check-tool-stream-e2e`
+- Goose verification (context contract + `/128k` banner when `AGENTIC_GOOSE_CONTEXT_LIMIT=128000`): `./agent test K`
 - Test campaigns: `./agent test <A..L|V|all>`
 - VM `strict-prod` campaign (evidence + update/rollback + tests): `./agent vm test --name agentic-strict-prod`
 - Check VM state: `multipass list` then `multipass info <vm-name>` (`State: Running` expected)

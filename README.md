@@ -39,6 +39,7 @@ export COMPOSE_PROFILES=trt
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `qwen3-coder:30b`) et réutilisé pour le preload Ollama.
 La fenêtre de contexte est pilotée par `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (défaut `262144`) et propagée vers `OLLAMA_CONTEXT_LENGTH`.
+Pour Goose (`optional-goose`), la limite de contexte client est pilotée séparément par `AGENTIC_GOOSE_CONTEXT_LIMIT` (défaut `128000`) et propagée vers `GOOSE_CONTEXT_LIMIT` pour conserver une jauge CLI déterministe (`0/128k` par défaut).
 
 ## Arborescence runtime (résumé)
 
@@ -522,6 +523,7 @@ Préconditions (runtime):
 
 - Diagnostic global: `./agent doctor`
 - Probe explicite stream tool-calls (codex, claude, openhands, opencode, openclaw, pi-mono, goose): `./agent doctor --check-tool-stream-e2e`
+- Vérification Goose (contrat contexte + bannière `/128k` quand `AGENTIC_GOOSE_CONTEXT_LIMIT=128000`): `./agent test K`
 - Campagnes de tests: `./agent test <A..L|V|all>`
 - Campagne VM `strict-prod` (preuves + update/rollback + tests): `./agent vm test --name agentic-strict-prod`
 - Vérifier l'état de la VM: `multipass list` puis `multipass info <vm-name>` (`State: Running` attendu)
