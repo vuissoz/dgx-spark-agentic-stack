@@ -76,6 +76,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='${default_context_window}
   || fail "full setup onboarding env must export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='${default_context_window}'$" "${env_file}" \
   || fail "full setup onboarding env must export OLLAMA_CONTEXT_LENGTH"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='${default_context_window}'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_GOOSE_CONTEXT_LIMIT aligned with default model context window"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \
   || fail "full setup onboarding env must export OLLAMA_PRELOAD_GENERATE_MODEL"
 grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${root_dir}/agent-workspaces'$" "${env_file}" \

@@ -20,7 +20,14 @@ assert_cmd docker
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
-goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT:-128000}"
+goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
+runtime_goose_context_limit_file="${agentic_root}/deployments/runtime.env"
+if [[ -f "${runtime_goose_context_limit_file}" ]]; then
+  runtime_goose_context_limit="$(sed -n 's/^AGENTIC_GOOSE_CONTEXT_LIMIT=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
+  if [[ -n "${runtime_goose_context_limit}" ]]; then
+    goose_context_limit="${runtime_goose_context_limit}"
+  fi
+fi
 [[ "${goose_context_limit}" =~ ^[0-9]+$ ]] || fail "AGENTIC_GOOSE_CONTEXT_LIMIT must be numeric (got ${goose_context_limit})"
 (( goose_context_limit >= 2048 )) || fail "AGENTIC_GOOSE_CONTEXT_LIMIT must be >= 2048 (got ${goose_context_limit})"
 goose_context_display="$((goose_context_limit / 1000))k"

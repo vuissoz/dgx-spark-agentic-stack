@@ -79,7 +79,7 @@ For that reason, activation requires:
   - explicit non-root user mapping (`AGENT_RUNTIME_UID:AGENT_RUNTIME_GID`),
   - `HOME=/state/home` with XDG dirs under `/state/home/.config`, `/state/home/.local/share`, `/state/home/.local/state`,
   - default provider wiring: `GOOSE_PROVIDER=ollama`, `OLLAMA_HOST=http://ollama-gate:11435`,
-  - explicit Goose client window: `GOOSE_CONTEXT_LIMIT=${AGENTIC_GOOSE_CONTEXT_LIMIT:-128000}` (`/128k` banner by default).
+  - explicit Goose client window: `GOOSE_CONTEXT_LIMIT=${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}` (defaults to the selected model context window).
 - Runtime data:
   - `${AGENTIC_ROOT}/optional/goose/state`
   - `${AGENTIC_ROOT}/optional/goose/logs`
@@ -164,7 +164,9 @@ Goose context verification (`optional-goose` enabled):
 ```bash
 goose_cid="$(docker ps --filter "name=${AGENTIC_COMPOSE_PROJECT:-agentic}-optional-goose" --format '{{.ID}}' | head -n 1)"
 docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${goose_cid}" | grep '^GOOSE_CONTEXT_LIMIT='
-timeout 12 docker exec "${goose_cid}" sh -lc 'goose session -n context-check' 2>&1 | grep '/128k'
+goose_context_limit="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${goose_cid}" | sed -n 's/^GOOSE_CONTEXT_LIMIT=//p' | head -n 1)"
+goose_context_display="$((goose_context_limit / 1000))k"
+timeout 12 docker exec "${goose_cid}" sh -lc 'goose session -n context-check' 2>&1 | grep "/${goose_context_display}"
 ```
 
 OpenClaw gateway port check (only applicable if you run the upstream gateway variant):

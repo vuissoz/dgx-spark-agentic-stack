@@ -48,7 +48,7 @@ if [[ -n "${AGENTIC_DOCTOR_CRITICAL_PORTS:-}" ]]; then
 fi
 portainer_host_port="${PORTAINER_HOST_PORT:-9001}"
 openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
-goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-128000}"
+goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
 
 service_requires_proxy_env() {
   local service="$1"

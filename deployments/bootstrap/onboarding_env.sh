@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+preseed_goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT-}"
 # shellcheck source=scripts/lib/runtime.sh
 source "${REPO_ROOT}/scripts/lib/runtime.sh"
 OPTIONAL_TEMPLATE_DIR="${REPO_ROOT}/examples/optional"
@@ -1116,24 +1117,25 @@ write_env_file() {
   local ollama_models="${12}"
   local default_model="${13}"
   local default_model_context_window="${14}"
-  local grafana_admin_user="${15}"
-  local grafana_admin_password="${16}"
-  local limits_default_cpus="${17}"
-  local limits_default_mem="${18}"
-  local limits_core_cpus="${19}"
-  local limits_core_mem="${20}"
-  local limits_ollama_mem="${21}"
-  local limits_agents_cpus="${22}"
-  local limits_agents_mem="${23}"
-  local limits_ui_cpus="${24}"
-  local limits_ui_mem="${25}"
-  local limits_obs_cpus="${26}"
-  local limits_obs_mem="${27}"
-  local limits_rag_cpus="${28}"
-  local limits_rag_mem="${29}"
-  local limits_optional_cpus="${30}"
-  local limits_optional_mem="${31}"
-  local out_file="${32}"
+  local goose_context_limit="${15}"
+  local grafana_admin_user="${16}"
+  local grafana_admin_password="${17}"
+  local limits_default_cpus="${18}"
+  local limits_default_mem="${19}"
+  local limits_core_cpus="${20}"
+  local limits_core_mem="${21}"
+  local limits_ollama_mem="${22}"
+  local limits_agents_cpus="${23}"
+  local limits_agents_mem="${24}"
+  local limits_ui_cpus="${25}"
+  local limits_ui_mem="${26}"
+  local limits_obs_cpus="${27}"
+  local limits_obs_mem="${28}"
+  local limits_rag_cpus="${29}"
+  local limits_rag_mem="${30}"
+  local limits_optional_cpus="${31}"
+  local limits_optional_mem="${32}"
+  local out_file="${33}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1159,6 +1161,7 @@ export OLLAMA_MODELS_DIR=$(shell_quote "${ollama_models}")
 export AGENTIC_DEFAULT_MODEL=$(shell_quote "${default_model}")
 export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=$(shell_quote "${default_model_context_window}")
 export OLLAMA_CONTEXT_LENGTH=$(shell_quote "${default_model_context_window}")
+export AGENTIC_GOOSE_CONTEXT_LIMIT=$(shell_quote "${goose_context_limit}")
 export OLLAMA_PRELOAD_GENERATE_MODEL=$(shell_quote "${default_model}")
 export GRAFANA_ADMIN_USER=$(shell_quote "${grafana_admin_user}")
 export GRAFANA_ADMIN_PASSWORD=$(shell_quote "${grafana_admin_password}")
@@ -1593,6 +1596,8 @@ collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_net
 collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_ollama_models_for_profile "${profile}" "${root_path}")" "${ollama_models_override}" "OLLAMA_MODELS_DIR points to the shared Ollama model storage path on host."
 collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model."
+goose_context_limit="${preseed_goose_context_limit:-${default_model_context_window}}"
+validate_context_window_value "AGENTIC_GOOSE_CONTEXT_LIMIT" "${goose_context_limit}" || die "invalid AGENTIC_GOOSE_CONTEXT_LIMIT"
 grafana_admin_user="${grafana_admin_user_override:-${GRAFANA_ADMIN_USER:-admin}}"
 grafana_admin_password="${grafana_admin_password_override:-${GRAFANA_ADMIN_PASSWORD:-replace-with-strong-password}}"
 if [[ "${non_interactive}" -eq 0 && -z "${grafana_admin_password_override}" ]]; then
@@ -1639,6 +1644,7 @@ write_env_file \
   "${ollama_models}" \
   "${default_model}" \
   "${default_model_context_window}" \
+  "${goose_context_limit}" \
   "${grafana_admin_user}" \
   "${grafana_admin_password}" \
   "${limits_default_cpus}" \

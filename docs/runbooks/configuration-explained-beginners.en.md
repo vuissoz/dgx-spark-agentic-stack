@@ -113,7 +113,7 @@ Notes:
 | `AGENTIC_DEFAULT_MODEL` | model id string | `qwen3-coder:30b` | shell, `runtime.env` |
 | `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` | integer `>= 2048` (tokens) | `262144` | shell, `runtime.env` |
 | `OLLAMA_CONTEXT_LENGTH` | integer `>= 2048` (tokens) | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
-| `AGENTIC_GOOSE_CONTEXT_LIMIT` | integer `>= 2048` (tokens, Goose client limit) | `128000` | shell, `runtime.env` |
+| `AGENTIC_GOOSE_CONTEXT_LIMIT` | integer `>= 2048` (tokens, Goose client limit) | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
 | `OLLAMA_PRELOAD_GENERATE_MODEL` | model id string | `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3-coder:30b`) | `runtime.env` |
 | `OLLAMA_PRELOAD_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |

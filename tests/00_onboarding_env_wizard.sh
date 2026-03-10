@@ -202,6 +202,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${default_env_
   || fail "default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 262144"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${default_env_file}" \
   || fail "default OLLAMA_CONTEXT_LENGTH is not 262144"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='262144'$" "${default_env_file}" \
+  || fail "default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='qwen3-coder:30b'$" "${default_env_file}" \
   || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not qwen3-coder:30b"
 grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${default_env_file}" \
@@ -261,6 +263,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${override_env
   || fail "override default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW should remain 262144 when not overridden"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${override_env_file}" \
   || fail "override default OLLAMA_CONTEXT_LENGTH should remain 262144 when not overridden"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='262144'$" "${override_env_file}" \
+  || fail "override default AGENTIC_GOOSE_CONTEXT_LIMIT should remain aligned with default context window"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override OLLAMA_PRELOAD_GENERATE_MODEL is not applied"
 grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${override_env_file}" \
@@ -318,6 +322,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${rootless_def
   || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 262144"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 262144"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='262144'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${rootless_default_env_file}" \
   || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be False"
 grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama-gate:11435'$" "${rootless_default_env_file}" \
@@ -384,6 +390,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='32768'$" "${non_interacti
   || fail "non-interactive AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not applied"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='32768'$" "${non_interactive_env_file}" \
   || fail "non-interactive OLLAMA_CONTEXT_LENGTH is not applied"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='32768'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${work_dir}/ni-agent-workspaces'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_AGENT_WORKSPACES_ROOT is not applied"
 grep -q "^export AGENTIC_CLAUDE_WORKSPACES_DIR='${work_dir}/ni-workspaces/claude'$" "${non_interactive_env_file}" \

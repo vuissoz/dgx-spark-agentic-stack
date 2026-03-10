@@ -1,7 +1,7 @@
 # ADR-0068: Explicit Goose context limit set to 128k by default
 
 ## Status
-Accepted
+Superseded by ADR-0069
 
 ## Context
 - Issue `dgx-spark-agentic-stack-ebz` reported ambiguity between:
