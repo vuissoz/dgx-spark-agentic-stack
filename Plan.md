@@ -16,6 +16,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-ik6` (OpenClaw complet inspire Ollama launch) [CLOSED]
   - `dgx-spark-agentic-stack-b32` (run D8/E2 sur stack compose démarrée) [CLOSED]
   - `dgx-spark-agentic-stack-p94` (onboarding secret `huggingface.token` pour Flux/ComfyUI) [CLOSED]
+- Beads (relay webhook providers OpenClaw):
+  - `dgx-spark-agentic-stack-0hk` (relay public Telegram/WhatsApp -> queue/file -> injection locale OpenClaw) [OPEN]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -46,6 +48,10 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - bootstrap config/env,
   - endpoints/auth/audit/sandbox alignés,
   - tests E2 de contrat et de non-régression.
+- Ajouter une trajectoire webhook provider "production-safe" pour OpenClaw, sans exposition publique directe du service local:
+  - endpoint public relay (hors OpenClaw local),
+  - persistance queue/file durable,
+  - worker sortant DGX qui injecte vers `http://127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}/v1/webhooks/dm`.
 
 ## Steps
 1. Mettre à jour les defaults runtime/compose/entrypoints.
@@ -99,6 +105,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 ## Remaining Work (open)
 - Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
 - Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
+- Follow-up `dgx-spark-agentic-stack-0hk`: implémenter le relay webhook provider (Telegram/WhatsApp) via queue/file + consommation sortante et injection locale OpenClaw, avec tests E2 et runbook.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -125,3 +132,9 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - Ajout du guide: `docs/runbooks/openclaw-onboarding-rootless-dev.md`.
   - Contenu: mapping des commandes upstream OpenClaw (`openclaw onboard`, `openclaw gateway ...`) vers le workflow stack (`./agent onboard`, `AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional`, `./agent doctor`, `./agent test K`), avec conventions de sécurité locale (`127.0.0.1`, secrets runtime, allowlists).
   - Références: `https://openclaw.ai/` et `https://docs.openclaw.ai/start/getting-started`.
+
+## Addendum (2026-03-10, webhook providers OpenClaw)
+- Beads `dgx-spark-agentic-stack-0hk`: Telegram/WhatsApp exigent un endpoint webhook joignable et stable, distinct de l'ingress loopback OpenClaw.
+  - Décision: conserver `127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}` comme point d'entrée interne uniquement.
+  - Implémentation visée: relay public -> queue/file durable -> consumer sortant DGX -> `POST /v1/webhooks/dm` en local loopback.
+  - Exigences associées: validation signature provider, idempotence/retries, audit JSONL corrélé, tests E2 (nominal + erreurs + reprise).
