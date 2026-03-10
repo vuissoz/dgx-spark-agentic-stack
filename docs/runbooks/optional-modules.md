@@ -36,6 +36,8 @@ For that reason, activation requires:
     - tool execution: `/v1/tools/execute`, `/v1/sandbox/tools/execute`
 - Sandbox and egress hardening blueprint for upstream OpenClaw gateway deployments:
   - `docs/security/openclaw-sandbox-egress.md`
+- Dedicated onboarding flow for this stack (`rootless-dev`):
+  - `docs/runbooks/openclaw-onboarding-rootless-dev.md`
 - If replaced by upstream OpenClaw gateway, default listeners are typically:
   - `18789` (gateway),
   - `18791` (`gateway.port + 2`, browser control),

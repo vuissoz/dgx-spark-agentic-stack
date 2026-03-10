@@ -562,6 +562,8 @@ Préconditions (runtime):
   - `docs/runbooks/profiles.md`
 - Modules optionnels:
   - `docs/runbooks/optional-modules.md`
+- Onboarding OpenClaw cible stack (`rootless-dev`):
+  - `docs/runbooks/openclaw-onboarding-rootless-dev.md`
 - Triage observabilité (latence, erreurs egress, restarts, OOM):
   - `docs/runbooks/observability-triage.md`
 - Modèle de sécurité OpenClaw (sandbox + egress contrôlé, sans `docker.sock`):

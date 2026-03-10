@@ -119,3 +119,9 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - Stockage: `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` (mode `0600`).
   - Ergonomie Flux: `agent comfyui flux-1-dev --download` consomme automatiquement ce fichier si `--hf-token-file` n'est pas fourni.
   - Vérif: extensions tests onboarding (`00_onboarding_env_wizard`, `00_onboarding_full_setup_wizard`) pour couvrir le secret HF.
+
+## Addendum (2026-03-10, rootless-dev onboarding OpenClaw)
+- Beads `dgx-spark-agentic-stack-s0m`: runbook d'onboarding OpenClaw cible `rootless-dev` pour cette stack.
+  - Ajout du guide: `docs/runbooks/openclaw-onboarding-rootless-dev.md`.
+  - Contenu: mapping des commandes upstream OpenClaw (`openclaw onboard`, `openclaw gateway ...`) vers le workflow stack (`./agent onboard`, `AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional`, `./agent doctor`, `./agent test K`), avec conventions de sécurité locale (`127.0.0.1`, secrets runtime, allowlists).
+  - Références: `https://openclaw.ai/` et `https://docs.openclaw.ai/start/getting-started`.
