@@ -565,6 +565,8 @@ Runtime prerequisites:
   - `docs/runbooks/openclaw-onboarding-rootless-dev.md`
 - OpenClaw explained for beginners (English):
   - `docs/runbooks/openclaw-explained-beginners.en.md`
+- OpenClaw explained for beginners (French):
+  - `docs/runbooks/openclaw-explique-debutants.md`
 - Observability triage (latency, egress errors, restarts, OOM):
   - `docs/runbooks/observability-triage.md`
 - OpenClaw security model (sandbox + controlled egress, no `docker.sock`):

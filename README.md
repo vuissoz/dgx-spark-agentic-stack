@@ -564,6 +564,8 @@ Préconditions (runtime):
   - `docs/runbooks/optional-modules.md`
 - Onboarding OpenClaw cible stack (`rootless-dev`):
   - `docs/runbooks/openclaw-onboarding-rootless-dev.md`
+- Guide OpenClaw pour debutants (francais):
+  - `docs/runbooks/openclaw-explique-debutants.md`
 - Guide OpenClaw pour debutants (anglais):
   - `docs/runbooks/openclaw-explained-beginners.en.md`
 - Triage observabilité (latence, erreurs egress, restarts, OOM):
