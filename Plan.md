@@ -106,6 +106,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
 - Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
 - Follow-up `dgx-spark-agentic-stack-0hk`: implémenter le relay webhook provider (Telegram/WhatsApp) via queue/file + consommation sortante et injection locale OpenClaw, avec tests E2 et runbook.
+- Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -138,3 +139,9 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - Décision: conserver `127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}` comme point d'entrée interne uniquement.
   - Implémentation visée: relay public -> queue/file durable -> consumer sortant DGX -> `POST /v1/webhooks/dm` en local loopback.
   - Exigences associées: validation signature provider, idempotence/retries, audit JSONL corrélé, tests E2 (nominal + erreurs + reprise).
+
+## Addendum (2026-03-10, OpenClaw vers core agent)
+- Beads `dgx-spark-agentic-stack-qcy`: demander la bascule OpenClaw de `optional` vers le périmètre `core`.
+  - Cible: `agent up core` doit démarrer OpenClaw sans dépendre de `AGENTIC_OPTIONAL_MODULES=openclaw`.
+  - Contraintes: conserver les invariants CDC (loopback-only hôte, pas de `docker.sock`, hardening conteneur, secrets runtime, egress contrôlé).
+  - Impacts attendus: aligner `agent ls/logs/stop`, `agent doctor`, `agent update`, `agent rollback` et la doc d'onboarding avec ce nouveau placement.
