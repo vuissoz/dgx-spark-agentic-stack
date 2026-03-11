@@ -20,6 +20,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-0hk` (relay public Telegram/WhatsApp -> queue/file -> injection locale OpenClaw) [OPEN]
 - Beads (dashboard OpenClaw):
   - `dgx-spark-agentic-stack-j01` (dashboard operateur OpenClaw accessible via tunnel SSH/Tailscale, loopback-only) [OPEN]
+- Beads (wizard CLI OpenClaw en conteneur):
+  - `dgx-spark-agentic-stack-69e` (parite wizard `openclaw onboard/configure/agents add` dans un conteneur OpenClaw avec workspace persistant) [OPEN]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -110,6 +112,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Follow-up `dgx-spark-agentic-stack-0hk`: implémenter le relay webhook provider (Telegram/WhatsApp) via queue/file + consommation sortante et injection locale OpenClaw, avec tests E2 et runbook.
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
 - Follow-up `dgx-spark-agentic-stack-j01`: implémenter un dashboard OpenClaw opérateur, accessible via tunnel SSH/Tailscale comme les autres services UI, sans exposition publique.
+- Follow-up `dgx-spark-agentic-stack-69e`: permettre une session operateur dans le conteneur OpenClaw pour executer `openclaw onboard`, `openclaw configure` et `openclaw agents add <name>`, avec persistance workspace/config et couverture doctor/update/rollback.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -154,3 +157,9 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - Besoin: combler l'écart entre la commande dashboard upstream OpenClaw et le runtime actuel orienté API locale.
   - Cible: dashboard accessible uniquement via bind loopback hôte et tunnel SSH/Tailscale (même posture d'accès que les autres interfaces opérateur).
   - Contraintes: aucune exposition 0.0.0.0, pas de `docker.sock`, intégration `agent doctor` + `agent update` + `agent rollback`.
+
+## Addendum (2026-03-11, wizard CLI OpenClaw en conteneur)
+- Beads `dgx-spark-agentic-stack-69e`: demander la parite operateur avec le wizard upstream OpenClaw directement dans le conteneur.
+  - Besoin: pouvoir lancer en session conteneur les commandes `openclaw onboard`, `openclaw configure`, `openclaw agents add <name>` comme decrit dans la doc OpenClaw.
+  - Cible: conteneur OpenClaw operable comme les autres agents (session shell/tmux), avec workspace persistant et configuration standard de la stack.
+  - Contraintes: conventions `/srv/agentic/openclaw/{state,logs,workspaces}`, posture loopback-only, hardening conteneur standard, integration `agent doctor` + `agent update` + `agent rollback`.
