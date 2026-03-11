@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -23,6 +24,14 @@ def now_ts() -> str:
 
 def epoch_now() -> int:
     return int(time.time())
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
 
 
 def read_token(path: str) -> str:
@@ -216,6 +225,267 @@ def load_openclaw_profile(path: str, mode: str) -> dict[str, Any]:
     }
 
 
+def read_json_file(path: Path, fallback: Any) -> Any:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return fallback
+    return payload
+
+
+def write_json_file_atomic(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+
+
+def load_openclaw_relay_targets(path: str) -> dict[str, str]:
+    payload = read_json_object_file(path)
+    providers = payload.get("providers")
+    if not isinstance(providers, dict):
+        raise ValueError("openclaw relay targets file must define providers object")
+
+    targets: dict[str, str] = {}
+    for name, entry in providers.items():
+        if not isinstance(name, str):
+            continue
+        provider = name.strip().lower()
+        if not provider:
+            continue
+        target = ""
+        if isinstance(entry, dict):
+            target = str(entry.get("target", "")).strip()
+        if target:
+            targets[provider] = target
+
+    if not targets:
+        raise ValueError("openclaw relay targets file has no valid provider targets")
+    return targets
+
+
+def relay_event_id(provider: str, raw: bytes, payload: dict[str, Any], header_value: str) -> str:
+    candidate = header_value.strip()
+    if candidate and REQUEST_ID_RE.match(candidate):
+        return candidate
+
+    payload_id = str(payload.get("event_id", "")).strip()
+    if payload_id and REQUEST_ID_RE.match(payload_id):
+        return payload_id
+
+    digest = hashlib.sha256(provider.encode("utf-8") + b":" + raw).hexdigest()
+    return f"{provider}-{digest[:20]}"
+
+
+def list_json_files(path: Path) -> list[Path]:
+    if not path.exists():
+        return []
+    return sorted([item for item in path.glob("*.json") if item.is_file()])
+
+
+def relay_dir_counts(base_dir: Path) -> dict[str, int]:
+    pending_dir = base_dir / "queue" / "pending"
+    done_dir = base_dir / "queue" / "done"
+    dead_dir = base_dir / "queue" / "dead"
+    return {
+        "pending": len(list_json_files(pending_dir)),
+        "done": len(list_json_files(done_dir)),
+        "dead": len(list_json_files(dead_dir)),
+    }
+
+
+def relay_verify_signature(
+    *,
+    raw: bytes,
+    headers: Any,
+    secret: str,
+    timestamp_header: str,
+    signature_header: str,
+    max_skew_sec: int,
+) -> tuple[bool, str]:
+    if not secret:
+        return False, "provider_secret_missing"
+
+    ts_header = headers.get(timestamp_header, "").strip()
+    sig_header = headers.get(signature_header, "").strip()
+    if not ts_header or not sig_header:
+        return False, "missing_provider_signature_headers"
+
+    try:
+        ts_value = int(ts_header)
+    except ValueError:
+        return False, "invalid_provider_timestamp"
+
+    if abs(epoch_now() - ts_value) > max_skew_sec:
+        return False, "provider_timestamp_skew"
+
+    canonical = f"{ts_header}.".encode("utf-8") + raw
+    digest = hmac.new(secret.encode("utf-8"), canonical, hashlib.sha256).hexdigest()
+    expected_sig = f"sha256={digest}"
+    if not hmac.compare_digest(sig_header, expected_sig):
+        return False, "invalid_provider_signature"
+
+    return True, "ok"
+
+
+def relay_forward_to_openclaw(cfg: dict[str, Any], event: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    forward_url = str(cfg.get("forward_url", "")).strip()
+    if not forward_url:
+        return 503, {"error": "forward_url_missing"}
+
+    token = read_token(str(cfg.get("openclaw_token_file", "")))
+    if not token:
+        return 503, {"error": "openclaw_token_missing"}
+
+    webhook_secret = read_token(str(cfg.get("openclaw_webhook_secret_file", "")))
+    if not webhook_secret:
+        return 503, {"error": "openclaw_webhook_secret_missing"}
+
+    body_obj = {
+        "target": event.get("target", ""),
+        "message": event.get("message", ""),
+        "provider": event.get("provider", ""),
+        "event_id": event.get("event_id", ""),
+    }
+    body = json.dumps(body_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ts_header = str(epoch_now())
+    canonical = f"{ts_header}.".encode("utf-8") + body
+    digest = hmac.new(webhook_secret.encode("utf-8"), canonical, hashlib.sha256).hexdigest()
+    signature = f"sha256={digest}"
+    request_id = str(event.get("request_id", "")).strip() or uuid.uuid4().hex
+
+    req = urllib.request.Request(
+        forward_url,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "X-Request-ID": request_id,
+            "X-Webhook-Timestamp": ts_header,
+            "X-Webhook-Signature": signature,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=float(cfg.get("forward_timeout_sec", 4.0))) as resp:
+            payload = decode_json_bytes(resp.read())
+            payload.setdefault("status", resp.status)
+            return resp.status, payload
+    except urllib.error.HTTPError as exc:
+        payload = decode_json_bytes(exc.read())
+        if not payload:
+            payload = {"error": "forward_http_error", "status": exc.code}
+        return exc.code, payload
+    except urllib.error.URLError as exc:
+        return 503, {"error": "forward_unreachable", "detail": str(exc.reason)}
+    except TimeoutError:
+        return 504, {"error": "forward_timeout"}
+
+
+def relay_worker_loop(cfg: dict[str, Any], stop_event: threading.Event) -> None:
+    state_dir = Path(str(cfg.get("state_dir", "/state")))
+    queue_dir = state_dir / "queue"
+    pending_dir = queue_dir / "pending"
+    done_dir = queue_dir / "done"
+    dead_dir = queue_dir / "dead"
+    for path in (pending_dir, done_dir, dead_dir):
+        path.mkdir(parents=True, exist_ok=True)
+
+    lock = cfg.get("relay_lock")
+    if lock is None:
+        lock = threading.Lock()
+        cfg["relay_lock"] = lock
+
+    while not stop_event.is_set():
+        pending_files = list_json_files(pending_dir)
+        for item in pending_files:
+            event_payload = read_json_file(item, {})
+            if not isinstance(event_payload, dict):
+                continue
+
+            now_epoch = epoch_now()
+            next_attempt_at = int(event_payload.get("next_attempt_at", 0) or 0)
+            if next_attempt_at > now_epoch:
+                continue
+
+            status_code, forward_payload = relay_forward_to_openclaw(cfg, event_payload)
+            if 200 <= status_code < 300:
+                done_payload = dict(event_payload)
+                done_payload["forward_status"] = status_code
+                done_payload["forwarded_at"] = now_ts()
+                done_payload["forward_response"] = forward_payload
+                with lock:
+                    write_json_file_atomic(done_dir / item.name, done_payload)
+                    item.unlink(missing_ok=True)
+
+                append_audit(
+                    str(cfg["audit_log"]),
+                    {
+                        "ts": now_ts(),
+                        "module": "openclaw-relay",
+                        "action": "forward",
+                        "decision": "allow",
+                        "provider": event_payload.get("provider", ""),
+                        "event_id": event_payload.get("event_id", ""),
+                        "request_id": event_payload.get("request_id", ""),
+                        "status": status_code,
+                    },
+                )
+                continue
+
+            attempts = int(event_payload.get("attempts", 0) or 0) + 1
+            max_attempts = int(cfg.get("max_attempts", 10))
+            retry_base = int(cfg.get("retry_base_sec", 2))
+            retry_max = int(cfg.get("retry_max_sec", 120))
+            delay = min(retry_max, retry_base * (2 ** max(0, attempts - 1)))
+
+            event_payload["attempts"] = attempts
+            event_payload["last_error"] = str(forward_payload.get("error", f"http_{status_code}"))
+            event_payload["last_status"] = status_code
+            event_payload["last_attempt_at"] = now_ts()
+
+            if attempts >= max_attempts:
+                event_payload["dead_lettered_at"] = now_ts()
+                with lock:
+                    write_json_file_atomic(dead_dir / item.name, event_payload)
+                    item.unlink(missing_ok=True)
+                append_audit(
+                    str(cfg["audit_log"]),
+                    {
+                        "ts": now_ts(),
+                        "module": "openclaw-relay",
+                        "action": "forward",
+                        "decision": "deny",
+                        "reason": "max_attempts_exceeded",
+                        "provider": event_payload.get("provider", ""),
+                        "event_id": event_payload.get("event_id", ""),
+                        "request_id": event_payload.get("request_id", ""),
+                        "status": status_code,
+                    },
+                )
+                continue
+
+            event_payload["next_attempt_at"] = epoch_now() + delay
+            with lock:
+                write_json_file_atomic(item, event_payload)
+            append_audit(
+                str(cfg["audit_log"]),
+                {
+                    "ts": now_ts(),
+                    "module": "openclaw-relay",
+                    "action": "retry_scheduled",
+                    "decision": "allow",
+                    "provider": event_payload.get("provider", ""),
+                    "event_id": event_payload.get("event_id", ""),
+                    "request_id": event_payload.get("request_id", ""),
+                    "delay_sec": delay,
+                    "attempts": attempts,
+                },
+            )
+
+        stop_event.wait(float(cfg.get("poll_interval_sec", 1.5)))
+
+
 class OptionalHandler(BaseHTTPRequestHandler):
     server_version = "agentic-optional/2.0"
 
@@ -381,7 +651,249 @@ class OptionalHandler(BaseHTTPRequestHandler):
         except TimeoutError:
             return 504, {"error": "sandbox_timeout", "request_id": request_id}
 
+    def _dashboard_html(self) -> str:
+        return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenClaw Operator Dashboard</title>
+  <style>
+    :root { --bg:#0e1117; --fg:#e6edf3; --card:#161b22; --ok:#2ea043; --warn:#d29922; --bad:#f85149; --accent:#58a6ff; }
+    body { margin:0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:var(--bg); color:var(--fg); }
+    main { max-width:980px; margin:0 auto; padding:20px; }
+    h1 { margin:0 0 12px; font-size:22px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+    .card { background:var(--card); border:1px solid #30363d; border-radius:10px; padding:12px; }
+    .muted { color:#8b949e; font-size:12px; }
+    .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+    input, button { font:inherit; border-radius:8px; border:1px solid #30363d; background:#0d1117; color:var(--fg); padding:8px; }
+    button { background:#1f6feb; border-color:#1f6feb; cursor:pointer; }
+    pre { white-space:pre-wrap; word-break:break-word; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>OpenClaw Operator Dashboard</h1>
+  <p class="muted">Loopback-only UI for SSH/Tailscale tunnels.</p>
+  <div class="grid">
+    <section class="card">
+      <h2>Runtime</h2>
+      <div id="runtime">loading...</div>
+    </section>
+    <section class="card">
+      <h2>Relay Queue</h2>
+      <div id="relay">loading...</div>
+    </section>
+    <section class="card">
+      <h2>Signed DM Probe</h2>
+      <p class="muted">Sends a request through local OpenClaw API using your bearer token.</p>
+      <form id="dm-form">
+        <p><input id="token" type="password" placeholder="Bearer token" style="width:100%" /></p>
+        <p><input id="target" type="text" placeholder="target (e.g. discord:user:example)" style="width:100%" /></p>
+        <p><input id="message" type="text" placeholder="message" style="width:100%" /></p>
+        <p><button type="submit">Send DM</button></p>
+      </form>
+      <pre id="dm-result" class="muted">idle</pre>
+    </section>
+  </div>
+</main>
+<script>
+async function loadStatus() {
+  try {
+    const r = await fetch('/v1/dashboard/status', {cache:'no-store'});
+    const data = await r.json();
+    const runtime = data.runtime || {};
+    const relay = data.relay || {};
+    const runtimeEl = document.getElementById('runtime');
+    const relayEl = document.getElementById('relay');
+    runtimeEl.innerHTML =
+      '<div>Mode: <strong>' + (runtime.mode || '-') + '</strong></div>' +
+      '<div>Profile: <strong>' + (runtime.profile_id || '-') + '</strong></div>' +
+      '<div>Sandbox: <strong class=\"' + (runtime.sandbox === 'reachable' ? 'ok' : 'bad') + '\">' + (runtime.sandbox || '-') + '</strong></div>';
+    relayEl.innerHTML =
+      '<div>Pending: <strong>' + (relay.pending ?? '-') + '</strong></div>' +
+      '<div>Done: <strong>' + (relay.done ?? '-') + '</strong></div>' +
+      '<div>Dead: <strong class=\"' + ((relay.dead || 0) > 0 ? 'warn' : 'ok') + '\">' + (relay.dead ?? '-') + '</strong></div>';
+  } catch (err) {
+    document.getElementById('runtime').textContent = 'status unavailable';
+    document.getElementById('relay').textContent = 'status unavailable';
+  }
+}
+
+document.getElementById('dm-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const token = document.getElementById('token').value.trim();
+  const target = document.getElementById('target').value.trim();
+  const message = document.getElementById('message').value.trim();
+  const out = document.getElementById('dm-result');
+  try {
+    const resp = await fetch('/v1/dm', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({target, message})
+    });
+    const payload = await resp.json();
+    out.textContent = JSON.stringify({status: resp.status, payload}, null, 2);
+  } catch (err) {
+    out.textContent = String(err);
+  }
+});
+
+loadStatus();
+setInterval(loadStatus, 5000);
+</script>
+</body>
+</html>
+"""
+
+    def _openclaw_dashboard_status(self) -> dict[str, Any]:
+        runtime: dict[str, Any] = {
+            "mode": "openclaw",
+            "profile_id": self.cfg.get("profile_id", ""),
+            "profile_version": self.cfg.get("profile_version", ""),
+        }
+        sandbox_ok, _sandbox_reason = self._sandbox_health()
+        runtime["sandbox"] = "reachable" if sandbox_ok else "unreachable"
+
+        relay: dict[str, Any] = {"pending": None, "done": None, "dead": None}
+        relay_url = str(self.cfg.get("relay_status_url", "")).strip()
+        if relay_url:
+            try:
+                req = urllib.request.Request(relay_url, method="GET")
+                with urllib.request.urlopen(req, timeout=2.0) as resp:
+                    payload = decode_json_bytes(resp.read())
+                    if isinstance(payload, dict):
+                        relay = {
+                            "pending": payload.get("pending"),
+                            "done": payload.get("done"),
+                            "dead": payload.get("dead"),
+                        }
+            except Exception:
+                relay = {"pending": None, "done": None, "dead": None}
+
+        return {"relay": relay, "runtime": runtime}
+
+    def _handle_openclaw_relay_ingest(self) -> None:
+        request_id = self._request_id()
+        provider_match = re.match(r"^/v1/providers/([a-zA-Z0-9_.-]+)/webhook$", self.path)
+        if not provider_match:
+            self._json_response(404, {"error": "not_found"})
+            return
+        provider = provider_match.group(1).strip().lower()
+
+        provider_secrets = self.cfg.get("provider_secrets", {})
+        if not isinstance(provider_secrets, dict) or provider not in provider_secrets:
+            self._json_response(404, {"error": "unknown_provider", "request_id": request_id})
+            return
+
+        raw = self._read_body_bytes()
+        payload = decode_json_bytes(raw)
+        secret = str(provider_secrets.get(provider, ""))
+        sig_ok, sig_reason = relay_verify_signature(
+            raw=raw,
+            headers=self.headers,
+            secret=secret,
+            timestamp_header=str(self.cfg.get("provider_timestamp_header", "X-Relay-Timestamp")),
+            signature_header=str(self.cfg.get("provider_signature_header", "X-Relay-Signature")),
+            max_skew_sec=int(self.cfg.get("provider_max_skew_sec", 300)),
+        )
+        if not sig_ok:
+            append_audit(
+                str(self.cfg["audit_log"]),
+                {
+                    "ts": now_ts(),
+                    "module": "openclaw-relay",
+                    "action": "ingest",
+                    "decision": "deny",
+                    "reason": sig_reason,
+                    "provider": provider,
+                    "request_id": request_id,
+                },
+            )
+            self._json_response(403, {"error": sig_reason, "request_id": request_id})
+            return
+
+        message = str(payload.get("message", "")).strip()
+        if not message:
+            message = str(payload.get("text", "")).strip()
+        if not message:
+            message = str(payload.get("body", "")).strip()
+        if not message:
+            self._json_response(400, {"error": "message_required", "request_id": request_id})
+            return
+
+        provider_targets = self.cfg.get("provider_targets", {})
+        if not isinstance(provider_targets, dict):
+            provider_targets = {}
+        target = str(payload.get("target", "")).strip() or str(provider_targets.get(provider, "")).strip()
+        if not target:
+            self._json_response(400, {"error": "target_required", "request_id": request_id})
+            return
+
+        event_id_header = self.headers.get(str(self.cfg.get("provider_event_id_header", "X-Provider-Event-ID")), "")
+        event_id = relay_event_id(provider, raw, payload, event_id_header)
+        state_dir = Path(str(self.cfg.get("state_dir", "/state")))
+        pending_dir = state_dir / "queue" / "pending"
+        done_dir = state_dir / "queue" / "done"
+        dead_dir = state_dir / "queue" / "dead"
+        for path in (pending_dir, done_dir, dead_dir):
+            path.mkdir(parents=True, exist_ok=True)
+
+        pending_file = pending_dir / f"{event_id}.json"
+        done_file = done_dir / f"{event_id}.json"
+        dead_file = dead_dir / f"{event_id}.json"
+        if done_file.exists() or dead_file.exists() or pending_file.exists():
+            self._json_response(202, {"event_id": event_id, "request_id": request_id, "status": "duplicate"})
+            return
+
+        event_payload = {
+            "attempts": 0,
+            "event_id": event_id,
+            "message": message,
+            "provider": provider,
+            "raw_payload": payload,
+            "received_at": now_ts(),
+            "request_id": request_id,
+            "target": target,
+        }
+        lock = self.cfg.get("relay_lock")
+        if lock is None:
+            lock = threading.Lock()
+            self.cfg["relay_lock"] = lock
+        with lock:
+            write_json_file_atomic(pending_file, event_payload)
+
+        append_audit(
+            str(self.cfg["audit_log"]),
+            {
+                "ts": now_ts(),
+                "module": "openclaw-relay",
+                "action": "ingest",
+                "decision": "allow",
+                "provider": provider,
+                "event_id": event_id,
+                "request_id": request_id,
+                "target": target,
+            },
+        )
+        self._json_response(202, {"event_id": event_id, "request_id": request_id, "status": "queued"})
+
     def do_GET(self) -> None:
+        if self.cfg["mode"] == "openclaw-relay":
+            if self.path == "/healthz":
+                self._json_response(200, {"mode": "openclaw-relay", "status": "ok"})
+                return
+            if self.path == "/v1/queue/status":
+                counts = relay_dir_counts(Path(str(self.cfg.get("state_dir", "/state"))))
+                self._json_response(200, counts)
+                return
+            self._json_response(404, {"error": "not_found"})
+            return
+
         health_paths = self.cfg.get("endpoint_health_paths", {"/healthz"})
         if self.path in health_paths:
             if self.cfg["mode"] == "openclaw":
@@ -401,6 +913,25 @@ class OptionalHandler(BaseHTTPRequestHandler):
                 return
 
             self._json_response(200, {"mode": self.cfg["mode"], "status": "ok"})
+            return
+
+        if self.path in self.cfg.get("endpoint_dashboard_paths", {"/dashboard"}) and self.cfg["mode"] == "openclaw":
+            if not bool(self.cfg.get("dashboard_enabled", True)):
+                self._json_response(404, {"error": "not_found"})
+                return
+            body = self._dashboard_html().encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if self.path in self.cfg.get("endpoint_dashboard_status_paths", {"/v1/dashboard/status"}) and self.cfg["mode"] == "openclaw":
+            if not bool(self.cfg.get("dashboard_enabled", True)):
+                self._json_response(404, {"error": "not_found"})
+                return
+            self._json_response(200, self._openclaw_dashboard_status())
             return
 
         if self.path in self.cfg.get("endpoint_sandbox_health_paths", {"/v1/sandbox/health"}) and self.cfg["mode"] == "openclaw":
@@ -448,6 +979,10 @@ class OptionalHandler(BaseHTTPRequestHandler):
                 self._handle_openclaw_tool_execute()
                 return
             self._json_response(404, {"error": "not_found"})
+            return
+
+        if self.cfg["mode"] == "openclaw-relay":
+            self._handle_openclaw_relay_ingest()
             return
 
         if self.cfg["mode"] == "openclaw-sandbox":
@@ -742,7 +1277,7 @@ class OptionalHandler(BaseHTTPRequestHandler):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Agentic optional module service")
-    parser.add_argument("mode", choices=["openclaw", "openclaw-sandbox", "mcp"])
+    parser.add_argument("mode", choices=["openclaw", "openclaw-sandbox", "openclaw-relay", "mcp"])
     return parser.parse_args()
 
 
@@ -752,6 +1287,7 @@ def main() -> int:
     default_port_map = {
         "openclaw": "8111",
         "openclaw-sandbox": "8112",
+        "openclaw-relay": "8113",
         "mcp": "8122",
     }
 
@@ -819,7 +1355,11 @@ def main() -> int:
             "endpoint_webhook_dm_paths": profile_cfg["endpoints"]["webhook_dm"],
             "endpoint_tool_execute_paths": profile_cfg["endpoints"]["tool_execute"],
             "endpoint_sandbox_execute_paths": profile_cfg["endpoints"]["sandbox_execute"],
+            "endpoint_dashboard_paths": {"/dashboard", "/ui/dashboard"},
+            "endpoint_dashboard_status_paths": {"/v1/dashboard/status"},
             "bearer_token_required": profile_cfg["bearer_token_required"],
+            "dashboard_enabled": env_flag("OPENCLAW_DASHBOARD_ENABLED", True),
+            "relay_status_url": os.environ.get("OPENCLAW_RELAY_STATUS_URL", "http://optional-openclaw-relay:8113/v1/queue/status"),
         }
 
         if not cfg["token"]:
@@ -874,6 +1414,61 @@ def main() -> int:
             print(f"ERROR: openclaw-sandbox profile requires non-empty tool allowlist: {allowlist_file}")
             return 2
 
+    elif args.mode == "openclaw-relay":
+        relay_targets_file = os.environ.get("OPENCLAW_RELAY_PROVIDER_TARGETS_FILE", "/config/relay_targets.json")
+        telegram_secret_file = os.environ.get(
+            "OPENCLAW_RELAY_TELEGRAM_SECRET_FILE",
+            "/run/secrets/openclaw.relay.telegram.secret",
+        )
+        whatsapp_secret_file = os.environ.get(
+            "OPENCLAW_RELAY_WHATSAPP_SECRET_FILE",
+            "/run/secrets/openclaw.relay.whatsapp.secret",
+        )
+        try:
+            provider_targets = load_openclaw_relay_targets(relay_targets_file)
+        except ValueError as exc:
+            print(f"ERROR: {exc}")
+            return 2
+
+        provider_secrets: dict[str, str] = {}
+        telegram_secret = read_token(telegram_secret_file)
+        whatsapp_secret = read_token(whatsapp_secret_file)
+        if telegram_secret:
+            provider_secrets["telegram"] = telegram_secret
+        if whatsapp_secret:
+            provider_secrets["whatsapp"] = whatsapp_secret
+        if not provider_secrets:
+            print("ERROR: openclaw relay requires at least one provider secret (telegram/whatsapp)")
+            return 2
+
+        cfg = {
+            "mode": args.mode,
+            "audit_log": audit_log,
+            "state_dir": os.environ.get("OPENCLAW_RELAY_STATE_DIR", "/state"),
+            "provider_targets": provider_targets,
+            "provider_secrets": provider_secrets,
+            "provider_signature_header": os.environ.get("OPENCLAW_RELAY_SIGNATURE_HEADER", "X-Relay-Signature"),
+            "provider_timestamp_header": os.environ.get("OPENCLAW_RELAY_TIMESTAMP_HEADER", "X-Relay-Timestamp"),
+            "provider_event_id_header": os.environ.get("OPENCLAW_RELAY_EVENT_ID_HEADER", "X-Provider-Event-ID"),
+            "provider_max_skew_sec": int(os.environ.get("OPENCLAW_RELAY_MAX_SKEW_SEC", "300") or 300),
+            "forward_url": os.environ.get("OPENCLAW_RELAY_FORWARD_URL", "http://optional-openclaw:8111/v1/webhooks/dm"),
+            "openclaw_token_file": os.environ.get("OPENCLAW_RELAY_OPENCLAW_TOKEN_FILE", "/run/secrets/openclaw.token"),
+            "openclaw_webhook_secret_file": os.environ.get(
+                "OPENCLAW_RELAY_OPENCLAW_WEBHOOK_SECRET_FILE",
+                "/run/secrets/openclaw.webhook_secret",
+            ),
+            "forward_timeout_sec": float(os.environ.get("OPENCLAW_RELAY_FORWARD_TIMEOUT_SEC", "4")),
+            "max_attempts": int(os.environ.get("OPENCLAW_RELAY_MAX_ATTEMPTS", "10")),
+            "retry_base_sec": int(os.environ.get("OPENCLAW_RELAY_RETRY_BASE_SEC", "2")),
+            "retry_max_sec": int(os.environ.get("OPENCLAW_RELAY_RETRY_MAX_SEC", "120")),
+            "poll_interval_sec": float(os.environ.get("OPENCLAW_RELAY_POLL_INTERVAL_SEC", "1.5")),
+            "relay_lock": threading.Lock(),
+        }
+
+        if not cfg["forward_url"]:
+            print("ERROR: OPENCLAW_RELAY_FORWARD_URL cannot be empty")
+            return 2
+
     else:
         token_file = os.environ.get("MCP_AUTH_TOKEN_FILE", "/run/secrets/mcp.token")
         allowlist_file = os.environ.get("MCP_ALLOWLIST_FILE", "/config/tool_allowlist.txt")
@@ -891,6 +1486,21 @@ def main() -> int:
             print(f"ERROR: token missing from {token_file}")
             return 2
 
+    relay_stop_event = threading.Event()
+    relay_thread: threading.Thread | None = None
+    if args.mode == "openclaw-relay":
+        relay_state_dir = Path(str(cfg.get("state_dir", "/state")))
+        (relay_state_dir / "queue" / "pending").mkdir(parents=True, exist_ok=True)
+        (relay_state_dir / "queue" / "done").mkdir(parents=True, exist_ok=True)
+        (relay_state_dir / "queue" / "dead").mkdir(parents=True, exist_ok=True)
+        relay_thread = threading.Thread(
+            target=relay_worker_loop,
+            kwargs={"cfg": cfg, "stop_event": relay_stop_event},
+            daemon=True,
+            name="openclaw-relay-worker",
+        )
+        relay_thread.start()
+
     server = ThreadingHTTPServer((bind_host, bind_port), OptionalHandler)
     server.cfg = cfg  # type: ignore[attr-defined]
     print(f"INFO: optional module '{args.mode}' listening on {bind_host}:{bind_port}")
@@ -899,6 +1509,10 @@ def main() -> int:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        relay_stop_event.set()
+        if relay_thread is not None:
+            relay_thread.join(timeout=2.0)
 
     return 0
 

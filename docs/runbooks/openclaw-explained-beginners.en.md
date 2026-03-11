@@ -12,9 +12,10 @@ For the full operational procedure in `rootless-dev`, see:
 ## 1. What OpenClaw Is (in this stack)
 
 Think of OpenClaw as a controlled messaging/automation API layer.
-In this repository, OpenClaw is deployed as an optional module with two services:
+In this repository, OpenClaw is deployed as an optional module with three services:
 - `optional-openclaw`: main API service,
-- `optional-openclaw-sandbox`: restricted tool execution backend.
+- `optional-openclaw-sandbox`: restricted tool execution backend,
+- `optional-openclaw-relay`: provider webhook relay with durable queue + local injection.
 
 Simple mental model:
 1. a request reaches OpenClaw,
@@ -23,7 +24,7 @@ Simple mental model:
 4. if a tool action is needed, it forwards to the sandbox,
 5. audit logs are written.
 
-## 2. Why There Are Two Containers
+## 2. Why There Are Three Containers
 
 ## `optional-openclaw` (API)
 - receives API requests,
@@ -35,6 +36,11 @@ Simple mental model:
 - runs allowed tool actions in a tighter execution boundary,
 - uses a dedicated allowlist,
 - is not exposed on a host public interface.
+
+## `optional-openclaw-relay` (provider ingress/queue)
+- accepts signed provider webhooks (`/v1/providers/<provider>/webhook`),
+- stores events durably in queue files,
+- forwards to local OpenClaw webhook endpoint with retries/dead-letter.
 
 Reason for this split:
 - reduce blast radius,

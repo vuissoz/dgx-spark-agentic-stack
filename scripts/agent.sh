@@ -120,7 +120,7 @@ agent_workspace_dir() {
     codex) printf '%s\n' "${AGENTIC_CODEX_WORKSPACES_DIR}" ;;
     opencode) printf '%s\n' "${AGENTIC_OPENCODE_WORKSPACES_DIR}" ;;
     vibestral) printf '%s\n' "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}" ;;
-    openclaw) printf '%s\n' "${AGENTIC_ROOT}/optional/openclaw/state" ;;
+    openclaw) printf '%s\n' "${AGENTIC_ROOT}/optional/openclaw/workspaces" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/optional/pi-mono/workspaces" ;;
     goose) printf '%s\n' "${AGENTIC_ROOT}/optional/goose/workspaces" ;;
     *) return 1 ;;
@@ -228,7 +228,9 @@ optional_module_secret_files() {
     openclaw)
       printf '%s\n' \
         "${AGENTIC_ROOT}/secrets/runtime/openclaw.token" \
-        "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+        "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret" \
+        "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret" \
+        "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
       ;;
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
@@ -240,7 +242,9 @@ optional_module_secret_files() {
 optional_module_config_files() {
   case "$1" in
     openclaw)
-      printf '%s\n' "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json"
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json" \
+        "${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json"
       ;;
     mcp|pi-mono|goose|portainer) ;;
     *) return 1 ;;
@@ -277,6 +281,30 @@ for key in ("dm", "webhook_dm", "tool_execute", "sandbox_execute", "profile"):
     values = endpoints.get(key)
     if not isinstance(values, list) or not values:
         raise SystemExit(f"runtime.endpoints.{key} must be a non-empty array")
+PY
+}
+
+validate_openclaw_relay_targets_file_contract() {
+  local targets_file="$1"
+  python3 - "${targets_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit("relay targets file must be an object")
+providers = payload.get("providers")
+if not isinstance(providers, dict) or not providers:
+    raise SystemExit("relay targets file must define providers object with entries")
+for name, entry in providers.items():
+    if not isinstance(name, str) or not name.strip():
+        raise SystemExit("provider key must be a non-empty string")
+    if not isinstance(entry, dict):
+        raise SystemExit(f"provider entry must be an object: {name}")
+    target = entry.get("target")
+    if not isinstance(target, str) or not target.strip():
+        raise SystemExit(f"provider entry must define non-empty target: {name}")
 PY
 }
 
@@ -340,9 +368,16 @@ validate_optional_module_prereqs() {
       || die "Optional module '${module}' requires runtime config file: ${config_file}"
     if [[ "${module}" == "openclaw" ]]; then
       command -v python3 >/dev/null 2>&1 \
-        || die "python3 is required to validate OpenClaw integration profile"
-      if ! validate_openclaw_profile_file_contract "${config_file}" >/dev/null 2>&1; then
-        die "Optional module '${module}' has invalid integration profile: ${config_file}"
+        || die "python3 is required to validate OpenClaw optional module config"
+      if [[ "$(basename "${config_file}")" == "integration-profile.current.json" ]]; then
+        if ! validate_openclaw_profile_file_contract "${config_file}" >/dev/null 2>&1; then
+          die "Optional module '${module}' has invalid integration profile: ${config_file}"
+        fi
+      fi
+      if [[ "$(basename "${config_file}")" == "relay_targets.json" ]]; then
+        if ! validate_openclaw_relay_targets_file_contract "${config_file}" >/dev/null 2>&1; then
+          die "Optional module '${module}' has invalid relay targets file: ${config_file}"
+        fi
       fi
     fi
   done
@@ -395,7 +430,8 @@ optional_module_build_inputs() {
     optional-openclaw|optional-mcp-catalog)
       printf '%s\n' \
         "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py"
+        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_cli.py"
       ;;
     optional-pi-mono)
       printf '%s\n' \
@@ -1131,6 +1167,8 @@ prepare_tool_session() {
       docker exec "${container_id}" sh -lc "mkdir -p '${workspace}'"
       ;;
     openclaw-shell)
+      workspace="/workspace/${project}"
+      docker exec "${container_id}" sh -lc "mkdir -p '${workspace}'"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -1149,6 +1187,8 @@ prepare_tool_session() {
     goose-direct)
       ;;
     openclaw-shell)
+      docker exec "${container_id}" sh -lc "test -x /usr/local/bin/openclaw" \
+        || die "openclaw CLI is missing in optional-openclaw container (/usr/local/bin/openclaw)"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -1168,6 +1208,8 @@ cmd_tool_attach() {
   workspace=""
   if [[ "${session_mode}" == "tmux" || "${session_mode}" == "goose-direct" ]]; then
     workspace="/workspace/${project}"
+  elif [[ "${session_mode}" == "openclaw-shell" ]]; then
+    workspace="/workspace/${project}"
   fi
 
   case "${session_mode}" in
@@ -1182,9 +1224,12 @@ cmd_tool_attach() {
       printf 'INFO: launching goose in %s; stop with Ctrl-c.\n' "${workspace}"
       ;;
     openclaw-shell)
-      printf 'INFO: openclaw uses the optional OpenClaw service shell (no tmux).\n'
+      printf 'INFO: openclaw uses the optional OpenClaw service shell (project workspace mounted).\n'
+      printf 'INFO: session workspace is %s.\n' "${workspace}"
       printf 'INFO: OpenClaw API is reachable via host loopback on http://127.0.0.1:%s.\n' "${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
       printf 'INFO: internal docker-network endpoint is http://optional-openclaw:8111.\n'
+      printf 'INFO: OpenClaw dashboard is available at http://127.0.0.1:%s/dashboard.\n' "${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+      printf 'INFO: provider relay ingress is available at http://127.0.0.1:%s/v1/providers/<provider>/webhook.\n' "${OPENCLAW_RELAY_HOST_PORT:-18112}"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -1204,7 +1249,7 @@ cmd_tool_attach() {
       exec docker exec -it "${container_id}" sh -lc "cd '${workspace}' && exec goose"
       ;;
     openclaw-shell)
-      exec docker exec -it "${container_id}" sh
+      exec docker exec -it "${container_id}" sh -lc "cd '${workspace}' && exec sh"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -1297,7 +1342,7 @@ cmd_stop_tool() {
   case "${service}" in
     optional-openclaw)
       compose_file="$(stack_to_compose_file optional)"
-      services_to_stop+=(optional-openclaw-sandbox)
+      services_to_stop+=(optional-openclaw-sandbox optional-openclaw-relay)
       ;;
     optional-pi-mono|optional-goose)
       compose_file="$(stack_to_compose_file optional)"
@@ -1445,6 +1490,8 @@ forget_target_paths() {
       printf '%s\n' \
         "${AGENTIC_ROOT}/optional/openclaw/config" \
         "${AGENTIC_ROOT}/optional/openclaw/state" \
+        "${AGENTIC_ROOT}/optional/openclaw/workspaces" \
+        "${AGENTIC_ROOT}/optional/openclaw/relay" \
         "${AGENTIC_ROOT}/optional/openclaw/logs" \
         "${AGENTIC_ROOT}/optional/openclaw/sandbox/state"
       ;;
@@ -1507,7 +1554,7 @@ forget_target_services() {
     opencode) printf '%s\n' agentic-opencode ;;
     vibestral) printf '%s\n' agentic-vibestral ;;
     comfyui) printf '%s\n' comfyui comfyui-loopback ;;
-    openclaw) printf '%s\n' optional-openclaw optional-openclaw-sandbox ;;
+    openclaw) printf '%s\n' optional-openclaw optional-openclaw-sandbox optional-openclaw-relay ;;
     openhands) printf '%s\n' openhands ;;
     openwebui) printf '%s\n' openwebui ;;
     qdrant) printf '%s\n' qdrant rag-retriever rag-worker opensearch ;;
@@ -1515,6 +1562,7 @@ forget_target_services() {
     all)
       printf '%s\n' \
         optional-openclaw optional-openclaw-sandbox \
+        optional-openclaw-relay \
         qdrant rag-retriever rag-worker opensearch \
         prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter \
         openwebui openhands comfyui comfyui-loopback \
@@ -2582,6 +2630,17 @@ normalize_logs_target() {
   esac
 }
 
+resolve_logs_container() {
+  local normalized_target="$1"
+  local cid
+  cid="$(service_container_id "${normalized_target}" 2>/dev/null || true)"
+  if [[ -n "${cid}" ]]; then
+    printf '%s\n' "${cid}"
+    return 0
+  fi
+  printf '%s\n' "${normalized_target}"
+}
+
 run_tests() {
   local selector="$1"
   local previous_test_mode
@@ -2811,7 +2870,8 @@ case "$cmd" in
   logs)
     [[ $# -ge 2 ]] || die "Usage: agent logs <service>"
     require_cmd docker
-    docker logs --tail "${AGENT_LOG_TAIL:-200}" -f "$(normalize_logs_target "$2")"
+    normalized_logs_target="$(normalize_logs_target "$2")"
+    docker logs --tail "${AGENT_LOG_TAIL:-200}" -f "$(resolve_logs_container "${normalized_logs_target}")"
     ;;
   stop)
     [[ $# -ge 2 ]] || die "Usage: agent stop <tool> | agent stop service <service...> | agent stop container <container...>"

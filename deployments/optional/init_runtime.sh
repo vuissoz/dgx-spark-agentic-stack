@@ -38,6 +38,25 @@ ensure_secret_mode() {
   fi
 }
 
+random_secret_hex() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24
+    return 0
+  fi
+  od -An -N24 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+ensure_secret_file_if_missing() {
+  local file="$1"
+  if [[ -f "${file}" ]]; then
+    return 0
+  fi
+  umask 077
+  random_secret_hex >"${file}"
+  chmod 0600 "${file}" || true
+  log "generated runtime secret: ${file}"
+}
+
 upsert_key_value_in_file() {
   local file_path="$1"
   local key="$2"
@@ -146,6 +165,10 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/config"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/state"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/logs"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/workspaces"
+  install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/relay"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/relay/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/relay/logs"
   install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/sandbox"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/sandbox/state"
 
@@ -177,6 +200,7 @@ main() {
   copy_if_missing "${TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt" 0640
   copy_if_missing "${TEMPLATE_DIR}/openclaw.integration-profile.v1.json" "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" 0640
   copy_if_missing "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json" 0640
+  copy_if_missing "${TEMPLATE_DIR}/openclaw.relay_targets.json" "${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json" 0640
   copy_if_missing "${TEMPLATE_DIR}/mcp.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt" 0640
   ensure_optional_request_file "openclaw"
   ensure_optional_request_file "mcp"
@@ -188,16 +212,24 @@ main() {
     "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt" \
     "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" \
     "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json" \
+    "${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json" \
     "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
 
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
 
   if [[ "${EUID}" -eq 0 ]]; then
     chown -R "${runtime_uid}:${runtime_gid}" \
       "${AGENTIC_ROOT}/optional/openclaw/state" \
+      "${AGENTIC_ROOT}/optional/openclaw/workspaces" \
       "${AGENTIC_ROOT}/optional/openclaw/sandbox/state" \
+      "${AGENTIC_ROOT}/optional/openclaw/relay/state" \
+      "${AGENTIC_ROOT}/optional/openclaw/relay/logs" \
       "${AGENTIC_ROOT}/optional/openclaw/logs" \
       "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \
@@ -215,6 +247,12 @@ main() {
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
     fi
+    if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret" ]]; then
+      chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
+    fi
+    if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret" ]]; then
+      chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
+    fi
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
     fi
@@ -222,7 +260,10 @@ main() {
 
   if [[ "${EUID}" -ne 0 ]]; then
     chmod 0770 "${AGENTIC_ROOT}/optional/openclaw/state" \
+      "${AGENTIC_ROOT}/optional/openclaw/workspaces" \
       "${AGENTIC_ROOT}/optional/openclaw/sandbox/state" \
+      "${AGENTIC_ROOT}/optional/openclaw/relay/state" \
+      "${AGENTIC_ROOT}/optional/openclaw/relay/logs" \
       "${AGENTIC_ROOT}/optional/openclaw/logs" \
       "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \

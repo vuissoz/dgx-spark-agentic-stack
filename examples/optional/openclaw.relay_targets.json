@@ -1,0 +1,10 @@
+{
+  "providers": {
+    "telegram": {
+      "target": "telegram:user:example"
+    },
+    "whatsapp": {
+      "target": "whatsapp:user:example"
+    }
+  }
+}

@@ -48,12 +48,13 @@ if [[ -n "${AGENTIC_DOCTOR_CRITICAL_PORTS:-}" ]]; then
 fi
 portainer_host_port="${PORTAINER_HOST_PORT:-9001}"
 openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+openclaw_relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
 
 service_requires_proxy_env() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|optional-openclaw|optional-openclaw-sandbox|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|optional-openclaw|optional-openclaw-sandbox|optional-openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
       return 0
       ;;
     *)
@@ -1088,7 +1089,9 @@ fi
 
 optional_openclaw_cid="$(service_container_id optional-openclaw)"
 optional_openclaw_sandbox_cid="$(service_container_id optional-openclaw-sandbox)"
+optional_openclaw_relay_cid="$(service_container_id optional-openclaw-relay)"
 optional_openclaw_profile_file="${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json"
+optional_openclaw_relay_targets_file="${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json"
 if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
     doctor_fail "optional openclaw webhook bind must stay loopback-only on port ${openclaw_webhook_host_port}"
@@ -1104,6 +1107,19 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! grep -q '^OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "optional-openclaw must set OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json"
   fi
+  if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'command -v openclaw >/dev/null'; then
+    doctor_fail "optional-openclaw must provide openclaw CLI in-container"
+  fi
+  if ! mount_destination_present "${optional_openclaw_cid}" "/workspace"; then
+    doctor_fail "optional-openclaw must mount /workspace for persistent operator sessions"
+  fi
+  if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'test -d /workspace && test -w /workspace'; then
+    doctor_fail "optional-openclaw workspace mount must be writable (/workspace)"
+  fi
+  dashboard_status="$(curl -sS -o /tmp/doctor-openclaw-dashboard.out -w '%{http_code}' "http://127.0.0.1:${openclaw_webhook_host_port}/dashboard" 2>/dev/null || true)"
+  if [[ "${dashboard_status}" != "200" ]]; then
+    doctor_fail "optional-openclaw dashboard must be reachable on loopback (/dashboard, status=${dashboard_status:-unknown})"
+  fi
 fi
 
 if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
@@ -1116,6 +1132,55 @@ if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
   optional_openclaw_sandbox_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_sandbox_cid}" 2>/dev/null || true)"
   if ! grep -q '^OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_sandbox_env}"; then
     doctor_fail "optional-openclaw-sandbox must set OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json"
+  fi
+fi
+
+if [[ -n "${optional_openclaw_relay_cid}" ]]; then
+  if ! assert_no_public_bind "${openclaw_relay_host_port}"; then
+    doctor_fail "optional openclaw relay bind must stay loopback-only on port ${openclaw_relay_host_port}"
+  fi
+  if [[ ! -s "${optional_openclaw_relay_targets_file}" ]]; then
+    doctor_fail "optional openclaw relay targets file is missing: ${optional_openclaw_relay_targets_file}"
+  fi
+
+  optional_openclaw_relay_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_relay_cid}" 2>/dev/null || true)"
+  if ! grep -q '^OPENCLAW_RELAY_PROVIDER_TARGETS_FILE=/config/relay_targets.json$' <<<"${optional_openclaw_relay_env}"; then
+    doctor_fail "optional-openclaw-relay must set OPENCLAW_RELAY_PROVIDER_TARGETS_FILE=/config/relay_targets.json"
+  fi
+
+  relay_bindings_json="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "${optional_openclaw_relay_cid}" 2>/dev/null || true)"
+  if ! python3 - "${relay_bindings_json}" "${openclaw_relay_host_port}" <<'PY' >/dev/null 2>&1
+import json
+import sys
+
+bindings_raw = sys.argv[1]
+expected_port = sys.argv[2]
+
+try:
+    bindings = json.loads(bindings_raw)
+except Exception:
+    raise SystemExit(1)
+
+entries = bindings.get("8113/tcp")
+if not isinstance(entries, list) or not entries:
+    raise SystemExit(1)
+
+for item in entries:
+    if not isinstance(item, dict):
+        continue
+    host_ip = str(item.get("HostIp", "")).strip()
+    host_port = str(item.get("HostPort", "")).strip()
+    if host_ip == "127.0.0.1" and host_port == expected_port:
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+  then
+    doctor_fail "optional-openclaw-relay must publish 8113/tcp on loopback 127.0.0.1:${openclaw_relay_host_port}"
+  fi
+
+  if ! timeout 15 docker exec "${optional_openclaw_relay_cid}" sh -lc "python3 -c 'import sys,urllib.request; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8113/v1/queue/status\", timeout=4).status == 200 else 1)'"; then
+    doctor_fail "optional-openclaw-relay queue status must be reachable from relay container (/v1/queue/status)"
   fi
 fi
 

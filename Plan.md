@@ -17,11 +17,13 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-b32` (run D8/E2 sur stack compose démarrée) [CLOSED]
   - `dgx-spark-agentic-stack-p94` (onboarding secret `huggingface.token` pour Flux/ComfyUI) [CLOSED]
 - Beads (relay webhook providers OpenClaw):
-  - `dgx-spark-agentic-stack-0hk` (relay public Telegram/WhatsApp -> queue/file -> injection locale OpenClaw) [OPEN]
+  - `dgx-spark-agentic-stack-0hk` (relay public Telegram/WhatsApp -> queue/file -> injection locale OpenClaw) [CLOSED]
 - Beads (dashboard OpenClaw):
-  - `dgx-spark-agentic-stack-j01` (dashboard operateur OpenClaw accessible via tunnel SSH/Tailscale, loopback-only) [OPEN]
+  - `dgx-spark-agentic-stack-j01` (dashboard operateur OpenClaw accessible via tunnel SSH/Tailscale, loopback-only) [CLOSED]
 - Beads (wizard CLI OpenClaw en conteneur):
-  - `dgx-spark-agentic-stack-69e` (parite wizard `openclaw onboard/configure/agents add` dans un conteneur OpenClaw avec workspace persistant) [OPEN]
+  - `dgx-spark-agentic-stack-69e` (parite wizard `openclaw onboard/configure/agents add` dans un conteneur OpenClaw avec workspace persistant) [CLOSED]
+- Beads (tests setup OpenClaw CLI):
+  - `dgx-spark-agentic-stack-x00` (couverture tests setup/config OpenClaw CLI + variantes) [CLOSED]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -109,10 +111,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 ## Remaining Work (open)
 - Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
 - Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
-- Follow-up `dgx-spark-agentic-stack-0hk`: implémenter le relay webhook provider (Telegram/WhatsApp) via queue/file + consommation sortante et injection locale OpenClaw, avec tests E2 et runbook.
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
-- Follow-up `dgx-spark-agentic-stack-j01`: implémenter un dashboard OpenClaw opérateur, accessible via tunnel SSH/Tailscale comme les autres services UI, sans exposition publique.
-- Follow-up `dgx-spark-agentic-stack-69e`: permettre une session operateur dans le conteneur OpenClaw pour executer `openclaw onboard`, `openclaw configure` et `openclaw agents add <name>`, avec persistance workspace/config et couverture doctor/update/rollback.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -163,3 +162,18 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - Besoin: pouvoir lancer en session conteneur les commandes `openclaw onboard`, `openclaw configure`, `openclaw agents add <name>` comme decrit dans la doc OpenClaw.
   - Cible: conteneur OpenClaw operable comme les autres agents (session shell/tmux), avec workspace persistant et configuration standard de la stack.
   - Contraintes: conventions `/srv/agentic/openclaw/{state,logs,workspaces}`, posture loopback-only, hardening conteneur standard, integration `agent doctor` + `agent update` + `agent rollback`.
+
+## Addendum (2026-03-11, livraison relay/dashboard/CLI wizard OpenClaw)
+- Beads `dgx-spark-agentic-stack-0hk`, `dgx-spark-agentic-stack-j01`, `dgx-spark-agentic-stack-69e`, `dgx-spark-agentic-stack-x00`: implementation livree.
+  - Runtime:
+    - ajout du service `optional-openclaw-relay` (ingest provider signe, queue durable `pending/done/dead`, retries/backoff, dead-letter, audit JSONL),
+    - ajout du dashboard OpenClaw (`/dashboard`, `/v1/dashboard/status`),
+    - ajout d'un CLI OpenClaw conteneurise (`openclaw onboard/configure/agents add`) avec persistance sous `/state/cli` et `/workspace`.
+  - Orchestration/doctor:
+    - `agent openclaw` expose les endpoints dashboard+relay et ouvre une session shell projet sur workspace persistant,
+    - `agent stop openclaw` inclut relay+sandbox,
+    - `agent doctor` verifie contrat CLI/workspace/dashboard/relay (loopback bindings + endpoint queue relay + profile/config files).
+  - Docs/tests:
+    - runbook mis a jour: `docs/runbooks/openclaw-onboarding-rootless-dev.md` (wizard en conteneur, tunnel SSH/Tailscale Linux/macOS/Windows, verifs relay),
+    - test E2 dedie: `tests/K6_openclaw_cli_dashboard_relay.sh` (CLI setup/config + erreur actionable, dashboard, relay happy/deny/duplicate/dead-letter),
+    - regression K1 maintenue (`tests/K1_openclaw.sh`).

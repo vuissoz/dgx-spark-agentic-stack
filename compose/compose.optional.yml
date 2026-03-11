@@ -60,9 +60,14 @@ services:
       OPENCLAW_SANDBOX_URL: http://optional-openclaw-sandbox:8112
       OPENCLAW_SANDBOX_TIMEOUT_SEC: 3
       OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_DASHBOARD_ENABLED: "1"
+      OPENCLAW_RELAY_STATUS_URL: http://optional-openclaw-relay:8113/v1/queue/status
+      OPENCLAW_CLI_STATE_DIR: /state/cli
+      OPENCLAW_CLI_WORKSPACE_ROOT: /workspace
+      OPENCLAW_GATEWAY_URL: http://127.0.0.1:8111
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,unbound,egress-proxy,optional-openclaw,optional-openclaw-sandbox,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,unbound,egress-proxy,optional-openclaw,optional-openclaw-sandbox,optional-openclaw-relay,localhost,127.0.0.1
     depends_on:
       optional-openclaw-sandbox:
         condition: service_healthy
@@ -72,6 +77,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/config:/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/workspaces:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.webhook_secret:/run/secrets/openclaw.webhook_secret:ro
     healthcheck:
@@ -129,6 +135,74 @@ services:
         - >
           python3 -c 'import sys,urllib.request;
           sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8112/healthz", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic
+
+  optional-openclaw-relay:
+    image: agentic/optional-modules:local
+    build:
+      context: ..
+      dockerfile: deployments/optional/Dockerfile
+    profiles:
+      - optional-openclaw
+    command:
+      - openclaw-relay
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_OPENCLAW_RELAY_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_OPENCLAW_RELAY_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OPTIONAL_BIND_HOST: 0.0.0.0
+      OPTIONAL_BIND_PORT: 8113
+      AUDIT_LOG_PATH: /logs/relay-audit.jsonl
+      OPENCLAW_RELAY_PROVIDER_TARGETS_FILE: /config/relay_targets.json
+      OPENCLAW_RELAY_TELEGRAM_SECRET_FILE: /run/secrets/openclaw.relay.telegram.secret
+      OPENCLAW_RELAY_WHATSAPP_SECRET_FILE: /run/secrets/openclaw.relay.whatsapp.secret
+      OPENCLAW_RELAY_FORWARD_URL: http://optional-openclaw:8111/v1/webhooks/dm
+      OPENCLAW_RELAY_OPENCLAW_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_RELAY_OPENCLAW_WEBHOOK_SECRET_FILE: /run/secrets/openclaw.webhook_secret
+      OPENCLAW_RELAY_FORWARD_TIMEOUT_SEC: ${OPENCLAW_RELAY_FORWARD_TIMEOUT_SEC:-4}
+      OPENCLAW_RELAY_MAX_ATTEMPTS: ${OPENCLAW_RELAY_MAX_ATTEMPTS:-10}
+      OPENCLAW_RELAY_RETRY_BASE_SEC: ${OPENCLAW_RELAY_RETRY_BASE_SEC:-2}
+      OPENCLAW_RELAY_RETRY_MAX_SEC: ${OPENCLAW_RELAY_RETRY_MAX_SEC:-120}
+      OPENCLAW_RELAY_POLL_INTERVAL_SEC: ${OPENCLAW_RELAY_POLL_INTERVAL_SEC:-1.5}
+      OPENCLAW_RELAY_SIGNATURE_HEADER: ${OPENCLAW_RELAY_SIGNATURE_HEADER:-X-Relay-Signature}
+      OPENCLAW_RELAY_TIMESTAMP_HEADER: ${OPENCLAW_RELAY_TIMESTAMP_HEADER:-X-Relay-Timestamp}
+      OPENCLAW_RELAY_EVENT_ID_HEADER: ${OPENCLAW_RELAY_EVENT_ID_HEADER:-X-Provider-Event-ID}
+      OPENCLAW_RELAY_MAX_SKEW_SEC: ${OPENCLAW_RELAY_MAX_SKEW_SEC:-300}
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,optional-openclaw,optional-openclaw-relay,localhost,127.0.0.1
+    depends_on:
+      optional-openclaw:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${OPENCLAW_RELAY_HOST_PORT:-18112}:8113
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/relay/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/relay/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.webhook_secret:/run/secrets/openclaw.webhook_secret:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.relay.telegram.secret:/run/secrets/openclaw.relay.telegram.secret:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.relay.whatsapp.secret:/run/secrets/openclaw.relay.whatsapp.secret:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8113/healthz", timeout=3).status == 200 else 1)'
       interval: 30s
       timeout: 10s
       retries: 5
