@@ -57,27 +57,152 @@ Signification debutant:
 
 ## 4. Fichiers de configuration principaux
 
-Les fichiers OpenClaw sont generes/prepares sous `${AGENTIC_ROOT}`:
+Les fichiers OpenClaw sont generes/prepares sous `${AGENTIC_ROOT}`. Ils sont tous importants, mais pas pour la meme raison:
 
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
-  - token bearer pour auth API,
-  - garder le mode `600`.
+- secrets d'authentification (`openclaw.token`, `openclaw.webhook_secret`),
+- politiques d'autorisation (`dm_allowlist.txt`, `tool_allowlist.txt`),
+- contrat runtime (`integration-profile.current.json`),
+- preuve d'intention operateur (`openclaw.request`).
 
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
-  - secret HMAC pour verification de signature webhook,
-  - garder le mode `600`.
+Si un de ces fichiers est absent, vide, invalide, ou trop permissif en droits, le module peut etre refuse au demarrage.
 
-- `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
-  - cibles DM autorisees.
+### 4.1 `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
 
-- `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
-  - actions outils sandbox autorisees.
+Role:
+- token Bearer exige pour les appels API proteges (exemple: `POST /v1/dm`).
 
-- `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`
-  - profil/contrat runtime actif (variables requises et aliases d'endpoints).
+Format attendu:
+- une ligne texte non vide.
 
-- `${AGENTIC_ROOT}/deployments/optional/openclaw.request`
-  - fichier d'intention operateur pour le gating optionnel (`need=` et `success=` non vides).
+Exemple:
+```text
+9f4d8b... (chaine aleatoire)
+```
+
+Pourquoi il est critique:
+- sans ce token, les appels authentifies retournent `401`.
+- avec un token faible/expose, n'importe qui ayant acces au host pourrait injecter des requetes.
+
+Bonnes pratiques:
+- permissions `600` (ou `640` en environnement controle),
+- rotation reguliere,
+- ne jamais committer dans git.
+
+### 4.2 `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
+
+Role:
+- secret partage pour verifier la signature HMAC des webhooks entrants.
+
+Format attendu:
+- une ligne texte non vide.
+
+Exemple:
+```text
+8a23cf... (chaine aleatoire)
+```
+
+Pourquoi il est critique:
+- empeche les faux webhooks envoyes par un tiers.
+- si ce secret fuit, un attaquant peut tenter de forger des signatures valides.
+
+### 4.3 `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
+
+Role:
+- liste des destinations DM autorisees.
+
+Format attendu:
+- un identifiant cible par ligne,
+- lignes vides et commentaires (`#`) autorises.
+
+Exemple de template:
+```text
+# One DM target identifier per line.
+# Example values: discord:user:1234, slack:U01ABCDE
+discord:user:example
+```
+
+Effet runtime:
+- une cible absente de cette liste est refusee (`403`).
+- plus la liste est courte, plus le perimetre est controle.
+
+### 4.4 `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
+
+Role:
+- liste des actions outils que le sandbox a le droit d'executer.
+
+Format attendu:
+- un nom d'outil par ligne,
+- lignes vides/commentaires autorises.
+
+Exemple de template:
+```text
+# One sandbox-executable OpenClaw tool per line.
+# Keep this list short and reviewed.
+diagnostics.ping
+time.now_utc
+```
+
+Effet runtime:
+- un outil non liste est bloque.
+- c'est le principal mecanisme de reduction de surface sur la partie "execution".
+
+### 4.5 `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`
+
+Role:
+- contrat runtime actif OpenClaw/sandbox.
+- ce fichier est valide au demarrage; s'il est invalide, demarrage refuse.
+
+Structure importante (resume):
+- `profile_id`, `profile_version`, `contract_kind`:
+  - identite/version du profil charge.
+- `runtime.auth`:
+  - exige token bearer + verification HMAC webhook,
+  - definit les headers attendus (`X-Webhook-Signature`, `X-Webhook-Timestamp`),
+  - definit la fenetre temporelle max (`webhook_max_skew_sec_default`).
+- `runtime.required_env`:
+  - liste les variables qui doivent exister cote `openclaw` et cote `openclaw_sandbox`.
+- `runtime.endpoints`:
+  - endpoints acceptes et aliases (exemple: `/v1/dm` et `/v1/dm/send`).
+- `runtime.sandbox_policy`:
+  - impose proxy env, allowlist outil et healthcheck.
+- `runtime.capabilities`:
+  - declaration des fonctions de securite et d'audit attendues.
+
+Fichier source/template:
+- `examples/optional/openclaw.integration-profile.v1.json`
+
+Conseil:
+- ne pas improviser ce JSON a la main.
+- partir du template versionne puis ajuster de maniere controlee.
+
+### 4.6 `${AGENTIC_ROOT}/deployments/optional/openclaw.request`
+
+Role:
+- trace d'intention operateur pour autoriser l'activation du module optionnel.
+- verifiee par `agent up optional` avant demarrage.
+
+Contenu attendu:
+```text
+need=Enable scoped OpenClaw webhook and DM automation for approved workflows.
+success=Webhook auth succeeds, deny paths stay blocked, and service healthcheck stays green.
+owner=<utilisateur>
+expires_at=
+```
+
+Signification des champs:
+- `need`:
+  - explique le besoin metier/operationnel.
+  - doit etre non vide.
+- `success`:
+  - definit les criteres de succes observables.
+  - doit etre non vide.
+- `owner`:
+  - responsable de la demande d'activation.
+- `expires_at`:
+  - date de fin de validite optionnelle.
+
+Si `need` ou `success` sont absents/vides:
+- l'activation OpenClaw est refusee avec message explicite.
 
 ## 5. Variables d'environnement importantes
 
