@@ -18,6 +18,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-p94` (onboarding secret `huggingface.token` pour Flux/ComfyUI) [CLOSED]
 - Beads (relay webhook providers OpenClaw):
   - `dgx-spark-agentic-stack-0hk` (relay public Telegram/WhatsApp -> queue/file -> injection locale OpenClaw) [OPEN]
+- Beads (dashboard OpenClaw):
+  - `dgx-spark-agentic-stack-j01` (dashboard operateur OpenClaw accessible via tunnel SSH/Tailscale, loopback-only) [OPEN]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -107,6 +109,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
 - Follow-up `dgx-spark-agentic-stack-0hk`: implémenter le relay webhook provider (Telegram/WhatsApp) via queue/file + consommation sortante et injection locale OpenClaw, avec tests E2 et runbook.
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
+- Follow-up `dgx-spark-agentic-stack-j01`: implémenter un dashboard OpenClaw opérateur, accessible via tunnel SSH/Tailscale comme les autres services UI, sans exposition publique.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -145,3 +148,9 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - Cible: `agent up core` doit démarrer OpenClaw sans dépendre de `AGENTIC_OPTIONAL_MODULES=openclaw`.
   - Contraintes: conserver les invariants CDC (loopback-only hôte, pas de `docker.sock`, hardening conteneur, secrets runtime, egress contrôlé).
   - Impacts attendus: aligner `agent ls/logs/stop`, `agent doctor`, `agent update`, `agent rollback` et la doc d'onboarding avec ce nouveau placement.
+
+## Addendum (2026-03-11, dashboard OpenClaw via tunnel SSH/Tailscale)
+- Beads `dgx-spark-agentic-stack-j01`: implémenter un dashboard OpenClaw opérateur dans la stack.
+  - Besoin: combler l'écart entre la commande dashboard upstream OpenClaw et le runtime actuel orienté API locale.
+  - Cible: dashboard accessible uniquement via bind loopback hôte et tunnel SSH/Tailscale (même posture d'accès que les autres interfaces opérateur).
+  - Contraintes: aucune exposition 0.0.0.0, pas de `docker.sock`, intégration `agent doctor` + `agent update` + `agent rollback`.
