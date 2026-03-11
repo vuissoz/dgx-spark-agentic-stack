@@ -21,8 +21,8 @@ Security and CDC constraints still apply:
 
 ## Decision
 
-1. Add an OpenClaw CLI shim (`deployments/optional/openclaw_cli.py`) into the optional modules image and expose it as `/usr/local/bin/openclaw`.
-2. Persist OpenClaw CLI wizard state under `/state/cli` and operator workspaces under `/workspace` mapped to `${AGENTIC_ROOT}/optional/openclaw/{state,workspaces}`.
+1. Install the upstream OpenClaw CLI in the optional modules image via `https://openclaw.ai/install-cli.sh` and expose it as `openclaw` in-container.
+2. Persist OpenClaw CLI state with `OPENCLAW_HOME=/state/cli/openclaw-home` and `OPENCLAW_CONFIG_PATH=/state/cli/openclaw-home/openclaw.json`, with operator workspaces under `/workspace` mapped to `${AGENTIC_ROOT}/optional/openclaw/{state,workspaces}`.
 3. Add dashboard endpoints in OpenClaw runtime:
    - `GET /dashboard` (operator UI)
    - `GET /v1/dashboard/status` (runtime + relay queue status)

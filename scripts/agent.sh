@@ -430,8 +430,7 @@ optional_module_build_inputs() {
     optional-openclaw|optional-mcp-catalog)
       printf '%s\n' \
         "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_cli.py"
+        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py"
       ;;
     optional-pi-mono)
       printf '%s\n' \
@@ -1187,8 +1186,8 @@ prepare_tool_session() {
     goose-direct)
       ;;
     openclaw-shell)
-      docker exec "${container_id}" sh -lc "test -x /usr/local/bin/openclaw" \
-        || die "openclaw CLI is missing in optional-openclaw container (/usr/local/bin/openclaw)"
+      docker exec "${container_id}" sh -lc "command -v openclaw >/dev/null" \
+        || die "openclaw CLI is missing in optional-openclaw container"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"

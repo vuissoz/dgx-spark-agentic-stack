@@ -20,8 +20,8 @@ Upstream references used as baseline:
 |---|---|
 | `openclaw onboard` | `./agent onboard --profile rootless-dev --optional-modules openclaw` |
 | `openclaw onboard` (operator in runtime container) | `./agent openclaw` then `openclaw onboard ...` |
-| `openclaw configure` | `./agent openclaw` then `openclaw configure --section ... --set key=value` |
-| `openclaw agents add <name>` | `./agent openclaw` then `openclaw agents add <name>` |
+| `openclaw configure` | `./agent openclaw` then `openclaw configure --section ...` |
+| `openclaw agents add <name>` | `./agent openclaw` then `openclaw agents add <name> --workspace ... --non-interactive` |
 | `openclaw gateway run --dashboard` | `AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional` |
 | `openclaw gateway status` | `./agent ls` (service state) + `./agent doctor` (compliance) |
 | `openclaw gateway logs` | `./agent logs openclaw` |
@@ -159,14 +159,15 @@ Run OpenClaw CLI wizard-like setup directly in container:
 ```bash
 # Inside `./agent openclaw` shell:
 openclaw --version
-openclaw onboard --workspace wizard-default --non-interactive
-openclaw configure --section channels --set default_target=discord:user:example --set mode=wizard
-openclaw agents add operator --channel discord --role ops
+openclaw onboard --workspace /workspace/wizard-default --non-interactive --accept-risk --skip-health --skip-daemon --skip-skills --skip-ui --skip-channels --skip-search
+openclaw configure --section channels
+openclaw agents add operator --workspace /workspace/wizard-default --non-interactive --json
 openclaw agents list
 ```
 
 CLI state files persist under:
-- `${AGENTIC_ROOT}/optional/openclaw/state/cli/`
+- `${AGENTIC_ROOT}/optional/openclaw/state/cli/openclaw-home/` (`OPENCLAW_HOME`)
+- `${AGENTIC_ROOT}/optional/openclaw/state/cli/openclaw-home/openclaw.json` (`OPENCLAW_CONFIG_PATH`)
 - `${AGENTIC_ROOT}/optional/openclaw/workspaces/`
 
 ## Step 5: Access Dashboard via SSH/Tailscale Tunnel

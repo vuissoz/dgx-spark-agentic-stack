@@ -33,6 +33,9 @@ services:
     build:
       context: ..
       dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
     profiles:
       - optional-openclaw
     command:
@@ -62,9 +65,9 @@ services:
       OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
       OPENCLAW_DASHBOARD_ENABLED: "1"
       OPENCLAW_RELAY_STATUS_URL: http://optional-openclaw-relay:8113/v1/queue/status
-      OPENCLAW_CLI_STATE_DIR: /state/cli
-      OPENCLAW_CLI_WORKSPACE_ROOT: /workspace
-      OPENCLAW_GATEWAY_URL: http://127.0.0.1:8111
+      HOME: /state/cli/openclaw-home
+      OPENCLAW_HOME: /state/cli/openclaw-home
+      OPENCLAW_CONFIG_PATH: /state/cli/openclaw-home/openclaw.json
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,optional-openclaw,optional-openclaw-sandbox,optional-openclaw-relay,localhost,127.0.0.1
@@ -99,6 +102,9 @@ services:
     build:
       context: ..
       dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
     profiles:
       - optional-openclaw
     command:
@@ -147,6 +153,9 @@ services:
     build:
       context: ..
       dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
     profiles:
       - optional-openclaw
     command:
@@ -215,6 +224,9 @@ services:
     build:
       context: ..
       dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
     profiles:
       - optional-mcp
     command:

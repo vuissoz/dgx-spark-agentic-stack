@@ -76,6 +76,7 @@ wait_for_relay_queue_at_least() {
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
 webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
+openclaw_agent_name="operator-k6-$(date +%s)"
 
 install -d -m 0700 "${agentic_root}/secrets/runtime"
 install -d -m 0750 "${agentic_root}/deployments/optional"
@@ -184,56 +185,45 @@ grep -q 'OpenClaw dashboard is available' /tmp/agent-k6-openclaw-entrypoint.out 
 grep -q 'provider relay ingress is available' /tmp/agent-k6-openclaw-entrypoint.out \
   || fail "agent openclaw output must mention relay ingress URL"
 
-openclaw_version="$(docker exec "${openclaw_cid}" sh -lc 'openclaw --version' 2>/tmp/agent-k6-openclaw-version.err || true)"
-echo "${openclaw_version}" | grep -q 'openclaw-stack-shim' \
-  || fail "openclaw CLI shim version output is missing expected marker"
+openclaw_version="$(docker exec "${openclaw_cid}" sh -lc 'openclaw --version 2>/tmp/agent-k6-openclaw-version.err || openclaw version 2>/tmp/agent-k6-openclaw-version.err' || true)"
+[[ -n "${openclaw_version}" ]] || fail "openclaw CLI must return a version string in-container"
+if echo "${openclaw_version}" | grep -qi 'shim'; then
+  fail "openclaw CLI must be the upstream binary, not a stack shim"
+fi
 
-docker exec "${openclaw_cid}" sh -lc 'openclaw onboard --workspace wizard-k6 --non-interactive' >/tmp/agent-k6-openclaw-onboard.out \
+docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_HOME}" = "/state/cli/openclaw-home"' \
+  || fail "optional-openclaw must set OPENCLAW_HOME to persistent /state path"
+docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_CONFIG_PATH}" = "/state/cli/openclaw-home/openclaw.json"' \
+  || fail "optional-openclaw must set OPENCLAW_CONFIG_PATH to persistent /state path"
+
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw onboard --help' >/tmp/agent-k6-openclaw-onboard-help.out \
+  || fail "openclaw onboard command must be available in-container"
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw configure --help' >/tmp/agent-k6-openclaw-configure-help.out \
+  || fail "openclaw configure command must be available in-container"
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw agents --help' >/tmp/agent-k6-openclaw-agents-help.out \
+  || fail "openclaw agents command must be available in-container"
+
+timeout 90 docker exec "${openclaw_cid}" sh -lc 'openclaw onboard --workspace /workspace/wizard-k6 --non-interactive --accept-risk --skip-health --skip-daemon --skip-skills --skip-ui --skip-channels --skip-search' >/tmp/agent-k6-openclaw-onboard.out \
   || fail "openclaw onboard must succeed in-container"
-docker exec "${openclaw_cid}" sh -lc 'openclaw configure --section channels --set default_target=discord:user:test --set mode=wizard' >/tmp/agent-k6-openclaw-configure.out \
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw configure --section channels' >/tmp/agent-k6-openclaw-configure.out \
   || fail "openclaw configure must succeed in-container"
-docker exec "${openclaw_cid}" sh -lc 'openclaw agents add operator-k6 --channel discord --role ops' >/tmp/agent-k6-openclaw-agents-add.out \
+timeout 30 docker exec "${openclaw_cid}" sh -lc "openclaw agents add ${openclaw_agent_name} --workspace /workspace/wizard-k6 --non-interactive --json" >/tmp/agent-k6-openclaw-agents-add.out \
   || fail "openclaw agents add must succeed in-container"
 
-set +e
-docker exec "${openclaw_cid}" sh -lc 'openclaw configure --section channels --set invalid' >/tmp/agent-k6-openclaw-configure-invalid.out 2>&1
-configure_invalid_rc=$?
-set -e
-[[ "${configure_invalid_rc}" -eq 2 ]] \
-  || fail "openclaw configure must fail with actionable error on invalid --set value"
-grep -q 'invalid --set value' /tmp/agent-k6-openclaw-configure-invalid.out \
-  || fail "openclaw configure invalid path must return explicit invalid --set guidance"
-
-docker exec "${openclaw_cid}" sh -lc 'openclaw agents list' >/tmp/agent-k6-openclaw-agents-list.out \
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw agents list' >/tmp/agent-k6-openclaw-agents-list.out \
   || fail "openclaw agents list must succeed"
-grep -q '"name": "operator-k6"' /tmp/agent-k6-openclaw-agents-list.out \
-  || fail "openclaw agents list must include operator-k6"
+grep -q "${openclaw_agent_name}" /tmp/agent-k6-openclaw-agents-list.out \
+  || fail "openclaw agents list must include ${openclaw_agent_name}"
 
-python3 - "${agentic_root}" <<'PY'
-import json
-import pathlib
-import sys
-
-root = pathlib.Path(sys.argv[1])
-config = json.loads((root / "optional/openclaw/state/cli/config.json").read_text(encoding="utf-8"))
-agents = json.loads((root / "optional/openclaw/state/cli/agents.json").read_text(encoding="utf-8"))
-onboard = json.loads((root / "optional/openclaw/state/cli/onboard.json").read_text(encoding="utf-8"))
-
-channels = config.get("sections", {}).get("channels", {})
-if channels.get("default_target") != "discord:user:test":
-    raise SystemExit("openclaw configure did not persist channels.default_target")
-if channels.get("mode") != "wizard":
-    raise SystemExit("openclaw configure did not persist channels.mode")
-if onboard.get("workspace", "").endswith("/wizard-k6") is False:
-    raise SystemExit("openclaw onboard did not persist expected workspace path")
-
-items = agents.get("agents", [])
-if not any(isinstance(item, dict) and item.get("name") == "operator-k6" for item in items):
-    raise SystemExit("openclaw agents add did not persist operator-k6 entry")
-PY
+docker exec "${openclaw_cid}" sh -lc 'test -d /state/cli/openclaw-home' \
+  || fail "openclaw home must be initialized under persistent /state"
+docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/openclaw.json' \
+  || fail "openclaw config must persist under OPENCLAW_CONFIG_PATH"
 
 [[ -d "${agentic_root}/optional/openclaw/workspaces/wizard-k6" ]] \
   || fail "openclaw onboard workspace must persist under optional/openclaw/workspaces"
+[[ -f "${agentic_root}/optional/openclaw/state/cli/openclaw-home/openclaw.json" ]] \
+  || fail "openclaw CLI config must persist under optional/openclaw/state/cli/openclaw-home"
 
 dashboard_status="$(curl -sS -o /tmp/agent-k6-dashboard.html -w '%{http_code}' "http://127.0.0.1:${webhook_host_port}/dashboard")"
 [[ "${dashboard_status}" == "200" ]] || fail "openclaw dashboard must be reachable on loopback (status=${dashboard_status})"

@@ -1,9 +1,32 @@
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
-RUN addgroup -S app && adduser -S -G app app
+ARG OPENCLAW_INSTALL_CLI_SCRIPT=https://openclaw.ai/install-cli.sh
+ARG OPENCLAW_INSTALL_VERSION=latest
+ARG OPENCLAW_PREFIX=/opt/openclaw
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    xz-utils \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN addgroup --system app && adduser --system --ingroup app app
 WORKDIR /app
 COPY deployments/optional/optional_service.py /app/optional_service.py
-COPY deployments/optional/openclaw_cli.py /usr/local/bin/openclaw
-RUN chmod 0755 /usr/local/bin/openclaw
+
+RUN install -d -m 0755 "${OPENCLAW_PREFIX}" /etc/agentic \
+  && tmp_script="$(mktemp)" \
+  && curl -fsSL "${OPENCLAW_INSTALL_CLI_SCRIPT}" -o "${tmp_script}" \
+  && bash "${tmp_script}" --prefix "${OPENCLAW_PREFIX}" --version "${OPENCLAW_INSTALL_VERSION}" --no-onboard \
+  && rm -f "${tmp_script}" \
+  && test -x "${OPENCLAW_PREFIX}/bin/openclaw" \
+  && ln -sf "${OPENCLAW_PREFIX}/bin/openclaw" /usr/local/bin/openclaw \
+  && printf '%s\n' "${OPENCLAW_PREFIX}/bin/openclaw" >/etc/agentic/openclaw-real-path \
+  && chmod 0644 /etc/agentic/openclaw-real-path \
+  && chmod -R a+rX "${OPENCLAW_PREFIX}"
+
+ENV PATH="${OPENCLAW_PREFIX}/bin:${PATH}"
 USER app
 ENTRYPOINT ["python3", "/app/optional_service.py"]
