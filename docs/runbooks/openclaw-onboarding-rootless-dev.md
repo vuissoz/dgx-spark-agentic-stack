@@ -170,6 +170,9 @@ CLI state files persist under:
 - `${AGENTIC_ROOT}/optional/openclaw/state/cli/openclaw-home/openclaw.json` (`OPENCLAW_CONFIG_PATH`)
 - `${AGENTIC_ROOT}/optional/openclaw/workspaces/`
 
+If you need a "brand-new install" reset (CLI-only or full module reset), follow:
+- `docs/runbooks/openclaw-explique-debutants.md` section `8. Reset "installation neuve" (clean reset)`
+
 ## Step 5: Access Dashboard via SSH/Tailscale Tunnel
 
 Dashboard remains loopback-only on the DGX host.

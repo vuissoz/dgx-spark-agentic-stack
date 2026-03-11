@@ -271,7 +271,54 @@ ${EDITOR:-vi} "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt"
 AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 ```
 
-## 8. Erreurs frequentes (et correctifs)
+## 8. Reset "installation neuve" (clean reset)
+
+Si vous voulez retrouver un etat "comme un premier demarrage", il faut supprimer l'etat persistant monte depuis l'hote.
+
+Important:
+- ces commandes sont destructives (perte historique sessions/config locale OpenClaw),
+- faites un backup avant si vous avez des artefacts a conserver.
+
+### 8.1 Reset CLI seulement (conserve policies + secrets)
+
+Ce mode reset la CLI OpenClaw (home/config/sessions) et les workspaces, mais garde vos fichiers de politique (`dm_allowlist`, `tool_allowlist`, profil) et vos secrets runtime.
+
+```bash
+./agent down optional
+rm -rf "${AGENTIC_ROOT}/optional/openclaw/state/cli/openclaw-home"
+rm -rf "${AGENTIC_ROOT}/optional/openclaw/workspaces"
+./deployments/optional/init_runtime.sh
+AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
+```
+
+Ensuite, refaire l'onboarding dans le conteneur:
+
+```bash
+./agent openclaw
+openclaw onboard --workspace /workspace/wizard-default --non-interactive --accept-risk --skip-health --skip-daemon --skip-skills --skip-ui --skip-channels --skip-search
+```
+
+### 8.2 Reset complet module OpenClaw
+
+Ce mode reset aussi les logs/queues et les secrets OpenClaw runtime du module optionnel.
+
+```bash
+./agent down optional
+rm -rf "${AGENTIC_ROOT}/optional/openclaw"
+rm -f "${AGENTIC_ROOT}/deployments/optional/openclaw.request"
+rm -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
+rm -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+rm -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
+rm -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
+./deployments/optional/init_runtime.sh
+AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
+```
+
+Apres reset complet:
+- verifier/adapter de nouveau les fichiers `dm_allowlist.txt`, `tool_allowlist.txt`, `relay_targets.json`,
+- relancer le setup CLI `openclaw onboard ...` dans `./agent openclaw`.
+
+## 9. Erreurs frequentes (et correctifs)
 
 - Erreur: OpenClaw ne demarre pas.
   - Verification: sortie `./agent doctor` et fichier request optionnel.
@@ -289,7 +336,7 @@ AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
   - Verification: `integration-profile.current.json` existe et est valide.
   - Correctif: restaurer depuis `examples/optional/openclaw.integration-profile.v1.json`.
 
-## 9. Lien avec la CLI upstream `openclaw`
+## 10. Lien avec la CLI upstream `openclaw`
 
 Cette stack s'inspire des workflows upstream OpenClaw,
 mais utilise le modele d'orchestration `./agent` du depot.
@@ -298,7 +345,7 @@ Mapping rapide:
 - upstream `openclaw onboard` -> stack `./agent onboard --optional-modules openclaw`
 - upstream `openclaw gateway run` -> stack `AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional`
 
-## 10. References utiles
+## 11. References utiles
 
 - Site OpenClaw: https://openclaw.ai/
 - Docs OpenClaw (getting started): https://docs.openclaw.ai/start/getting-started
