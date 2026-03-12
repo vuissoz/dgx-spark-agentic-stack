@@ -24,6 +24,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-69e` (parite wizard `openclaw onboard/configure/agents add` dans un conteneur OpenClaw avec workspace persistant) [CLOSED]
 - Beads (tests setup OpenClaw CLI):
   - `dgx-spark-agentic-stack-x00` (couverture tests setup/config OpenClaw CLI + variantes) [CLOSED]
+- Beads (ComfyUI persistence rootless-dev):
+  - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -111,6 +113,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 ## Remaining Work (open)
 - Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
 - Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
+- Follow-up `dgx-spark-agentic-stack-0ik`: remplacer les mounts ComfyUI fragmentes (`models/input/output/user/custom_nodes`) par un mount persistant unique couvrant toute l'arborescence runtime ComfyUI, puis aligner doctor/tests/runbooks.
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
 
 ## Sync Note (2026-03-07)
@@ -177,3 +180,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - runbook mis a jour: `docs/runbooks/openclaw-onboarding-rootless-dev.md` (wizard en conteneur, tunnel SSH/Tailscale Linux/macOS/Windows, verifs relay),
     - test E2 dedie: `tests/K6_openclaw_cli_dashboard_relay.sh` (CLI setup/config + erreur actionable, dashboard, relay happy/deny/duplicate/dead-letter),
     - regression K1 maintenue (`tests/K1_openclaw.sh`).
+
+## Addendum (2026-03-12, requirement ComfyUI persistence scope)
+- Beads `dgx-spark-agentic-stack-0ik`: en rootless-dev, les mutations ComfyUI peuvent impacter toute l'arborescence (pas seulement `input/output`).
+  - Exigence ajoutee: basculer vers un mount hote persistant unique pour toute l'arborescence runtime ComfyUI (point canonique sous `${AGENTIC_ROOT}/comfyui`).
+  - Impact attendu: persistance deterministe des changements ComfyUI hors `input/output`, avec alignement compose/bootstrap/doctor/tests/runbooks.
