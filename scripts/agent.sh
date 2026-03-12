@@ -1238,6 +1238,8 @@ cmd_tool_attach() {
       printf 'INFO: internal docker-network endpoint is http://optional-openclaw:8111.\n'
       printf 'INFO: OpenClaw dashboard is available at http://127.0.0.1:%s/dashboard.\n' "${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
       printf 'INFO: provider relay ingress is available at http://127.0.0.1:%s/v1/providers/<provider>/webhook.\n' "${OPENCLAW_RELAY_HOST_PORT:-18112}"
+      printf 'INFO: OpenClaw onboarding SecretRef expects OPENCLAW_GATEWAY_TOKEN to be set in this shell.\n'
+      printf 'INFO: run: export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\\''\\n'\\'' </run/secrets/openclaw.token)"\n'
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
