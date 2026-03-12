@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+AGENTIC_OPENCLAW_WORKSPACES_DIR="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT}/optional/openclaw/workspaces}"
+AGENTIC_PI_MONO_WORKSPACES_DIR="${AGENTIC_PI_MONO_WORKSPACES_DIR:-${AGENTIC_ROOT}/optional/pi-mono/workspaces}"
+AGENTIC_GOOSE_WORKSPACES_DIR="${AGENTIC_GOOSE_WORKSPACES_DIR:-${AGENTIC_ROOT}/optional/goose/workspaces}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/optional"
 
 log() {
@@ -165,7 +168,7 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/config"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/state"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/logs"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/workspaces"
+  install -d -m 0770 "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"
   install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/relay"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/relay/state"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/relay/logs"
@@ -180,12 +183,12 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/optional/pi-mono"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/pi-mono/state"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/pi-mono/logs"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/pi-mono/workspaces"
+  install -d -m 0770 "${AGENTIC_PI_MONO_WORKSPACES_DIR}"
 
   install -d -m 0750 "${AGENTIC_ROOT}/optional/goose"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/goose/state"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/goose/logs"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/goose/workspaces"
+  install -d -m 0770 "${AGENTIC_GOOSE_WORKSPACES_DIR}"
 
   install -d -m 0750 "${AGENTIC_ROOT}/optional/portainer"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/portainer/data"
@@ -226,7 +229,7 @@ main() {
   if [[ "${EUID}" -eq 0 ]]; then
     chown -R "${runtime_uid}:${runtime_gid}" \
       "${AGENTIC_ROOT}/optional/openclaw/state" \
-      "${AGENTIC_ROOT}/optional/openclaw/workspaces" \
+      "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/optional/openclaw/sandbox/state" \
       "${AGENTIC_ROOT}/optional/openclaw/relay/state" \
       "${AGENTIC_ROOT}/optional/openclaw/relay/logs" \
@@ -235,10 +238,10 @@ main() {
       "${AGENTIC_ROOT}/optional/mcp/logs" \
       "${AGENTIC_ROOT}/optional/pi-mono/state" \
       "${AGENTIC_ROOT}/optional/pi-mono/logs" \
-      "${AGENTIC_ROOT}/optional/pi-mono/workspaces" \
+      "${AGENTIC_PI_MONO_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/optional/goose/state" \
       "${AGENTIC_ROOT}/optional/goose/logs" \
-      "${AGENTIC_ROOT}/optional/goose/workspaces" \
+      "${AGENTIC_GOOSE_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/optional/portainer/data" \
       "${AGENTIC_ROOT}/optional/portainer/logs"
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.token" ]]; then
@@ -260,7 +263,7 @@ main() {
 
   if [[ "${EUID}" -ne 0 ]]; then
     chmod 0770 "${AGENTIC_ROOT}/optional/openclaw/state" \
-      "${AGENTIC_ROOT}/optional/openclaw/workspaces" \
+      "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/optional/openclaw/sandbox/state" \
       "${AGENTIC_ROOT}/optional/openclaw/relay/state" \
       "${AGENTIC_ROOT}/optional/openclaw/relay/logs" \
@@ -269,10 +272,10 @@ main() {
       "${AGENTIC_ROOT}/optional/mcp/logs" \
       "${AGENTIC_ROOT}/optional/pi-mono/state" \
       "${AGENTIC_ROOT}/optional/pi-mono/logs" \
-      "${AGENTIC_ROOT}/optional/pi-mono/workspaces" \
+      "${AGENTIC_PI_MONO_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/optional/goose/state" \
       "${AGENTIC_ROOT}/optional/goose/logs" \
-      "${AGENTIC_ROOT}/optional/goose/workspaces" \
+      "${AGENTIC_GOOSE_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/optional/portainer/data" \
       "${AGENTIC_ROOT}/optional/portainer/logs"
     log "non-root runtime init: relaxed optional dirs permissions for userns compatibility"

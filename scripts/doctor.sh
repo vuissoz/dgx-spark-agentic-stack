@@ -140,6 +140,20 @@ mount_destination_read_only() {
   awk -F'|' -v d="${destination}" '$1 == d && $2 == "false" { found=1 } END { exit(found ? 0 : 1) }' <<<"${mounts}"
 }
 
+mount_destination_matches_source() {
+  local cid="$1"
+  local destination="$2"
+  local expected_source="$3"
+  local actual_source expected_real actual_real
+
+  actual_source="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "'"${destination}"'"}}{{println .Source}}{{end}}{{end}}' "${cid}" 2>/dev/null | head -n 1)"
+  [[ -n "${actual_source}" ]] || return 1
+
+  expected_real="$(readlink -f "${expected_source}" 2>/dev/null || printf '%s\n' "${expected_source}")"
+  actual_real="$(readlink -f "${actual_source}" 2>/dev/null || printf '%s\n' "${actual_source}")"
+  [[ "${actual_real}" == "${expected_real}" ]]
+}
+
 allowlist_has_entry() {
   local allowlist_file="$1"
   local entry="$2"
@@ -868,6 +882,9 @@ for row in "${running_services[@]}"; do
     elif ! mount_destination_read_only "${cid}" "/run/secrets/gate_mcp.token"; then
       doctor_fail "optional-pi-mono must mount /run/secrets/gate_mcp.token read-only"
     fi
+    if ! mount_destination_matches_source "${cid}" "/workspace" "${AGENTIC_PI_MONO_WORKSPACES_DIR}"; then
+      doctor_fail "optional-pi-mono /workspace source must match AGENTIC_PI_MONO_WORKSPACES_DIR (${AGENTIC_PI_MONO_WORKSPACES_DIR})"
+    fi
 
     if ! timeout 15 docker exec "${cid}" sh -lc 'test -d /state/home && test -w /state/home'; then
       doctor_fail "optional-pi-mono home directory is not writable (/state/home)"
@@ -964,6 +981,9 @@ PY
     fi
     if ! mount_destination_present "${cid}" "/workspace"; then
       doctor_fail "optional-goose must mount /workspace"
+    fi
+    if ! mount_destination_matches_source "${cid}" "/workspace" "${AGENTIC_GOOSE_WORKSPACES_DIR}"; then
+      doctor_fail "optional-goose /workspace source must match AGENTIC_GOOSE_WORKSPACES_DIR (${AGENTIC_GOOSE_WORKSPACES_DIR})"
     fi
 
     if ! timeout 20 docker exec "${cid}" sh -lc 'goose session list >/dev/null 2>&1'; then
@@ -1112,6 +1132,8 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   fi
   if ! mount_destination_present "${optional_openclaw_cid}" "/workspace"; then
     doctor_fail "optional-openclaw must mount /workspace for persistent operator sessions"
+  elif ! mount_destination_matches_source "${optional_openclaw_cid}" "/workspace" "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"; then
+    doctor_fail "optional-openclaw /workspace source must match AGENTIC_OPENCLAW_WORKSPACES_DIR (${AGENTIC_OPENCLAW_WORKSPACES_DIR})"
   fi
   if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'test -d /workspace && test -w /workspace'; then
     doctor_fail "optional-openclaw workspace mount must be writable (/workspace)"

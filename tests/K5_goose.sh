@@ -20,6 +20,7 @@ assert_cmd docker
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+goose_workspaces_dir="${AGENTIC_GOOSE_WORKSPACES_DIR:-${agentic_root}/optional/goose/workspaces}"
 goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
 runtime_goose_context_limit_file="${agentic_root}/deployments/runtime.env"
 if [[ -f "${runtime_goose_context_limit_file}" ]]; then
@@ -74,6 +75,12 @@ echo "${mount_dump}" | grep -q '|/logs|true$' \
   || fail "optional-goose must mount /logs as writable"
 echo "${mount_dump}" | grep -q '|/workspace|true$' \
   || fail "optional-goose must mount /workspace as writable"
+workspace_mount_source="$(printf '%s\n' "${mount_dump}" | awk -F'|' '$2=="/workspace" {print $1; exit}')"
+[[ -n "${workspace_mount_source}" ]] || fail "optional-goose workspace mount source is missing"
+workspace_mount_source="$(readlink -f "${workspace_mount_source}" 2>/dev/null || printf '%s\n' "${workspace_mount_source}")"
+expected_workspace_source="$(readlink -f "${goose_workspaces_dir}" 2>/dev/null || printf '%s\n' "${goose_workspaces_dir}")"
+[[ "${workspace_mount_source}" == "${expected_workspace_source}" ]] \
+  || fail "optional-goose /workspace mount source mismatch (expected=${expected_workspace_source}, actual=${workspace_mount_source})"
 
 timeout 30 docker exec "${goose_cid}" sh -lc 'goose session list >/tmp/goose-k5-session-list.out 2>&1' \
   || fail "optional-goose goose session list failed"

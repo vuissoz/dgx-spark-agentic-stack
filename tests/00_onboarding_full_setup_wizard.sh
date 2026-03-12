@@ -92,6 +92,12 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${root_dir}/agent-workspaces/
   || fail "full setup onboarding env must export AGENTIC_VIBESTRAL_WORKSPACES_DIR"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${root_dir}/openhands/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_OPENHANDS_WORKSPACES_DIR"
+grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${root_dir}/optional/openclaw/workspaces'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_OPENCLAW_WORKSPACES_DIR"
+grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${root_dir}/optional/pi-mono/workspaces'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_PI_MONO_WORKSPACES_DIR"
+grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${root_dir}/optional/goose/workspaces'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_GOOSE_WORKSPACES_DIR"
 grep -q "^export GRAFANA_ADMIN_USER='${grafana_admin_user}'$" "${env_file}" \
   || fail "full setup onboarding env must export GRAFANA_ADMIN_USER"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='${grafana_admin_password}'$" "${env_file}" \

@@ -38,6 +38,9 @@ run_override_answers() {
   local custom_opencode_workspace="${work_dir}/custom-workspaces/opencode"
   local custom_vibestral_workspace="${work_dir}/custom-workspaces/vibestral"
   local custom_openhands_workspace="${work_dir}/custom-workspaces/openhands"
+  local custom_openclaw_workspace="${work_dir}/custom-workspaces/openclaw"
+  local custom_pi_mono_workspace="${work_dir}/custom-workspaces/pi-mono"
+  local custom_goose_workspace="${work_dir}/custom-workspaces/goose"
   local custom_models="${work_dir}/custom-ollama-models"
   local custom_default_model="llama3.2:1b"
   local custom_compose="agentic-ci"
@@ -53,6 +56,9 @@ ${custom_codex_workspace}
 ${custom_opencode_workspace}
 ${custom_vibestral_workspace}
 ${custom_openhands_workspace}
+${custom_openclaw_workspace}
+${custom_pi_mono_workspace}
+${custom_goose_workspace}
 ${custom_compose}
 ${custom_network}
 ${custom_egress_network}
@@ -188,6 +194,12 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='/srv/agentic/vibestral/worksp
   || fail "default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not /srv/agentic/vibestral/workspaces"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='/srv/agentic/openhands/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_OPENHANDS_WORKSPACES_DIR is not /srv/agentic/openhands/workspaces"
+grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='/srv/agentic/optional/openclaw/workspaces'$" "${default_env_file}" \
+  || fail "default AGENTIC_OPENCLAW_WORKSPACES_DIR is not /srv/agentic/optional/openclaw/workspaces"
+grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='/srv/agentic/optional/pi-mono/workspaces'$" "${default_env_file}" \
+  || fail "default AGENTIC_PI_MONO_WORKSPACES_DIR is not /srv/agentic/optional/pi-mono/workspaces"
+grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='/srv/agentic/optional/goose/workspaces'$" "${default_env_file}" \
+  || fail "default AGENTIC_GOOSE_WORKSPACES_DIR is not /srv/agentic/optional/goose/workspaces"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic'$" "${default_env_file}" \
   || fail "default AGENTIC_COMPOSE_PROJECT is not agentic"
 grep -q "^export AGENTIC_NETWORK='agentic'$" "${default_env_file}" \
@@ -249,6 +261,12 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/custom-workspaces
   || fail "override AGENTIC_VIBESTRAL_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/custom-workspaces/openhands'$" "${override_env_file}" \
   || fail "override AGENTIC_OPENHANDS_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/custom-workspaces/openclaw'$" "${override_env_file}" \
+  || fail "override AGENTIC_OPENCLAW_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${work_dir}/custom-workspaces/pi-mono'$" "${override_env_file}" \
+  || fail "override AGENTIC_PI_MONO_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/custom-workspaces/goose'$" "${override_env_file}" \
+  || fail "override AGENTIC_GOOSE_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic-ci'$" "${override_env_file}" \
   || fail "override AGENTIC_COMPOSE_PROJECT is not applied"
 grep -q "^export AGENTIC_NETWORK='agentic-ci-net'$" "${override_env_file}" \
@@ -316,6 +334,12 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/rootless-default-
   || fail "rootless default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not <root>/agent-workspaces/vibestral/workspaces"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/rootless-default-root/openhands/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_OPENHANDS_WORKSPACES_DIR is not <root>/openhands/workspaces"
+grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/openclaw/workspaces'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_OPENCLAW_WORKSPACES_DIR is not <root>/optional/openclaw/workspaces"
+grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/pi-mono/workspaces'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_PI_MONO_WORKSPACES_DIR is not <root>/optional/pi-mono/workspaces"
+grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/goose/workspaces'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_GOOSE_WORKSPACES_DIR is not <root>/optional/goose/workspaces"
 grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3-coder:30b'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_DEFAULT_MODEL is not qwen3-coder:30b"
 grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${rootless_default_env_file}" \
@@ -355,6 +379,9 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --opencode-workspaces-dir "${work_dir}/ni-workspaces/opencode" \
   --vibestral-workspaces-dir "${work_dir}/ni-workspaces/vibestral" \
   --openhands-workspaces-dir "${work_dir}/ni-workspaces/openhands" \
+  --openclaw-workspaces-dir "${work_dir}/ni-workspaces/openclaw" \
+  --pi-mono-workspaces-dir "${work_dir}/ni-workspaces/pi-mono" \
+  --goose-workspaces-dir "${work_dir}/ni-workspaces/goose" \
   --compose-project agentic-ni \
   --network agentic-ni-net \
   --egress-network agentic-ni-egress \
@@ -404,6 +431,12 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/ni-workspaces/vib
   || fail "non-interactive AGENTIC_VIBESTRAL_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/ni-workspaces/openhands'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_OPENHANDS_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/ni-workspaces/openclaw'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_OPENCLAW_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${work_dir}/ni-workspaces/pi-mono'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_PI_MONO_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/ni-workspaces/goose'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_GOOSE_WORKSPACES_DIR is not applied"
 grep -q "^export GRAFANA_ADMIN_USER='grafana-admin'$" "${non_interactive_env_file}" \
   || fail "non-interactive GRAFANA_ADMIN_USER is not applied"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='grafana-strong-password'$" "${non_interactive_env_file}" \

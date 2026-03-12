@@ -20,6 +20,7 @@ assert_cmd docker
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+pi_mono_workspaces_dir="${AGENTIC_PI_MONO_WORKSPACES_DIR:-${agentic_root}/optional/pi-mono/workspaces}"
 install -d -m 0750 "${agentic_root}/deployments/optional"
 
 cat >"${agentic_root}/deployments/optional/pi-mono.request" <<'REQ'
@@ -62,6 +63,12 @@ default_model="$(printf '%s\n' "${env_dump}" | sed -n 's/^AGENTIC_DEFAULT_MODEL=
 mount_dump="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%v\n" .Source .Destination .RW}}{{end}}' "${pi_mono_cid}")"
 echo "${mount_dump}" | grep -q '|/run/secrets/gate_mcp.token|false$' \
   || fail "optional-pi-mono must mount gate_mcp.token read-only"
+workspace_mount_source="$(printf '%s\n' "${mount_dump}" | awk -F'|' '$2=="/workspace" {print $1; exit}')"
+[[ -n "${workspace_mount_source}" ]] || fail "optional-pi-mono must mount /workspace"
+workspace_mount_source="$(readlink -f "${workspace_mount_source}" 2>/dev/null || printf '%s\n' "${workspace_mount_source}")"
+expected_workspace_source="$(readlink -f "${pi_mono_workspaces_dir}" 2>/dev/null || printf '%s\n' "${pi_mono_workspaces_dir}")"
+[[ "${workspace_mount_source}" == "${expected_workspace_source}" ]] \
+  || fail "optional-pi-mono /workspace mount source mismatch (expected=${expected_workspace_source}, actual=${workspace_mount_source})"
 
 timeout 20 docker exec "${pi_mono_cid}" sh -lc 'test -d /state/home && test -w /state/home' \
   || fail "optional-pi-mono home must be writable at /state/home"

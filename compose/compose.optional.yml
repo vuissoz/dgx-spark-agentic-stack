@@ -80,7 +80,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/config:/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/workspaces:/workspace
+      - ${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/workspaces}:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.webhook_secret:/run/secrets/openclaw.webhook_secret:ro
     healthcheck:
@@ -325,7 +325,7 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/workspaces:/workspace
+      - ${AGENTIC_PI_MONO_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/optional/pi-mono/workspaces}:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
@@ -390,7 +390,7 @@ services:
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/logs:/logs
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/goose/workspaces:/workspace
+      - ${AGENTIC_GOOSE_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/optional/goose/workspaces}:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
     healthcheck:

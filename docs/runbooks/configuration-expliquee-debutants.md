@@ -197,6 +197,9 @@ Autres variables utiles:
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-opencode`)
 - `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-vibestral`)
 - `AGENTIC_OPENHANDS_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `openhands`)
+- `AGENTIC_OPENCLAW_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `optional-openclaw`)
+- `AGENTIC_PI_MONO_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `optional-pi-mono`)
+- `AGENTIC_GOOSE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `optional-goose`)
 - `AGENT_NO_ATTACH=1`
 - `AGENTIC_DOCTOR_CRITICAL_PORTS`
 

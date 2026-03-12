@@ -310,10 +310,11 @@ source .runtime/env.generated.sh
 ./agent profile
 ```
 
-During this wizard, set these two workspace-related values explicitly:
+During this wizard, set workspace-related values explicitly:
 - `AGENTIC_AGENT_WORKSPACES_ROOT` (host directory that backs `/workspace` in agent containers)
 - `AGENTIC_CLAUDE_WORKSPACES_DIR`, `AGENTIC_CODEX_WORKSPACES_DIR`, `AGENTIC_OPENCODE_WORKSPACES_DIR`, `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (one host directory per agent container mounted to `/workspace`)
 - `AGENTIC_OPENHANDS_WORKSPACES_DIR` (host directory mounted to `/workspace` for `openhands`)
+- `AGENTIC_OPENCLAW_WORKSPACES_DIR`, `AGENTIC_PI_MONO_WORKSPACES_DIR`, `AGENTIC_GOOSE_WORKSPACES_DIR` (host directories mounted to `/workspace` for optional agents when enabled)
 
 Example with explicit default local model:
 

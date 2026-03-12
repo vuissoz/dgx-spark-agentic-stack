@@ -16,6 +16,9 @@ codex_workspaces_dir_override=""
 opencode_workspaces_dir_override=""
 vibestral_workspaces_dir_override=""
 openhands_workspaces_dir_override=""
+openclaw_workspaces_dir_override=""
+pi_mono_workspaces_dir_override=""
+goose_workspaces_dir_override=""
 compose_project_override=""
 network_override=""
 egress_network_override=""
@@ -81,6 +84,9 @@ Runtime options:
   --opencode-workspaces-dir <path>
   --vibestral-workspaces-dir <path>
   --openhands-workspaces-dir <path>
+  --openclaw-workspaces-dir <path>
+  --pi-mono-workspaces-dir <path>
+  --goose-workspaces-dir <path>
   --compose-project <name>
   --network <name>
   --egress-network <name>
@@ -207,6 +213,19 @@ default_agent_workspace_dir_for_tool() {
 default_openhands_workspaces_dir() {
   local root_path="$1"
   printf '%s\n' "${root_path}/openhands/workspaces"
+}
+
+default_optional_workspace_dir_for_tool() {
+  local root_path="$1"
+  local tool="$2"
+  case "${tool}" in
+    openclaw|pi-mono|goose)
+      printf '%s\n' "${root_path}/optional/${tool}/workspaces"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 default_compose_project_for_profile() {
@@ -1111,31 +1130,34 @@ write_env_file() {
   local opencode_workspaces_dir="$6"
   local vibestral_workspaces_dir="$7"
   local openhands_workspaces_dir="$8"
-  local compose_project="$9"
-  local network="${10}"
-  local egress_network="${11}"
-  local ollama_models="${12}"
-  local default_model="${13}"
-  local default_model_context_window="${14}"
-  local goose_context_limit="${15}"
-  local grafana_admin_user="${16}"
-  local grafana_admin_password="${17}"
-  local limits_default_cpus="${18}"
-  local limits_default_mem="${19}"
-  local limits_core_cpus="${20}"
-  local limits_core_mem="${21}"
-  local limits_ollama_mem="${22}"
-  local limits_agents_cpus="${23}"
-  local limits_agents_mem="${24}"
-  local limits_ui_cpus="${25}"
-  local limits_ui_mem="${26}"
-  local limits_obs_cpus="${27}"
-  local limits_obs_mem="${28}"
-  local limits_rag_cpus="${29}"
-  local limits_rag_mem="${30}"
-  local limits_optional_cpus="${31}"
-  local limits_optional_mem="${32}"
-  local out_file="${33}"
+  local openclaw_workspaces_dir="$9"
+  local pi_mono_workspaces_dir="${10}"
+  local goose_workspaces_dir="${11}"
+  local compose_project="${12}"
+  local network="${13}"
+  local egress_network="${14}"
+  local ollama_models="${15}"
+  local default_model="${16}"
+  local default_model_context_window="${17}"
+  local goose_context_limit="${18}"
+  local grafana_admin_user="${19}"
+  local grafana_admin_password="${20}"
+  local limits_default_cpus="${21}"
+  local limits_default_mem="${22}"
+  local limits_core_cpus="${23}"
+  local limits_core_mem="${24}"
+  local limits_ollama_mem="${25}"
+  local limits_agents_cpus="${26}"
+  local limits_agents_mem="${27}"
+  local limits_ui_cpus="${28}"
+  local limits_ui_mem="${29}"
+  local limits_obs_cpus="${30}"
+  local limits_obs_mem="${31}"
+  local limits_rag_cpus="${32}"
+  local limits_rag_mem="${33}"
+  local limits_optional_cpus="${34}"
+  local limits_optional_mem="${35}"
+  local out_file="${36}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1153,6 +1175,9 @@ export AGENTIC_CODEX_WORKSPACES_DIR=$(shell_quote "${codex_workspaces_dir}")
 export AGENTIC_OPENCODE_WORKSPACES_DIR=$(shell_quote "${opencode_workspaces_dir}")
 export AGENTIC_VIBESTRAL_WORKSPACES_DIR=$(shell_quote "${vibestral_workspaces_dir}")
 export AGENTIC_OPENHANDS_WORKSPACES_DIR=$(shell_quote "${openhands_workspaces_dir}")
+export AGENTIC_OPENCLAW_WORKSPACES_DIR=$(shell_quote "${openclaw_workspaces_dir}")
+export AGENTIC_PI_MONO_WORKSPACES_DIR=$(shell_quote "${pi_mono_workspaces_dir}")
+export AGENTIC_GOOSE_WORKSPACES_DIR=$(shell_quote "${goose_workspaces_dir}")
 export AGENTIC_COMPOSE_PROJECT=$(shell_quote "${compose_project}")
 export AGENTIC_NETWORK=$(shell_quote "${network}")
 export AGENTIC_EGRESS_NETWORK=$(shell_quote "${egress_network}")
@@ -1323,6 +1348,21 @@ while [[ $# -gt 0 ]]; do
     --openhands-workspaces-dir)
       [[ $# -ge 2 ]] || die "missing value for --openhands-workspaces-dir"
       openhands_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --openclaw-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --openclaw-workspaces-dir"
+      openclaw_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --pi-mono-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --pi-mono-workspaces-dir"
+      pi_mono_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --goose-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --goose-workspaces-dir"
+      goose_workspaces_dir_override="$2"
       shift 2
       ;;
     --compose-project)
@@ -1588,6 +1628,9 @@ collect_path_value codex_workspaces_dir "AGENTIC_CODEX_WORKSPACES_DIR" "${profil
 collect_path_value opencode_workspaces_dir "AGENTIC_OPENCODE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "opencode")" "${opencode_workspaces_dir_override}" "AGENTIC_OPENCODE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-opencode."
 collect_path_value vibestral_workspaces_dir "AGENTIC_VIBESTRAL_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "vibestral")" "${vibestral_workspaces_dir_override}" "AGENTIC_VIBESTRAL_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-vibestral."
 collect_path_value openhands_workspaces_dir "AGENTIC_OPENHANDS_WORKSPACES_DIR" "${profile}" "$(default_openhands_workspaces_dir "${root_path}")" "${openhands_workspaces_dir_override}" "AGENTIC_OPENHANDS_WORKSPACES_DIR controls the host path mounted as /workspace in openhands."
+collect_path_value openclaw_workspaces_dir "AGENTIC_OPENCLAW_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "openclaw")" "${openclaw_workspaces_dir_override}" "AGENTIC_OPENCLAW_WORKSPACES_DIR controls the host path mounted as /workspace in optional-openclaw."
+collect_path_value pi_mono_workspaces_dir "AGENTIC_PI_MONO_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "pi-mono")" "${pi_mono_workspaces_dir_override}" "AGENTIC_PI_MONO_WORKSPACES_DIR controls the host path mounted as /workspace in optional-pi-mono."
+collect_path_value goose_workspaces_dir "AGENTIC_GOOSE_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "goose")" "${goose_workspaces_dir_override}" "AGENTIC_GOOSE_WORKSPACES_DIR controls the host path mounted as /workspace in optional-goose."
 
 collect_text_value compose_project "AGENTIC_COMPOSE_PROJECT" "${default_compose_project}" "${compose_project_override}" validate_compose_or_network_name "AGENTIC_COMPOSE_PROJECT is the docker compose project name used to namespace resources."
 collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_override}" validate_compose_or_network_name "AGENTIC_NETWORK is the private docker network for internal traffic."
@@ -1638,6 +1681,9 @@ write_env_file \
   "${opencode_workspaces_dir}" \
   "${vibestral_workspaces_dir}" \
   "${openhands_workspaces_dir}" \
+  "${openclaw_workspaces_dir}" \
+  "${pi_mono_workspaces_dir}" \
+  "${goose_workspaces_dir}" \
   "${compose_project}" \
   "${network}" \
   "${egress_network}" \

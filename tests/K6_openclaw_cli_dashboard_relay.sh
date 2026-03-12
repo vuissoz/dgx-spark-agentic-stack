@@ -74,6 +74,7 @@ wait_for_relay_queue_at_least() {
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+openclaw_workspaces_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${agentic_root}/optional/openclaw/workspaces}"
 webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 openclaw_agent_name="operator-k6-$(date +%s)"
@@ -166,6 +167,13 @@ assert_proxy_enforced "${relay_cid}" || fail "optional-openclaw-relay proxy env 
 assert_no_docker_sock_mount "${openclaw_cid}" || fail "optional-openclaw must not mount docker.sock"
 assert_no_docker_sock_mount "${sandbox_cid}" || fail "optional-openclaw-sandbox must not mount docker.sock"
 assert_no_docker_sock_mount "${relay_cid}" || fail "optional-openclaw-relay must not mount docker.sock"
+openclaw_mount_dump="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%v\n" .Source .Destination .RW}}{{end}}' "${openclaw_cid}")"
+openclaw_workspace_source="$(printf '%s\n' "${openclaw_mount_dump}" | awk -F'|' '$2=="/workspace" {print $1; exit}')"
+[[ -n "${openclaw_workspace_source}" ]] || fail "optional-openclaw must mount /workspace"
+openclaw_workspace_source="$(readlink -f "${openclaw_workspace_source}" 2>/dev/null || printf '%s\n' "${openclaw_workspace_source}")"
+expected_openclaw_workspace_source="$(readlink -f "${openclaw_workspaces_dir}" 2>/dev/null || printf '%s\n' "${openclaw_workspaces_dir}")"
+[[ "${openclaw_workspace_source}" == "${expected_openclaw_workspace_source}" ]] \
+  || fail "optional-openclaw /workspace mount source mismatch (expected=${expected_openclaw_workspace_source}, actual=${openclaw_workspace_source})"
 
 relay_ready=0
 for _ in $(seq 1 30); do
@@ -220,8 +228,8 @@ docker exec "${openclaw_cid}" sh -lc 'test -d /state/cli/openclaw-home' \
 docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/openclaw.json' \
   || fail "openclaw config must persist under OPENCLAW_CONFIG_PATH"
 
-[[ -d "${agentic_root}/optional/openclaw/workspaces/wizard-k6" ]] \
-  || fail "openclaw onboard workspace must persist under optional/openclaw/workspaces"
+[[ -d "${openclaw_workspaces_dir}/wizard-k6" ]] \
+  || fail "openclaw onboard workspace must persist under ${openclaw_workspaces_dir}"
 [[ -f "${agentic_root}/optional/openclaw/state/cli/openclaw-home/openclaw.json" ]] \
   || fail "openclaw CLI config must persist under optional/openclaw/state/cli/openclaw-home"
 
