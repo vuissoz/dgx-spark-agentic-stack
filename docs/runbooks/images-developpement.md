@@ -17,7 +17,7 @@ Ce runbook couvre les images locales suivantes:
 | `agentic/comfyui:local` | `deployments/images/comfyui/Dockerfile` | `comfyui` | `./agent up ui` (via Compose) |
 | `agentic/ollama-gate:local` | `deployments/gate/Dockerfile` | `ollama-gate` | `./agent up core`, `./agent update` |
 | `agentic/gate-mcp:local` | `deployments/gate_mcp/Dockerfile` | `gate-mcp` | `./agent up core`, `./agent update` |
-| `agentic/optional-modules:local` | `deployments/optional/Dockerfile` | `optional-openclaw`, `optional-mcp-catalog` | `./agent up optional` (si modules actives) |
+| `agentic/optional-modules:local` | `deployments/optional/Dockerfile` | `optional-openclaw`, `optional-openclaw-gateway`, `optional-mcp-catalog` | `./agent up optional` (si modules actives) |
 
 ## 2) Logique de build automatique
 

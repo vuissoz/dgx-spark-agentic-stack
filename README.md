@@ -15,7 +15,7 @@ Les fichiers Compose sont dans `compose/`:
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (profile `rag-lexical`)
-- `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-openclaw-sandbox`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-openclaw-gateway`, `optional-openclaw-sandbox`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
 
 ## Profils d'exécution
 
@@ -239,6 +239,7 @@ Ports utiles à tunneliser (selon les modules activés):
 - `13100` → Loki (`http://127.0.0.1:13100`)
 - `9001` → Portainer optionnel (`http://127.0.0.1:9001`)
 - `18111` → OpenClaw webhook ingress optionnel (`http://127.0.0.1:18111`)
+- `18789` → OpenClaw upstream Web UI + Gateway WS optionnels (`http://127.0.0.1:18789`, `ws://127.0.0.1:18789`)
 
 Notes:
 - tunneliser uniquement les ports nécessaires;
@@ -247,6 +248,7 @@ Notes:
 - `rag-retriever` (`7111`) et `rag-worker` (`7112`) ne sont pas publiés sur l'hôte.
 - `opensearch` (`rag-lexical`) reste interne uniquement (pas de port host publié).
 - `optional-openclaw` publie uniquement un ingress webhook local (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), jamais en `0.0.0.0`.
+- `optional-openclaw-gateway` publie le Web UI/WS OpenClaw upstream en loopback (`127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`), jamais en `0.0.0.0`.
 
 Exemple Windows PowerShell (API Loki):
 
@@ -348,7 +350,7 @@ Exemples:
 
 Notes:
 - `agent stop` gère les tools `claude|codex|opencode|vibestral|openclaw|pi-mono|goose`.
-- `agent <tool> [project]` attache une session persistante: `claude|codex|opencode|vibestral|pi-mono` utilisent tmux (`Ctrl-b d` pour détacher), `goose` lance directement la CLI Goose dans `/workspace/<project>` (pas de tmux dans l'image upstream), et `openclaw` ouvre un shell opérateur dans le service `optional-openclaw` avec rappel des endpoints API loopback.
+- `agent <tool> [project]` attache une session persistante: `claude|codex|opencode|vibestral|pi-mono` utilisent tmux (`Ctrl-b d` pour détacher), `goose` lance directement la CLI Goose dans `/workspace/<project>` (pas de tmux dans l'image upstream), et `openclaw` ouvre un shell opérateur dans le service `optional-openclaw` avec rappel des endpoints API loopback, Web UI (`18789`) et Gateway WS (`ws://127.0.0.1:18789`).
 - `agent sudo-mode on` active `sudo` dans les conteneurs agents (en relachant uniquement `no-new-privileges` pour ces services); `agent sudo-mode off` revient au mode durci.
 - `agent rollback all` exige un `release_id`.
 - Utiliser `--skip-d5-tests` (ou `AGENTIC_SKIP_D5_TESTS=1`) pour ignorer uniquement `D5_gate_external_providers.sh` avec un warning si l'accès API externe n'est pas disponible.

@@ -424,6 +424,17 @@ Links:
 - Internal stack security doc: `docs/security/openclaw-sandbox-egress.md`
 - MCP concept reference: https://modelcontextprotocol.io/
 
+### Service `optional-openclaw-gateway`
+
+Simple role:
+- Optional upstream OpenClaw Web UI + Gateway WS exposure on host loopback.
+
+Key point:
+- Exposed only on `127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`.
+
+Links:
+- Internal stack security doc: `docs/security/openclaw-sandbox-egress.md`
+
 ### Service `optional-openclaw-sandbox`
 
 Simple role:

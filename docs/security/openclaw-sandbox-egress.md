@@ -8,7 +8,8 @@ This runbook documents a tight egress pattern for upstream OpenClaw gateway depl
 
 ## Scope and Guardrails
 
-- The `optional-openclaw` + `optional-openclaw-sandbox` services shipped by this repository implement a minimal optional API/sandbox pair, not the upstream OpenClaw gateway runtime.
+- The `optional-openclaw` + `optional-openclaw-sandbox` services shipped by this repository implement a minimal optional API/sandbox pair.
+- This repository also ships `optional-openclaw-gateway` for upstream OpenClaw Web UI/WS access on loopback host bind (`127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`).
 - For upstream OpenClaw gateway deployments, keep sandbox traffic fail-closed:
   - default sandbox network is `none`,
   - when egress is needed, force traffic through a dedicated proxy path.

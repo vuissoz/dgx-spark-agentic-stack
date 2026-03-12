@@ -427,6 +427,17 @@ Liens:
 - Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
 - Concept MCP (utile pour comprendre certaines integrations): https://modelcontextprotocol.io/
 
+### Service `optional-openclaw-gateway`
+
+Role simple:
+- Exposition optionnelle du Web UI OpenClaw upstream + Gateway WS en loopback hote.
+
+A retenir:
+- Exposition uniquement sur `127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`.
+
+Liens:
+- Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
+
 ### Service `optional-openclaw-sandbox`
 
 Role simple:

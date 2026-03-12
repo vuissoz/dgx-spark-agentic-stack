@@ -48,13 +48,14 @@ if [[ -n "${AGENTIC_DOCTOR_CRITICAL_PORTS:-}" ]]; then
 fi
 portainer_host_port="${PORTAINER_HOST_PORT:-9001}"
 openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+openclaw_gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 openclaw_relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
 
 service_requires_proxy_env() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|optional-openclaw|optional-openclaw-sandbox|optional-openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|optional-openclaw|optional-openclaw-gateway|optional-openclaw-sandbox|optional-openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
       return 0
       ;;
     *)
@@ -1108,6 +1109,7 @@ if [[ -n "${comfyui_cid}" ]]; then
 fi
 
 optional_openclaw_cid="$(service_container_id optional-openclaw)"
+optional_openclaw_gateway_cid="$(service_container_id optional-openclaw-gateway)"
 optional_openclaw_sandbox_cid="$(service_container_id optional-openclaw-sandbox)"
 optional_openclaw_relay_cid="$(service_container_id optional-openclaw-relay)"
 optional_openclaw_profile_file="${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json"
@@ -1141,6 +1143,70 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   dashboard_status="$(curl -sS -o /tmp/doctor-openclaw-dashboard.out -w '%{http_code}' "http://127.0.0.1:${openclaw_webhook_host_port}/dashboard" 2>/dev/null || true)"
   if [[ "${dashboard_status}" != "200" ]]; then
     doctor_fail "optional-openclaw dashboard must be reachable on loopback (/dashboard, status=${dashboard_status:-unknown})"
+  fi
+fi
+
+if [[ -n "${optional_openclaw_gateway_cid}" ]]; then
+  if ! assert_no_public_bind "${openclaw_gateway_host_port}"; then
+    doctor_fail "optional openclaw gateway bind must stay loopback-only on port ${openclaw_gateway_host_port}"
+  fi
+
+  optional_openclaw_gateway_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_gateway_cid}" 2>/dev/null || true)"
+  if ! grep -q '^OPENCLAW_GATEWAY_BIND_MODE=loopback$' <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "optional-openclaw-gateway must set OPENCLAW_GATEWAY_BIND_MODE=loopback"
+  fi
+  if ! grep -q '^OPENCLAW_GATEWAY_PORT=18789$' <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "optional-openclaw-gateway must set OPENCLAW_GATEWAY_PORT=18789"
+  fi
+
+  if ! timeout 15 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'command -v openclaw >/dev/null'; then
+    doctor_fail "optional-openclaw-gateway must provide openclaw CLI in-container"
+  fi
+
+  if ! mount_destination_present "${optional_openclaw_gateway_cid}" "/workspace"; then
+    doctor_fail "optional-openclaw-gateway must mount /workspace for persistent operator sessions"
+  elif ! mount_destination_matches_source "${optional_openclaw_gateway_cid}" "/workspace" "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"; then
+    doctor_fail "optional-openclaw-gateway /workspace source must match AGENTIC_OPENCLAW_WORKSPACES_DIR (${AGENTIC_OPENCLAW_WORKSPACES_DIR})"
+  fi
+
+  gateway_bindings_json="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "${optional_openclaw_gateway_cid}" 2>/dev/null || true)"
+  if ! python3 - "${gateway_bindings_json}" "${openclaw_gateway_host_port}" <<'PY' >/dev/null 2>&1
+import json
+import sys
+
+bindings_raw = sys.argv[1]
+expected_port = sys.argv[2]
+
+try:
+    bindings = json.loads(bindings_raw)
+except Exception:
+    raise SystemExit(1)
+
+entries = bindings.get("8114/tcp")
+if not isinstance(entries, list) or not entries:
+    raise SystemExit(1)
+
+for item in entries:
+    if not isinstance(item, dict):
+        continue
+    host_ip = str(item.get("HostIp", "")).strip()
+    host_port = str(item.get("HostPort", "")).strip()
+    if host_ip == "127.0.0.1" and host_port == expected_port:
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+  then
+    doctor_fail "optional-openclaw-gateway must publish 8114/tcp on loopback 127.0.0.1:${openclaw_gateway_host_port}"
+  fi
+
+  gateway_ui_status="$(curl -sS -o /tmp/doctor-openclaw-gateway-ui.out -w '%{http_code}' "http://127.0.0.1:${openclaw_gateway_host_port}/" 2>/dev/null || true)"
+  if [[ "${gateway_ui_status}" != "200" ]]; then
+    doctor_fail "optional-openclaw-gateway Web UI must be reachable on loopback (/, status=${gateway_ui_status:-unknown})"
+  fi
+
+  if ! timeout 20 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && openclaw gateway health --json --url ws://127.0.0.1:18789 --token "${token}" >/tmp/openclaw-gateway-health.out'; then
+    doctor_fail "optional-openclaw-gateway WS endpoint must answer token-auth health check on ws://127.0.0.1:18789"
   fi
 fi
 

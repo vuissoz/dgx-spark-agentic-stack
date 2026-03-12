@@ -12,8 +12,9 @@ For the full operational procedure in `rootless-dev`, see:
 ## 1. What OpenClaw Is (in this stack)
 
 Think of OpenClaw as a controlled messaging/automation API layer.
-In this repository, OpenClaw is deployed as an optional module with three services:
+In this repository, OpenClaw is deployed as an optional module with four services:
 - `optional-openclaw`: main API service,
+- `optional-openclaw-gateway`: upstream Web UI/WS service (host loopback),
 - `optional-openclaw-sandbox`: restricted tool execution backend,
 - `optional-openclaw-relay`: provider webhook relay with durable queue + local injection.
 
@@ -24,13 +25,18 @@ Simple mental model:
 4. if a tool action is needed, it forwards to the sandbox,
 5. audit logs are written.
 
-## 2. Why There Are Three Containers
+## 2. Why There Are Four Containers
 
 ## `optional-openclaw` (API)
 - receives API requests,
 - enforces auth token and webhook secret,
 - checks DM allowlist and endpoint contract,
 - records audit events.
+
+## `optional-openclaw-gateway` (upstream Web UI/WS)
+- exposes the upstream OpenClaw Web UI on `127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`,
+- exposes the upstream Gateway WebSocket on `ws://127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`,
+- remains host loopback-only.
 
 ## `optional-openclaw-sandbox` (execution)
 - runs allowed tool actions in a tighter execution boundary,
@@ -51,6 +57,7 @@ Reason for this split:
 
 Key protections used by default:
 - host exposure is loopback only (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`),
+- upstream Web UI/WS is loopback-only as well (`127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`),
 - no `docker.sock` mount,
 - `cap_drop: ALL`,
 - `security_opt: no-new-privileges:true`,

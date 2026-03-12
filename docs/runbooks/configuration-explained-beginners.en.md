@@ -137,6 +137,7 @@ All published ports stay loopback-only (`127.0.0.1`).
 | `LOKI_HOST_PORT` | Loki | `13100` |
 | `PORTAINER_HOST_PORT` | Optional Portainer | `9001` |
 | `OPENCLAW_WEBHOOK_HOST_PORT` | Optional OpenClaw webhook ingress | `18111` |
+| `OPENCLAW_GATEWAY_HOST_PORT` | Optional OpenClaw upstream Web UI + Gateway WS | `18789` |
 
 ## 3.6 Resource Limits
 

@@ -3,7 +3,7 @@
 This runbook explains how to configure and validate OpenClaw in this repository when running in `rootless-dev` mode.
 
 Scope:
-- this stack's optional OpenClaw module (`optional-openclaw` + `optional-openclaw-sandbox` + `optional-openclaw-relay`),
+- this stack's optional OpenClaw module (`optional-openclaw` + `optional-openclaw-gateway` + `optional-openclaw-sandbox` + `optional-openclaw-relay`),
 - loopback-only host exposure (`127.0.0.1`),
 - onboarding through `./agent` (not direct upstream daemon install on host).
 
@@ -152,6 +152,8 @@ This shell reminds you of:
 - host loopback endpoint: `http://127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`
 - internal endpoint: `http://optional-openclaw:8111`
 - dashboard endpoint: `http://127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}/dashboard`
+- upstream Web UI endpoint: `http://127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`
+- upstream Gateway WS endpoint: `ws://127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`
 - relay ingress endpoint: `http://127.0.0.1:${OPENCLAW_RELAY_HOST_PORT:-18112}/v1/providers/<provider>/webhook`
 
 Run OpenClaw CLI wizard-like setup directly in container:
@@ -200,6 +202,16 @@ Windows PuTTY:
 4. Add, then connect to `<dgx-host-or-tailscale-ip>`
 5. Open `http://127.0.0.1:18111/dashboard` locally
 
+If you need upstream OpenClaw Web UI + Gateway WS in parallel:
+
+Linux/macOS (OpenSSH):
+
+```bash
+ssh -N -L 18789:127.0.0.1:18789 <user>@<dgx-host-or-tailscale-ip>
+# then open:
+# http://127.0.0.1:18789/
+```
+
 ## Step 6: Validate Health, Dashboard, Relay, and Compliance
 
 Run compliance and optional tests:
@@ -243,10 +255,11 @@ Loopback-only host bind check:
 
 ```bash
 ss -lntp | grep ":${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+ss -lntp | grep ":${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 ss -lntp | grep ":${OPENCLAW_RELAY_HOST_PORT:-18112}"
 ```
 
-Expected listener address: `127.0.0.1`, never `0.0.0.0`, for both OpenClaw API/dashboard and relay.
+Expected listener address: `127.0.0.1`, never `0.0.0.0`, for OpenClaw API/dashboard, upstream gateway, and relay.
 
 Provider relay signature probe (telegram example):
 

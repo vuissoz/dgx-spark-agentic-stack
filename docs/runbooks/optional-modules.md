@@ -19,11 +19,13 @@ For that reason, activation requires:
 
 ### `openclaw`
 - Service: `optional-openclaw`
+- Gateway service: `optional-openclaw-gateway`
 - Sandbox service: `optional-openclaw-sandbox`
 - Profile: `optional-openclaw`
 - Purpose: token-protected optional API module for scoped workflows.
 - Current repo behavior:
   - internal API listener `:8111` on Docker network,
+  - upstream Web UI/WS listener bridged to host loopback (`127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`),
   - dedicated sandbox runtime `:8112` on Docker network,
   - versioned integration profile bootstrap:
     - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json`
@@ -171,7 +173,7 @@ goose_context_display="$((goose_context_limit / 1000))k"
 timeout 12 docker exec "${goose_cid}" sh -lc 'goose session -n context-check' 2>&1 | grep "/${goose_context_display}"
 ```
 
-OpenClaw gateway port check (only applicable if you run the upstream gateway variant):
+OpenClaw gateway port check (optional module exposes loopback `18789`; upstream variants may add `18791`/`18792`):
 
 ```bash
 lsof -nP -iTCP -sTCP:LISTEN | egrep ':(18789|18791|18792|188[0-9]{2})'

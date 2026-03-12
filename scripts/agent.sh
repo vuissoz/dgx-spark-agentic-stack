@@ -153,7 +153,7 @@ tool_session_mode() {
 
 service_start_hint() {
   case "$1" in
-    optional-openclaw) echo "AGENTIC_OPTIONAL_MODULES=openclaw agent up optional" ;;
+    optional-openclaw|optional-openclaw-gateway) echo "AGENTIC_OPTIONAL_MODULES=openclaw agent up optional" ;;
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
     *) echo "agent up agents" ;;
@@ -414,7 +414,7 @@ optional_module_build_services() {
 
 optional_module_build_stamp_key() {
   case "$1" in
-    optional-openclaw|optional-mcp-catalog) echo "optional-modules-local" ;;
+    optional-openclaw|optional-openclaw-gateway|optional-mcp-catalog) echo "optional-modules-local" ;;
     optional-pi-mono) echo "agent-cli-base-local" ;;
     *) return 1 ;;
   esac
@@ -422,7 +422,7 @@ optional_module_build_stamp_key() {
 
 optional_module_image_ref() {
   case "$1" in
-    optional-openclaw|optional-mcp-catalog) echo "agentic/optional-modules:local" ;;
+    optional-openclaw|optional-openclaw-gateway|optional-mcp-catalog) echo "agentic/optional-modules:local" ;;
     optional-pi-mono) echo "agentic/agent-cli-base:local" ;;
     *) return 1 ;;
   esac
@@ -430,10 +430,12 @@ optional_module_image_ref() {
 
 optional_module_build_inputs() {
   case "$1" in
-    optional-openclaw|optional-mcp-catalog)
+    optional-openclaw|optional-openclaw-gateway|optional-mcp-catalog)
       printf '%s\n' \
         "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py"
+        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_gateway_entrypoint.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/tcp_forward.py"
       ;;
     optional-pi-mono)
       printf '%s\n' \
@@ -1237,6 +1239,8 @@ cmd_tool_attach() {
       printf 'INFO: OpenClaw API is reachable via host loopback on http://127.0.0.1:%s.\n' "${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
       printf 'INFO: internal docker-network endpoint is http://optional-openclaw:8111.\n'
       printf 'INFO: OpenClaw dashboard is available at http://127.0.0.1:%s/dashboard.\n' "${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+      printf 'INFO: OpenClaw upstream Web UI is available at http://127.0.0.1:%s/.\n' "${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
+      printf 'INFO: OpenClaw upstream Gateway WS is ws://127.0.0.1:%s.\n' "${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
       printf 'INFO: provider relay ingress is available at http://127.0.0.1:%s/v1/providers/<provider>/webhook.\n' "${OPENCLAW_RELAY_HOST_PORT:-18112}"
       printf 'INFO: OpenClaw onboarding SecretRef expects OPENCLAW_GATEWAY_TOKEN to be set in this shell.\n'
       printf 'INFO: run: export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\\''\\n'\\'' </run/secrets/openclaw.token)"\n'
@@ -1352,7 +1356,7 @@ cmd_stop_tool() {
   case "${service}" in
     optional-openclaw)
       compose_file="$(stack_to_compose_file optional)"
-      services_to_stop+=(optional-openclaw-sandbox optional-openclaw-relay)
+      services_to_stop+=(optional-openclaw-gateway optional-openclaw-sandbox optional-openclaw-relay)
       ;;
     optional-pi-mono|optional-goose)
       compose_file="$(stack_to_compose_file optional)"
@@ -1567,14 +1571,14 @@ forget_target_services() {
     opencode) printf '%s\n' agentic-opencode ;;
     vibestral) printf '%s\n' agentic-vibestral ;;
     comfyui) printf '%s\n' comfyui comfyui-loopback ;;
-    openclaw) printf '%s\n' optional-openclaw optional-openclaw-sandbox optional-openclaw-relay ;;
+    openclaw) printf '%s\n' optional-openclaw optional-openclaw-gateway optional-openclaw-sandbox optional-openclaw-relay ;;
     openhands) printf '%s\n' openhands ;;
     openwebui) printf '%s\n' openwebui ;;
     qdrant) printf '%s\n' qdrant rag-retriever rag-worker opensearch ;;
     obs) printf '%s\n' prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter ;;
     all)
       printf '%s\n' \
-        optional-openclaw optional-openclaw-sandbox \
+        optional-openclaw optional-openclaw-gateway optional-openclaw-sandbox \
         optional-openclaw-relay \
         qdrant rag-retriever rag-worker opensearch \
         prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter \

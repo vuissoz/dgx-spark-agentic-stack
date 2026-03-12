@@ -97,6 +97,65 @@ services:
       - agentic
       - agentic-egress
 
+  optional-openclaw-gateway:
+    image: agentic/optional-modules:local
+    build:
+      context: ..
+      dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
+    profiles:
+      - optional-openclaw
+    entrypoint:
+      - /app/openclaw_gateway_entrypoint.sh
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_OPENCLAW_GATEWAY_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_OPENCLAW_GATEWAY_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OPENCLAW_GATEWAY_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_GATEWAY_PORT: 18789
+      OPENCLAW_GATEWAY_PROXY_PORT: 8114
+      OPENCLAW_GATEWAY_AUTH_MODE: token
+      OPENCLAW_GATEWAY_BIND_MODE: loopback
+      OPENCLAW_GATEWAY_TAILSCALE_MODE: off
+      HOME: /state/cli/openclaw-home
+      OPENCLAW_HOME: /state/cli/openclaw-home
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,optional-openclaw,optional-openclaw-gateway,optional-openclaw-sandbox,optional-openclaw-relay,localhost,127.0.0.1
+    depends_on:
+      optional-openclaw:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}:8114
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/logs:/logs
+      - ${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/optional/openclaw/workspaces}:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8114/", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+      - agentic-egress
+
   optional-openclaw-sandbox:
     image: agentic/optional-modules:local
     build:

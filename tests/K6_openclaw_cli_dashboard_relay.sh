@@ -76,6 +76,7 @@ wait_for_relay_queue_at_least() {
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
 openclaw_workspaces_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${agentic_root}/optional/openclaw/workspaces}"
 webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
+gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 openclaw_agent_name="operator-k6-$(date +%s)"
 
@@ -150,21 +151,26 @@ OPENCLAW_RELAY_POLL_INTERVAL_SEC=0.5 \
   || fail "agent up optional (openclaw) failed"
 
 openclaw_cid="$(require_service_container optional-openclaw)" || exit 1
+gateway_cid="$(require_service_container optional-openclaw-gateway)" || exit 1
 sandbox_cid="$(require_service_container optional-openclaw-sandbox)" || exit 1
 relay_cid="$(require_service_container optional-openclaw-relay)" || exit 1
 toolbox_cid="$(require_service_container toolbox)" || exit 1
 
 wait_for_container_ready "${openclaw_cid}" 90 || fail "optional-openclaw did not become ready"
+wait_for_container_ready "${gateway_cid}" 90 || fail "optional-openclaw-gateway did not become ready"
 wait_for_container_ready "${sandbox_cid}" 90 || fail "optional-openclaw-sandbox did not become ready"
 wait_for_container_ready "${relay_cid}" 90 || fail "optional-openclaw-relay did not become ready"
 
 assert_container_security "${openclaw_cid}" || fail "optional-openclaw container security baseline failed"
+assert_container_security "${gateway_cid}" || fail "optional-openclaw-gateway container security baseline failed"
 assert_container_security "${sandbox_cid}" || fail "optional-openclaw-sandbox container security baseline failed"
 assert_container_security "${relay_cid}" || fail "optional-openclaw-relay container security baseline failed"
 assert_proxy_enforced "${openclaw_cid}" || fail "optional-openclaw proxy env baseline failed"
+assert_proxy_enforced "${gateway_cid}" || fail "optional-openclaw-gateway proxy env baseline failed"
 assert_proxy_enforced "${sandbox_cid}" || fail "optional-openclaw-sandbox proxy env baseline failed"
 assert_proxy_enforced "${relay_cid}" || fail "optional-openclaw-relay proxy env baseline failed"
 assert_no_docker_sock_mount "${openclaw_cid}" || fail "optional-openclaw must not mount docker.sock"
+assert_no_docker_sock_mount "${gateway_cid}" || fail "optional-openclaw-gateway must not mount docker.sock"
 assert_no_docker_sock_mount "${sandbox_cid}" || fail "optional-openclaw-sandbox must not mount docker.sock"
 assert_no_docker_sock_mount "${relay_cid}" || fail "optional-openclaw-relay must not mount docker.sock"
 openclaw_mount_dump="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%v\n" .Source .Destination .RW}}{{end}}' "${openclaw_cid}")"
@@ -190,6 +196,10 @@ AGENT_NO_ATTACH=1 "${agent_bin}" openclaw >/tmp/agent-k6-openclaw-entrypoint.out
   || fail "agent openclaw operator entrypoint must be available"
 grep -q 'OpenClaw dashboard is available' /tmp/agent-k6-openclaw-entrypoint.out \
   || fail "agent openclaw output must mention dashboard URL"
+grep -q 'OpenClaw upstream Web UI is available' /tmp/agent-k6-openclaw-entrypoint.out \
+  || fail "agent openclaw output must mention upstream Web UI URL"
+grep -q 'OpenClaw upstream Gateway WS is ws://127.0.0.1:' /tmp/agent-k6-openclaw-entrypoint.out \
+  || fail "agent openclaw output must mention upstream Gateway WS URL"
 grep -q 'provider relay ingress is available' /tmp/agent-k6-openclaw-entrypoint.out \
   || fail "agent openclaw output must mention relay ingress URL"
 
@@ -257,6 +267,12 @@ for field in ("pending", "done", "dead"):
         raise SystemExit(f"dashboard relay payload missing field: {field}")
 PY
 
+gateway_ui_status="$(curl -sS -o /tmp/agent-k6-gateway-ui.html -w '%{http_code}' "http://127.0.0.1:${gateway_host_port}/")"
+[[ "${gateway_ui_status}" == "200" ]] || fail "openclaw gateway Web UI must be reachable on loopback (status=${gateway_ui_status})"
+
+timeout 25 docker exec "${gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && openclaw gateway health --json --url ws://127.0.0.1:18789 --token "${token}" >/tmp/agent-k6-gateway-health.json' \
+  || fail "openclaw gateway WS health check must succeed with token auth"
+
 relay_body='{"message":"relay hello from k6","target":"discord:user:test"}'
 relay_ts="$(date +%s)"
 relay_sig="$(relay_signature "${telegram_secret}" "${relay_ts}" "${relay_body}")"
@@ -313,7 +329,7 @@ grep -q '"action":"forward"' "${relay_audit_log}" || fail "relay audit log must 
 grep -q '"action":"retry_scheduled"' "${relay_audit_log}" || fail "relay audit log must include retry_scheduled entries"
 grep -q '"reason":"max_attempts_exceeded"' "${relay_audit_log}" || fail "relay audit log must include max_attempts_exceeded dead-letter entry"
 
-assert_no_public_bind 8111 "${webhook_host_port}" "${relay_host_port}" \
-  || fail "openclaw dashboard and relay ports must remain loopback-only"
+assert_no_public_bind "${webhook_host_port}" "${gateway_host_port}" "${relay_host_port}" \
+  || fail "openclaw dashboard, gateway, and relay ports must remain loopback-only"
 
 ok "K6_openclaw_cli_dashboard_relay passed"
