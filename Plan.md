@@ -208,3 +208,30 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - conserver le bind loopback-only cote hote,
     - ne pas exposer de secrets dans labels/logs/metrics,
     - ne pas relacher le hardening conteneur.
+
+## Addendum (2026-03-13, onboarding retention and disk occupation policy)
+- Beads `dgx-spark-agentic-stack-im5`: ajouter dans l'onboarding des questions explicites pour la retention maximale et l'occupation disque maximale, puis appliquer ces politiques au runtime.
+  - Objectif:
+    - rendre la retention observabilite parametrique des le premier setup operateur, avec enforcement technique (pas uniquement documentaire).
+  - Plan d'implementation:
+    1. Etendre `agent onboard` (wizard + non-interactif) avec deux nouveaux parametres:
+       - retention maximale (ex: `15d`, `30d`),
+       - occupation disque maximale (ex: `50GB`, `200GB`).
+    2. Definir des variables runtime explicites exportees dans `runtime.env` (noms a figer pendant implementation).
+    3. Propager la retention vers Prometheus:
+       - `--storage.tsdb.retention.time`,
+       - `--storage.tsdb.retention.size`.
+    4. Propager la retention/limites vers Loki:
+       - retention policy (ex: `limits_config.retention_period`),
+       - compactor/cleanup si necessaire selon mode Loki utilise.
+    5. Aligner la politique de logs conteneurs (rotation `json-file` max-size/max-file) avec le budget disque global choisi, sans regressions de securite.
+    6. Ajouter des verifications `agent doctor`:
+       - presence des valeurs configurees,
+       - coherence format/borne,
+       - correspondance entre onboarding, compose effectif et runtime.
+    7. Ajouter tests de non-regression onboarding + compose rendering + checks observabilite.
+    8. Mettre a jour README et runbooks ops (changement de policy apres deploiement, impact rollback).
+  - Contraintes:
+    - conserver binds loopback-only,
+    - ne pas exposer de secrets dans logs/metrics,
+    - garder une trajectoire rollback deterministe (release manifests).
