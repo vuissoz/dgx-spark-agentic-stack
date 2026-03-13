@@ -185,3 +185,26 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Beads `dgx-spark-agentic-stack-0ik`: en rootless-dev, les mutations ComfyUI peuvent impacter toute l'arborescence (pas seulement `input/output`).
   - Exigence ajoutee: basculer vers un mount hote persistant unique pour toute l'arborescence runtime ComfyUI (point canonique sous `${AGENTIC_ROOT}/comfyui`).
   - Impact attendu: persistance deterministe des changements ComfyUI hors `input/output`, avec alignement compose/bootstrap/doctor/tests/runbooks.
+
+## Addendum (2026-03-13, Prometheus metrics for TCP forwarder)
+- Beads `dgx-spark-agentic-stack-wlx`: exporter des metriques Prometheus natives pour les forwarders TCP OpenClaw (notamment le forwarder `optional-openclaw-gateway`).
+  - Objectif:
+    - rendre observable le trafic du forwarder (connexions, bytes entrants/sortants, erreurs) depuis Prometheus/Grafana.
+  - Plan d'implementation:
+    1. Remplacer/etendre `deployments/optional/tcp_forward.py` pour exposer un endpoint HTTP `/metrics` (format Prometheus text exposition).
+    2. Ajouter des compteurs/gauges minimaux:
+       - `tcp_forward_connections_total`,
+       - `tcp_forward_connections_active`,
+       - `tcp_forward_bytes_in_total`,
+       - `tcp_forward_bytes_out_total`,
+       - `tcp_forward_connection_errors_total`.
+    3. Etendre la definition `optional-openclaw-gateway` pour exposer le port metrics en interne uniquement (pas de bind host public supplementaire).
+    4. Ajouter un scrape target Prometheus pour ce endpoint et verifier sa presence via `api/v1/targets`.
+    5. Ajouter/mettre a jour un dashboard Grafana (ou panel dans dashboard existant) pour visualiser debit, connexions actives, erreurs.
+    6. Etendre `agent doctor` (chemin optional OpenClaw) pour verifier que le endpoint `/metrics` est disponible quand le module est actif.
+    7. Ajouter un test de non-regression (suite K/OpenClaw) validant exposition metrics + scrape Prometheus.
+    8. Mettre a jour les runbooks OpenClaw/observabilite.
+  - Contraintes:
+    - conserver le bind loopback-only cote hote,
+    - ne pas exposer de secrets dans labels/logs/metrics,
+    - ne pas relacher le hardening conteneur.
