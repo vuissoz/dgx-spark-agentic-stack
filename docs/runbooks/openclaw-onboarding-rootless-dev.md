@@ -175,6 +175,40 @@ CLI state files persist under:
 If you need a "brand-new install" reset (CLI-only or full module reset), follow:
 - `docs/runbooks/openclaw-explique-debutants.md` section `8. Reset "installation neuve" (clean reset)`
 
+## Step 4b: Manual Onboard Wizard Choices (This Stack)
+
+If you run interactive/manual onboarding (`openclaw onboard` prompts, or Web UI onboarding forms), use the following choices.
+
+| Wizard item | Choose in this stack | Why / notes |
+|---|---|---|
+| Workspace path | `/workspace/<project>` (example: `/workspace/wizard-default`) | This is the stack-standard persistent workspace mount (`${AGENTIC_OPENCLAW_WORKSPACES_DIR}`). |
+| Is `/state/cli/openclaw-home/.openclaw/workspace` persistent? | Yes | `/state` is also a persistent host mount. Still prefer `/workspace/<project>` for explicit operator projects. |
+| Custom provider base URL | `http://ollama-gate:11435/v1` | From containers, use Docker DNS service name `ollama-gate` (not host loopback). |
+| "IP of ollama-gate" | Do not set fixed IP | Container IPs are ephemeral. Always use `ollama-gate` hostname on the `agentic` network. |
+| API key field for custom provider | Non-empty placeholder (example: `local-gate`) | Empty keys can be rejected by onboarding forms; local `ollama-gate` path does not require a real upstream key. |
+| Entrypoint compatibility | OpenAI-compatible / enabled | `ollama-gate` OpenAI endpoint is `/v1/*`. |
+| Model ID | `${AGENTIC_DEFAULT_MODEL}` (default: `qwen3-coder:30b`) | Keeps onboarding aligned with stack defaults and `agent doctor` checks. |
+| Gateway auth mode | `Token` | Stack gateway service is configured with `OPENCLAW_GATEWAY_AUTH_MODE=token`. |
+| Tailscale exposure (inside container) | `Off` | Exposure is handled at host level via SSH/Tailscale tunnel to loopback ports. |
+| "How should I provide the gateway token?" | `Use SecretRef` -> Environment variable | Matches secret storage contract used by this stack. |
+| Secret provider type | `Environment variable` | Recommended for this stack (no external secret manager required). |
+| Environment variable name | `OPENCLAW_GATEWAY_TOKEN` | This is the expected SecretRef variable name in onboarding. |
+| Why `OPENCLAW_GATEWAY_TOKEN` is not present by default in shell | Expected behavior | Token is file-backed (`/run/secrets/openclaw.token`) and intentionally not auto-exported to reduce accidental leakage. |
+| Zsh shell completion | Usually `Off` | Optional convenience only; not required for stack operation. |
+
+Set the onboarding env variable explicitly when needed in `./agent openclaw` shell:
+
+```bash
+export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' </run/secrets/openclaw.token)"
+```
+
+Quick probe from inside `optional-openclaw` container context:
+
+```bash
+curl -fsS http://ollama-gate:11435/healthz
+curl -fsS http://ollama-gate:11435/v1/models | sed -n '1,40p'
+```
+
 ## Step 5: Access Dashboard via SSH/Tailscale Tunnel
 
 Dashboard remains loopback-only on the DGX host.
@@ -210,6 +244,14 @@ Linux/macOS (OpenSSH):
 ssh -N -L 18789:127.0.0.1:18789 <user>@<dgx-host-or-tailscale-ip>
 # then open:
 # http://127.0.0.1:18789/
+```
+
+If your local machine reports `bind [127.0.0.1]:18789: Permission denied`, use another local source port:
+
+```bash
+ssh -N -L 28789:127.0.0.1:18789 <user>@<dgx-host-or-tailscale-ip>
+# then open:
+# http://127.0.0.1:28789/
 ```
 
 ## Step 6: Validate Health, Dashboard, Relay, and Compliance
