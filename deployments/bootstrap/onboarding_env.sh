@@ -2068,6 +2068,11 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     write_secret_file "${root_path}" "openclaw.webhook_secret" "${openclaw_webhook_secret}" || true
     write_secret_file "${root_path}" "mcp.token" "${mcp_token}" || true
 
+    # Defensive hardening: ensure all runtime secret files are 0600, even if something wrote them looser.
+    if [[ -d "${root_path}/secrets/runtime" ]]; then
+      find "${root_path}/secrets/runtime" -type f -exec chmod 0600 {} +
+    fi
+
     if [[ "${#optional_modules_list[@]}" -gt 0 ]]; then
       for module in "${optional_modules_list[@]}"; do
         [[ -n "${module}" && "${module}" != "none" ]] || continue

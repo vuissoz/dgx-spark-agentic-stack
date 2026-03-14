@@ -60,9 +60,12 @@ ensure_dir() {
 ensure_secret_files_mode() {
   local secrets_dir="$1"
 
-  while IFS= read -r file; do
-    chmod 600 "${file}"
-  done < <(find "${secrets_dir}" -maxdepth 1 -type f)
+  if [[ ! -d "${secrets_dir}" ]]; then
+    return 0
+  fi
+
+  # Ensure all runtime secret files are always restrictive (including subdirectories like runtime/)
+  find "${secrets_dir}" -type f -exec chmod 0600 {} +
 }
 
 main() {
