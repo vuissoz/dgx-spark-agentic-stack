@@ -34,6 +34,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-fcb` (resoudre les valeurs `latest` en versions figees au moment de `agent update` et tracer demande vs valeur resolue) [OPEN]
 - Beads (Registre d'etat OpenClaw):
   - `dgx-spark-agentic-stack-oop` (ajouter un registre persistant des sessions/sandboxes OpenClaw pour `agent ls` et `agent doctor`) [OPEN]
+- Beads (Dualite API interne / CLI operateur OpenClaw):
+  - `dgx-spark-agentic-stack-0n8` (gerer les sous-agents via une API interne OpenClaw et separer cette logique de la surface CLI operateur `agent openclaw ...`) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
@@ -149,6 +151,14 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - champs operateur minimaux: current/default, model, provider, policy set, creation, workspace, last health,
   - integration dans `agent ls`, `agent doctor` et les futurs workflows OpenClaw,
   - sans stocker de donnees sensibles.
+- Follow-up `dgx-spark-agentic-stack-0n8`: separer les surfaces de controle OpenClaw:
+  - API interne de lifecycle des sandboxes/sous-agents consommee par le main agent OpenClaw,
+  - surface CLI operateur distincte, adossee au meme runtime/registre, avec des commandes de type:
+    - `agent openclaw status [--json]`
+    - `agent openclaw policy list|add`
+    - `agent openclaw model set <id>`
+    - `agent openclaw sandbox ls|attach|destroy`
+  - sans exposer `./agent` comme dependance du main agent.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -379,3 +389,31 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - aucune donnee sensible dans le registre,
     - emplacement/runtime documentes,
     - docs/tests alignes si le registre devient un contrat supporte.
+
+## Addendum (2026-03-22, dualite API interne / CLI operateur OpenClaw)
+- Beads `dgx-spark-agentic-stack-0n8`: introduire une separation explicite entre pilotage machine des sous-agents OpenClaw et surface d'operations humaine.
+  - Constat actuel:
+    - une future surface `agent openclaw ...` est utile pour l'operateur,
+    - mais elle ne constitue pas le bon mecanisme pour que le main agent OpenClaw cree/attache/detruise ses sous-agents,
+    - il faut eviter toute dependance du main agent a `./agent` ou a un wrapper shell hote.
+  - Cible:
+    - surface 1 `internal sandbox manager API`:
+      - API interne de confiance pour le lifecycle des sous-agents/sandboxes OpenClaw,
+      - operations cibles: create, get, list, delete, attach-or-reuse selon session,
+      - consommee par le main agent OpenClaw ;
+    - surface 2 `operator CLI`:
+      - commandes d'administration/inspection lisibles par l'operateur,
+      - cibles minimales:
+        - `agent openclaw status [--json]`
+        - `agent openclaw policy list|add`
+        - `agent openclaw model set <id>`
+        - `agent openclaw sandbox ls|attach|destroy`
+      - branchee sur le meme registre/runtime que l'API interne.
+  - Effet recherche:
+    - le main agent OpenClaw pilote ses sous-agents via une interface machine appropriee,
+    - l'operateur dispose d'une surface dediee pour observer, debugger et reprendre la main sans ouvrir un contournement de securite.
+  - Exigences:
+    - aucune invocation de `./agent` par le main agent OpenClaw,
+    - compatibilite avec les futurs sandboxes de session et le registre d'etat OpenClaw,
+    - `agent doctor` able de verifier la coherence entre API interne, registre et surface operateur,
+    - pas de secret ni de capacite privilegiee inutile dans les commandes operateur exposees.
