@@ -28,6 +28,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-4xu` (inspiration NemoClaw/OpenShell: gateway toujours actif + sous-agents OpenClaw isoles dans un sandbox dedie par session) [OPEN]
 - Beads (OpenClaw config split):
   - `dgx-spark-agentic-stack-lhm` (separer config immuable, overlay valide et etat writable pour OpenClaw) [OPEN]
+- Beads (OpenClaw approvals egress interactives):
+  - `dgx-spark-agentic-stack-e0q` (ajouter une queue d'approbation operateur par destination egress + workflow `agent openclaw approvals`) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
@@ -128,6 +130,11 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - overlay operateur valide sur un sous-ensemble de cles safe,
   - etat runtime writable (agents/sessions/devices/cache/workspace metadata),
   - avec documentation explicite des cles immuables vs overlay-allowed.
+- Follow-up `dgx-spark-agentic-stack-e0q`: ajouter une boucle d'approbation egress interactive OpenClaw au-dessus des allowlists statiques:
+  - queue durable `pending/approved/denied/expired` pour les destinations non listees,
+  - workflow operateur `agent openclaw approvals [list|approve|deny|promote]`,
+  - approbations scope session vs promotion persistante vers artefact de config explicite,
+  - audit JSONL et verifications doctor/tests associees.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -293,3 +300,22 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - layout d'arborescence cible documente,
     - bootstrap/runtime alignes sur cette separation,
     - doctor/tests/docs listant clairement ce qui est immuable, overlay-allowed et writable.
+
+## Addendum (2026-03-22, OpenClaw approvals egress interactives)
+- Beads `dgx-spark-agentic-stack-e0q`: completer le modele allowlist-only actuel par une boucle d'approbation operateur pour les destinations egress non prevues.
+  - Constat actuel:
+    - OpenClaw s'appuie sur des allowlists statiques/policies explicites,
+    - une destination non prevue est bloquee, mais il n'existe pas de queue operateur ni de workflow de decision runtime comparable a l'idee NemoClaw/OpenShell.
+  - Cible:
+    - garder les allowlists statiques comme baseline de securite,
+    - bloquer par defaut toute destination inconnue puis materialiser la tentative dans une queue durable,
+    - fournir un workflow `agent openclaw approvals` pour:
+      - lister les demandes pending,
+      - approuver temporairement dans un scope controle (session),
+      - refuser explicitement,
+      - promouvoir une destination vers un artefact de config persistant et tracable.
+  - Exigences:
+    - aucune ouverture implicite de trafic hors du scope de la decision,
+    - audit JSONL des demandes et des decisions,
+    - pas de secrets dans la queue, les logs ou les commentaires,
+    - doctor/tests/docs couvrant la queue, les promotions persistantes et l'absence de regression des controles egress.
