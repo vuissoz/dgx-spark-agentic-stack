@@ -32,6 +32,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-e0q` (ajouter une queue d'approbation operateur par destination egress + workflow `agent openclaw approvals`) [OPEN]
 - Beads (Resolution deterministe des `latest`):
   - `dgx-spark-agentic-stack-fcb` (resoudre les valeurs `latest` en versions figees au moment de `agent update` et tracer demande vs valeur resolue) [OPEN]
+- Beads (Registre d'etat OpenClaw):
+  - `dgx-spark-agentic-stack-oop` (ajouter un registre persistant des sessions/sandboxes OpenClaw pour `agent ls` et `agent doctor`) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
@@ -142,6 +144,11 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - capture release de la valeur demandee vs valeur resolue,
   - deploiement/rollback appuyes sur la valeur resolue/pinnee,
   - doctor/tests/docs pour detecter les flottants non resolus dans les releases actives.
+- Follow-up `dgx-spark-agentic-stack-oop`: introduire un modele d'etat OpenClaw premier-classe:
+  - registre persistant des sessions/sandboxes OpenClaw,
+  - champs operateur minimaux: current/default, model, provider, policy set, creation, workspace, last health,
+  - integration dans `agent ls`, `agent doctor` et les futurs workflows OpenClaw,
+  - sans stocker de donnees sensibles.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -347,3 +354,28 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - aucune re-resolution implicite pendant un simple `agent up` sur une release deja figee,
     - doctor/tests detectent les releases actives contenant encore des flottants non resolus la ou la politique impose une resolution,
     - docs/runbooks explicitent que `latest` est une intention de tracking, pas une version deploiement.
+
+## Addendum (2026-03-22, registre d'etat OpenClaw)
+- Beads `dgx-spark-agentic-stack-oop`: ajouter un registre d'etat persistant pour les sessions/sandboxes OpenClaw afin d'ameliorer l'operabilite.
+  - Constat actuel:
+    - la stack expose les services OpenClaw et des checks ponctuels,
+    - mais ne maintient pas un registre explicite permettant de repondre simplement a: quelle session est courante/par defaut, quel modele/provider/policy est applique, quel workspace est attache, quelle est la derniere sante observee.
+  - Cible:
+    - registre local/persistant, plus leger que le modele NemoClaw complet,
+    - champs minimaux:
+      - `current` / `default`,
+      - `model`,
+      - `provider`,
+      - `policy_set`,
+      - `created_at`,
+      - `workspace`,
+      - `last_health`,
+      - `expires_at` ou equivalent si le runtime introduit des sandboxes de session.
+  - Usages vises:
+    - enrichir `agent ls`,
+    - permettre a `agent doctor` de verifier la coherence de l'etat OpenClaw actif,
+    - fournir une base de contrat pour les futurs workflows OpenClaw (approvals, sandboxes de session, model/status).
+  - Exigences:
+    - aucune donnee sensible dans le registre,
+    - emplacement/runtime documentes,
+    - docs/tests alignes si le registre devient un contrat supporte.
