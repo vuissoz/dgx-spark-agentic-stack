@@ -3,7 +3,7 @@
 This runbook explains how to configure and validate OpenClaw in this repository when running in `rootless-dev` mode.
 
 Scope:
-- this stack's optional OpenClaw module (`optional-openclaw` + `optional-openclaw-gateway` + `optional-openclaw-sandbox` + `optional-openclaw-relay`),
+- this stack's core OpenClaw services (`openclaw` + `openclaw-gateway` + `openclaw-sandbox` + `openclaw-relay`),
 - loopback-only host exposure (`127.0.0.1`),
 - onboarding through `./agent` (not direct upstream daemon install on host).
 
@@ -18,15 +18,15 @@ Upstream references used as baseline:
 
 | Upstream OpenClaw docs | This stack (`dgx-spark-agentic-stack`) |
 |---|---|
-| `openclaw onboard` | `./agent onboard --profile rootless-dev --optional-modules openclaw` |
+| `openclaw onboard` | `./agent onboard --profile rootless-dev` |
 | `openclaw onboard` (operator in runtime container) | `./agent openclaw` then `openclaw onboard ...` |
 | `openclaw configure` | `./agent openclaw` then `openclaw configure --section ...` |
 | `openclaw agents add <name>` | `./agent openclaw` then `openclaw agents add <name> --workspace ... --non-interactive` |
-| `openclaw gateway run --dashboard` | `AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional` |
+| `openclaw gateway run --dashboard` | `./agent up core` |
 | `openclaw gateway status` | `./agent ls` (service state) + `./agent doctor` (compliance) |
 | `openclaw gateway logs` | `./agent logs openclaw` |
-| `openclaw gateway stop` | `./agent down optional` (or `./agent stop openclaw`) |
-| `openclaw node run` | not used in baseline stack path; this stack deploys a local optional OpenClaw API/sandbox pair |
+| `openclaw gateway stop` | `./agent stop openclaw` (or `./agent down core`) |
+| `openclaw node run` | not used in baseline stack path; this stack deploys a local core OpenClaw API/sandbox pair |
 
 ## Preconditions
 
@@ -51,7 +51,6 @@ Interactive (recommended):
 ```bash
 ./agent onboard \
   --profile rootless-dev \
-  --optional-modules openclaw \
   --output .runtime/env.generated.sh
 ```
 
@@ -72,7 +71,6 @@ Non-interactive example:
 ./agent onboard \
   --profile rootless-dev \
   --non-interactive \
-  --optional-modules openclaw \
   --output .runtime/env.generated.sh
 source .runtime/env.generated.sh
 ```
@@ -80,16 +78,15 @@ source .runtime/env.generated.sh
 ## Step 2: Review Generated OpenClaw Artifacts
 
 Onboarding/runtime init prepares these files:
-- `${AGENTIC_ROOT}/deployments/optional/openclaw.request`
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret`
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret`
-- `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
-- `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
-- `${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json`
-- `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json`
-- `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`
+- `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/relay_targets.json`
+- `${AGENTIC_ROOT}/openclaw/config/integration-profile.v1.json`
+- `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json`
 
 Verify permissions (secrets must stay restrictive):
 
@@ -110,36 +107,35 @@ OpenClaw is allowlist-driven in this stack.
 Edit DM targets:
 
 ```bash
-${EDITOR:-vi} "${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt"
+${EDITOR:-vi} "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt"
 ```
 
 Edit allowed sandbox tools:
 
 ```bash
-${EDITOR:-vi} "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt"
+${EDITOR:-vi} "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt"
 ```
 
 Edit relay provider targets:
 
 ```bash
-${EDITOR:-vi} "${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json"
+${EDITOR:-vi} "${AGENTIC_ROOT}/openclaw/config/relay_targets.json"
 ```
 
-Also verify request intent file:
+Also verify the active integration profile:
 
 ```bash
-cat "${AGENTIC_ROOT}/deployments/optional/openclaw.request"
+cat "${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json"
 ```
 
-It must keep non-empty `need=` and `success=` fields, otherwise optional activation is refused.
+It must remain valid JSON matching the runtime contract, otherwise OpenClaw startup is refused.
 
 ## Step 4: Start Services
 
-Start baseline and then optional OpenClaw:
+Start the core stack:
 
 ```bash
 ./agent up core
-AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 ```
 
 Open an operator shell for OpenClaw service context:
@@ -150,7 +146,7 @@ Open an operator shell for OpenClaw service context:
 
 This shell reminds you of:
 - host loopback endpoint: `http://127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`
-- internal endpoint: `http://optional-openclaw:8111`
+- internal endpoint: `http://openclaw:8111`
 - dashboard endpoint: `http://127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}/dashboard`
 - upstream Web UI endpoint: `http://127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`
 - upstream Gateway WS endpoint: `ws://127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`
@@ -168,9 +164,9 @@ openclaw agents list
 ```
 
 CLI state files persist under:
-- `${AGENTIC_ROOT}/optional/openclaw/state/cli/openclaw-home/` (`OPENCLAW_HOME`)
-- `${AGENTIC_ROOT}/optional/openclaw/state/cli/openclaw-home/openclaw.json` (`OPENCLAW_CONFIG_PATH`)
-- `${AGENTIC_ROOT}/optional/openclaw/workspaces/`
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/` (`OPENCLAW_HOME`)
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.json` (`OPENCLAW_CONFIG_PATH`)
+- `${AGENTIC_ROOT}/openclaw/workspaces/`
 
 If you need a "brand-new install" reset (CLI-only or full module reset), follow:
 - `docs/runbooks/openclaw-explique-debutants.md` section `8. Reset "installation neuve" (clean reset)`
@@ -202,7 +198,7 @@ Set the onboarding env variable explicitly when needed in `./agent openclaw` she
 export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' </run/secrets/openclaw.token)"
 ```
 
-Quick probe from inside `optional-openclaw` container context:
+Quick probe from inside the `openclaw` container context:
 
 ```bash
 curl -fsS http://ollama-gate:11435/healthz
@@ -256,7 +252,7 @@ ssh -N -L 28789:127.0.0.1:18789 <user>@<dgx-host-or-tailscale-ip>
 
 ## Step 6: Validate Health, Dashboard, Relay, and Compliance
 
-Run compliance and optional tests:
+Run compliance and OpenClaw tests:
 
 ```bash
 ./agent doctor
@@ -341,11 +337,11 @@ Logs:
 ./agent logs openclaw
 ```
 
-If you modify allowlist files, restart optional services to reload config:
+If you modify allowlist files, restart OpenClaw core services to reload config:
 
 ```bash
-./agent down optional
-AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
+./agent stop openclaw
+./agent up core
 ```
 
 Rotate OpenClaw secrets:
@@ -358,18 +354,15 @@ openssl rand -hex 24 > "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.
 openssl rand -hex 24 > "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
 chmod 600 "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret" \
   "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
-./agent down optional
-AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
+./agent stop openclaw
+./agent up core
 ./agent doctor
 ```
 
 ## Troubleshooting
 
-- `optional stack gating refused because 'agent doctor' is not green`
-  - fix baseline doctor failures first, then re-run optional activation.
-
-- `requires request file` or `missing need=/success=`
-  - update `${AGENTIC_ROOT}/deployments/optional/openclaw.request` with non-empty `need` and `success`.
+- `openclaw service is not running`
+  - start or recreate the core stack with `./agent up core`.
 
 - `requires a secret file with mode 600`
   - create/fix `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`, `openclaw.webhook_secret`, `openclaw.relay.telegram.secret`, and `openclaw.relay.whatsapp.secret`, then `chmod 600`.
@@ -377,7 +370,7 @@ AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 - `integration profile is invalid`
   - restore from template:
     - `examples/optional/openclaw.integration-profile.v1.json`
-    - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`
+    - `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json`
 
 - DM call returns `403`
   - target is not present in `dm_allowlist.txt` (or file changes were not reloaded yet).
@@ -387,8 +380,8 @@ AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 
 - Relay queue `dead` count increases
   - downstream OpenClaw webhook injection failed repeatedly; inspect:
-    - `${AGENTIC_ROOT}/optional/openclaw/relay/logs/relay-audit.jsonl`
-    - `${AGENTIC_ROOT}/optional/openclaw/relay/state/queue/dead/`
+    - `${AGENTIC_ROOT}/openclaw/relay/logs/relay-audit.jsonl`
+    - `${AGENTIC_ROOT}/openclaw/relay/state/queue/dead/`
   - then fix root cause (token/secret mismatch, openclaw service unavailable), and replay manually if required.
 
 ## Security Notes

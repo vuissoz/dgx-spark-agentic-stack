@@ -2,6 +2,8 @@
 
 Optional modules are intentionally gated features. They are not part of the default baseline and are deployed only after explicit, auditable operator intent.
 
+OpenClaw was promoted into the `core` stack by `ADR-0072` and is no longer controlled by `AGENTIC_OPTIONAL_MODULES`.
+
 For a full beginner-friendly catalog of configuration variables, allowed values, storage, and secrets handling, see:
 - `docs/runbooks/configuration-expliquee-debutants.md`
 - `docs/runbooks/configuration-explained-beginners.en.md`
@@ -16,43 +18,6 @@ For that reason, activation requires:
 - audit trail in deployment logs.
 
 ## Implemented Optional Modules
-
-### `openclaw`
-- Service: `optional-openclaw`
-- Gateway service: `optional-openclaw-gateway`
-- Sandbox service: `optional-openclaw-sandbox`
-- Profile: `optional-openclaw`
-- Purpose: token-protected optional API module for scoped workflows.
-- Current repo behavior:
-  - internal API listener `:8111` on Docker network,
-  - upstream Web UI/WS listener bridged to host loopback (`127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`),
-  - dedicated sandbox runtime `:8112` on Docker network,
-  - versioned integration profile bootstrap:
-    - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json`
-    - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`,
-  - signed webhook ingress on host loopback only (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`).
-  - launch-inspired endpoint contract:
-    - DM: `/v1/dm`, `/v1/dm/send`
-    - webhook DM: `/v1/webhooks/dm`, `/v1/webhooks/channels/dm`
-    - profile/capabilities: `/v1/profile`, `/v1/capabilities`
-    - tool execution: `/v1/tools/execute`, `/v1/sandbox/tools/execute`
-- Sandbox and egress hardening blueprint for upstream OpenClaw gateway deployments:
-  - `docs/security/openclaw-sandbox-egress.md`
-- Dedicated onboarding flow for this stack (`rootless-dev`):
-  - `docs/runbooks/openclaw-onboarding-rootless-dev.md`
-- If replaced by upstream OpenClaw gateway, default listeners are typically:
-  - `18789` (gateway),
-  - `18791` (`gateway.port + 2`, browser control),
-  - `18792` (`gateway.port + 3`, relay),
-  - `18800-18899` for local CDP when managed browser profiles are enabled.
-- Runtime data:
-  - `${AGENTIC_ROOT}/optional/openclaw/config`
-  - `${AGENTIC_ROOT}/optional/openclaw/state`
-  - `${AGENTIC_ROOT}/optional/openclaw/sandbox/state`
-  - `${AGENTIC_ROOT}/optional/openclaw/logs`
-- Secrets required:
-  - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
-  - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 
 ### `mcp`
 - Service: `optional-mcp-catalog`
@@ -109,7 +74,6 @@ For that reason, activation requires:
 ```
 
 2. Activation request file exists and is complete for every module you enable:
-- `${AGENTIC_ROOT}/deployments/optional/openclaw.request`
 - `${AGENTIC_ROOT}/deployments/optional/mcp.request`
 - `${AGENTIC_ROOT}/deployments/optional/pi-mono.request`
 - `${AGENTIC_ROOT}/deployments/optional/goose.request`
@@ -120,24 +84,12 @@ Each request file must include non-empty:
 - `success=<how success will be measured>`
 
 3. Required runtime secrets exist with restrictive permissions (`600` or `640`):
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 - `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (required by `pi-mono`)
-
-4. OpenClaw policy files are reviewed:
-- `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
-- `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
 
 ## Activation
 
 Single module:
-
-```bash
-AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
-```
-
-Multiple modules:
 
 ```bash
 AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
@@ -173,7 +125,7 @@ goose_context_display="$((goose_context_limit / 1000))k"
 timeout 12 docker exec "${goose_cid}" sh -lc 'goose session -n context-check' 2>&1 | grep "/${goose_context_display}"
 ```
 
-OpenClaw gateway port check (optional module exposes loopback `18789`; upstream variants may add `18791`/`18792`):
+OpenClaw gateway port check (core OpenClaw exposes loopback `18789`; upstream variants may add `18791`/`18792`):
 
 ```bash
 lsof -nP -iTCP -sTCP:LISTEN | egrep ':(18789|18791|18792|188[0-9]{2})'

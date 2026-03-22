@@ -212,8 +212,8 @@ If the allowlist is too strict, agents/UI that need external APIs will fail outb
 
 Required files:
 - `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (auto-generated for D7 local `gate-mcp`)
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
+- `${AGENTIC_ROOT}/secrets/runtime/openclaw.token` (required for core OpenClaw)
+- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret` (required for core OpenClaw)
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 - `${AGENTIC_ROOT}/secrets/runtime/openai.api_key` (if OpenAI routing enabled)
 - `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key` (if OpenRouter routing enabled)
@@ -261,7 +261,7 @@ Every service can still be overridden individually with:
 Examples:
 - `AGENTIC_LIMIT_OLLAMA_MEM=6g`
 - `AGENTIC_LIMIT_OPENWEBUI_CPUS=0.60`
-- `AGENTIC_LIMIT_OPTIONAL_OPENCLAW_MEM=768m`
+- `AGENTIC_LIMIT_OPENCLAW_MEM=768m`
 
 Supported memory format: `512m`, `1g`, `2G`, etc.
 
@@ -552,17 +552,17 @@ At first `obs` start, Grafana auto-loads:
 
 Remote access pattern is Tailscale + SSH tunnel to host loopback (not direct LAN/public binds).
 
-## 10. Optional Modules (Later, Explicit Opt-In)
+## 10. OpenClaw Core and Optional Modules
 
-Do not enable optional modules until baseline is green.
+OpenClaw now ships in `core`. Keep the remaining optional modules disabled until the baseline is green.
 
-Activation pattern:
+Start OpenClaw with the core stack:
 
 ```bash
-AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
+./agent up core
 ```
 
-or:
+Remaining optional-module activation pattern:
 
 ```bash
 AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
@@ -572,8 +572,8 @@ Before activation:
 - fill `${AGENTIC_ROOT}/deployments/optional/*.request` (`need=`, `success=`),
 - place required tokens/secrets in `${AGENTIC_ROOT}/secrets/runtime/`,
 - review OpenClaw allowlists:
-  - `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
-  - `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
+  - `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
+  - `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
 - run `./agent doctor` and confirm baseline readiness.
 
 See:

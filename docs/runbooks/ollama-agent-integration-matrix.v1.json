@@ -1,5 +1,5 @@
 {
-  "matrix_version": "2026-03-08.step13.v4",
+  "matrix_version": "2026-03-22.step13.v5",
   "scope": [
     "rootless-dev",
     "strict-prod"
@@ -56,8 +56,8 @@
           "ollama launch clawdbot"
         ]
       },
-      "config_mode": "launch-inspired-profile-v1-optional-adapter",
-      "target_endpoint": "http://optional-openclaw:8111",
+      "config_mode": "launch-inspired-profile-v1-core-adapter",
+      "target_endpoint": "http://openclaw:8111",
       "target_protocol_paths": [
         "/v1/dm",
         "/v1/dm/send",
@@ -75,9 +75,9 @@
         "OPENCLAW_SANDBOX_PROFILE_FILE"
       ],
       "stack_sources": [
-        "compose/compose.optional.yml",
+        "compose/compose.core.yml",
         "examples/optional/openclaw.integration-profile.v1.json",
-        "deployments/optional/init_runtime.sh",
+        "deployments/core/init_runtime.sh",
         "deployments/optional/optional_service.py"
       ],
       "contract_tests": [

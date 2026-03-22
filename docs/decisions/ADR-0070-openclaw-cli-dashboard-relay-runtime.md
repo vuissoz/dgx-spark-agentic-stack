@@ -3,9 +3,14 @@
 ## Status
 Accepted (2026-03-11)
 
+## Placement Note
+
+ADR-0072 later moved OpenClaw from the optional stack into `core`.
+This ADR still documents the CLI/dashboard/relay design, but the current service/path names are `openclaw`, `openclaw-relay`, and `${AGENTIC_ROOT}/openclaw/...`.
+
 ## Context
 
-OpenClaw in this repository was already available as an optional API + sandbox runtime, but four operator gaps remained:
+Before ADR-0072, OpenClaw in this repository was already available as an API + sandbox runtime, but four operator gaps remained:
 
 1. No container-native wizard parity for `openclaw onboard`, `openclaw configure`, and `openclaw agents add`.
 2. No operator dashboard endpoint equivalent to upstream dashboard workflows.
@@ -21,12 +26,12 @@ Security and CDC constraints still apply:
 
 ## Decision
 
-1. Install the upstream OpenClaw CLI in the optional modules image via `https://openclaw.ai/install-cli.sh` and expose it as `openclaw` in-container.
-2. Persist OpenClaw CLI state with `OPENCLAW_HOME=/state/cli/openclaw-home` and `OPENCLAW_CONFIG_PATH=/state/cli/openclaw-home/openclaw.json`, with operator workspaces under `/workspace` mapped to `${AGENTIC_ROOT}/optional/openclaw/{state,workspaces}`.
+1. Install the upstream OpenClaw CLI in the shared OpenClaw runtime image via `https://openclaw.ai/install-cli.sh` and expose it as `openclaw` in-container.
+2. Persist OpenClaw CLI state with `OPENCLAW_HOME=/state/cli/openclaw-home` and `OPENCLAW_CONFIG_PATH=/state/cli/openclaw-home/openclaw.json`, with operator workspaces under `/workspace` mapped to `${AGENTIC_ROOT}/openclaw/{state,workspaces}`.
 3. Add dashboard endpoints in OpenClaw runtime:
    - `GET /dashboard` (operator UI)
    - `GET /v1/dashboard/status` (runtime + relay queue status)
-4. Add a dedicated relay service (`optional-openclaw-relay`) with:
+4. Add a dedicated relay service (`openclaw-relay`) with:
    - signed provider ingestion: `POST /v1/providers/<provider>/webhook`
    - durable queue files (`pending`, `done`, `dead`)
    - retry/backoff and dead-letter flow
@@ -34,7 +39,7 @@ Security and CDC constraints still apply:
 5. Keep both dashboard and relay host publication loopback-only:
    - `127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`
    - `127.0.0.1:${OPENCLAW_RELAY_HOST_PORT:-18112}`
-6. Extend doctor checks and optional runtime/bootstrap contracts for:
+6. Extend doctor checks and OpenClaw runtime/bootstrap contracts for:
    - CLI availability in-container
    - writable `/workspace` mount
    - dashboard reachability
@@ -50,7 +55,7 @@ Positive:
 - Test and doctor coverage now validate these capabilities explicitly.
 
 Trade-offs:
-- Optional OpenClaw now includes an additional service (`optional-openclaw-relay`) and more runtime files/secrets.
+- OpenClaw now includes an additional service (`openclaw-relay`) and more runtime files/secrets.
 - Relay operation adds queue lifecycle management responsibilities for operators.
 
 ## Validation

@@ -71,7 +71,7 @@ Point important:
 | Variable | Valeurs possibles | Defaut | Stockage |
 |---|---|---|---|
 | `AGENTIC_STACK_ALL_TARGETS` | liste CSV de `core,agents,ui,obs,rag,optional` (sous-ensemble possible) | `core,agents,ui,obs,rag,optional` | shell |
-| `AGENTIC_OPTIONAL_MODULES` | liste CSV de `openclaw,mcp,pi-mono,goose,portainer` | vide | shell |
+| `AGENTIC_OPTIONAL_MODULES` | liste CSV de `mcp,pi-mono,goose,portainer` | vide | shell |
 | `COMPOSE_PROFILES` | liste CSV. Supporte ici: `trt`, `rag-lexical` | vide | shell |
 
 Notes:
@@ -132,8 +132,8 @@ Tous les ports restent en loopback (`127.0.0.1`).
 | `PROMETHEUS_HOST_PORT` | Prometheus | `19090` |
 | `LOKI_HOST_PORT` | Loki | `13100` |
 | `PORTAINER_HOST_PORT` | Portainer optionnel | `9001` |
-| `OPENCLAW_WEBHOOK_HOST_PORT` | webhook OpenClaw optionnel | `18111` |
-| `OPENCLAW_GATEWAY_HOST_PORT` | Web UI + Gateway WS OpenClaw upstream optionnels | `18789` |
+| `OPENCLAW_WEBHOOK_HOST_PORT` | webhook OpenClaw core | `18111` |
+| `OPENCLAW_GATEWAY_HOST_PORT` | Web UI + Gateway WS OpenClaw upstream core | `18789` |
 
 ## 3.6 Limites ressources
 
@@ -156,7 +156,7 @@ Overrides service par service:
 Exemples:
 - `AGENTIC_LIMIT_OLLAMA_MEM=6g`
 - `AGENTIC_LIMIT_OPENWEBUI_CPUS=0.60`
-- `AGENTIC_LIMIT_OPTIONAL_OPENCLAW_MEM=768m`
+- `AGENTIC_LIMIT_OPENCLAW_MEM=768m`
 
 Formats:
 - CPU: decimal positif (`0.5`, `1`, `2.5`)
@@ -198,7 +198,7 @@ Autres variables utiles:
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-opencode`)
 - `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-vibestral`)
 - `AGENTIC_OPENHANDS_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `openhands`)
-- `AGENTIC_OPENCLAW_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `optional-openclaw`)
+- `AGENTIC_OPENCLAW_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `openclaw`)
 - `AGENTIC_PI_MONO_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `optional-pi-mono`)
 - `AGENTIC_GOOSE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `optional-goose`)
 - `AGENT_NO_ATTACH=1`
@@ -284,8 +284,9 @@ Fichiers de base crees par les scripts d'init:
 - `${AGENTIC_ROOT}/dns/unbound.conf`
 - `${AGENTIC_ROOT}/openwebui/config/openwebui.env`
 - `${AGENTIC_ROOT}/openhands/config/openhands.env`
-- `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
-- `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json`
 - `${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt`
 - `${AGENTIC_ROOT}/deployments/optional/<module>.request`
 
@@ -317,8 +318,8 @@ Secrets baseline + optionnels:
 - `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (cree automatiquement si absent)
 - `${AGENTIC_ROOT}/secrets/runtime/openai.api_key` (optionnel, routage OpenAI)
 - `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key` (optionnel, routage OpenRouter)
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.token` (requis si `openclaw` actif)
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret` (requis si `openclaw` actif)
+- `${AGENTIC_ROOT}/secrets/runtime/openclaw.token` (requis pour OpenClaw core)
+- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret` (requis pour OpenClaw core)
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token` (requis si module `mcp` actif)
 
 ## 5.2 Permissions requises
@@ -341,7 +342,7 @@ chmod 600 "${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
 2. Garder mode `600`.
 3. Recreer la stack concernee.
 - Exemple: `./agent up core`
-- Exemple optionnel: `AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional`
+- Exemple module optionnel restant: `AGENTIC_OPTIONAL_MODULES=mcp ./agent up optional`
 4. Lancer `./agent doctor`.
 
 ## 5.4 A ne pas faire

@@ -36,7 +36,7 @@ La stack est divisee en 6 plans:
 3. `ui` (interface): OpenWebUI, OpenHands, ComfyUI.
 4. `obs` (observabilite): Prometheus, Grafana, Loki, exporters.
 5. `rag` (recherche vectorielle): Qdrant.
-6. `optional` (extensions): modules opt-in (OpenClaw, MCP catalog, Goose, Portainer, etc.).
+6. `optional` (extensions): modules opt-in (MCP catalog, Goose, Portainer, etc.).
 
 Important securite:
 - Les ports hote sont publies sur `127.0.0.1` (loopback) uniquement.
@@ -137,6 +137,55 @@ Entrees/sorties:
 
 Liens officiels:
 - Netshoot (image utilisee): https://github.com/nicolaka/netshoot
+
+### Service `openclaw`
+
+Role simple:
+- Service OpenClaw core pour les workflows webhook/DM controles.
+
+Pourquoi il existe:
+- Garder OpenClaw disponible par defaut avec le meme niveau de durcissement et de loopback-only que le reste du `core`.
+
+Entrees/sorties:
+- Loopback host: `127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`.
+- Service interne: `http://openclaw:8111`.
+- Donnees: `${AGENTIC_ROOT}/openclaw/*`.
+
+Liens:
+- Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
+
+### Service `openclaw-gateway`
+
+Role simple:
+- Pont Web UI OpenClaw upstream + Gateway WS pour les operateurs.
+
+A retenir:
+- Exposition uniquement sur `127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`.
+
+Liens:
+- Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
+
+### Service `openclaw-sandbox`
+
+Role simple:
+- Sandbox d'execution associee a OpenClaw.
+
+A retenir:
+- Sert a limiter l'impact et separer l'execution des actions sensibles.
+
+Liens:
+- Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
+
+### Service `openclaw-relay`
+
+Role simple:
+- Relay webhook provider signe avec queue, retries et injection locale.
+
+A retenir:
+- Permet un ingress provider durable sans rendre OpenClaw public.
+
+Liens:
+- Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
 
 ## 4) Plan `agents` (execution agentique)
 
@@ -414,40 +463,6 @@ Role simple:
 
 Liens officiels:
 - Alpine image: https://hub.docker.com/_/alpine
-
-### Service `optional-openclaw`
-
-Role simple:
-- Point d'entree OpenClaw (webhook/API locale selon configuration du stack).
-
-A retenir:
-- Dans ce repo, c'est un composant optionnel fortement encadre (secrets, allowlists, sandbox).
-
-Liens:
-- Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
-- Concept MCP (utile pour comprendre certaines integrations): https://modelcontextprotocol.io/
-
-### Service `optional-openclaw-gateway`
-
-Role simple:
-- Exposition optionnelle du Web UI OpenClaw upstream + Gateway WS en loopback hote.
-
-A retenir:
-- Exposition uniquement sur `127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`.
-
-Liens:
-- Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
-
-### Service `optional-openclaw-sandbox`
-
-Role simple:
-- Sandbox d'execution associee a OpenClaw.
-
-A retenir:
-- Sert a limiter l'impact et separer l'execution des actions sensibles.
-
-Liens:
-- Documentation interne stack: `docs/security/openclaw-sandbox-egress.md`
 
 ### Service `optional-mcp-catalog`
 

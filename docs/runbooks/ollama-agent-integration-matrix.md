@@ -15,7 +15,7 @@ Source versionnee machine-readable:
 | Agent | Support upstream `ollama launch` | Source de contrat principale | Mode de configuration stack | Endpoint cible | Variables requises |
 | --- | --- | --- | --- | --- | --- |
 | `opencode` | `launch-supported` | `docs/integrations/opencode.mdx` | Reconciliation de `~/.config/opencode/opencode.json` + defaults stack (`ollama-gate-defaults.env`) | `http://ollama-gate:11435` | `OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE_URL`, `OPENAI_API_BASE`, `OPENAI_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
-| `openclaw` | `launch-supported` | `docs/integrations/openclaw.mdx` | Adapter optionnel inspire launch avec profil versionne (`optional-openclaw`) | `http://optional-openclaw:8111` | `OPENCLAW_AUTH_TOKEN_FILE`, `OPENCLAW_WEBHOOK_SECRET_FILE`, `OPENCLAW_PROFILE_FILE`, `OPENCLAW_SANDBOX_URL`, `OPENCLAW_SANDBOX_AUTH_TOKEN_FILE`, `OPENCLAW_SANDBOX_PROFILE_FILE` |
+| `openclaw` | `launch-supported` | `docs/integrations/openclaw.mdx` | Adapter core inspire launch avec profil versionne (`openclaw`) | `http://openclaw:8111` | `OPENCLAW_AUTH_TOKEN_FILE`, `OPENCLAW_WEBHOOK_SECRET_FILE`, `OPENCLAW_PROFILE_FILE`, `OPENCLAW_SANDBOX_URL`, `OPENCLAW_SANDBOX_AUTH_TOKEN_FILE`, `OPENCLAW_SANDBOX_PROFILE_FILE` |
 | `openhands` | `adapter-internal` | Contrat stack (`compose.ui` + onboarding) | Bootstrap `openhands.env` + `settings.json` | `http://ollama-gate:11435/v1` | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
 | `vibestral` | `adapter-internal` | Contrat stack (`entrypoint` + `compose.agents`) | Generation de `~/.vibe/config.toml` vers `ollama-gate` | `http://ollama-gate:11435/v1` | `AGENTIC_OLLAMA_GATE_V1_URL`, `AGENTIC_DEFAULT_MODEL`, `OLLAMA_BASE_URL` |
 | `pi-mono` | `adapter-internal` | Contrat stack (`compose.optional` + `entrypoint`) | Reconciliation de `~/.pi/agent/{models,settings}.json` vers `ollama-gate` | `http://ollama-gate:11435/v1` | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
@@ -43,7 +43,7 @@ Source versionnee machine-readable:
 
 ## Ecarts assumes (explicites)
 
-- `openclaw`: la stack n'appelle pas directement `ollama launch openclaw`; elle implemente un adapter optionnel inspire du contrat observable, avec profil versionne bootstrappe au runtime.
+- `openclaw`: la stack n'appelle pas directement `ollama launch openclaw`; elle implemente un adapter core inspire du contrat observable, avec profil versionne bootstrappe au runtime.
 - `openhands` et `vibestral`: il n'existe pas de contrat `ollama launch` officiel equivalent; la compatibilite repose sur un adapter interne versionne et teste.
 
 ## Contrat de maintenance

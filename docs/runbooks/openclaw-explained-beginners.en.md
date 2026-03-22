@@ -12,11 +12,11 @@ For the full operational procedure in `rootless-dev`, see:
 ## 1. What OpenClaw Is (in this stack)
 
 Think of OpenClaw as a controlled messaging/automation API layer.
-In this repository, OpenClaw is deployed as an optional module with four services:
-- `optional-openclaw`: main API service,
-- `optional-openclaw-gateway`: upstream Web UI/WS service (host loopback),
-- `optional-openclaw-sandbox`: restricted tool execution backend,
-- `optional-openclaw-relay`: provider webhook relay with durable queue + local injection.
+In this repository, OpenClaw is deployed as part of the `core` stack with four services:
+- `openclaw`: main API service,
+- `openclaw-gateway`: upstream Web UI/WS service (host loopback),
+- `openclaw-sandbox`: restricted tool execution backend,
+- `openclaw-relay`: provider webhook relay with durable queue + local injection.
 
 Simple mental model:
 1. a request reaches OpenClaw,
@@ -27,23 +27,23 @@ Simple mental model:
 
 ## 2. Why There Are Four Containers
 
-## `optional-openclaw` (API)
+## `openclaw` (API)
 - receives API requests,
 - enforces auth token and webhook secret,
 - checks DM allowlist and endpoint contract,
 - records audit events.
 
-## `optional-openclaw-gateway` (upstream Web UI/WS)
+## `openclaw-gateway` (upstream Web UI/WS)
 - exposes the upstream OpenClaw Web UI on `127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`,
 - exposes the upstream Gateway WebSocket on `ws://127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`,
 - remains host loopback-only.
 
-## `optional-openclaw-sandbox` (execution)
+## `openclaw-sandbox` (execution)
 - runs allowed tool actions in a tighter execution boundary,
 - uses a dedicated allowlist,
 - is not exposed on a host public interface.
 
-## `optional-openclaw-relay` (provider ingress/queue)
+## `openclaw-relay` (provider ingress/queue)
 - accepts signed provider webhooks (`/v1/providers/<provider>/webhook`),
 - stores events durably in queue files,
 - forwards to local OpenClaw webhook endpoint with retries/dead-letter.
@@ -80,17 +80,17 @@ OpenClaw config files are generated/prepared under `${AGENTIC_ROOT}`:
   - HMAC secret for webhook signature verification,
   - keep mode `600`.
 
-- `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
   - allowed DM targets.
 
-- `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
   - allowed sandbox tool actions.
 
-- `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`
+- `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json`
   - active runtime contract/profile (required env keys and endpoint aliases).
 
-- `${AGENTIC_ROOT}/deployments/optional/openclaw.request`
-  - operator intent file used by optional-module gating (`need=` and `success=` cannot be empty).
+- `${AGENTIC_ROOT}/openclaw/config/relay_targets.json`
+  - provider relay target mapping used by `openclaw-relay`.
 
 ## 5. Important Environment Variables
 
@@ -100,7 +100,7 @@ Common variables used by the service:
 - `OPENCLAW_DM_ALLOWLIST_FILE=/config/dm_allowlist.txt`
 - `OPENCLAW_TOOL_ALLOWLIST_FILE=/config/tool_allowlist.txt`
 - `OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json`
-- `OPENCLAW_SANDBOX_URL=http://optional-openclaw-sandbox:8112`
+- `OPENCLAW_SANDBOX_URL=http://openclaw-sandbox:8112`
 - `OPENCLAW_SANDBOX_AUTH_TOKEN_FILE=/run/secrets/openclaw.token`
 
 You usually do not edit these container paths directly.
@@ -124,14 +124,13 @@ This is normal and desirable.
 
 1. Prepare environment and secrets:
 ```bash
-./agent onboard --profile rootless-dev --optional-modules openclaw --output .runtime/env.generated.sh
+./agent onboard --profile rootless-dev --output .runtime/env.generated.sh
 source .runtime/env.generated.sh
 ```
 
-2. Start stack and OpenClaw module:
+2. Start the core stack:
 ```bash
 ./agent up core
-AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 ```
 
 3. Check status:
@@ -143,21 +142,21 @@ AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 
 4. Edit policies when needed:
 ```bash
-${EDITOR:-vi} "${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt"
-${EDITOR:-vi} "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt"
+${EDITOR:-vi} "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt"
+${EDITOR:-vi} "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt"
 ```
 
-5. Restart optional services after policy changes:
+5. Restart OpenClaw core services after policy changes:
 ```bash
-./agent down optional
-AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
+./agent stop openclaw
+./agent up core
 ```
 
 ## 8. Common Mistakes (and Fixes)
 
 - Mistake: OpenClaw not starting.
-  - Check: `./agent doctor` output and optional request file.
-  - Fix: ensure `${AGENTIC_ROOT}/deployments/optional/openclaw.request` has non-empty `need=` and `success=`.
+  - Check: `./agent doctor` output and whether `./agent up core` succeeded.
+  - Fix: ensure `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`, `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`, and `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json` exist and are valid.
 
 - Mistake: API call returns `401`.
   - Check: token file content and auth header.
@@ -165,7 +164,7 @@ AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 
 - Mistake: API call returns `403` on DM.
   - Check: DM target allowlist.
-  - Fix: add target to `dm_allowlist.txt` and restart optional services.
+  - Fix: add target to `dm_allowlist.txt` and restart OpenClaw core services.
 
 - Mistake: profile validation failure.
   - Check: `integration-profile.current.json` exists and is valid.
@@ -177,12 +176,12 @@ This stack is inspired by upstream OpenClaw onboarding and gateway workflows,
 but it uses the repository's `./agent` orchestration model.
 
 Quick mapping:
-- upstream `openclaw onboard` -> stack `./agent onboard --optional-modules openclaw`
-- upstream `openclaw gateway run` -> stack `AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional`
+- upstream `openclaw onboard` -> stack `./agent onboard --profile rootless-dev`
+- upstream `openclaw gateway run` -> stack `./agent up core`
 
 ## 10. Useful References
 
 - OpenClaw site: https://openclaw.ai/
 - OpenClaw docs (getting started): https://docs.openclaw.ai/start/getting-started
 - Stack onboarding runbook: `docs/runbooks/openclaw-onboarding-rootless-dev.md`
-- Stack optional module guide: `docs/runbooks/optional-modules.md`
+- Stack security model: `docs/security/openclaw-sandbox-egress.md`

@@ -125,6 +125,39 @@ For the versioned Ollama integration compatibility matrix (launch-supported vs i
 - Why it exists:
   - gives operators a controlled diagnostic shell for connectivity checks without weakening app containers.
 
+### `openclaw`
+- Role: core OpenClaw API/dashboard service for controlled webhook and DM workflows.
+- Access path:
+  - host loopback: `127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`
+  - internal: `openclaw:8111`
+- Persistence:
+  - `${AGENTIC_ROOT}/openclaw/config`
+  - `${AGENTIC_ROOT}/openclaw/state`
+  - `${AGENTIC_ROOT}/openclaw/logs`
+  - `${AGENTIC_OPENCLAW_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/openclaw/workspaces`)
+
+### `openclaw-gateway`
+- Role: upstream OpenClaw Web UI + Gateway WS bridge for operators.
+- Access path:
+  - host loopback: `127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`
+- Why it exists:
+  - keeps the upstream OpenClaw UI/WS available without exposing it beyond loopback.
+
+### `openclaw-sandbox`
+- Role: isolated tool execution backend used by `openclaw`.
+- Persistence:
+  - `${AGENTIC_ROOT}/openclaw/sandbox/state`
+- Why it exists:
+  - keeps tool execution separated from the main API surface.
+
+### `openclaw-relay`
+- Role: signed provider webhook relay with durable queue and local reinjection.
+- Access path:
+  - host loopback: `127.0.0.1:${OPENCLAW_RELAY_HOST_PORT:-18112}`
+- Persistence:
+  - `${AGENTIC_ROOT}/openclaw/relay/state`
+  - `${AGENTIC_ROOT}/openclaw/relay/logs`
+
 ## Agent Stack (`./agent up agents`)
 
 The baseline agent services are tmux-backed CLI environments in hardened containers.  
@@ -340,8 +373,6 @@ Optional modules are disabled unless `AGENTIC_OPTIONAL_MODULES` is set explicitl
 See `docs/runbooks/optional-modules.md` for gating and security details.
 
 Implemented optional services:
-- `optional-openclaw` (`openclaw`)
-- `optional-openclaw-sandbox` (OpenClaw isolated tool runtime)
 - `optional-mcp-catalog` (`mcp`)
 - `optional-pi-mono` (`pi-mono`)
 - `optional-goose` (`goose`)

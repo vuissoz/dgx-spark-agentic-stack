@@ -10,12 +10,12 @@ This repository provides a containerized agentic services stack for DGX Spark, w
 ## Compose Stacks
 
 Compose files are located in `compose/`:
-- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `trtllm` (`trt` profile), `unbound`, `egress-proxy`, `toolbox`
+- `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `trtllm` (`trt` profile), `unbound`, `egress-proxy`, `toolbox`
 - `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
 - `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (`rag-lexical` profile)
-- `compose/compose.optional.yml`: `optional-sentinel`, `optional-openclaw`, `optional-openclaw-sandbox`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
 
 ## Execution Profiles
 
@@ -58,7 +58,8 @@ Key persistent folders:
 - `comfyui/{models,input,output,user}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
-- `optional/{openclaw,mcp,pi-mono,goose,portainer}/...`
+- `openclaw/{config,state,logs,relay/{state,logs},sandbox/state,workspaces}/`
+- `optional/{mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
 - `shared-ro/`, `shared-rw/`
@@ -238,7 +239,8 @@ Useful ports to tunnel (depending on enabled modules):
 - `19090` -> Prometheus (`http://127.0.0.1:19090`)
 - `13100` -> Loki (`http://127.0.0.1:13100`)
 - `9001` -> optional Portainer (`http://127.0.0.1:9001`)
-- `18111` -> optional OpenClaw webhook ingress (`http://127.0.0.1:18111`)
+- `18111` -> OpenClaw core webhook ingress (`http://127.0.0.1:18111`)
+- `18789` -> OpenClaw core upstream Web UI + Gateway WS (`http://127.0.0.1:18789`, `ws://127.0.0.1:18789`)
 
 Notes:
 - tunnel only the ports you need;
@@ -246,7 +248,8 @@ Notes:
 - `qdrant` is not published on a host port in the current configuration;
 - `rag-retriever` (`7111`) and `rag-worker` (`7112`) are never host-published;
 - `opensearch` (`rag-lexical`) remains internal-only (no host-published port);
-- `optional-openclaw` only publishes local webhook ingress (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), never `0.0.0.0`.
+- `openclaw` only publishes local webhook ingress (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), never `0.0.0.0`.
+- `openclaw-gateway` only publishes the upstream OpenClaw Web UI/WS on loopback (`127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`), never `0.0.0.0`.
 
 Windows PowerShell example (Loki API):
 
@@ -348,7 +351,7 @@ Examples:
 
 Notes:
 - `agent stop` handles `claude|codex|opencode|vibestral|openclaw|pi-mono|goose` tools.
-- `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|vibestral|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in `optional-openclaw` with loopback API endpoint reminders.
+- `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|vibestral|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in the core `openclaw` service with loopback API, Web UI (`18789`), and Gateway WS reminders.
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.
 - `agent rollback all` requires a `release_id`.
 - Use `--skip-d5-tests` (or `AGENTIC_SKIP_D5_TESTS=1`) to skip only `D5_gate_external_providers.sh` with a warning when external API access is unavailable.
@@ -499,24 +502,31 @@ Injected into agent containers:
 Explicit activation:
 
 ```bash
-AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional
 AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
 ```
 
-Runtime prerequisites:
+OpenClaw is now part of `core` and starts with:
+
+```bash
+./agent up core
+```
+
+Runtime prerequisites for the remaining optional modules:
 - request files: `${AGENTIC_ROOT}/deployments/optional/*.request`
-  - `${AGENTIC_ROOT}/deployments/optional/openclaw.request`
   - `${AGENTIC_ROOT}/deployments/optional/mcp.request`
   - `${AGENTIC_ROOT}/deployments/optional/pi-mono.request`
   - `${AGENTIC_ROOT}/deployments/optional/goose.request`
   - `${AGENTIC_ROOT}/deployments/optional/portainer.request`
+- remaining optional secret:
+  - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
+
+Runtime prerequisites for core OpenClaw:
 - secrets:
   - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`
   - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`
-  - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 - versioned OpenClaw profile (runtime bootstrap):
-  - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json`
-  - `${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json`
+  - `${AGENTIC_ROOT}/openclaw/config/integration-profile.v1.json`
+  - `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json`
 
 ## Validation
 

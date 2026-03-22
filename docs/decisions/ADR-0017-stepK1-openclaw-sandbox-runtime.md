@@ -3,8 +3,13 @@
 ## Status
 Accepted
 
+## Placement Note
+
+ADR-0072 later moved OpenClaw from the optional stack into `core`.
+This ADR still documents the sandbox/webhook security model, but current service names are `openclaw` and `openclaw-sandbox`.
+
 ## Context
-Step K1 requires OpenClaw to remain optional but enforce the same baseline controls as core services, with additional safeguards:
+Step K1 requires OpenClaw to enforce the same baseline controls as core services, with additional safeguards:
 - explicit sandbox separation for tool execution,
 - request/audit correlation,
 - webhook ingress limited to loopback and protected by authentication plus signature,
@@ -13,9 +18,9 @@ Step K1 requires OpenClaw to remain optional but enforce the same baseline contr
 The previous optional OpenClaw implementation only covered token auth, DM allowlist, and basic audit logs.
 
 ## Decision
-- Add a dedicated service pair under the same optional profile:
-  - `optional-openclaw` (control API),
-  - `optional-openclaw-sandbox` (tool runtime).
+- Add a dedicated service pair:
+  - `openclaw` (control API),
+  - `openclaw-sandbox` (tool runtime).
 - Keep both services hardened (`read_only`, `cap_drop: ALL`, `no-new-privileges`, non-root) and on internal Docker networking.
 - Route tool execution through an explicit OpenClaw -> sandbox HTTP channel with:
   - pre-execution sandbox reachability check,

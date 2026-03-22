@@ -17,7 +17,7 @@ Ce runbook couvre les images locales suivantes:
 | `agentic/comfyui:local` | `deployments/images/comfyui/Dockerfile` | `comfyui` | `./agent up ui` (via Compose) |
 | `agentic/ollama-gate:local` | `deployments/gate/Dockerfile` | `ollama-gate` | `./agent up core`, `./agent update` |
 | `agentic/gate-mcp:local` | `deployments/gate_mcp/Dockerfile` | `gate-mcp` | `./agent up core`, `./agent update` |
-| `agentic/optional-modules:local` | `deployments/optional/Dockerfile` | `optional-openclaw`, `optional-openclaw-gateway`, `optional-mcp-catalog` | `./agent up optional` (si modules actives) |
+| `agentic/optional-modules:local` | `deployments/optional/Dockerfile` | `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `optional-mcp-catalog` | `./agent up core`, `./agent update`, `./agent up optional` (si `mcp`) |
 
 ## 2) Logique de build automatique
 
@@ -25,7 +25,8 @@ Ce runbook couvre les images locales suivantes:
 
 `agent` tente de (re)build:
 - `ollama-gate`,
-- `gate-mcp`.
+- `gate-mcp`,
+- `agentic/optional-modules:local` pour les services OpenClaw core.
 
 Le build est intelligent (fingerprint + stamp) et ne rebuild pas si les inputs n'ont pas change.
 
@@ -60,7 +61,7 @@ Variable de contournement:
 ### `./agent up optional`
 
 Si des modules optionnels sont actives, `agent` peut build:
-- `agentic/optional-modules:local` (openclaw/mcp),
+- `agentic/optional-modules:local` (`mcp`),
 - `agentic/agent-cli-base:local` (pi-mono).
 
 Variable de contournement:

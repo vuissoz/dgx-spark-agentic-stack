@@ -75,7 +75,7 @@ If you are unsure, use these defaults:
 | Variable | Allowed values | Default | Stored in |
 |---|---|---|---|
 | `AGENTIC_STACK_ALL_TARGETS` | comma list of `core,agents,ui,obs,rag,optional` (subset allowed) | `core,agents,ui,obs,rag,optional` | shell |
-| `AGENTIC_OPTIONAL_MODULES` | comma list of `openclaw,mcp,pi-mono,goose,portainer` | empty (none enabled) | shell |
+| `AGENTIC_OPTIONAL_MODULES` | comma list of `mcp,pi-mono,goose,portainer` | empty (none enabled) | shell |
 | `COMPOSE_PROFILES` | comma list. Supported in repo: `trt`, `rag-lexical` | empty | shell |
 
 Notes:
@@ -136,8 +136,8 @@ All published ports stay loopback-only (`127.0.0.1`).
 | `PROMETHEUS_HOST_PORT` | Prometheus | `19090` |
 | `LOKI_HOST_PORT` | Loki | `13100` |
 | `PORTAINER_HOST_PORT` | Optional Portainer | `9001` |
-| `OPENCLAW_WEBHOOK_HOST_PORT` | Optional OpenClaw webhook ingress | `18111` |
-| `OPENCLAW_GATEWAY_HOST_PORT` | Optional OpenClaw upstream Web UI + Gateway WS | `18789` |
+| `OPENCLAW_WEBHOOK_HOST_PORT` | Core OpenClaw webhook ingress | `18111` |
+| `OPENCLAW_GATEWAY_HOST_PORT` | Core OpenClaw upstream Web UI + Gateway WS | `18789` |
 
 ## 3.6 Resource Limits
 
@@ -160,7 +160,7 @@ Per-service override pattern:
 Examples:
 - `AGENTIC_LIMIT_OLLAMA_MEM=6g`
 - `AGENTIC_LIMIT_OPENWEBUI_CPUS=0.60`
-- `AGENTIC_LIMIT_OPTIONAL_OPENCLAW_MEM=768m`
+- `AGENTIC_LIMIT_OPENCLAW_MEM=768m`
 
 Value formats:
 - CPU: positive decimal (`0.5`, `1`, `2.5`)
@@ -202,7 +202,7 @@ Other useful operational variables:
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-opencode`)
 - `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-vibestral`)
 - `AGENTIC_OPENHANDS_WORKSPACES_DIR` (host path mounted to `/workspace` for `openhands`)
-- `AGENTIC_OPENCLAW_WORKSPACES_DIR` (host path mounted to `/workspace` for `optional-openclaw`)
+- `AGENTIC_OPENCLAW_WORKSPACES_DIR` (host path mounted to `/workspace` for `openclaw`)
 - `AGENTIC_PI_MONO_WORKSPACES_DIR` (host path mounted to `/workspace` for `optional-pi-mono`)
 - `AGENTIC_GOOSE_WORKSPACES_DIR` (host path mounted to `/workspace` for `optional-goose`)
 - `AGENT_NO_ATTACH=1` (prepare tmux session without attaching)
@@ -288,8 +288,9 @@ Baseline files (created by runtime init scripts):
 - `${AGENTIC_ROOT}/dns/unbound.conf`
 - `${AGENTIC_ROOT}/openwebui/config/openwebui.env`
 - `${AGENTIC_ROOT}/openhands/config/openhands.env`
-- `${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt`
-- `${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json`
 - `${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt`
 - `${AGENTIC_ROOT}/deployments/optional/<module>.request`
 
@@ -321,8 +322,8 @@ Baseline + optional secret files:
 - `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (auto-created if missing)
 - `${AGENTIC_ROOT}/secrets/runtime/openai.api_key` (optional, for OpenAI routing)
 - `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key` (optional, for OpenRouter routing)
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.token` (required if `openclaw` enabled)
-- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret` (required if `openclaw` enabled)
+- `${AGENTIC_ROOT}/secrets/runtime/openclaw.token` (required for core OpenClaw)
+- `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret` (required for core OpenClaw)
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token` (required if optional `mcp` enabled)
 
 ## 5.2 Required permissions
@@ -345,7 +346,7 @@ chmod 600 "${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
 2. Keep mode `600`.
 3. Recreate the related stack plane.
 - Example: `./agent up core`
-- Optional module example: `AGENTIC_OPTIONAL_MODULES=openclaw ./agent up optional`
+- Remaining optional-module example: `AGENTIC_OPTIONAL_MODULES=mcp ./agent up optional`
 4. Run `./agent doctor`.
 
 ## 5.4 What not to do
