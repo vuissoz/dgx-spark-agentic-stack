@@ -30,6 +30,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-lhm` (separer config immuable, overlay valide et etat writable pour OpenClaw) [OPEN]
 - Beads (OpenClaw approvals egress interactives):
   - `dgx-spark-agentic-stack-e0q` (ajouter une queue d'approbation operateur par destination egress + workflow `agent openclaw approvals`) [OPEN]
+- Beads (Resolution deterministe des `latest`):
+  - `dgx-spark-agentic-stack-fcb` (resoudre les valeurs `latest` en versions figees au moment de `agent update` et tracer demande vs valeur resolue) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
@@ -135,6 +137,11 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - workflow operateur `agent openclaw approvals [list|approve|deny|promote]`,
   - approbations scope session vs promotion persistante vers artefact de config explicite,
   - audit JSONL et verifications doctor/tests associees.
+- Follow-up `dgx-spark-agentic-stack-fcb`: traiter `latest` comme une politique de resolution et non comme une version deploiement:
+  - resolution des valeurs `latest` supportees au moment de `agent update`,
+  - capture release de la valeur demandee vs valeur resolue,
+  - deploiement/rollback appuyes sur la valeur resolue/pinnee,
+  - doctor/tests/docs pour detecter les flottants non resolus dans les releases actives.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -319,3 +326,24 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - audit JSONL des demandes et des decisions,
     - pas de secrets dans la queue, les logs ou les commentaires,
     - doctor/tests/docs couvrant la queue, les promotions persistantes et l'absence de regression des controles egress.
+
+## Addendum (2026-03-22, resolution deterministe des valeurs `latest`)
+- Beads `dgx-spark-agentic-stack-fcb`: garder l'ergonomie operateur `latest` tout en figeant les versions effectivement deployees.
+  - Constat actuel:
+    - la stack enregistre deja digests/images/runtime inputs dans les releases,
+    - mais certains composants acceptent des valeurs `latest` qui restent une intention flottante plutot qu'une version resolue explicitement tracee.
+  - Cible:
+    - `latest` devient une politique de resolution au moment de `agent update`,
+    - chaque composant supporte est resolu une seule fois vers une version concrete upstream,
+    - la release enregistre:
+      - la valeur demandee (`latest`),
+      - la valeur resolue (ex: `2026.3.11`),
+      - toute verification associee disponible (checksum/signature/source de resolution) quand elle existe,
+    - le deploiement effectif et le rollback reutilisent la valeur resolue/pinnee, pas l'alias flottant.
+  - Portee:
+    - OpenClaw en priorite,
+    - puis tout autre point de la stack utilisant `latest` (images, install scripts, specs d'outils) selon inventaire explicite.
+  - Exigences:
+    - aucune re-resolution implicite pendant un simple `agent up` sur une release deja figee,
+    - doctor/tests detectent les releases actives contenant encore des flottants non resolus la ou la politique impose une resolution,
+    - docs/runbooks explicitent que `latest` est une intention de tracking, pas une version deploiement.
