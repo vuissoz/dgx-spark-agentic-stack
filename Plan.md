@@ -24,6 +24,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-69e` (parite wizard `openclaw onboard/configure/agents add` dans un conteneur OpenClaw avec workspace persistant) [CLOSED]
 - Beads (tests setup OpenClaw CLI):
   - `dgx-spark-agentic-stack-x00` (couverture tests setup/config OpenClaw CLI + variantes) [CLOSED]
+- Beads (OpenClaw sandboxes de session):
+  - `dgx-spark-agentic-stack-4xu` (inspiration NemoClaw/OpenShell: gateway toujours actif + sous-agents OpenClaw isoles dans un sandbox dedie par session) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
@@ -115,6 +117,10 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
 - Follow-up `dgx-spark-agentic-stack-0ik`: remplacer les mounts ComfyUI fragmentes (`models/input/output/user/custom_nodes`) par un mount persistant unique couvrant toute l'arborescence runtime ComfyUI, puis aligner doctor/tests/runbooks.
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
+- Follow-up `dgx-spark-agentic-stack-4xu`: faire evoluer OpenClaw vers un modele a deux plans:
+  - control-plane toujours actif (`optional-openclaw` + `optional-openclaw-gateway`),
+  - execution-plane isole par session/sous-agent (sandbox dedie, reutilise pendant la session puis expire),
+  - avec inspiration NemoClaw/OpenShell sur l'isolation par session, sans reprendre les choix d'auth plus faibles de NemoClaw.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -235,3 +241,26 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - conserver binds loopback-only,
     - ne pas exposer de secrets dans logs/metrics,
     - garder une trajectoire rollback deterministe (release manifests).
+
+## Addendum (2026-03-22, OpenClaw subagents sandboxes per-session)
+- Beads `dgx-spark-agentic-stack-4xu`: faire evoluer l'implementation OpenClaw en s'inspirant de NemoClaw/OpenShell pour l'isolation des sous-agents.
+  - Constat actuel:
+    - `optional-openclaw-gateway` et `optional-openclaw` fournissent deja un plan de controle toujours actif adapte a l'usage operateur,
+    - `optional-openclaw-sandbox` reste un service Compose long-vivant partage, donc pas un vrai boundary de sandbox par session/sous-agent.
+  - Cible:
+    - conserver le gateway OpenClaw toujours actif et sans reconfiguration a chaque session,
+    - introduire un execution-plane capable de creer un sandbox dedie par session de sous-agent / runtime outils,
+    - reutiliser ce sandbox pendant toute la session, puis expirer/nettoyer sur timeout ou fermeture explicite,
+    - exposer un etat operateur (doctor/status/logs) montrant quels sandboxes de session existent et leur rattachement aux sessions.
+  - Inspirations NemoClaw a reprendre:
+    - separation nette control-plane / execution-plane,
+    - isolation par session,
+    - trajectoire config immuable / state mutable pour limiter le tampering runtime.
+  - Inspirations NemoClaw a ne pas reprendre:
+    - auth gateway affaiblie,
+    - auto-approval implicite des devices,
+    - secrets/token gates figes dans l'image.
+  - Impacts attendus:
+    - evolution de `optional-openclaw-sandbox` vers un orchestrateur/launcher de sandboxes de session plutot qu'un backend partage,
+    - extension de `agent doctor` + tests K/OpenClaw pour verifier creation/reutilisation/expiration des sandboxes de session,
+    - ADR dedie expliquant le modele cible et les ecarts volontaires avec NemoClaw.
