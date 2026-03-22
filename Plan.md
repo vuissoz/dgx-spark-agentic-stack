@@ -36,6 +36,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-oop` (ajouter un registre persistant des sessions/sandboxes OpenClaw pour `agent ls` et `agent doctor`) [OPEN]
 - Beads (Dualite API interne / CLI operateur OpenClaw):
   - `dgx-spark-agentic-stack-0n8` (gerer les sous-agents via une API interne OpenClaw et separer cette logique de la surface CLI operateur `agent openclaw ...`) [OPEN]
+- Beads (Contrat de module OpenClaw):
+  - `dgx-spark-agentic-stack-zj4` (formaliser un blueprint/manifest OpenClaw pour les fichiers, ports, auth, routes provider et compatibilites CLI) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
@@ -159,6 +161,11 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - `agent openclaw model set <id>`
     - `agent openclaw sandbox ls|attach|destroy`
   - sans exposer `./agent` comme dependance du main agent.
+- Follow-up `dgx-spark-agentic-stack-zj4`: ajouter un contrat de module OpenClaw type blueprint/manifest:
+  - manifeste versionne des fichiers/configs requis, ports/endpoints attendus, mode d'auth, routes provider permises et version(s) CLI compatibles,
+  - etapes lifecycle explicites de type `resolve`, `verify digest`, `plan`, `apply`, `status`,
+  - integration avec `agent doctor` et/ou `agent update` pour signaler les incoherences de module,
+  - articulation documentee entre contrat OpenClaw et artefacts globaux de release, sans y stocker de secrets.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -417,3 +424,27 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - compatibilite avec les futurs sandboxes de session et le registre d'etat OpenClaw,
     - `agent doctor` able de verifier la coherence entre API interne, registre et surface operateur,
     - pas de secret ni de capacite privilegiee inutile dans les commandes operateur exposees.
+
+## Addendum (2026-03-22, contrat de module OpenClaw type blueprint/manifest)
+- Beads `dgx-spark-agentic-stack-zj4`: formaliser un contrat de module OpenClaw inspire du lifecycle blueprint de NemoClaw.
+  - Constat actuel:
+    - la stack dispose deja d'une tracabilite globale des releases et des digests deploiement,
+    - mais OpenClaw ne dispose pas d'un contrat de module explicite et versionne qui decrive ses preconditions, ses artefacts et ses compatibilites,
+    - il manque donc une source unique pour verifier fichiers requis, ports, mode d'auth, routes provider autorisees et version CLI supportee.
+  - Cible:
+    - introduire un manifest/module contract OpenClaw versionne qui decrit au minimum:
+      - les fichiers/configs requis,
+      - les ports/endpoints attendus,
+      - le mode d'auth supporte,
+      - les routes/provider base URLs permises,
+      - les versions CLI compatibles,
+      - les etapes lifecycle de type `resolve`, `verify digest`, `plan`, `apply`, `status` ;
+    - permettre a `agent doctor`, `agent update` ou au flux de deploiement de s'appuyer sur ce contrat pour signaler une incoherence de module.
+  - Effet recherche:
+    - rendre le module OpenClaw auditable comme unite fonctionnelle,
+    - mieux lier les artefacts globaux de release aux attentes specifiques du module OpenClaw,
+    - preparer une base de validation stable pour les futures evolutions OpenClaw (sandboxes, approvals, model/policy surface).
+  - Exigences:
+    - ne pas dupliquer inutilement les artefacts de release globaux,
+    - ne stocker aucun secret dans le manifeste,
+    - documenter clairement la relation entre contrat de module, release globale et checks `doctor`.
