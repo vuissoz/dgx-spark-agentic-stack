@@ -38,6 +38,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-0n8` (gerer les sous-agents via une API interne OpenClaw et separer cette logique de la surface CLI operateur `agent openclaw ...`) [OPEN]
 - Beads (Contrat de module OpenClaw):
   - `dgx-spark-agentic-stack-zj4` (formaliser un blueprint/manifest OpenClaw pour les fichiers, ports, auth, routes provider et compatibilites CLI) [OPEN]
+- Beads (Plugin UX in-chat OpenClaw):
+  - `dgx-spark-agentic-stack-irt` (ajouter une commande slash OpenClaw de statut dans le chat, branchee au registre/runtime sans fuite de secrets) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
@@ -166,6 +168,11 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - etapes lifecycle explicites de type `resolve`, `verify digest`, `plan`, `apply`, `status`,
   - integration avec `agent doctor` et/ou `agent update` pour signaler les incoherences de module,
   - articulation documentee entre contrat OpenClaw et artefacts globaux de release, sans y stocker de secrets.
+- Follow-up `dgx-spark-agentic-stack-irt`: ajouter une commande in-chat OpenClaw de type plugin UX:
+  - commande slash minimale de type `/openclaw status` (ou equivalent) dans l'interface OpenClaw,
+  - lecture d'un etat deja expose par le registre/runtime/API interne OpenClaw,
+  - sortie utile pour l'operateur: statut module, sandbox/session courant, modele/provider, sante recente,
+  - sans contourner la separation entre confinement, API interne machine et CLI operateur.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -448,3 +455,26 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - ne pas dupliquer inutilement les artefacts de release globaux,
     - ne stocker aucun secret dans le manifeste,
     - documenter clairement la relation entre contrat de module, release globale et checks `doctor`.
+
+## Addendum (2026-03-22, plugin UX in-chat OpenClaw)
+- Beads `dgx-spark-agentic-stack-irt`: ajouter une commande in-chat OpenClaw inspiree du `/nemoclaw status` de NemoClaw.
+  - Constat actuel:
+    - la stack prepare une surface operateur `agent openclaw ...` et des APIs/etats OpenClaw plus riches,
+    - mais ne prevoit pas encore de commande de chat pour obtenir rapidement un statut operationnel sans sortir dans le shell,
+    - cette fonctionnalite est une amelioration d'ergonomie, pas un mecanisme de confinement.
+  - Cible:
+    - introduire une commande slash minimaliste de type `/openclaw status` dans l'interface de chat OpenClaw,
+    - brancher cette commande sur le registre d'etat, le runtime ou l'API interne OpenClaw deja exposes par la stack,
+    - afficher un resume sans secret du module OpenClaw:
+      - sandbox/session courant,
+      - modele/provider actif,
+      - derniere sante connue,
+      - eventuels indicateurs d'etat operateur utiles.
+  - Effet recherche:
+    - reduire le besoin de quitter le chat pour des diagnostics simples,
+    - ameliorer l'operabilite sans ajouter de droits ou de voies de contournement,
+    - reutiliser les futurs contrats d'etat OpenClaw au lieu d'introduire une source de verite parallele.
+  - Exigences:
+    - ne pas exposer de secrets, tokens, chemins sensibles ou details privilegies,
+    - ne pas contourner la separation entre main agent, API interne et CLI operateur,
+    - documenter explicitement que cette UX vient apres les travaux de securite et de confinement.
