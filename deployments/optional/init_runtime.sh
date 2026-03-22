@@ -5,7 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
-AGENTIC_OPENCLAW_WORKSPACES_DIR="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT}/optional/openclaw/workspaces}"
 AGENTIC_PI_MONO_WORKSPACES_DIR="${AGENTIC_PI_MONO_WORKSPACES_DIR:-${AGENTIC_ROOT}/optional/pi-mono/workspaces}"
 AGENTIC_GOOSE_WORKSPACES_DIR="${AGENTIC_GOOSE_WORKSPACES_DIR:-${AGENTIC_ROOT}/optional/goose/workspaces}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/optional"
@@ -102,7 +101,6 @@ upsert_key_value_in_file() {
 optional_request_default_need() {
   local module="$1"
   case "${module}" in
-    openclaw) printf '%s\n' "Enable scoped OpenClaw webhook and DM automation for approved workflows." ;;
     mcp) printf '%s\n' "Expose a restricted MCP catalog for local automation workflows." ;;
     pi-mono) printf '%s\n' "Provide an additional isolated CLI agent runtime for targeted tasks." ;;
     goose) printf '%s\n' "Provide an isolated Goose CLI runtime for approved workflows." ;;
@@ -114,7 +112,6 @@ optional_request_default_need() {
 optional_request_default_success() {
   local module="$1"
   case "${module}" in
-    openclaw) printf '%s\n' "Webhook auth succeeds, deny paths stay blocked, and service healthcheck stays green." ;;
     mcp) printf '%s\n' "Only allowlisted tools are available and service healthcheck stays green." ;;
     pi-mono) printf '%s\n' "Container starts with expected user/workspace mappings and no forbidden mounts." ;;
     goose) printf '%s\n' "Container starts successfully with isolated workspace and expected proxy controls." ;;
@@ -164,17 +161,6 @@ main() {
   local runtime_gid="${AGENT_RUNTIME_GID:-1000}"
 
   install -d -m 0750 "${AGENTIC_ROOT}/optional"
-  install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw"
-  install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/config"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/state"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/logs"
-  install -d -m 0770 "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"
-  install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/relay"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/relay/state"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/relay/logs"
-  install -d -m 0750 "${AGENTIC_ROOT}/optional/openclaw/sandbox"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/openclaw/sandbox/state"
-
   install -d -m 0750 "${AGENTIC_ROOT}/optional/mcp"
   install -d -m 0750 "${AGENTIC_ROOT}/optional/mcp/config"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/mcp/state"
@@ -199,41 +185,18 @@ main() {
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
 
-  copy_if_missing "${TEMPLATE_DIR}/openclaw.dm_allowlist.txt" "${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt" 0640
-  copy_if_missing "${TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt" 0640
-  copy_if_missing "${TEMPLATE_DIR}/openclaw.integration-profile.v1.json" "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" 0640
-  copy_if_missing "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json" 0640
-  copy_if_missing "${TEMPLATE_DIR}/openclaw.relay_targets.json" "${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json" 0640
   copy_if_missing "${TEMPLATE_DIR}/mcp.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt" 0640
-  ensure_optional_request_file "openclaw"
   ensure_optional_request_file "mcp"
   ensure_optional_request_file "pi-mono"
   ensure_optional_request_file "goose"
   ensure_optional_request_file "portainer"
 
-  chmod 0644 "${AGENTIC_ROOT}/optional/openclaw/config/dm_allowlist.txt" \
-    "${AGENTIC_ROOT}/optional/openclaw/config/tool_allowlist.txt" \
-    "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.v1.json" \
-    "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json" \
-    "${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json" \
-    "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
+  chmod 0644 "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
 
-  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
-  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
-  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
-  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
-  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
-  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
 
   if [[ "${EUID}" -eq 0 ]]; then
     chown -R "${runtime_uid}:${runtime_gid}" \
-      "${AGENTIC_ROOT}/optional/openclaw/state" \
-      "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
-      "${AGENTIC_ROOT}/optional/openclaw/sandbox/state" \
-      "${AGENTIC_ROOT}/optional/openclaw/relay/state" \
-      "${AGENTIC_ROOT}/optional/openclaw/relay/logs" \
-      "${AGENTIC_ROOT}/optional/openclaw/logs" \
       "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \
       "${AGENTIC_ROOT}/optional/pi-mono/state" \
@@ -244,31 +207,13 @@ main() {
       "${AGENTIC_GOOSE_WORKSPACES_DIR}" \
       "${AGENTIC_ROOT}/optional/portainer/data" \
       "${AGENTIC_ROOT}/optional/portainer/logs"
-    if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.token" ]]; then
-      chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
-    fi
-    if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret" ]]; then
-      chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
-    fi
-    if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret" ]]; then
-      chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
-    fi
-    if [[ -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret" ]]; then
-      chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
-    fi
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
     fi
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then
-    chmod 0770 "${AGENTIC_ROOT}/optional/openclaw/state" \
-      "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
-      "${AGENTIC_ROOT}/optional/openclaw/sandbox/state" \
-      "${AGENTIC_ROOT}/optional/openclaw/relay/state" \
-      "${AGENTIC_ROOT}/optional/openclaw/relay/logs" \
-      "${AGENTIC_ROOT}/optional/openclaw/logs" \
-      "${AGENTIC_ROOT}/optional/mcp/state" \
+    chmod 0770 "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \
       "${AGENTIC_ROOT}/optional/pi-mono/state" \
       "${AGENTIC_ROOT}/optional/pi-mono/logs" \

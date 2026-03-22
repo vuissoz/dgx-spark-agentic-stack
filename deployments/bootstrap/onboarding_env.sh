@@ -219,7 +219,10 @@ default_optional_workspace_dir_for_tool() {
   local root_path="$1"
   local tool="$2"
   case "${tool}" in
-    openclaw|pi-mono|goose)
+    openclaw)
+      printf '%s\n' "${root_path}/openclaw/workspaces"
+      ;;
+    pi-mono|goose)
       printf '%s\n' "${root_path}/optional/${tool}/workspaces"
       ;;
     *)
@@ -640,11 +643,11 @@ validate_optional_modules_csv() {
       none)
         saw_none=1
         ;;
-      openclaw|mcp|pi-mono|goose|portainer)
+      mcp|pi-mono|goose|portainer)
         saw_module=1
         ;;
       *)
-        echo "unknown optional module '${entry}' (allowed: openclaw,mcp,pi-mono,goose,portainer,none)" >&2
+        echo "unknown optional module '${entry}' (allowed: mcp,pi-mono,goose,portainer,none)" >&2
         return 1
         ;;
     esac
@@ -1057,8 +1060,8 @@ expires_at=
 ensure_openclaw_integration_profile_file() {
   local root_path="$1"
   local template_path="${OPTIONAL_TEMPLATE_DIR}/openclaw.integration-profile.v1.json"
-  local versioned_path="${root_path}/optional/openclaw/config/integration-profile.v1.json"
-  local current_path="${root_path}/optional/openclaw/config/integration-profile.current.json"
+  local versioned_path="${root_path}/openclaw/config/integration-profile.v1.json"
+  local current_path="${root_path}/openclaw/config/integration-profile.current.json"
   local created=0
   local profile_content
 
@@ -1628,7 +1631,7 @@ collect_path_value codex_workspaces_dir "AGENTIC_CODEX_WORKSPACES_DIR" "${profil
 collect_path_value opencode_workspaces_dir "AGENTIC_OPENCODE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "opencode")" "${opencode_workspaces_dir_override}" "AGENTIC_OPENCODE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-opencode."
 collect_path_value vibestral_workspaces_dir "AGENTIC_VIBESTRAL_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "vibestral")" "${vibestral_workspaces_dir_override}" "AGENTIC_VIBESTRAL_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-vibestral."
 collect_path_value openhands_workspaces_dir "AGENTIC_OPENHANDS_WORKSPACES_DIR" "${profile}" "$(default_openhands_workspaces_dir "${root_path}")" "${openhands_workspaces_dir_override}" "AGENTIC_OPENHANDS_WORKSPACES_DIR controls the host path mounted as /workspace in openhands."
-collect_path_value openclaw_workspaces_dir "AGENTIC_OPENCLAW_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "openclaw")" "${openclaw_workspaces_dir_override}" "AGENTIC_OPENCLAW_WORKSPACES_DIR controls the host path mounted as /workspace in optional-openclaw."
+collect_path_value openclaw_workspaces_dir "AGENTIC_OPENCLAW_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "openclaw")" "${openclaw_workspaces_dir_override}" "AGENTIC_OPENCLAW_WORKSPACES_DIR controls the host path mounted as /workspace in openclaw."
 collect_path_value pi_mono_workspaces_dir "AGENTIC_PI_MONO_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "pi-mono")" "${pi_mono_workspaces_dir_override}" "AGENTIC_PI_MONO_WORKSPACES_DIR controls the host path mounted as /workspace in optional-pi-mono."
 collect_path_value goose_workspaces_dir "AGENTIC_GOOSE_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "goose")" "${goose_workspaces_dir_override}" "AGENTIC_GOOSE_WORKSPACES_DIR controls the host path mounted as /workspace in optional-goose."
 
@@ -1976,7 +1979,7 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
 
     if [[ -z "${optional_modules_override}" ]]; then
       while true; do
-        candidate="$(prompt_with_default "Optional modules to prepare secrets for (csv: none,openclaw,mcp,pi-mono,goose,portainer)" "${optional_modules_raw}")"
+        candidate="$(prompt_with_default "Optional modules to prepare secrets for (csv: none,mcp,pi-mono,goose,portainer)" "${optional_modules_raw}")"
         if validate_optional_modules_csv "${candidate}"; then
           optional_modules_raw="${candidate}"
           break
@@ -1987,6 +1990,32 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     fi
   else
     validate_optional_modules_csv "${optional_modules_raw}" || die "invalid --optional-modules"
+  fi
+
+  if [[ -z "${openclaw_token}" ]]; then
+    if [[ "${non_interactive}" -eq 0 ]]; then
+      candidate="$(prompt_secret_or_generate "openclaw.token")"
+      if [[ -n "${candidate}" ]]; then
+        openclaw_token="${candidate}"
+      else
+        openclaw_token="$(generate_secret_value 24)"
+      fi
+    else
+      openclaw_token="$(generate_secret_value 24)"
+    fi
+  fi
+
+  if [[ -z "${openclaw_webhook_secret}" ]]; then
+    if [[ "${non_interactive}" -eq 0 ]]; then
+      candidate="$(prompt_secret_or_generate "openclaw.webhook_secret")"
+      if [[ -n "${candidate}" ]]; then
+        openclaw_webhook_secret="${candidate}"
+      else
+        openclaw_webhook_secret="$(generate_secret_value 24)"
+      fi
+    else
+      openclaw_webhook_secret="$(generate_secret_value 24)"
+    fi
   fi
 
   normalized_modules="$(normalize_allowlist_csv "${optional_modules_raw}" | tr '[:upper:]' '[:lower:]')"
@@ -2002,33 +2031,6 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
       [[ -n "${module}" ]] || continue
       summary_add_module "${module}"
       case "${module}" in
-        openclaw)
-          if [[ -z "${openclaw_token}" ]]; then
-            if [[ "${non_interactive}" -eq 0 ]]; then
-              candidate="$(prompt_secret_or_generate "openclaw.token")"
-              if [[ -n "${candidate}" ]]; then
-                openclaw_token="${candidate}"
-              else
-                openclaw_token="$(generate_secret_value 24)"
-              fi
-            else
-              openclaw_token="$(generate_secret_value 24)"
-            fi
-          fi
-
-          if [[ -z "${openclaw_webhook_secret}" ]]; then
-            if [[ "${non_interactive}" -eq 0 ]]; then
-              candidate="$(prompt_secret_or_generate "openclaw.webhook_secret")"
-              if [[ -n "${candidate}" ]]; then
-                openclaw_webhook_secret="${candidate}"
-              else
-                openclaw_webhook_secret="$(generate_secret_value 24)"
-              fi
-            else
-              openclaw_webhook_secret="$(generate_secret_value 24)"
-            fi
-          fi
-          ;;
         mcp)
           if [[ -z "${mcp_token}" ]]; then
             if [[ "${non_interactive}" -eq 0 ]]; then
@@ -2051,11 +2053,9 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
 
   if [[ "${root_is_writable}" -ne 1 ]]; then
     summary_add_deferred "secret values were collected but not written because ${root_path} is not writable"
+    summary_add_deferred "openclaw runtime profile was not written because ${root_path} is not writable"
     if [[ "${normalized_modules}" != "none" ]]; then
       summary_add_deferred "optional request files were not written because ${root_path} is not writable"
-      if printf '%s\n' "${optional_modules_list[@]:-}" | grep -qx 'openclaw'; then
-        summary_add_deferred "openclaw integration profile was not written because ${root_path} is not writable"
-      fi
     fi
     if [[ "${require_complete}" -eq 1 ]]; then
       summary_add_blocker "secret bootstrap requested but runtime root is not writable"
@@ -2073,13 +2073,12 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
       find "${root_path}/secrets/runtime" -type f -exec chmod 0600 {} +
     fi
 
+    ensure_openclaw_integration_profile_file "${root_path}" || true
+
     if [[ "${#optional_modules_list[@]}" -gt 0 ]]; then
       for module in "${optional_modules_list[@]}"; do
         [[ -n "${module}" && "${module}" != "none" ]] || continue
         ensure_optional_request_file "${root_path}" "${module}" || true
-        if [[ "${module}" == "openclaw" ]]; then
-          ensure_openclaw_integration_profile_file "${root_path}" || true
-        fi
       done
     fi
   fi

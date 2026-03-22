@@ -23,7 +23,7 @@ AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_v
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_TOOLS=(claude codex opencode vibestral openclaw pi-mono goose)
-OPTIONAL_MODULES=(openclaw mcp pi-mono goose portainer)
+OPTIONAL_MODULES=(mcp pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
 STACK_STOP_ORDER=(optional rag obs ui agents core)
@@ -72,7 +72,7 @@ Usage:
   agent doctor [--fix-net] [--check-tool-stream-e2e]
 
 Optional modules (disabled by default):
-  AGENTIC_OPTIONAL_MODULES=openclaw,mcp,pi-mono,goose,portainer agent up optional
+  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer agent up optional
 USAGE
 }
 
@@ -136,7 +136,7 @@ tool_to_service() {
     codex) echo "agentic-codex" ;;
     opencode) echo "agentic-opencode" ;;
     vibestral) echo "agentic-vibestral" ;;
-    openclaw) echo "optional-openclaw" ;;
+    openclaw) echo "openclaw" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "optional-goose" ;;
     *) return 1 ;;
@@ -153,7 +153,7 @@ tool_session_mode() {
 
 service_start_hint() {
   case "$1" in
-    optional-openclaw|optional-openclaw-gateway) echo "AGENTIC_OPTIONAL_MODULES=openclaw agent up optional" ;;
+    openclaw|openclaw-gateway) echo "agent up core" ;;
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
     *) echo "agent up agents" ;;
@@ -217,7 +217,6 @@ targets_include() {
 
 optional_module_profile() {
   case "$1" in
-    openclaw) echo "optional-openclaw" ;;
     mcp) echo "optional-mcp" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "optional-goose" ;;
@@ -228,13 +227,6 @@ optional_module_profile() {
 
 optional_module_secret_files() {
   case "$1" in
-    openclaw)
-      printf '%s\n' \
-        "${AGENTIC_ROOT}/secrets/runtime/openclaw.token" \
-        "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret" \
-        "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret" \
-        "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
-      ;;
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
     goose|portainer) ;;
@@ -244,11 +236,6 @@ optional_module_secret_files() {
 
 optional_module_config_files() {
   case "$1" in
-    openclaw)
-      printf '%s\n' \
-        "${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json" \
-        "${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json"
-      ;;
     mcp|pi-mono|goose|portainer) ;;
     *) return 1 ;;
   esac
@@ -369,20 +356,6 @@ validate_optional_module_prereqs() {
     [[ -n "${config_file}" ]] || continue
     [[ -s "${config_file}" ]] \
       || die "Optional module '${module}' requires runtime config file: ${config_file}"
-    if [[ "${module}" == "openclaw" ]]; then
-      command -v python3 >/dev/null 2>&1 \
-        || die "python3 is required to validate OpenClaw optional module config"
-      if [[ "$(basename "${config_file}")" == "integration-profile.current.json" ]]; then
-        if ! validate_openclaw_profile_file_contract "${config_file}" >/dev/null 2>&1; then
-          die "Optional module '${module}' has invalid integration profile: ${config_file}"
-        fi
-      fi
-      if [[ "$(basename "${config_file}")" == "relay_targets.json" ]]; then
-        if ! validate_openclaw_relay_targets_file_contract "${config_file}" >/dev/null 2>&1; then
-          die "Optional module '${module}' has invalid relay targets file: ${config_file}"
-        fi
-      fi
-    fi
   done
 }
 
@@ -403,7 +376,6 @@ log_optional_activation() {
 
 optional_module_build_services() {
   case "$1" in
-    openclaw) echo "optional-openclaw" ;;
     mcp) echo "optional-mcp-catalog" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "" ;;
@@ -414,7 +386,7 @@ optional_module_build_services() {
 
 optional_module_build_stamp_key() {
   case "$1" in
-    optional-openclaw|optional-openclaw-gateway|optional-mcp-catalog) echo "optional-modules-local" ;;
+    optional-mcp-catalog) echo "optional-modules-local" ;;
     optional-pi-mono) echo "agent-cli-base-local" ;;
     *) return 1 ;;
   esac
@@ -422,7 +394,7 @@ optional_module_build_stamp_key() {
 
 optional_module_image_ref() {
   case "$1" in
-    optional-openclaw|optional-openclaw-gateway|optional-mcp-catalog) echo "agentic/optional-modules:local" ;;
+    optional-mcp-catalog) echo "agentic/optional-modules:local" ;;
     optional-pi-mono) echo "agentic/agent-cli-base:local" ;;
     *) return 1 ;;
   esac
@@ -430,11 +402,10 @@ optional_module_image_ref() {
 
 optional_module_build_inputs() {
   case "$1" in
-    optional-openclaw|optional-openclaw-gateway|optional-mcp-catalog)
+    optional-mcp-catalog)
       printf '%s\n' \
         "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_gateway_entrypoint.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/tcp_forward.py"
       ;;
     optional-pi-mono)
@@ -556,6 +527,13 @@ core_service_build_inputs() {
         "${AGENTIC_REPO_ROOT}/deployments/gate_mcp/Dockerfile" \
         "${AGENTIC_REPO_ROOT}/deployments/gate_mcp/service.py"
       ;;
+    openclaw)
+      printf '%s\n' \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_gateway_entrypoint.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/tcp_forward.py"
+      ;;
     *)
       return 1
       ;;
@@ -566,6 +544,7 @@ core_service_stamp_key() {
   case "$1" in
     ollama-gate) echo "ollama-gate-local" ;;
     gate-mcp) echo "gate-mcp-local" ;;
+    openclaw) echo "openclaw-local" ;;
     *) return 1 ;;
   esac
 }
@@ -574,6 +553,7 @@ core_service_image_ref() {
   case "$1" in
     ollama-gate) echo "agentic/ollama-gate:local" ;;
     gate-mcp) echo "agentic/gate-mcp:local" ;;
+    openclaw) echo "agentic/optional-modules:local" ;;
     *) return 1 ;;
   esac
 }
@@ -604,7 +584,7 @@ core_service_build_fingerprint() {
 
 build_core_local_images() {
   local core_compose_file="$1"
-  local -a services=(ollama-gate gate-mcp)
+  local -a services=(ollama-gate gate-mcp openclaw)
   local -a build_services=()
   local -a build_stamp_paths=()
   local -a build_fingerprints=()
@@ -1198,7 +1178,7 @@ prepare_tool_session() {
       ;;
     openclaw-shell)
       docker exec "${container_id}" sh -lc "command -v openclaw >/dev/null" \
-        || die "openclaw CLI is missing in optional-openclaw container"
+        || die "openclaw CLI is missing in openclaw container"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -1234,10 +1214,10 @@ cmd_tool_attach() {
       printf 'INFO: launching goose in %s; stop with Ctrl-c.\n' "${workspace}"
       ;;
     openclaw-shell)
-      printf 'INFO: openclaw uses the optional OpenClaw service shell (project workspace mounted).\n'
+      printf 'INFO: openclaw uses the core OpenClaw service shell (project workspace mounted).\n'
       printf 'INFO: session workspace is %s.\n' "${workspace}"
       printf 'INFO: OpenClaw API is reachable via host loopback on http://127.0.0.1:%s.\n' "${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
-      printf 'INFO: internal docker-network endpoint is http://optional-openclaw:8111.\n'
+      printf 'INFO: internal docker-network endpoint is http://openclaw:8111.\n'
       printf 'INFO: OpenClaw dashboard is available at http://127.0.0.1:%s/dashboard.\n' "${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
       printf 'INFO: OpenClaw upstream Web UI is available at http://127.0.0.1:%s/.\n' "${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
       printf 'INFO: OpenClaw upstream Gateway WS is ws://127.0.0.1:%s.\n' "${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
@@ -1354,9 +1334,9 @@ cmd_stop_tool() {
   service="$(tool_to_service "${tool}")" || die "Unknown tool '${tool}'. Expected one of: ${AGENT_TOOLS[*]}"
   services_to_stop=("${service}")
   case "${service}" in
-    optional-openclaw)
-      compose_file="$(stack_to_compose_file optional)"
-      services_to_stop+=(optional-openclaw-gateway optional-openclaw-sandbox optional-openclaw-relay)
+    openclaw)
+      compose_file="$(stack_to_compose_file core)"
+      services_to_stop+=(openclaw-gateway openclaw-sandbox openclaw-relay)
       ;;
     optional-pi-mono|optional-goose)
       compose_file="$(stack_to_compose_file optional)"
@@ -1502,12 +1482,12 @@ forget_target_paths() {
       ;;
     openclaw)
       printf '%s\n' \
-        "${AGENTIC_ROOT}/optional/openclaw/config" \
-        "${AGENTIC_ROOT}/optional/openclaw/state" \
+        "${AGENTIC_ROOT}/openclaw/config" \
+        "${AGENTIC_ROOT}/openclaw/state" \
         "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
-        "${AGENTIC_ROOT}/optional/openclaw/relay" \
-        "${AGENTIC_ROOT}/optional/openclaw/logs" \
-        "${AGENTIC_ROOT}/optional/openclaw/sandbox/state"
+        "${AGENTIC_ROOT}/openclaw/relay" \
+        "${AGENTIC_ROOT}/openclaw/logs" \
+        "${AGENTIC_ROOT}/openclaw/sandbox/state"
       ;;
     openhands)
       printf '%s\n' \
@@ -1542,7 +1522,7 @@ forget_target_paths() {
         "$(agent_workspace_dir "opencode")" \
         "$(agent_workspace_dir "vibestral")" \
         "${AGENTIC_ROOT}/comfyui" \
-        "${AGENTIC_ROOT}/optional/openclaw" \
+        "${AGENTIC_ROOT}/openclaw" \
         "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
         "${AGENTIC_PI_MONO_WORKSPACES_DIR}" \
         "${AGENTIC_GOOSE_WORKSPACES_DIR}" \
@@ -1571,15 +1551,15 @@ forget_target_services() {
     opencode) printf '%s\n' agentic-opencode ;;
     vibestral) printf '%s\n' agentic-vibestral ;;
     comfyui) printf '%s\n' comfyui comfyui-loopback ;;
-    openclaw) printf '%s\n' optional-openclaw optional-openclaw-gateway optional-openclaw-sandbox optional-openclaw-relay ;;
+    openclaw) printf '%s\n' openclaw openclaw-gateway openclaw-sandbox openclaw-relay ;;
     openhands) printf '%s\n' openhands ;;
     openwebui) printf '%s\n' openwebui ;;
     qdrant) printf '%s\n' qdrant rag-retriever rag-worker opensearch ;;
     obs) printf '%s\n' prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter ;;
     all)
       printf '%s\n' \
-        optional-openclaw optional-openclaw-gateway optional-openclaw-sandbox \
-        optional-openclaw-relay \
+        openclaw openclaw-gateway openclaw-sandbox \
+        openclaw-relay \
         qdrant rag-retriever rag-worker opensearch \
         prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter \
         openwebui openhands comfyui comfyui-loopback \
@@ -1730,7 +1710,6 @@ collect_cleanup_image_refs() {
     docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
       --profile rag-lexical \
       --profile optional \
-      --profile optional-openclaw \
       --profile optional-mcp \
       --profile optional-pi-mono \
       --profile optional-goose \
@@ -2837,7 +2816,6 @@ case "$cmd" in
       require_cmd docker
       docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
         --profile optional \
-        --profile optional-openclaw \
         --profile optional-mcp \
         --profile optional-pi-mono \
         --profile optional-goose \

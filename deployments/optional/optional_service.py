@@ -1302,7 +1302,7 @@ def main() -> int:
         webhook_secret_file = os.environ.get("OPENCLAW_WEBHOOK_SECRET_FILE", "/run/secrets/openclaw.webhook_secret")
         profile_file = os.environ.get("OPENCLAW_PROFILE_FILE", "/config/integration-profile.current.json")
         sandbox_token_file = os.environ.get("OPENCLAW_SANDBOX_AUTH_TOKEN_FILE", token_file)
-        sandbox_base_url = os.environ.get("OPENCLAW_SANDBOX_URL", "http://optional-openclaw-sandbox:8112").rstrip("/")
+        sandbox_base_url = os.environ.get("OPENCLAW_SANDBOX_URL", "http://openclaw-sandbox:8112").rstrip("/")
         sandbox_timeout = float(os.environ.get("OPENCLAW_SANDBOX_TIMEOUT_SEC", "3"))
         try:
             profile_cfg = load_openclaw_profile(profile_file, args.mode)
@@ -1359,7 +1359,7 @@ def main() -> int:
             "endpoint_dashboard_status_paths": {"/v1/dashboard/status"},
             "bearer_token_required": profile_cfg["bearer_token_required"],
             "dashboard_enabled": env_flag("OPENCLAW_DASHBOARD_ENABLED", True),
-            "relay_status_url": os.environ.get("OPENCLAW_RELAY_STATUS_URL", "http://optional-openclaw-relay:8113/v1/queue/status"),
+            "relay_status_url": os.environ.get("OPENCLAW_RELAY_STATUS_URL", "http://openclaw-relay:8113/v1/queue/status"),
         }
 
         if not cfg["token"]:
@@ -1451,7 +1451,7 @@ def main() -> int:
             "provider_timestamp_header": os.environ.get("OPENCLAW_RELAY_TIMESTAMP_HEADER", "X-Relay-Timestamp"),
             "provider_event_id_header": os.environ.get("OPENCLAW_RELAY_EVENT_ID_HEADER", "X-Provider-Event-ID"),
             "provider_max_skew_sec": int(os.environ.get("OPENCLAW_RELAY_MAX_SKEW_SEC", "300") or 300),
-            "forward_url": os.environ.get("OPENCLAW_RELAY_FORWARD_URL", "http://optional-openclaw:8111/v1/webhooks/dm"),
+            "forward_url": os.environ.get("OPENCLAW_RELAY_FORWARD_URL", "http://openclaw:8111/v1/webhooks/dm"),
             "openclaw_token_file": os.environ.get("OPENCLAW_RELAY_OPENCLAW_TOKEN_FILE", "/run/secrets/openclaw.token"),
             "openclaw_webhook_secret_file": os.environ.get(
                 "OPENCLAW_RELAY_OPENCLAW_WEBHOOK_SECRET_FILE",

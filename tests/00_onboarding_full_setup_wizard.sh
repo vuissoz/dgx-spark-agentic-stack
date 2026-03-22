@@ -57,7 +57,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --openai-api-key "${openai_key}" \
   --openrouter-api-key "${openrouter_key}" \
   --huggingface-token "${huggingface_token}" \
-  --optional-modules 'openclaw,mcp' \
+  --optional-modules 'mcp' \
   --openclaw-token "${openclaw_token}" \
   --openclaw-webhook-secret "${openclaw_webhook}" \
   --mcp-token "${mcp_token}" \
@@ -92,7 +92,7 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${root_dir}/agent-workspaces/
   || fail "full setup onboarding env must export AGENTIC_VIBESTRAL_WORKSPACES_DIR"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${root_dir}/openhands/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_OPENHANDS_WORKSPACES_DIR"
-grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${root_dir}/optional/openclaw/workspaces'$" "${env_file}" \
+grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${root_dir}/openclaw/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_OPENCLAW_WORKSPACES_DIR"
 grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${root_dir}/optional/pi-mono/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_PI_MONO_WORKSPACES_DIR"
@@ -129,9 +129,8 @@ huggingface_secret_file="${root_dir}/secrets/runtime/huggingface.token"
 openclaw_token_file="${root_dir}/secrets/runtime/openclaw.token"
 openclaw_webhook_file="${root_dir}/secrets/runtime/openclaw.webhook_secret"
 mcp_token_file="${root_dir}/secrets/runtime/mcp.token"
-openclaw_request_file="${root_dir}/deployments/optional/openclaw.request"
 mcp_request_file="${root_dir}/deployments/optional/mcp.request"
-openclaw_profile_file="${root_dir}/optional/openclaw/config/integration-profile.current.json"
+openclaw_profile_file="${root_dir}/openclaw/config/integration-profile.current.json"
 
 [[ -s "${openwebui_env}" ]] || fail "openwebui env file missing: ${openwebui_env}"
 [[ -s "${openhands_env}" ]] || fail "openhands env file missing: ${openhands_env}"
@@ -154,7 +153,6 @@ for secret_file in \
 done
 
 for request_file in \
-  "${openclaw_request_file}" \
   "${mcp_request_file}"; do
   [[ -s "${request_file}" ]] || fail "optional request file missing: ${request_file}"
   request_perm="$(stat -c '%a' "${request_file}")"

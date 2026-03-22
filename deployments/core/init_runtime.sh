@@ -5,7 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+AGENTIC_OPENCLAW_WORKSPACES_DIR="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT}/openclaw/workspaces}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/core"
+OPTIONAL_TEMPLATE_DIR="${REPO_ROOT}/examples/optional"
 AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}"
 AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
 
@@ -25,6 +27,25 @@ ensure_secret_mode() {
   fi
 }
 
+random_secret_hex() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24
+    return 0
+  fi
+  od -An -N24 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+ensure_secret_file_if_missing() {
+  local file="$1"
+  if [[ -f "${file}" ]]; then
+    return 0
+  fi
+  umask 077
+  random_secret_hex >"${file}"
+  chmod 0600 "${file}" || true
+  log "generated runtime secret: ${file}"
+}
+
 copy_if_missing() {
   local src="$1"
   local dst="$2"
@@ -38,6 +59,42 @@ copy_if_missing() {
 
   install -D -m "$mode" "$src" "$dst"
   log "created runtime file: ${dst}"
+}
+
+set_openclaw_runtime_permissions() {
+  local openclaw_state_dir="${AGENTIC_ROOT}/openclaw/state"
+  local openclaw_logs_dir="${AGENTIC_ROOT}/openclaw/logs"
+  local openclaw_sandbox_state_dir="${AGENTIC_ROOT}/openclaw/sandbox/state"
+  local openclaw_relay_state_dir="${AGENTIC_ROOT}/openclaw/relay/state"
+  local openclaw_relay_logs_dir="${AGENTIC_ROOT}/openclaw/relay/logs"
+  local openclaw_token="${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
+  local openclaw_webhook_secret="${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+  local openclaw_relay_telegram_secret="${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
+  local openclaw_relay_whatsapp_secret="${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
+
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
+      "${openclaw_state_dir}" \
+      "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
+      "${openclaw_sandbox_state_dir}" \
+      "${openclaw_relay_state_dir}" \
+      "${openclaw_relay_logs_dir}" \
+      "${openclaw_logs_dir}" || true
+    [[ -f "${openclaw_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_token}" || true
+    [[ -f "${openclaw_webhook_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_webhook_secret}" || true
+    [[ -f "${openclaw_relay_telegram_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_relay_telegram_secret}" || true
+    [[ -f "${openclaw_relay_whatsapp_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_relay_whatsapp_secret}" || true
+    return 0
+  fi
+
+  chmod 0770 \
+    "${openclaw_state_dir}" \
+    "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
+    "${openclaw_sandbox_state_dir}" \
+    "${openclaw_relay_state_dir}" \
+    "${openclaw_relay_logs_dir}" \
+    "${openclaw_logs_dir}"
+  log "non-root runtime init: relaxed openclaw dirs permissions for userns compatibility"
 }
 
 iter_allowlist_entries() {
@@ -236,6 +293,16 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/proxy"
   install -d -m 0750 "${AGENTIC_ROOT}/proxy/config"
   install -d -m 0755 "${AGENTIC_ROOT}/proxy/logs"
+  install -d -m 0750 "${AGENTIC_ROOT}/openclaw"
+  install -d -m 0750 "${AGENTIC_ROOT}/openclaw/config"
+  install -d -m 0770 "${AGENTIC_ROOT}/openclaw/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/openclaw/logs"
+  install -d -m 0770 "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"
+  install -d -m 0750 "${AGENTIC_ROOT}/openclaw/relay"
+  install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
+  install -d -m 0750 "${AGENTIC_ROOT}/openclaw/sandbox"
+  install -d -m 0770 "${AGENTIC_ROOT}/openclaw/sandbox/state"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
 
@@ -243,18 +310,38 @@ main() {
   copy_if_missing "${TEMPLATE_DIR}/unbound.conf" "${AGENTIC_ROOT}/dns/unbound.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/squid.conf" "${AGENTIC_ROOT}/proxy/config/squid.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt" 0644
+  copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.dm_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt" 0640
+  copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt" 0640
+  copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.integration-profile.v1.json" "${AGENTIC_ROOT}/openclaw/config/integration-profile.v1.json" 0640
+  copy_if_missing "${AGENTIC_ROOT}/openclaw/config/integration-profile.v1.json" "${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json" 0640
+  copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.relay_targets.json" "${AGENTIC_ROOT}/openclaw/config/relay_targets.json" 0640
   ensure_allowlist_baseline_entries "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt"
   chmod 0640 "${AGENTIC_ROOT}/gate/config/model_routes.yml"
   chmod 0644 "${AGENTIC_ROOT}/dns/unbound.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/config/squid.conf"
   chmod 0644 "${AGENTIC_ROOT}/proxy/allowlist.txt"
+  chmod 0644 \
+    "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt" \
+    "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt" \
+    "${AGENTIC_ROOT}/openclaw/config/integration-profile.v1.json" \
+    "${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json" \
+    "${AGENTIC_ROOT}/openclaw/config/relay_targets.json"
   ensure_gate_mode_file
   ensure_gate_quotas_file
   ensure_gate_mcp_token
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
   set_gate_runtime_permissions
   set_proxy_runtime_permissions
+  set_openclaw_runtime_permissions
 }
 
 main "$@"

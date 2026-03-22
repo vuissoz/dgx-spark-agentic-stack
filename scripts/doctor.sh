@@ -55,7 +55,7 @@ goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_M
 service_requires_proxy_env() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|optional-openclaw|optional-openclaw-gateway|optional-openclaw-sandbox|optional-openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
       return 0
       ;;
     *)
@@ -515,7 +515,7 @@ check_streamed_tool_call_health() {
     "claude|agentic-claude"
     "openhands|openhands"
     "opencode|agentic-opencode"
-    "openclaw|optional-openclaw"
+    "openclaw|openclaw"
     "pi-mono|optional-pi-mono"
     "goose|optional-goose"
   )
@@ -1108,65 +1108,65 @@ if [[ -n "${comfyui_cid}" ]]; then
   fi
 fi
 
-optional_openclaw_cid="$(service_container_id optional-openclaw)"
-optional_openclaw_gateway_cid="$(service_container_id optional-openclaw-gateway)"
-optional_openclaw_sandbox_cid="$(service_container_id optional-openclaw-sandbox)"
-optional_openclaw_relay_cid="$(service_container_id optional-openclaw-relay)"
-optional_openclaw_profile_file="${AGENTIC_ROOT}/optional/openclaw/config/integration-profile.current.json"
-optional_openclaw_relay_targets_file="${AGENTIC_ROOT}/optional/openclaw/config/relay_targets.json"
+optional_openclaw_cid="$(service_container_id openclaw)"
+optional_openclaw_gateway_cid="$(service_container_id openclaw-gateway)"
+optional_openclaw_sandbox_cid="$(service_container_id openclaw-sandbox)"
+optional_openclaw_relay_cid="$(service_container_id openclaw-relay)"
+optional_openclaw_profile_file="${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json"
+optional_openclaw_relay_targets_file="${AGENTIC_ROOT}/openclaw/config/relay_targets.json"
 if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
-    doctor_fail "optional openclaw webhook bind must stay loopback-only on port ${openclaw_webhook_host_port}"
+    doctor_fail "openclaw webhook bind must stay loopback-only on port ${openclaw_webhook_host_port}"
   fi
 
   if [[ ! -s "${optional_openclaw_profile_file}" ]]; then
-    doctor_fail "optional openclaw integration profile is missing: ${optional_openclaw_profile_file}"
+    doctor_fail "openclaw integration profile is missing: ${optional_openclaw_profile_file}"
   elif ! validate_openclaw_profile_file "${optional_openclaw_profile_file}" >/dev/null 2>&1; then
-    doctor_fail "optional openclaw integration profile is invalid: ${optional_openclaw_profile_file}"
+    doctor_fail "openclaw integration profile is invalid: ${optional_openclaw_profile_file}"
   fi
 
   optional_openclaw_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_cid}" 2>/dev/null || true)"
   if ! grep -q '^OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_env}"; then
-    doctor_fail "optional-openclaw must set OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json"
+    doctor_fail "openclaw must set OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json"
   fi
   if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'command -v openclaw >/dev/null'; then
-    doctor_fail "optional-openclaw must provide openclaw CLI in-container"
+    doctor_fail "openclaw must provide openclaw CLI in-container"
   fi
   if ! mount_destination_present "${optional_openclaw_cid}" "/workspace"; then
-    doctor_fail "optional-openclaw must mount /workspace for persistent operator sessions"
+    doctor_fail "openclaw must mount /workspace for persistent operator sessions"
   elif ! mount_destination_matches_source "${optional_openclaw_cid}" "/workspace" "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"; then
-    doctor_fail "optional-openclaw /workspace source must match AGENTIC_OPENCLAW_WORKSPACES_DIR (${AGENTIC_OPENCLAW_WORKSPACES_DIR})"
+    doctor_fail "openclaw /workspace source must match AGENTIC_OPENCLAW_WORKSPACES_DIR (${AGENTIC_OPENCLAW_WORKSPACES_DIR})"
   fi
   if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'test -d /workspace && test -w /workspace'; then
-    doctor_fail "optional-openclaw workspace mount must be writable (/workspace)"
+    doctor_fail "openclaw workspace mount must be writable (/workspace)"
   fi
   dashboard_status="$(curl -sS -o /tmp/doctor-openclaw-dashboard.out -w '%{http_code}' "http://127.0.0.1:${openclaw_webhook_host_port}/dashboard" 2>/dev/null || true)"
   if [[ "${dashboard_status}" != "200" ]]; then
-    doctor_fail "optional-openclaw dashboard must be reachable on loopback (/dashboard, status=${dashboard_status:-unknown})"
+    doctor_fail "openclaw dashboard must be reachable on loopback (/dashboard, status=${dashboard_status:-unknown})"
   fi
 fi
 
 if [[ -n "${optional_openclaw_gateway_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_gateway_host_port}"; then
-    doctor_fail "optional openclaw gateway bind must stay loopback-only on port ${openclaw_gateway_host_port}"
+    doctor_fail "openclaw gateway bind must stay loopback-only on port ${openclaw_gateway_host_port}"
   fi
 
   optional_openclaw_gateway_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_gateway_cid}" 2>/dev/null || true)"
   if ! grep -q '^OPENCLAW_GATEWAY_BIND_MODE=loopback$' <<<"${optional_openclaw_gateway_env}"; then
-    doctor_fail "optional-openclaw-gateway must set OPENCLAW_GATEWAY_BIND_MODE=loopback"
+    doctor_fail "openclaw-gateway must set OPENCLAW_GATEWAY_BIND_MODE=loopback"
   fi
   if ! grep -q '^OPENCLAW_GATEWAY_PORT=18789$' <<<"${optional_openclaw_gateway_env}"; then
-    doctor_fail "optional-openclaw-gateway must set OPENCLAW_GATEWAY_PORT=18789"
+    doctor_fail "openclaw-gateway must set OPENCLAW_GATEWAY_PORT=18789"
   fi
 
   if ! timeout 15 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'command -v openclaw >/dev/null'; then
-    doctor_fail "optional-openclaw-gateway must provide openclaw CLI in-container"
+    doctor_fail "openclaw-gateway must provide openclaw CLI in-container"
   fi
 
   if ! mount_destination_present "${optional_openclaw_gateway_cid}" "/workspace"; then
-    doctor_fail "optional-openclaw-gateway must mount /workspace for persistent operator sessions"
+    doctor_fail "openclaw-gateway must mount /workspace for persistent operator sessions"
   elif ! mount_destination_matches_source "${optional_openclaw_gateway_cid}" "/workspace" "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"; then
-    doctor_fail "optional-openclaw-gateway /workspace source must match AGENTIC_OPENCLAW_WORKSPACES_DIR (${AGENTIC_OPENCLAW_WORKSPACES_DIR})"
+    doctor_fail "openclaw-gateway /workspace source must match AGENTIC_OPENCLAW_WORKSPACES_DIR (${AGENTIC_OPENCLAW_WORKSPACES_DIR})"
   fi
 
   gateway_bindings_json="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "${optional_openclaw_gateway_cid}" 2>/dev/null || true)"
@@ -1197,43 +1197,43 @@ for item in entries:
 raise SystemExit(1)
 PY
   then
-    doctor_fail "optional-openclaw-gateway must publish 8114/tcp on loopback 127.0.0.1:${openclaw_gateway_host_port}"
+    doctor_fail "openclaw-gateway must publish 8114/tcp on loopback 127.0.0.1:${openclaw_gateway_host_port}"
   fi
 
   gateway_ui_status="$(curl -sS -o /tmp/doctor-openclaw-gateway-ui.out -w '%{http_code}' "http://127.0.0.1:${openclaw_gateway_host_port}/" 2>/dev/null || true)"
   if [[ "${gateway_ui_status}" != "200" ]]; then
-    doctor_fail "optional-openclaw-gateway Web UI must be reachable on loopback (/, status=${gateway_ui_status:-unknown})"
+    doctor_fail "openclaw-gateway Web UI must be reachable on loopback (/, status=${gateway_ui_status:-unknown})"
   fi
 
   if ! timeout 20 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && openclaw gateway health --json --url ws://127.0.0.1:18789 --token "${token}" >/tmp/openclaw-gateway-health.out'; then
-    doctor_fail "optional-openclaw-gateway WS endpoint must answer token-auth health check on ws://127.0.0.1:18789"
+    doctor_fail "openclaw-gateway WS endpoint must answer token-auth health check on ws://127.0.0.1:18789"
   fi
 fi
 
 if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
   if [[ ! -s "${optional_openclaw_profile_file}" ]]; then
-    doctor_fail "optional openclaw sandbox requires integration profile: ${optional_openclaw_profile_file}"
+    doctor_fail "openclaw sandbox requires integration profile: ${optional_openclaw_profile_file}"
   elif ! validate_openclaw_profile_file "${optional_openclaw_profile_file}" >/dev/null 2>&1; then
-    doctor_fail "optional openclaw sandbox profile is invalid: ${optional_openclaw_profile_file}"
+    doctor_fail "openclaw sandbox profile is invalid: ${optional_openclaw_profile_file}"
   fi
 
   optional_openclaw_sandbox_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_sandbox_cid}" 2>/dev/null || true)"
   if ! grep -q '^OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_sandbox_env}"; then
-    doctor_fail "optional-openclaw-sandbox must set OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json"
+    doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json"
   fi
 fi
 
 if [[ -n "${optional_openclaw_relay_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_relay_host_port}"; then
-    doctor_fail "optional openclaw relay bind must stay loopback-only on port ${openclaw_relay_host_port}"
+    doctor_fail "openclaw relay bind must stay loopback-only on port ${openclaw_relay_host_port}"
   fi
   if [[ ! -s "${optional_openclaw_relay_targets_file}" ]]; then
-    doctor_fail "optional openclaw relay targets file is missing: ${optional_openclaw_relay_targets_file}"
+    doctor_fail "openclaw relay targets file is missing: ${optional_openclaw_relay_targets_file}"
   fi
 
   optional_openclaw_relay_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_relay_cid}" 2>/dev/null || true)"
   if ! grep -q '^OPENCLAW_RELAY_PROVIDER_TARGETS_FILE=/config/relay_targets.json$' <<<"${optional_openclaw_relay_env}"; then
-    doctor_fail "optional-openclaw-relay must set OPENCLAW_RELAY_PROVIDER_TARGETS_FILE=/config/relay_targets.json"
+    doctor_fail "openclaw-relay must set OPENCLAW_RELAY_PROVIDER_TARGETS_FILE=/config/relay_targets.json"
   fi
 
   relay_bindings_json="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "${optional_openclaw_relay_cid}" 2>/dev/null || true)"
@@ -1264,11 +1264,11 @@ for item in entries:
 raise SystemExit(1)
 PY
   then
-    doctor_fail "optional-openclaw-relay must publish 8113/tcp on loopback 127.0.0.1:${openclaw_relay_host_port}"
+    doctor_fail "openclaw-relay must publish 8113/tcp on loopback 127.0.0.1:${openclaw_relay_host_port}"
   fi
 
   if ! timeout 15 docker exec "${optional_openclaw_relay_cid}" sh -lc "python3 -c 'import sys,urllib.request; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8113/v1/queue/status\", timeout=4).status == 200 else 1)'"; then
-    doctor_fail "optional-openclaw-relay queue status must be reachable from relay container (/v1/queue/status)"
+    doctor_fail "openclaw-relay queue status must be reachable from relay container (/v1/queue/status)"
   fi
 fi
 

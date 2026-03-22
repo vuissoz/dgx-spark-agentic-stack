@@ -38,7 +38,7 @@ relay_queue_value() {
   local toolbox_cid="$1"
   local field="$2"
   local payload
-  payload="$(docker exec "${toolbox_cid}" sh -lc 'curl -fsS http://optional-openclaw-relay:8113/v1/queue/status')" || return 1
+  payload="$(docker exec "${toolbox_cid}" sh -lc 'curl -fsS http://openclaw-relay:8113/v1/queue/status')" || return 1
   python3 - "${field}" "${payload}" <<'PY'
 import json
 import sys
@@ -70,11 +70,11 @@ wait_for_relay_queue_at_least() {
   fail "relay queue '${field}' did not reach ${minimum} within ${timeout_sec}s (last=${value:-unknown})"
 }
 
-"${agent_bin}" down optional >/tmp/agent-k6-down-pre.out 2>&1 || true
-"${REPO_ROOT}/deployments/optional/init_runtime.sh"
+"${agent_bin}" down core >/tmp/agent-k6-down-pre.out 2>&1 || true
+"${REPO_ROOT}/deployments/core/init_runtime.sh"
 
 agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
-openclaw_workspaces_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${agentic_root}/optional/openclaw/workspaces}"
+openclaw_workspaces_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${agentic_root}/openclaw/workspaces}"
 webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
@@ -83,25 +83,17 @@ openclaw_agent_name="operator-k6-$(date +%s)"
 install -d -m 0700 "${agentic_root}/secrets/runtime"
 install -d -m 0750 "${agentic_root}/deployments/optional"
 
-cat >"${agentic_root}/deployments/optional/openclaw.request" <<'REQ'
-need=Validate OpenClaw CLI wizard parity, dashboard access, and provider relay delivery path.
-success=CLI setup flows are persistent, dashboard stays loopback-only, and relay queue handles success plus dead-letter retries.
-owner=ops
-expires_at=2099-12-31
-REQ
-chmod 0640 "${agentic_root}/deployments/optional/openclaw.request"
-
-cat >"${agentic_root}/optional/openclaw/config/dm_allowlist.txt" <<'ALLOW'
+cat >"${agentic_root}/openclaw/config/dm_allowlist.txt" <<'ALLOW'
 discord:user:test
 ALLOW
-chmod 0644 "${agentic_root}/optional/openclaw/config/dm_allowlist.txt"
+chmod 0644 "${agentic_root}/openclaw/config/dm_allowlist.txt"
 
-cat >"${agentic_root}/optional/openclaw/config/tool_allowlist.txt" <<'ALLOW'
+cat >"${agentic_root}/openclaw/config/tool_allowlist.txt" <<'ALLOW'
 diagnostics.ping
 ALLOW
-chmod 0644 "${agentic_root}/optional/openclaw/config/tool_allowlist.txt"
+chmod 0644 "${agentic_root}/openclaw/config/tool_allowlist.txt"
 
-cat >"${agentic_root}/optional/openclaw/config/relay_targets.json" <<'JSON'
+cat >"${agentic_root}/openclaw/config/relay_targets.json" <<'JSON'
 {
   "providers": {
     "telegram": {
@@ -113,7 +105,7 @@ cat >"${agentic_root}/optional/openclaw/config/relay_targets.json" <<'JSON'
   }
 }
 JSON
-chmod 0644 "${agentic_root}/optional/openclaw/config/relay_targets.json"
+chmod 0644 "${agentic_root}/openclaw/config/relay_targets.json"
 
 claw_token="k6-test-token-$(date +%s)"
 printf '%s\n' "${claw_token}" >"${agentic_root}/secrets/runtime/openclaw.token"
@@ -142,55 +134,54 @@ fi
 "${agent_bin}" doctor >/tmp/agent-k6-doctor-pre.out \
   || fail "precondition failed: doctor must be green before validating K6"
 
-AGENTIC_OPTIONAL_MODULES=openclaw \
 OPENCLAW_RELAY_MAX_ATTEMPTS=2 \
 OPENCLAW_RELAY_RETRY_BASE_SEC=1 \
 OPENCLAW_RELAY_RETRY_MAX_SEC=1 \
 OPENCLAW_RELAY_POLL_INTERVAL_SEC=0.5 \
-"${agent_bin}" up optional >/tmp/agent-k6-up.out \
-  || fail "agent up optional (openclaw) failed"
+"${agent_bin}" up core >/tmp/agent-k6-up.out \
+  || fail "agent up core (openclaw) failed"
 
-openclaw_cid="$(require_service_container optional-openclaw)" || exit 1
-gateway_cid="$(require_service_container optional-openclaw-gateway)" || exit 1
-sandbox_cid="$(require_service_container optional-openclaw-sandbox)" || exit 1
-relay_cid="$(require_service_container optional-openclaw-relay)" || exit 1
+openclaw_cid="$(require_service_container openclaw)" || exit 1
+gateway_cid="$(require_service_container openclaw-gateway)" || exit 1
+sandbox_cid="$(require_service_container openclaw-sandbox)" || exit 1
+relay_cid="$(require_service_container openclaw-relay)" || exit 1
 toolbox_cid="$(require_service_container toolbox)" || exit 1
 
-wait_for_container_ready "${openclaw_cid}" 90 || fail "optional-openclaw did not become ready"
-wait_for_container_ready "${gateway_cid}" 90 || fail "optional-openclaw-gateway did not become ready"
-wait_for_container_ready "${sandbox_cid}" 90 || fail "optional-openclaw-sandbox did not become ready"
-wait_for_container_ready "${relay_cid}" 90 || fail "optional-openclaw-relay did not become ready"
+wait_for_container_ready "${openclaw_cid}" 90 || fail "openclaw did not become ready"
+wait_for_container_ready "${gateway_cid}" 90 || fail "openclaw-gateway did not become ready"
+wait_for_container_ready "${sandbox_cid}" 90 || fail "openclaw-sandbox did not become ready"
+wait_for_container_ready "${relay_cid}" 90 || fail "openclaw-relay did not become ready"
 
-assert_container_security "${openclaw_cid}" || fail "optional-openclaw container security baseline failed"
-assert_container_security "${gateway_cid}" || fail "optional-openclaw-gateway container security baseline failed"
-assert_container_security "${sandbox_cid}" || fail "optional-openclaw-sandbox container security baseline failed"
-assert_container_security "${relay_cid}" || fail "optional-openclaw-relay container security baseline failed"
-assert_proxy_enforced "${openclaw_cid}" || fail "optional-openclaw proxy env baseline failed"
-assert_proxy_enforced "${gateway_cid}" || fail "optional-openclaw-gateway proxy env baseline failed"
-assert_proxy_enforced "${sandbox_cid}" || fail "optional-openclaw-sandbox proxy env baseline failed"
-assert_proxy_enforced "${relay_cid}" || fail "optional-openclaw-relay proxy env baseline failed"
-assert_no_docker_sock_mount "${openclaw_cid}" || fail "optional-openclaw must not mount docker.sock"
-assert_no_docker_sock_mount "${gateway_cid}" || fail "optional-openclaw-gateway must not mount docker.sock"
-assert_no_docker_sock_mount "${sandbox_cid}" || fail "optional-openclaw-sandbox must not mount docker.sock"
-assert_no_docker_sock_mount "${relay_cid}" || fail "optional-openclaw-relay must not mount docker.sock"
+assert_container_security "${openclaw_cid}" || fail "openclaw container security baseline failed"
+assert_container_security "${gateway_cid}" || fail "openclaw-gateway container security baseline failed"
+assert_container_security "${sandbox_cid}" || fail "openclaw-sandbox container security baseline failed"
+assert_container_security "${relay_cid}" || fail "openclaw-relay container security baseline failed"
+assert_proxy_enforced "${openclaw_cid}" || fail "openclaw proxy env baseline failed"
+assert_proxy_enforced "${gateway_cid}" || fail "openclaw-gateway proxy env baseline failed"
+assert_proxy_enforced "${sandbox_cid}" || fail "openclaw-sandbox proxy env baseline failed"
+assert_proxy_enforced "${relay_cid}" || fail "openclaw-relay proxy env baseline failed"
+assert_no_docker_sock_mount "${openclaw_cid}" || fail "openclaw must not mount docker.sock"
+assert_no_docker_sock_mount "${gateway_cid}" || fail "openclaw-gateway must not mount docker.sock"
+assert_no_docker_sock_mount "${sandbox_cid}" || fail "openclaw-sandbox must not mount docker.sock"
+assert_no_docker_sock_mount "${relay_cid}" || fail "openclaw-relay must not mount docker.sock"
 openclaw_mount_dump="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%v\n" .Source .Destination .RW}}{{end}}' "${openclaw_cid}")"
 openclaw_workspace_source="$(printf '%s\n' "${openclaw_mount_dump}" | awk -F'|' '$2=="/workspace" {print $1; exit}')"
-[[ -n "${openclaw_workspace_source}" ]] || fail "optional-openclaw must mount /workspace"
+[[ -n "${openclaw_workspace_source}" ]] || fail "openclaw must mount /workspace"
 openclaw_workspace_source="$(readlink -f "${openclaw_workspace_source}" 2>/dev/null || printf '%s\n' "${openclaw_workspace_source}")"
 expected_openclaw_workspace_source="$(readlink -f "${openclaw_workspaces_dir}" 2>/dev/null || printf '%s\n' "${openclaw_workspaces_dir}")"
 [[ "${openclaw_workspace_source}" == "${expected_openclaw_workspace_source}" ]] \
-  || fail "optional-openclaw /workspace mount source mismatch (expected=${expected_openclaw_workspace_source}, actual=${openclaw_workspace_source})"
+  || fail "openclaw /workspace mount source mismatch (expected=${expected_openclaw_workspace_source}, actual=${openclaw_workspace_source})"
 
 relay_ready=0
 for _ in $(seq 1 30); do
-  relay_health_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-health.out -w '%{http_code}' http://optional-openclaw-relay:8113/healthz" || true)"
+  relay_health_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-health.out -w '%{http_code}' http://openclaw-relay:8113/healthz" || true)"
   if [[ "${relay_health_status}" == "200" ]]; then
     relay_ready=1
     break
   fi
   sleep 1
 done
-[[ "${relay_ready}" -eq 1 ]] || fail "optional-openclaw-relay is not reachable on internal health endpoint"
+[[ "${relay_ready}" -eq 1 ]] || fail "openclaw-relay is not reachable on internal health endpoint"
 
 AGENT_NO_ATTACH=1 "${agent_bin}" openclaw >/tmp/agent-k6-openclaw-entrypoint.out \
   || fail "agent openclaw operator entrypoint must be available"
@@ -210,9 +201,9 @@ if echo "${openclaw_version}" | grep -qi 'shim'; then
 fi
 
 docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_HOME}" = "/state/cli/openclaw-home"' \
-  || fail "optional-openclaw must set OPENCLAW_HOME to persistent /state path"
+  || fail "openclaw must set OPENCLAW_HOME to persistent /state path"
 docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_CONFIG_PATH}" = "/state/cli/openclaw-home/openclaw.json"' \
-  || fail "optional-openclaw must set OPENCLAW_CONFIG_PATH to persistent /state path"
+  || fail "openclaw must set OPENCLAW_CONFIG_PATH to persistent /state path"
 
 timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw onboard --help' >/tmp/agent-k6-openclaw-onboard-help.out \
   || fail "openclaw onboard command must be available in-container"
@@ -240,8 +231,8 @@ docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/openclaw.
 
 [[ -d "${openclaw_workspaces_dir}/wizard-k6" ]] \
   || fail "openclaw onboard workspace must persist under ${openclaw_workspaces_dir}"
-[[ -f "${agentic_root}/optional/openclaw/state/cli/openclaw-home/openclaw.json" ]] \
-  || fail "openclaw CLI config must persist under optional/openclaw/state/cli/openclaw-home"
+[[ -f "${agentic_root}/openclaw/state/cli/openclaw-home/openclaw.json" ]] \
+  || fail "openclaw CLI config must persist under openclaw/state/cli/openclaw-home"
 
 dashboard_status="$(curl -sS -o /tmp/agent-k6-dashboard.html -w '%{http_code}' "http://127.0.0.1:${webhook_host_port}/dashboard")"
 [[ "${dashboard_status}" == "200" ]] || fail "openclaw dashboard must be reachable on loopback (status=${dashboard_status})"
@@ -276,7 +267,7 @@ timeout 25 docker exec "${gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secret
 relay_body='{"message":"relay hello from k6","target":"discord:user:test"}'
 relay_ts="$(date +%s)"
 relay_sig="$(relay_signature "${telegram_secret}" "${relay_ts}" "${relay_body}")"
-relay_ingest_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-ingest.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Relay-Timestamp: ${relay_ts}' -H 'X-Relay-Signature: sha256=${relay_sig}' -d '${relay_body}' http://optional-openclaw-relay:8113/v1/providers/telegram/webhook")"
+relay_ingest_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-ingest.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Relay-Timestamp: ${relay_ts}' -H 'X-Relay-Signature: sha256=${relay_sig}' -d '${relay_body}' http://openclaw-relay:8113/v1/providers/telegram/webhook")"
 [[ "${relay_ingest_status}" == "202" ]] || fail "relay ingest happy-path must return 202 (status=${relay_ingest_status})"
 docker exec "${toolbox_cid}" sh -lc 'cat /tmp/k6-relay-ingest.out' >/tmp/agent-k6-relay-ingest.out
 python3 - <<'PY' /tmp/agent-k6-relay-ingest.out
@@ -293,37 +284,37 @@ PY
 
 wait_for_relay_queue_at_least "${toolbox_cid}" "done" 1 30
 
-relay_bad_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-invalid-signature.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Relay-Timestamp: ${relay_ts}' -H 'X-Relay-Signature: sha256=deadbeef' -d '${relay_body}' http://optional-openclaw-relay:8113/v1/providers/telegram/webhook")"
+relay_bad_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-invalid-signature.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Relay-Timestamp: ${relay_ts}' -H 'X-Relay-Signature: sha256=deadbeef' -d '${relay_body}' http://openclaw-relay:8113/v1/providers/telegram/webhook")"
 [[ "${relay_bad_status}" == "403" ]] || fail "relay ingest must reject invalid provider signature (status=${relay_bad_status})"
 
 dup_body='{"message":"relay duplicate check","target":"discord:user:test"}'
 dup_event_id="k6-duplicate-event"
 dup_ts_1="$(date +%s)"
 dup_sig_1="$(relay_signature "${telegram_secret}" "${dup_ts_1}" "${dup_body}")"
-dup_first_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-dup-first.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Provider-Event-ID: ${dup_event_id}' -H 'X-Relay-Timestamp: ${dup_ts_1}' -H 'X-Relay-Signature: sha256=${dup_sig_1}' -d '${dup_body}' http://optional-openclaw-relay:8113/v1/providers/telegram/webhook")"
+dup_first_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-dup-first.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Provider-Event-ID: ${dup_event_id}' -H 'X-Relay-Timestamp: ${dup_ts_1}' -H 'X-Relay-Signature: sha256=${dup_sig_1}' -d '${dup_body}' http://openclaw-relay:8113/v1/providers/telegram/webhook")"
 [[ "${dup_first_status}" == "202" ]] || fail "relay duplicate first ingest must return 202 (status=${dup_first_status})"
 
 dup_ts_2="$(date +%s)"
 dup_sig_2="$(relay_signature "${telegram_secret}" "${dup_ts_2}" "${dup_body}")"
-dup_second_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-dup-second.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Provider-Event-ID: ${dup_event_id}' -H 'X-Relay-Timestamp: ${dup_ts_2}' -H 'X-Relay-Signature: sha256=${dup_sig_2}' -d '${dup_body}' http://optional-openclaw-relay:8113/v1/providers/telegram/webhook")"
+dup_second_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-dup-second.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Provider-Event-ID: ${dup_event_id}' -H 'X-Relay-Timestamp: ${dup_ts_2}' -H 'X-Relay-Signature: sha256=${dup_sig_2}' -d '${dup_body}' http://openclaw-relay:8113/v1/providers/telegram/webhook")"
 [[ "${dup_second_status}" == "202" ]] || fail "relay duplicate second ingest must return 202 (status=${dup_second_status})"
 docker exec "${toolbox_cid}" sh -lc 'cat /tmp/k6-relay-dup-second.out' >/tmp/agent-k6-relay-dup-second.out
 grep -q '"status":"duplicate"' /tmp/agent-k6-relay-dup-second.out \
   || fail "relay duplicate second ingest must return duplicate status"
 
 docker stop "${openclaw_cid}" >/tmp/agent-k6-stop-openclaw.out 2>&1 \
-  || fail "failed to stop optional-openclaw for relay dead-letter scenario"
+  || fail "failed to stop openclaw for relay dead-letter scenario"
 
 dead_body='{"message":"relay dead-letter scenario","target":"discord:user:test"}'
 dead_event_id="k6-dead-letter-event"
 dead_ts="$(date +%s)"
 dead_sig="$(relay_signature "${telegram_secret}" "${dead_ts}" "${dead_body}")"
-dead_ingest_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-dead-ingest.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Provider-Event-ID: ${dead_event_id}' -H 'X-Relay-Timestamp: ${dead_ts}' -H 'X-Relay-Signature: sha256=${dead_sig}' -d '${dead_body}' http://optional-openclaw-relay:8113/v1/providers/telegram/webhook")"
+dead_ingest_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k6-relay-dead-ingest.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'X-Provider-Event-ID: ${dead_event_id}' -H 'X-Relay-Timestamp: ${dead_ts}' -H 'X-Relay-Signature: sha256=${dead_sig}' -d '${dead_body}' http://openclaw-relay:8113/v1/providers/telegram/webhook")"
 [[ "${dead_ingest_status}" == "202" ]] || fail "relay dead-letter ingest must still return 202 (status=${dead_ingest_status})"
 
 wait_for_relay_queue_at_least "${toolbox_cid}" "dead" 1 45
 
-relay_audit_log="${agentic_root}/optional/openclaw/relay/logs/relay-audit.jsonl"
+relay_audit_log="${agentic_root}/openclaw/relay/logs/relay-audit.jsonl"
 [[ -s "${relay_audit_log}" ]] || fail "relay audit log is missing: ${relay_audit_log}"
 grep -q '"action":"forward"' "${relay_audit_log}" || fail "relay audit log must include forward action entries"
 grep -q '"action":"retry_scheduled"' "${relay_audit_log}" || fail "relay audit log must include retry_scheduled entries"

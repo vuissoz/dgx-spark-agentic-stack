@@ -147,7 +147,6 @@ run_openclaw_secret_answers() {
       --limits-optional-mem 512m \
       --skip-ui-bootstrap \
       --skip-network-bootstrap \
-      --optional-modules openclaw \
       --output "${openclaw_env_file}" >"${openclaw_log}" 2>&1; then
     cat "${openclaw_log}" >&2 || true
     fail "wizard failed during openclaw secret bootstrap"
@@ -194,8 +193,8 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='/srv/agentic/vibestral/worksp
   || fail "default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not /srv/agentic/vibestral/workspaces"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='/srv/agentic/openhands/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_OPENHANDS_WORKSPACES_DIR is not /srv/agentic/openhands/workspaces"
-grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='/srv/agentic/optional/openclaw/workspaces'$" "${default_env_file}" \
-  || fail "default AGENTIC_OPENCLAW_WORKSPACES_DIR is not /srv/agentic/optional/openclaw/workspaces"
+grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='/srv/agentic/openclaw/workspaces'$" "${default_env_file}" \
+  || fail "default AGENTIC_OPENCLAW_WORKSPACES_DIR is not /srv/agentic/openclaw/workspaces"
 grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='/srv/agentic/optional/pi-mono/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_PI_MONO_WORKSPACES_DIR is not /srv/agentic/optional/pi-mono/workspaces"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='/srv/agentic/optional/goose/workspaces'$" "${default_env_file}" \
@@ -334,8 +333,8 @@ grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/rootless-default-
   || fail "rootless default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not <root>/agent-workspaces/vibestral/workspaces"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/rootless-default-root/openhands/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_OPENHANDS_WORKSPACES_DIR is not <root>/openhands/workspaces"
-grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/openclaw/workspaces'$" "${rootless_default_env_file}" \
-  || fail "rootless default AGENTIC_OPENCLAW_WORKSPACES_DIR is not <root>/optional/openclaw/workspaces"
+grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/rootless-default-root/openclaw/workspaces'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_OPENCLAW_WORKSPACES_DIR is not <root>/openclaw/workspaces"
 grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/pi-mono/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_PI_MONO_WORKSPACES_DIR is not <root>/optional/pi-mono/workspaces"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/goose/workspaces'$" "${rootless_default_env_file}" \
@@ -358,13 +357,13 @@ run_openclaw_secret_answers
 assert_generated_file_baseline "${openclaw_env_file}"
 openclaw_token_file="${work_dir}/openclaw-root/secrets/runtime/openclaw.token"
 openclaw_webhook_secret_file="${work_dir}/openclaw-root/secrets/runtime/openclaw.webhook_secret"
-openclaw_profile_file="${work_dir}/openclaw-root/optional/openclaw/config/integration-profile.current.json"
+openclaw_profile_file="${work_dir}/openclaw-root/openclaw/config/integration-profile.current.json"
 [[ -s "${openclaw_token_file}" ]] \
-  || fail "openclaw token file must be generated when optional module openclaw is selected"
+  || fail "openclaw token file must be generated during core OpenClaw bootstrap"
 [[ -s "${openclaw_webhook_secret_file}" ]] \
-  || fail "openclaw webhook secret file must be generated when optional module openclaw is selected"
+  || fail "openclaw webhook secret file must be generated during core OpenClaw bootstrap"
 [[ -s "${openclaw_profile_file}" ]] \
-  || fail "openclaw integration profile file must be generated when optional module openclaw is selected"
+  || fail "openclaw integration profile file must be generated during core OpenClaw bootstrap"
 grep -q "ERROR: input aborted" "${openclaw_log}" \
   && fail "openclaw secret bootstrap should not abort input in interactive mode"
 ok "wizard openclaw secret bootstrap works with interactive stdin"
