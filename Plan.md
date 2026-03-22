@@ -26,6 +26,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-x00` (couverture tests setup/config OpenClaw CLI + variantes) [CLOSED]
 - Beads (OpenClaw sandboxes de session):
   - `dgx-spark-agentic-stack-4xu` (inspiration NemoClaw/OpenShell: gateway toujours actif + sous-agents OpenClaw isoles dans un sandbox dedie par session) [OPEN]
+- Beads (OpenClaw config split):
+  - `dgx-spark-agentic-stack-lhm` (separer config immuable, overlay valide et etat writable pour OpenClaw) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
 
@@ -121,6 +123,11 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - control-plane toujours actif (`optional-openclaw` + `optional-openclaw-gateway`),
   - execution-plane isole par session/sous-agent (sandbox dedie, reutilise pendant la session puis expire),
   - avec inspiration NemoClaw/OpenShell sur l'isolation par session, sans reprendre les choix d'auth plus faibles de NemoClaw.
+- Follow-up `dgx-spark-agentic-stack-lhm`: separer l'etat OpenClaw en trois couches:
+  - config immuable geree par la stack,
+  - overlay operateur valide sur un sous-ensemble de cles safe,
+  - etat runtime writable (agents/sessions/devices/cache/workspace metadata),
+  - avec documentation explicite des cles immuables vs overlay-allowed.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
@@ -264,3 +271,25 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - evolution de `optional-openclaw-sandbox` vers un orchestrateur/launcher de sandboxes de session plutot qu'un backend partage,
     - extension de `agent doctor` + tests K/OpenClaw pour verifier creation/reutilisation/expiration des sandboxes de session,
     - ADR dedie expliquant le modele cible et les ecarts volontaires avec NemoClaw.
+
+## Addendum (2026-03-22, OpenClaw config immuable / overlay valide / etat writable)
+- Beads `dgx-spark-agentic-stack-lhm`: clarifier et durcir le modele d'etat OpenClaw en separant les couches de configuration et de runtime.
+  - Constat actuel:
+    - `OPENCLAW_HOME=/state/cli/openclaw-home` et `OPENCLAW_CONFIG_PATH=/state/cli/openclaw-home/openclaw.json` pointent vers une arborescence writable unique,
+    - des reglages stack-owned (auth gateway, routage provider, attentes SecretRef, parametres sensibles) peuvent cohabiter avec l'etat mutable OpenClaw.
+  - Cible:
+    - couche 1 `immutable`:
+      - configuration geree par la stack et non reecrivable au runtime,
+      - typiquement: auth/bind du gateway, provider/routage local, endpoints sensibles, attentes SecretRef, policy sandbox/egress stack-owned ;
+    - couche 2 `validated overlay`:
+      - personnalisation operateur permise uniquement sur un sous-ensemble de cles explicitement autorisees,
+      - validation stricte avant merge dans la config effective ;
+    - couche 3 `writable state`:
+      - etat runtime mutable: agents, sessions, devices, cache, metadata workspace, extensions/skills state si autorises.
+  - Effet recherche:
+    - empecher qu'un workflow OpenClaw normal ou un agent reecrive silencieusement la configuration de securite/routage appartenant a la stack,
+    - conserver les workflows operateur utiles (`openclaw agents add`, workspaces, sessions) sans reintroduire une config monolithique writable.
+  - Livrables attendus:
+    - layout d'arborescence cible documente,
+    - bootstrap/runtime alignes sur cette separation,
+    - doctor/tests/docs listant clairement ce qui est immuable, overlay-allowed et writable.
