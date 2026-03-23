@@ -19,6 +19,7 @@ AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollb
 AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch.sh"
 AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_drift_watch_schedule.sh"
 AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
+AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
@@ -38,6 +39,7 @@ Usage:
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
   agent <claude|codex|opencode|vibestral|openclaw|pi-mono|goose> [project]
+  agent openclaw approvals [list [--status <pending|approved|denied|expired|all>] [--json] | approve <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] | deny <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] [--reason <text>] | promote <id>]
   agent ls
   agent ps
   agent llm mode [local|hybrid|remote]
@@ -2468,6 +2470,62 @@ cmd_comfyui() {
   esac
 }
 
+cmd_openclaw_approvals() {
+  local action="${1:-list}"
+  shift || true
+
+  [[ -f "${AGENT_OPENCLAW_APPROVALS_SCRIPT}" ]] \
+    || die "openclaw approvals helper is missing: ${AGENT_OPENCLAW_APPROVALS_SCRIPT}"
+
+  ensure_runtime_env
+  ensure_core_runtime >/dev/null
+
+  local state_dir="${AGENTIC_ROOT}/openclaw/state/approvals"
+  local audit_log="${AGENTIC_ROOT}/openclaw/logs/audit.jsonl"
+  local actor="${SUDO_USER:-${USER:-unknown}}"
+  local dm_allowlist_file="${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt"
+  local tool_allowlist_file="${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt"
+
+  case "${action}" in
+    list)
+      python3 "${AGENT_OPENCLAW_APPROVALS_SCRIPT}" \
+        --state-dir "${state_dir}" \
+        --audit-log "${audit_log}" \
+        --actor "${actor}" \
+        list "$@"
+      ;;
+    approve)
+      [[ $# -ge 1 ]] || die "Usage: agent openclaw approvals approve <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>]"
+      python3 "${AGENT_OPENCLAW_APPROVALS_SCRIPT}" \
+        --state-dir "${state_dir}" \
+        --audit-log "${audit_log}" \
+        --actor "${actor}" \
+        approve "$@"
+      ;;
+    deny)
+      [[ $# -ge 1 ]] || die "Usage: agent openclaw approvals deny <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] [--reason <text>]"
+      python3 "${AGENT_OPENCLAW_APPROVALS_SCRIPT}" \
+        --state-dir "${state_dir}" \
+        --audit-log "${audit_log}" \
+        --actor "${actor}" \
+        deny "$@"
+      ;;
+    promote)
+      [[ $# -ge 1 ]] || die "Usage: agent openclaw approvals promote <id>"
+      python3 "${AGENT_OPENCLAW_APPROVALS_SCRIPT}" \
+        --state-dir "${state_dir}" \
+        --audit-log "${audit_log}" \
+        --actor "${actor}" \
+        promote "$@" \
+        --dm-allowlist-file "${dm_allowlist_file}" \
+        --tool-allowlist-file "${tool_allowlist_file}"
+      ;;
+    *)
+      die "Usage: agent openclaw approvals [list [--status <pending|approved|denied|expired|all>] [--json] | approve <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] | deny <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] [--reason <text>] | promote <id>]"
+      ;;
+  esac
+}
+
 cmd_backup() {
   [[ -x "${AGENT_BACKUP_SCRIPT}" ]] || die "backup script missing or not executable: ${AGENT_BACKUP_SCRIPT}"
 
@@ -2884,7 +2942,16 @@ case "$cmd" in
     [[ $# -ge 2 ]] || die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
     cmd_stack "$2" "${3:-all}"
     ;;
-  claude|codex|opencode|vibestral|openclaw|pi-mono|goose)
+  openclaw)
+    if [[ "${2:-}" == "approvals" ]]; then
+      shift 2
+      cmd_openclaw_approvals "$@"
+    else
+      shift
+      cmd_tool_attach "${cmd}" "${1:-}"
+    fi
+    ;;
+  claude|codex|opencode|vibestral|pi-mono|goose)
     shift
     cmd_tool_attach "${cmd}" "${1:-}"
     ;;

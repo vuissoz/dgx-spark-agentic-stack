@@ -183,6 +183,8 @@ services:
       OPENCLAW_SANDBOX_STATUS_URL: http://openclaw-sandbox:8112/v1/sandboxes/status
       OPENCLAW_DASHBOARD_ENABLED: "1"
       OPENCLAW_RELAY_STATUS_URL: http://openclaw-relay:8113/v1/queue/status
+      OPENCLAW_APPROVALS_STATE_DIR: /state/approvals
+      OPENCLAW_APPROVALS_PENDING_TTL_SEC: ${OPENCLAW_APPROVALS_PENDING_TTL_SEC:-604800}
       OPENCLAW_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
       HOME: /state/cli/openclaw-home
       OPENCLAW_HOME: /state/cli/openclaw-home
@@ -319,6 +321,8 @@ services:
       OPENCLAW_SANDBOX_REGISTRY_FILE: /state/session-sandboxes.json
       OPENCLAW_SANDBOX_STATE_ROOT: /state/sandboxes
       OPENCLAW_SANDBOX_WORKSPACES_DIR: /sandbox-workspaces
+      OPENCLAW_APPROVALS_STATE_DIR: /approvals
+      OPENCLAW_APPROVALS_PENDING_TTL_SEC: ${OPENCLAW_APPROVALS_PENDING_TTL_SEC:-604800}
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-sandbox,localhost,127.0.0.1
@@ -326,6 +330,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/sandbox/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/sandbox/workspaces:/sandbox-workspaces
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/state/approvals:/approvals
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
     healthcheck:

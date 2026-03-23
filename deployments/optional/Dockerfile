@@ -15,6 +15,7 @@ RUN apt-get update \
 RUN addgroup --system app && adduser --system --ingroup app app
 WORKDIR /app
 COPY deployments/optional/optional_service.py /app/optional_service.py
+COPY deployments/optional/openclaw_approvals.py /app/openclaw_approvals.py
 COPY deployments/optional/openclaw_gateway_entrypoint.sh /app/openclaw_gateway_entrypoint.sh
 COPY deployments/optional/openclaw_wrapper.sh /app/openclaw_wrapper.sh
 COPY deployments/optional/openclaw_config_layers.py /app/openclaw_config_layers.py
@@ -30,6 +31,7 @@ RUN install -d -m 0755 "${OPENCLAW_PREFIX}" /etc/agentic \
   && chmod 0644 /etc/agentic/openclaw-real-path \
   && install -m 0755 /app/openclaw_wrapper.sh /usr/local/bin/openclaw \
   && chmod 0755 /app/openclaw_gateway_entrypoint.sh \
+  && chmod 0755 /app/openclaw_approvals.py \
   && chmod 0755 /app/openclaw_config_layers.py \
   && install -d -m 0755 "${OPENCLAW_PREFIX}/lib/node_modules/openclaw/dist/control-ui" \
   && if [ ! -f "${OPENCLAW_PREFIX}/lib/node_modules/openclaw/dist/control-ui/index.html" ]; then \

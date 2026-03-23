@@ -1117,6 +1117,7 @@ optional_openclaw_relay_targets_file="${AGENTIC_ROOT}/openclaw/config/relay_targ
 optional_openclaw_immutable_file="${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json"
 optional_openclaw_overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
 optional_openclaw_state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+optional_openclaw_approvals_dir="${AGENTIC_ROOT}/openclaw/state/approvals"
 optional_openclaw_layer_helper="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_config_layers.py"
 if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
@@ -1160,6 +1161,9 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! grep -q '^OPENCLAW_CONFIG_PATH=/tmp/openclaw.effective.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_CONFIG_PATH=/tmp/openclaw.effective.json"
   fi
+  if ! grep -q '^OPENCLAW_APPROVALS_STATE_DIR=/state/approvals$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_APPROVALS_STATE_DIR=/state/approvals"
+  fi
   if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'command -v openclaw >/dev/null'; then
     doctor_fail "openclaw must provide openclaw CLI in-container"
   fi
@@ -1174,9 +1178,51 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'test -d /workspace && test -w /workspace'; then
     doctor_fail "openclaw workspace mount must be writable (/workspace)"
   fi
+  if [[ ! -d "${optional_openclaw_approvals_dir}" ]]; then
+    doctor_fail "openclaw approvals state directory is missing: ${optional_openclaw_approvals_dir}"
+  elif ! python3 - "${optional_openclaw_approvals_dir}" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+for name in ("pending", "approved", "denied", "expired"):
+    current = root / name
+    if not current.is_dir():
+        raise SystemExit(1)
+    for item in current.glob("*.json"):
+        payload = json.loads(item.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise SystemExit(1)
+        if str(payload.get("status", "")) != name:
+            raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw approvals queue must expose valid JSON records under ${optional_openclaw_approvals_dir}/{pending,approved,denied,expired}"
+  fi
   dashboard_status="$(curl -sS -o /tmp/doctor-openclaw-dashboard.out -w '%{http_code}' "http://127.0.0.1:${openclaw_webhook_host_port}/dashboard" 2>/dev/null || true)"
   if [[ "${dashboard_status}" != "200" ]]; then
     doctor_fail "openclaw dashboard must be reachable on loopback (/dashboard, status=${dashboard_status:-unknown})"
+  fi
+  dashboard_json_status="$(curl -sS -o /tmp/doctor-openclaw-dashboard-status.out -w '%{http_code}' "http://127.0.0.1:${openclaw_webhook_host_port}/v1/dashboard/status" 2>/dev/null || true)"
+  if [[ "${dashboard_json_status}" != "200" ]]; then
+    doctor_fail "openclaw dashboard status must be reachable on loopback (/v1/dashboard/status, status=${dashboard_json_status:-unknown})"
+  elif ! python3 - "/tmp/doctor-openclaw-dashboard-status.out" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+approvals = payload.get("approvals")
+if not isinstance(approvals, dict):
+    raise SystemExit(1)
+for key in ("pending", "approved", "denied", "expired"):
+    value = approvals.get(key)
+    if value is not None and not isinstance(value, int):
+        raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw dashboard status must expose approvals queue counters"
   fi
   if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw --version >/tmp/openclaw-layer-version.out && python3 /app/openclaw_config_layers.py check-runtime --immutable-file /config/immutable/openclaw.stack-config.v1.json --overlay-file /overlay/openclaw.operator-overlay.json --state-file /state/cli/openclaw-home/openclaw.state.json --effective-file /tmp/openclaw.effective.json --gateway-token-file /run/secrets/openclaw.token"; then
     doctor_fail "openclaw layered config runtime check failed"
@@ -1273,8 +1319,16 @@ if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
   if ! grep -q '^OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json$' <<<"${optional_openclaw_sandbox_env}"; then
     doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json"
   fi
+  if ! grep -q '^OPENCLAW_APPROVALS_STATE_DIR=/approvals$' <<<"${optional_openclaw_sandbox_env}"; then
+    doctor_fail "openclaw-sandbox must set OPENCLAW_APPROVALS_STATE_DIR=/approvals"
+  fi
   if ! mount_destination_present "${optional_openclaw_sandbox_cid}" "/sandbox-workspaces"; then
     doctor_fail "openclaw-sandbox must mount /sandbox-workspaces for session-scoped workspaces"
+  fi
+  if ! mount_destination_present "${optional_openclaw_sandbox_cid}" "/approvals"; then
+    doctor_fail "openclaw-sandbox must mount /approvals for shared approvals state"
+  elif ! mount_destination_matches_source "${optional_openclaw_sandbox_cid}" "/approvals" "${optional_openclaw_approvals_dir}"; then
+    doctor_fail "openclaw-sandbox /approvals source must match ${optional_openclaw_approvals_dir}"
   fi
   if [[ ! -d "${AGENTIC_ROOT}/openclaw/sandbox/workspaces" ]]; then
     doctor_fail "openclaw sandbox workspaces directory is missing: ${AGENTIC_ROOT}/openclaw/sandbox/workspaces"

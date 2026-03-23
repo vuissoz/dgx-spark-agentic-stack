@@ -130,6 +130,57 @@ cat "${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json"
 
 It must remain valid JSON matching the runtime contract, otherwise OpenClaw startup is refused.
 
+## Step 3b: Review and Process Interactive Approvals
+
+If a DM target or tool is blocked by policy, OpenClaw now creates a durable queue entry under:
+- `${AGENTIC_ROOT}/openclaw/state/approvals/pending/`
+
+List the queue:
+
+```bash
+./agent openclaw approvals list
+./agent openclaw approvals list --status pending --json
+```
+
+Approve a blocked request temporarily for one session:
+
+```bash
+./agent openclaw approvals approve <approval_id> --scope session --session-id <session_id> --ttl-sec 3600
+```
+
+Approve temporarily for all sessions:
+
+```bash
+./agent openclaw approvals approve <approval_id> --scope global --ttl-sec 21600
+```
+
+Refuse explicitly:
+
+```bash
+./agent openclaw approvals deny <approval_id> --scope global --reason "not allowed for this stack"
+```
+
+Promote persistently into the explicit allowlist artifact:
+
+```bash
+./agent openclaw approvals promote <approval_id>
+```
+
+Promotion writes to one of:
+- `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
+- `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
+
+State transitions are durable and auditable:
+- `pending`
+- `approved`
+- `denied`
+- `expired`
+
+Audit events are appended to:
+- `${AGENTIC_ROOT}/openclaw/logs/audit.jsonl`
+
+Queue records intentionally avoid storing secrets, tokens, message bodies, or raw tool arguments.
+
 ## Step 4: Start Services
 
 Start the core stack:
@@ -265,6 +316,7 @@ Run compliance and OpenClaw tests:
 ```bash
 ./agent doctor
 ./agent test K
+./agent openclaw approvals list
 ```
 
 Quick API smoke from host:

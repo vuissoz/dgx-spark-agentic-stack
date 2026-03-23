@@ -15,6 +15,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from openclaw_approvals import (
+    active_record_for_request,
+    approval_counts,
+    ensure_state_layout,
+    register_pending_request,
+    sweep_expired,
+)
+
 
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 SANDBOX_ID_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
@@ -997,6 +1005,10 @@ class OptionalHandler(BaseHTTPRequestHandler):
       <div id="relay">loading...</div>
     </section>
     <section class="card">
+      <h2>Approvals</h2>
+      <div id="approvals">loading...</div>
+    </section>
+    <section class="card">
       <h2>Signed DM Probe</h2>
       <p class="muted">Sends a request through local OpenClaw API using your bearer token.</p>
       <form id="dm-form">
@@ -1017,9 +1029,11 @@ async function loadStatus() {
     const runtime = data.runtime || {};
     const execPlane = data.execution_plane || {};
     const relay = data.relay || {};
+    const approvals = data.approvals || {};
     const runtimeEl = document.getElementById('runtime');
     const sandboxesEl = document.getElementById('sandboxes');
     const relayEl = document.getElementById('relay');
+    const approvalsEl = document.getElementById('approvals');
     runtimeEl.innerHTML =
       '<div>Mode: <strong>' + (runtime.mode || '-') + '</strong></div>' +
       '<div>Profile: <strong>' + (runtime.profile_id || '-') + '</strong></div>' +
@@ -1032,10 +1046,16 @@ async function loadStatus() {
       '<div>Pending: <strong>' + (relay.pending ?? '-') + '</strong></div>' +
       '<div>Done: <strong>' + (relay.done ?? '-') + '</strong></div>' +
       '<div>Dead: <strong class=\"' + ((relay.dead || 0) > 0 ? 'warn' : 'ok') + '\">' + (relay.dead ?? '-') + '</strong></div>';
+    approvalsEl.innerHTML =
+      '<div>Pending: <strong class=\"' + ((approvals.pending || 0) > 0 ? 'warn' : 'ok') + '\">' + (approvals.pending ?? '-') + '</strong></div>' +
+      '<div>Approved: <strong>' + (approvals.approved ?? '-') + '</strong></div>' +
+      '<div>Denied: <strong>' + (approvals.denied ?? '-') + '</strong></div>' +
+      '<div>Expired: <strong>' + (approvals.expired ?? '-') + '</strong></div>';
   } catch (err) {
     document.getElementById('runtime').textContent = 'status unavailable';
     document.getElementById('sandboxes').textContent = 'status unavailable';
     document.getElementById('relay').textContent = 'status unavailable';
+    document.getElementById('approvals').textContent = 'status unavailable';
   }
 }
 
@@ -1113,7 +1133,55 @@ setInterval(loadStatus, 5000);
             except Exception:
                 execution_plane = {"active": None, "default_model": None, "recent_expired": []}
 
-        return {"execution_plane": execution_plane, "relay": relay, "runtime": runtime}
+        approvals: dict[str, Any] = {"pending": None, "approved": None, "denied": None, "expired": None}
+        approvals_state_dir = str(self.cfg.get("approvals_state_dir", "")).strip()
+        if approvals_state_dir:
+            try:
+                sweep_expired(approvals_state_dir, audit_log=str(self.cfg.get("audit_log", "")))
+                approvals = approval_counts(approvals_state_dir)
+            except Exception:
+                approvals = {"pending": None, "approved": None, "denied": None, "expired": None}
+
+        return {"approvals": approvals, "execution_plane": execution_plane, "relay": relay, "runtime": runtime}
+
+    def _check_approval_policy(
+        self,
+        *,
+        kind: str,
+        value: str,
+        request_id: str,
+        source: str,
+        session_id: str = "",
+        model: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+        approvals_state_dir = str(self.cfg.get("approvals_state_dir", "")).strip()
+        if not approvals_state_dir:
+            return "pending", {"id": "", "status": "pending"}
+
+        decision = active_record_for_request(
+            approvals_state_dir,
+            kind=kind,
+            value=value,
+            session_id=session_id,
+            audit_log=str(self.cfg.get("audit_log", "")),
+        )
+        if decision is not None:
+            return decision
+
+        pending = register_pending_request(
+            approvals_state_dir,
+            kind=kind,
+            value=value,
+            request_id=request_id,
+            source=source,
+            session_id=session_id,
+            model=model,
+            metadata=metadata,
+            pending_ttl_sec=int(self.cfg.get("approvals_pending_ttl_sec", 604800) or 604800),
+            audit_log=str(self.cfg.get("audit_log", "")),
+        )
+        return "pending", pending
 
     def _handle_openclaw_relay_ingest(self) -> None:
         request_id = self._request_id()
@@ -1360,6 +1428,7 @@ setInterval(loadStatus, 5000);
     ) -> None:
         target = str(payload.get("target", "")).strip()
         message = str(payload.get("message", "")).strip()
+        session_id, model, _workspace_hint = self._session_context(payload)
 
         if not target or not message:
             append_audit(
@@ -1378,8 +1447,46 @@ setInterval(loadStatus, 5000);
             self._json_response(400, {"error": "invalid_payload", "request_id": request_id})
             return
 
-        allowlist = self.cfg["dm_allowlist"]
+        allowlist = read_list_file(str(self.cfg.get("dm_allowlist_file", "")))
         if target not in allowlist:
+            approval_status, approval_record = self._check_approval_policy(
+                kind="dm_target",
+                value=target,
+                request_id=request_id,
+                source=source,
+                session_id=session_id,
+                model=model,
+                metadata={"action": action, "message_len": len(message)},
+            )
+            if approval_status == "approved":
+                append_audit(
+                    self.cfg["audit_log"],
+                    {
+                        "ts": now_ts(),
+                        "module": "openclaw",
+                        "action": action,
+                        "decision": "allow",
+                        "request_id": request_id,
+                        "source": source,
+                        "target": target,
+                        "message_len": len(message),
+                        "session_id": session_id,
+                        "model": model,
+                        "approval_id": approval_record.get("id", ""),
+                        "approval_scope": approval_record.get("scope", ""),
+                    },
+                )
+                self._json_response(
+                    202,
+                    {
+                        "approval_id": approval_record.get("id", ""),
+                        "approval_scope": approval_record.get("scope", ""),
+                        "request_id": request_id,
+                        "status": "queued",
+                        "target": target,
+                    },
+                )
+                return
             append_audit(
                 self.cfg["audit_log"],
                 {
@@ -1387,13 +1494,26 @@ setInterval(loadStatus, 5000);
                     "module": "openclaw",
                     "action": action,
                     "decision": "deny",
-                    "reason": "target_not_allowlisted",
+                    "reason": "approval_denied" if approval_status == "denied" else "approval_required",
                     "request_id": request_id,
                     "source": source,
                     "target": target,
+                    "session_id": session_id,
+                    "model": model,
+                    "approval_id": approval_record.get("id", ""),
+                    "approval_scope": approval_record.get("scope", ""),
+                    "approval_status": approval_status,
                 },
             )
-            self._json_response(403, {"error": "target_not_allowlisted", "request_id": request_id})
+            self._json_response(
+                403,
+                {
+                    "approval_id": approval_record.get("id", ""),
+                    "approval_status": approval_status,
+                    "error": "approval_denied" if approval_status == "denied" else "approval_required",
+                    "request_id": request_id,
+                },
+            )
             return
 
         append_audit(
@@ -1407,6 +1527,8 @@ setInterval(loadStatus, 5000);
                 "source": source,
                 "target": target,
                 "message_len": len(message),
+                "session_id": session_id,
+                "model": model,
             },
         )
         self._json_response(202, {"request_id": request_id, "status": "queued", "target": target})
@@ -1463,24 +1585,61 @@ setInterval(loadStatus, 5000);
             self._json_response(400, {"error": "tool_required", "request_id": request_id})
             return
 
-        tool_allowlist = self.cfg.get("tool_allowlist", set())
+        tool_allowlist = read_list_file(str(self.cfg.get("tool_allowlist_file", "")))
         if tool_allowlist and tool not in tool_allowlist:
+            approval_status, approval_record = self._check_approval_policy(
+                kind="tool",
+                value=tool,
+                request_id=request_id,
+                source="api",
+                session_id=session_id,
+                model=model,
+                metadata={"action": "execute_tool", "arg_keys": sorted(args.keys())[:16]},
+            )
+            if approval_status != "approved":
+                append_audit(
+                    self.cfg["audit_log"],
+                    {
+                        "ts": now_ts(),
+                        "module": "openclaw",
+                        "action": "execute_tool",
+                        "decision": "deny",
+                        "reason": "approval_denied" if approval_status == "denied" else "approval_required",
+                        "request_id": request_id,
+                        "session_id": session_id,
+                        "model": model,
+                        "tool": tool,
+                        "approval_id": approval_record.get("id", ""),
+                        "approval_scope": approval_record.get("scope", ""),
+                        "approval_status": approval_status,
+                    },
+                )
+                self._json_response(
+                    403,
+                    {
+                        "approval_id": approval_record.get("id", ""),
+                        "approval_status": approval_status,
+                        "error": "approval_denied" if approval_status == "denied" else "approval_required",
+                        "request_id": request_id,
+                    },
+                )
+                return
+
             append_audit(
                 self.cfg["audit_log"],
                 {
                     "ts": now_ts(),
                     "module": "openclaw",
                     "action": "execute_tool",
-                    "decision": "deny",
-                    "reason": "tool_not_allowlisted",
+                    "decision": "allow",
                     "request_id": request_id,
                     "session_id": session_id,
                     "model": model,
                     "tool": tool,
+                    "approval_id": approval_record.get("id", ""),
+                    "approval_scope": approval_record.get("scope", ""),
                 },
             )
-            self._json_response(403, {"error": "tool_not_allowlisted", "request_id": request_id})
-            return
 
         sandbox_ok, sandbox_reason = self._sandbox_health()
         if not sandbox_ok:
@@ -1571,24 +1730,61 @@ setInterval(loadStatus, 5000);
             args = {}
         session_id, model, workspace_hint = self._session_context(payload)
 
-        allowlist = self.cfg["allowlist"]
+        allowlist = read_list_file(str(self.cfg.get("allowlist_file", "")))
         if tool not in allowlist:
+            approval_status, approval_record = self._check_approval_policy(
+                kind="tool",
+                value=tool,
+                request_id=request_id,
+                source="sandbox",
+                session_id=session_id,
+                model=model,
+                metadata={"action": "sandbox_execute", "arg_keys": sorted(args.keys())[:16]},
+            )
+            if approval_status != "approved":
+                append_audit(
+                    self.cfg["audit_log"],
+                    {
+                        "ts": now_ts(),
+                        "module": "openclaw-sandbox",
+                        "action": "execute_tool",
+                        "decision": "deny",
+                        "reason": "approval_denied" if approval_status == "denied" else "approval_required",
+                        "request_id": request_id,
+                        "session_id": session_id,
+                        "model": model,
+                        "tool": tool,
+                        "approval_id": approval_record.get("id", ""),
+                        "approval_scope": approval_record.get("scope", ""),
+                        "approval_status": approval_status,
+                    },
+                )
+                self._json_response(
+                    403,
+                    {
+                        "approval_id": approval_record.get("id", ""),
+                        "approval_status": approval_status,
+                        "error": "approval_denied" if approval_status == "denied" else "approval_required",
+                        "request_id": request_id,
+                    },
+                )
+                return
+
             append_audit(
                 self.cfg["audit_log"],
                 {
                     "ts": now_ts(),
                     "module": "openclaw-sandbox",
-                    "action": "execute_tool",
-                    "decision": "deny",
-                    "reason": "tool_not_allowlisted",
+                    "action": "approval_match",
+                    "decision": "allow",
                     "request_id": request_id,
                     "session_id": session_id,
                     "model": model,
                     "tool": tool,
+                    "approval_id": approval_record.get("id", ""),
+                    "approval_scope": approval_record.get("scope", ""),
                 },
             )
-            self._json_response(403, {"error": "tool_not_allowlisted", "request_id": request_id})
-            return
 
         sandbox_info, reused = lease_session_sandbox(
             self.cfg,
@@ -1765,14 +1961,12 @@ def main() -> int:
         webhook_max_skew_sec = int(os.environ.get("OPENCLAW_WEBHOOK_MAX_SKEW_SEC", str(webhook_max_skew_default)))
         token_value = read_token(token_file)
         webhook_secret = read_token(webhook_secret_file)
-        tool_allowlist = read_list_file(tool_allowlist_file)
-        dm_allowlist = read_list_file(dm_allowlist_file)
 
         cfg = {
             "mode": args.mode,
             "token": token_value,
-            "dm_allowlist": dm_allowlist,
-            "tool_allowlist": tool_allowlist,
+            "dm_allowlist_file": dm_allowlist_file,
+            "tool_allowlist_file": tool_allowlist_file,
             "webhook_secret": webhook_secret,
             "webhook_max_skew_sec": webhook_max_skew_sec,
             "webhook_signature_header": profile_cfg["webhook_signature_header"],
@@ -1803,6 +1997,8 @@ def main() -> int:
             "bearer_token_required": profile_cfg["bearer_token_required"],
             "dashboard_enabled": env_flag("OPENCLAW_DASHBOARD_ENABLED", True),
             "relay_status_url": os.environ.get("OPENCLAW_RELAY_STATUS_URL", "http://openclaw-relay:8113/v1/queue/status"),
+            "approvals_state_dir": os.environ.get("OPENCLAW_APPROVALS_STATE_DIR", "/state/approvals"),
+            "approvals_pending_ttl_sec": int(os.environ.get("OPENCLAW_APPROVALS_PENDING_TTL_SEC", "604800") or 604800),
         }
 
         if not cfg["token"]:
@@ -1811,7 +2007,7 @@ def main() -> int:
         if profile_cfg["webhook_hmac_sha256_required"] and not cfg["webhook_secret"]:
             print(f"ERROR: webhook secret missing from {webhook_secret_file}")
             return 2
-        if profile_cfg["tool_allowlist_required"] and not cfg["tool_allowlist"]:
+        if profile_cfg["tool_allowlist_required"] and not read_list_file(tool_allowlist_file):
             print(f"ERROR: openclaw profile requires non-empty tool allowlist: {tool_allowlist_file}")
             return 2
 
@@ -1838,12 +2034,10 @@ def main() -> int:
                 print("ERROR: openclaw-sandbox profile requires HTTP_PROXY and HTTPS_PROXY")
                 return 2
 
-        allowlist = read_list_file(allowlist_file)
-
         cfg = {
             "mode": args.mode,
             "token": read_token(token_file),
-            "allowlist": allowlist,
+            "allowlist_file": allowlist_file,
             "audit_log": audit_log,
             "default_model": os.environ.get("OPENCLAW_SANDBOX_DEFAULT_MODEL", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
             "session_ttl_sec": int(os.environ.get("OPENCLAW_SANDBOX_SESSION_TTL_SEC", "1800") or 1800),
@@ -1857,12 +2051,14 @@ def main() -> int:
             "endpoint_sandbox_status_paths": {"/v1/sandboxes/status", "/v1/sandboxes"},
             "endpoint_sandbox_lease_paths": {"/v1/sandboxes/lease"},
             "bearer_token_required": profile_cfg["bearer_token_required"],
+            "approvals_state_dir": os.environ.get("OPENCLAW_APPROVALS_STATE_DIR", "/approvals"),
+            "approvals_pending_ttl_sec": int(os.environ.get("OPENCLAW_APPROVALS_PENDING_TTL_SEC", "604800") or 604800),
         }
 
         if not cfg["token"]:
             print(f"ERROR: sandbox token missing from {token_file}")
             return 2
-        if profile_cfg["tool_allowlist_required"] and not cfg["allowlist"]:
+        if profile_cfg["tool_allowlist_required"] and not read_list_file(allowlist_file):
             print(f"ERROR: openclaw-sandbox profile requires non-empty tool allowlist: {allowlist_file}")
             return 2
 
@@ -1956,6 +2152,7 @@ def main() -> int:
         relay_thread.start()
     elif args.mode == "openclaw-sandbox":
         ensure_sandbox_registry_baseline(cfg)
+        ensure_state_layout(str(cfg.get("approvals_state_dir", "/approvals")))
         sandbox_thread = threading.Thread(
             target=sandbox_reaper_loop,
             kwargs={"cfg": cfg, "stop_event": sandbox_stop_event},
@@ -1963,6 +2160,8 @@ def main() -> int:
             name="openclaw-sandbox-reaper",
         )
         sandbox_thread.start()
+    elif args.mode == "openclaw":
+        ensure_state_layout(str(cfg.get("approvals_state_dir", "/state/approvals")))
 
     server = ThreadingHTTPServer((bind_host, bind_port), OptionalHandler)
     server.cfg = cfg  # type: ignore[attr-defined]
