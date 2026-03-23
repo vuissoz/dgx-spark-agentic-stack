@@ -177,7 +177,10 @@ services:
       OPENCLAW_TOOL_ALLOWLIST_FILE: /config/tool_allowlist.txt
       OPENCLAW_WEBHOOK_SECRET_FILE: /run/secrets/openclaw.webhook_secret
       OPENCLAW_PROFILE_FILE: /config/integration-profile.current.json
+      OPENCLAW_OPERATOR_RUNTIME_FILE: /config/operator-runtime.v1.json
+      OPENCLAW_MODULE_MANIFEST_FILE: /config/module/openclaw.module-manifest.v1.json
       OPENCLAW_SANDBOX_URL: http://openclaw-sandbox:8112
+      OPENCLAW_SANDBOX_LIFECYCLE_URL: http://openclaw-sandbox:8112/v1/internal/sandboxes/lease
       OPENCLAW_SANDBOX_TIMEOUT_SEC: 3
       OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
       OPENCLAW_SANDBOX_STATUS_URL: http://openclaw-sandbox:8112/v1/sandboxes/status
@@ -315,6 +318,8 @@ services:
       OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
       OPENCLAW_SANDBOX_TOOL_ALLOWLIST_FILE: /config/tool_allowlist.txt
       OPENCLAW_SANDBOX_PROFILE_FILE: /config/integration-profile.current.json
+      OPENCLAW_SANDBOX_OPERATOR_RUNTIME_FILE: /config/operator-runtime.v1.json
+      OPENCLAW_SANDBOX_MODULE_MANIFEST_FILE: /config/module/openclaw.module-manifest.v1.json
       OPENCLAW_SANDBOX_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
       OPENCLAW_SANDBOX_DEFAULT_SESSION_ID: ${OPENCLAW_SANDBOX_DEFAULT_SESSION_ID:-default-session}
       OPENCLAW_SANDBOX_PROVIDER_LABEL: ${OPENCLAW_SANDBOX_PROVIDER_LABEL:-ollama-gate}

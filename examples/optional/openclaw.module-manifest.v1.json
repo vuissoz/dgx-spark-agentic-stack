@@ -1,0 +1,94 @@
+{
+  "auth": {
+    "api": "bearer-token",
+    "gateway": "token",
+    "internal_lifecycle": "bearer-token",
+    "webhook": "hmac-sha256"
+  },
+  "compatibility": {
+    "cli": {
+      "require_non_empty_version": true,
+      "supported_version_selectors": [
+        "latest"
+      ],
+      "version_probe": "openclaw --version"
+    },
+    "profiles": [
+      "rootless-dev",
+      "strict-prod"
+    ]
+  },
+  "files": {
+    "required": [
+      "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt",
+      "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt",
+      "${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json",
+      "${AGENTIC_ROOT}/openclaw/config/operator-runtime.v1.json",
+      "${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json",
+      "${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json",
+      "${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json",
+      "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json",
+      "${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json",
+      "${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
+    ],
+    "secrets": [
+      "${AGENTIC_ROOT}/secrets/runtime/openclaw.token",
+      "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
+    ],
+    "state_roots": [
+      "${AGENTIC_ROOT}/openclaw/state",
+      "${AGENTIC_ROOT}/openclaw/logs",
+      "${AGENTIC_ROOT}/openclaw/sandbox/state",
+      "${AGENTIC_ROOT}/openclaw/sandbox/workspaces",
+      "${AGENTIC_ROOT}/openclaw/relay/state",
+      "${AGENTIC_ROOT}/openclaw/relay/logs"
+    ]
+  },
+  "lifecycle": {
+    "apply": [
+      "./agent up core"
+    ],
+    "plan": [
+      "prepare runtime config and secrets under ${AGENTIC_ROOT}/openclaw",
+      "keep operator-facing policy files outside container images"
+    ],
+    "resolve": [
+      "./agent update resolves latest image tags to digests",
+      "release snapshots capture effective compose inputs and deployed digests"
+    ],
+    "status": [
+      "./agent openclaw status",
+      "./agent openclaw sandbox ls",
+      "./agent doctor"
+    ],
+    "verify": [
+      "./agent doctor validates loopback-only binds, auth mode, required files, internal lifecycle API, and registry coherence"
+    ]
+  },
+  "manifest_id": "openclaw.module.blueprint.v1",
+  "manifest_version": 1,
+  "module": "openclaw",
+  "network": {
+    "allowed_base_urls": [
+      "http://openclaw:8111",
+      "http://openclaw-sandbox:8112",
+      "http://openclaw-relay:8113",
+      "http://ollama-gate:11434"
+    ],
+    "host_loopback_ports": {
+      "gateway": 18789,
+      "relay": 18112,
+      "webhook": 18111
+    },
+    "internal_endpoints": {
+      "api": "http://openclaw:8111",
+      "relay": "http://openclaw-relay:8113",
+      "sandbox": "http://openclaw-sandbox:8112",
+      "sandbox_lifecycle": "http://openclaw-sandbox:8112/v1/internal/sandboxes"
+    }
+  },
+  "release": {
+    "component": "openclaw-core",
+    "global_release_relation": "captured by stack-level release snapshots under ${AGENTIC_ROOT}/deployments/releases"
+  }
+}

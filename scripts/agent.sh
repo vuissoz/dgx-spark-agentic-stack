@@ -21,6 +21,8 @@ AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch
 AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_drift_watch_schedule.sh"
 AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
 AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py"
+AGENT_OPENCLAW_OPERATOR_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_operator.py"
+AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_module_manifest.py"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
@@ -40,6 +42,10 @@ Usage:
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
   agent <claude|codex|opencode|vibestral|openclaw|pi-mono|goose> [project]
+  agent openclaw status [--json]
+  agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
+  agent openclaw model set <id> [--json]
+  agent openclaw sandbox [ls [--json] | attach <sandbox_id> | destroy <sandbox_id> [--json]]
   agent openclaw approvals [list [--status <pending|approved|denied|expired|all>] [--json] | approve <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] | deny <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] [--reason <text>] | promote <id>]
   agent ls
   agent ps
@@ -2586,6 +2592,149 @@ cmd_comfyui() {
   esac
 }
 
+openclaw_operator_args() {
+  printf '%s\n' \
+    --operator-registry-file "${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json" \
+    --operator-runtime-file "${AGENTIC_ROOT}/openclaw/config/operator-runtime.v1.json" \
+    --manifest-file "${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json" \
+    --dm-allowlist-file "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt" \
+    --tool-allowlist-file "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt"
+}
+
+openclaw_operator_sandbox_field() {
+  local registry_file="$1"
+  local sandbox_id="$2"
+  local field="$3"
+  python3 - "${registry_file}" "${sandbox_id}" "${field}" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+sandbox_id = sys.argv[2]
+field = sys.argv[3]
+record = (payload.get("sandboxes") or {}).get(sandbox_id)
+if not isinstance(record, dict):
+    raise SystemExit(1)
+value = record.get(field)
+if not isinstance(value, str) or not value:
+    raise SystemExit(1)
+print(value)
+PY
+}
+
+cmd_openclaw_operator() {
+  local action="${1:-status}"
+  shift || true
+
+  [[ -f "${AGENT_OPENCLAW_OPERATOR_SCRIPT}" ]] \
+    || die "openclaw operator helper is missing: ${AGENT_OPENCLAW_OPERATOR_SCRIPT}"
+  [[ -f "${AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT}" ]] \
+    || die "openclaw module manifest helper is missing: ${AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT}"
+
+  ensure_runtime_env
+  ensure_core_runtime >/dev/null
+
+  local operator_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
+  local operator_runtime_file="${AGENTIC_ROOT}/openclaw/config/operator-runtime.v1.json"
+  local manifest_file="${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json"
+  local actor="${SUDO_USER:-${USER:-unknown}}"
+  local timestamp
+  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  python3 "${AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT}" validate --manifest-file "${manifest_file}" >/dev/null
+
+  case "${action}" in
+    status)
+      python3 "${AGENT_OPENCLAW_OPERATOR_SCRIPT}" \
+        $(openclaw_operator_args) \
+        status "$@"
+      ;;
+    policy)
+      local policy_action="${1:-list}"
+      shift || true
+      case "${policy_action}" in
+        list)
+          python3 "${AGENT_OPENCLAW_OPERATOR_SCRIPT}" \
+            $(openclaw_operator_args) \
+            policy list "$@"
+          ;;
+        add)
+          [[ $# -ge 2 ]] || die "Usage: agent openclaw policy add <dm-target|tool> <value> [--json]"
+          python3 "${AGENT_OPENCLAW_OPERATOR_SCRIPT}" \
+            $(openclaw_operator_args) \
+            policy add "$@"
+          ;;
+        *)
+          die "Usage: agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]"
+          ;;
+      esac
+      ;;
+    model)
+      [[ "${1:-}" == "set" ]] || die "Usage: agent openclaw model set <id> [--json]"
+      shift
+      [[ $# -ge 1 ]] || die "Usage: agent openclaw model set <id> [--json]"
+      local model_id="$1"
+      shift
+      python3 "${AGENT_OPENCLAW_OPERATOR_SCRIPT}" \
+        $(openclaw_operator_args) \
+        model set "${model_id}" \
+        --updated-at "${timestamp}" \
+        --updated-by "${actor}" \
+        "$@"
+      ;;
+    sandbox)
+      local sandbox_action="${1:-ls}"
+      shift || true
+      case "${sandbox_action}" in
+        ls)
+          python3 "${AGENT_OPENCLAW_OPERATOR_SCRIPT}" \
+            $(openclaw_operator_args) \
+            sandbox ls "$@"
+          ;;
+        destroy)
+          [[ $# -ge 1 ]] || die "Usage: agent openclaw sandbox destroy <sandbox_id> [--json]"
+          local sandbox_id="$1"
+          shift
+          local sandbox_cid
+          sandbox_cid="$(service_container_id openclaw-sandbox)"
+          [[ -n "${sandbox_cid}" ]] || die "Service 'openclaw-sandbox' is not running. Start it with: agent up core"
+          python3 "${AGENT_OPENCLAW_OPERATOR_SCRIPT}" \
+            $(openclaw_operator_args) \
+            sandbox destroy "${sandbox_id}" \
+            --sandbox-container "${sandbox_cid}" \
+            --token-file /run/secrets/openclaw.token \
+            "$@"
+          ;;
+        attach)
+          [[ $# -ge 1 ]] || die "Usage: agent openclaw sandbox attach <sandbox_id>"
+          local sandbox_id="$1"
+          local sandbox_cid
+          local workspace_dir
+          sandbox_cid="$(service_container_id openclaw-sandbox)"
+          [[ -n "${sandbox_cid}" ]] || die "Service 'openclaw-sandbox' is not running. Start it with: agent up core"
+          workspace_dir="$(openclaw_operator_sandbox_field "${operator_registry_file}" "${sandbox_id}" "workspace_dir")" \
+            || die "sandbox '${sandbox_id}' not found in operator registry ${operator_registry_file}"
+          printf 'INFO: openclaw sandbox attach targets sandbox_id=%s.\n' "${sandbox_id}"
+          printf 'INFO: sandbox workspace is %s.\n' "${workspace_dir}"
+          printf 'INFO: runtime registry is %s.\n' "${operator_registry_file}"
+          if [[ "${AGENT_NO_ATTACH:-0}" == "1" ]]; then
+            printf 'prepared sandbox=%s container=%s workspace=%s\n' "${sandbox_id}" "${sandbox_cid}" "${workspace_dir}"
+            return 0
+          fi
+          exec docker exec -it "${sandbox_cid}" sh -lc "cd '${workspace_dir}' && exec sh"
+          ;;
+        *)
+          die "Usage: agent openclaw sandbox [ls [--json] | attach <sandbox_id> | destroy <sandbox_id> [--json]]"
+          ;;
+      esac
+      ;;
+    *)
+      die "Usage: agent openclaw [status [--json] | policy [list [--json] | add <dm-target|tool> <value> [--json]] | model set <id> [--json] | sandbox [ls [--json] | attach <sandbox_id> | destroy <sandbox_id> [--json]] | approvals ...]"
+      ;;
+  esac
+}
+
 cmd_openclaw_approvals() {
   local action="${1:-list}"
   shift || true
@@ -3071,13 +3220,21 @@ case "$cmd" in
     cmd_stack "$2" "${3:-all}"
     ;;
   openclaw)
-    if [[ "${2:-}" == "approvals" ]]; then
-      shift 2
-      cmd_openclaw_approvals "$@"
-    else
-      shift
-      cmd_tool_attach "${cmd}" "${1:-}"
-    fi
+    case "${2:-}" in
+      status|policy|model|sandbox)
+        openclaw_action="${2:-}"
+        shift 2
+        cmd_openclaw_operator "${openclaw_action}" "$@"
+        ;;
+      approvals)
+        shift 2
+        cmd_openclaw_approvals "$@"
+        ;;
+      *)
+        shift
+        cmd_tool_attach "${cmd}" "${1:-}"
+        ;;
+    esac
     ;;
   claude|codex|opencode|vibestral|pi-mono|goose)
     shift

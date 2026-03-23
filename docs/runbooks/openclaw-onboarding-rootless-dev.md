@@ -181,6 +181,47 @@ Audit events are appended to:
 
 Queue records intentionally avoid storing secrets, tokens, message bodies, or raw tool arguments.
 
+## Step 3c: Use the Operator Control Surface
+
+OpenClaw now exposes a separate operator-facing CLI on the host wrapper.
+
+Read runtime status:
+
+```bash
+./agent openclaw status
+./agent openclaw status --json
+```
+
+Inspect and extend local policy artefacts:
+
+```bash
+./agent openclaw policy list
+./agent openclaw policy list --json
+./agent openclaw policy add dm-target discord:user:ops
+./agent openclaw policy add tool diagnostics.echo
+```
+
+Set the default OpenClaw model stored in the shared operator runtime file:
+
+```bash
+./agent openclaw model set qwen3-coder:14b
+```
+
+Inspect or administer sandbox runtime state:
+
+```bash
+./agent openclaw sandbox ls
+./agent openclaw sandbox ls --json
+./agent openclaw sandbox attach <sandbox_id>
+./agent openclaw sandbox destroy <sandbox_id>
+```
+
+The shared operator runtime file is:
+- `${AGENTIC_ROOT}/openclaw/config/operator-runtime.v1.json`
+
+The module blueprint/manifest is:
+- `${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json`
+
 ## Step 4: Start Services
 
 Start the core stack:

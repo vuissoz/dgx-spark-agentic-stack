@@ -1,0 +1,7 @@
+{
+  "default_model": "qwen3-coder:30b",
+  "module": "openclaw-operator-runtime",
+  "schema_version": 1,
+  "updated_at": "1970-01-01T00:00:00Z",
+  "updated_by": "init_runtime"
+}

@@ -1113,7 +1113,9 @@ optional_openclaw_gateway_cid="$(service_container_id openclaw-gateway)"
 optional_openclaw_sandbox_cid="$(service_container_id openclaw-sandbox)"
 optional_openclaw_relay_cid="$(service_container_id openclaw-relay)"
 optional_openclaw_profile_file="${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json"
+optional_openclaw_operator_runtime_file="${AGENTIC_ROOT}/openclaw/config/operator-runtime.v1.json"
 optional_openclaw_relay_targets_file="${AGENTIC_ROOT}/openclaw/config/relay_targets.json"
+optional_openclaw_manifest_file="${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json"
 optional_openclaw_immutable_file="${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json"
 optional_openclaw_overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
 optional_openclaw_state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
@@ -1123,6 +1125,7 @@ optional_openclaw_operator_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state
 optional_openclaw_token_file="${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
 optional_openclaw_webhook_secret_file="${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
 optional_openclaw_layer_helper="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_config_layers.py"
+optional_openclaw_manifest_helper="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_module_manifest.py"
 if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
     doctor_fail "openclaw webhook bind must stay loopback-only on port ${openclaw_webhook_host_port}"
@@ -1148,10 +1151,44 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   elif ! validate_openclaw_profile_file "${optional_openclaw_profile_file}" >/dev/null 2>&1; then
     doctor_fail "openclaw integration profile is invalid: ${optional_openclaw_profile_file}"
   fi
+  if [[ ! -s "${optional_openclaw_operator_runtime_file}" ]]; then
+    doctor_fail "openclaw operator runtime file is missing: ${optional_openclaw_operator_runtime_file}"
+  elif ! python3 - "${optional_openclaw_operator_runtime_file}" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+if payload.get("module") != "openclaw-operator-runtime":
+    raise SystemExit(1)
+if payload.get("schema_version") != 1:
+    raise SystemExit(1)
+default_model = payload.get("default_model")
+if not isinstance(default_model, str) or not default_model.strip():
+    raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw operator runtime file is invalid: ${optional_openclaw_operator_runtime_file}"
+  fi
+  if [[ ! -s "${optional_openclaw_manifest_file}" ]]; then
+    doctor_fail "openclaw module manifest is missing: ${optional_openclaw_manifest_file}"
+  elif ! python3 "${optional_openclaw_manifest_helper}" validate --manifest-file "${optional_openclaw_manifest_file}" >/dev/null 2>&1; then
+    doctor_fail "openclaw module manifest is invalid: ${optional_openclaw_manifest_file}"
+  else
+    ok "openclaw module manifest is present and valid"
+  fi
 
   optional_openclaw_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_cid}" 2>/dev/null || true)"
   if ! grep -q '^OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json"
+  fi
+  if ! grep -q '^OPENCLAW_OPERATOR_RUNTIME_FILE=/config/operator-runtime.v1.json$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_OPERATOR_RUNTIME_FILE=/config/operator-runtime.v1.json"
+  fi
+  if ! grep -q '^OPENCLAW_MODULE_MANIFEST_FILE=/config/module/openclaw.module-manifest.v1.json$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_MODULE_MANIFEST_FILE=/config/module/openclaw.module-manifest.v1.json"
   fi
   if ! grep -q '^OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json"
@@ -1164,6 +1201,9 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   fi
   if ! grep -q '^OPENCLAW_CONFIG_PATH=/tmp/openclaw.effective.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_CONFIG_PATH=/tmp/openclaw.effective.json"
+  fi
+  if ! grep -q '^OPENCLAW_SANDBOX_LIFECYCLE_URL=http://openclaw-sandbox:8112/v1/internal/sandboxes/lease$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_SANDBOX_LIFECYCLE_URL=http://openclaw-sandbox:8112/v1/internal/sandboxes/lease"
   fi
   if ! grep -q '^OPENCLAW_APPROVALS_STATE_DIR=/state/approvals$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_APPROVALS_STATE_DIR=/state/approvals"
@@ -1320,6 +1360,12 @@ if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
   if ! grep -q '^OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_sandbox_env}"; then
     doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json"
   fi
+  if ! grep -q '^OPENCLAW_SANDBOX_OPERATOR_RUNTIME_FILE=/config/operator-runtime.v1.json$' <<<"${optional_openclaw_sandbox_env}"; then
+    doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_OPERATOR_RUNTIME_FILE=/config/operator-runtime.v1.json"
+  fi
+  if ! grep -q '^OPENCLAW_SANDBOX_MODULE_MANIFEST_FILE=/config/module/openclaw.module-manifest.v1.json$' <<<"${optional_openclaw_sandbox_env}"; then
+    doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_MODULE_MANIFEST_FILE=/config/module/openclaw.module-manifest.v1.json"
+  fi
   if ! grep -q '^OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json$' <<<"${optional_openclaw_sandbox_env}"; then
     doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json"
   fi
@@ -1366,6 +1412,7 @@ PY
   elif ! python3 - \
     "${optional_openclaw_operator_registry_file}" \
     "${optional_openclaw_sandbox_registry_file}" \
+    "${optional_openclaw_operator_runtime_file}" \
     "${optional_openclaw_token_file}" \
     "${optional_openclaw_webhook_secret_file}" <<'PY' >/dev/null 2>&1
 import json
@@ -1374,11 +1421,13 @@ import sys
 
 operator_path = pathlib.Path(sys.argv[1])
 technical_path = pathlib.Path(sys.argv[2])
-secret_paths = [pathlib.Path(sys.argv[3]), pathlib.Path(sys.argv[4])]
+runtime_path = pathlib.Path(sys.argv[3])
+secret_paths = [pathlib.Path(sys.argv[4]), pathlib.Path(sys.argv[5])]
 
 operator_raw = operator_path.read_text(encoding="utf-8")
 operator = json.loads(operator_raw)
 technical = json.loads(technical_path.read_text(encoding="utf-8"))
+runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
 
 if not isinstance(operator, dict):
     raise SystemExit(1)
@@ -1400,6 +1449,11 @@ if not isinstance(default_session_id, str) or not default_session_id:
 if not isinstance(provider, str) or not provider:
     raise SystemExit(1)
 if not isinstance(policy_set, list) or not policy_set or not all(isinstance(item, str) and item for item in policy_set):
+    raise SystemExit(1)
+runtime_default_model = runtime.get("default_model")
+if not isinstance(runtime_default_model, str) or not runtime_default_model:
+    raise SystemExit(1)
+if runtime_default_model != default_model:
     raise SystemExit(1)
 
 technical_sandboxes = technical.get("sandboxes")
@@ -1482,6 +1536,35 @@ PY"; then
     doctor_fail "openclaw-sandbox status endpoint must expose session/operator registry fields (/v1/sandboxes/status)"
   else
     ok "openclaw-sandbox status endpoint exposes operator registry fields"
+  fi
+  if ! timeout 15 docker exec "${optional_openclaw_sandbox_cid}" sh -lc "python3 - <<'PY'
+import json
+import pathlib
+import urllib.request
+
+token = pathlib.Path('/run/secrets/openclaw.token').read_text(encoding='utf-8').strip()
+registry = json.loads(pathlib.Path('/state/openclaw-state-registry.v1.json').read_text(encoding='utf-8'))
+req = urllib.request.Request(
+    'http://127.0.0.1:8112/v1/internal/sandboxes',
+    headers={'Authorization': f'Bearer {token}'},
+    method='GET',
+)
+with urllib.request.urlopen(req, timeout=4) as resp:
+    payload = json.loads(resp.read().decode('utf-8'))
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+if not isinstance(payload.get('sandboxes'), list):
+    raise SystemExit(1)
+if payload.get('active') != len((registry.get('sandboxes') or {})):
+    raise SystemExit(1)
+if payload.get('current_session_id') != registry.get('current_session_id'):
+    raise SystemExit(1)
+if payload.get('default_model') != registry.get('default_model'):
+    raise SystemExit(1)
+PY"; then
+    doctor_fail "openclaw-sandbox internal lifecycle API must stay coherent with the operator registry"
+  else
+    ok "openclaw-sandbox internal lifecycle API is coherent with the operator registry"
   fi
 fi
 
