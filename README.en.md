@@ -58,7 +58,7 @@ Key persistent folders:
 - `comfyui/{models,input,output,user}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
-- `openclaw/{config,state,logs,relay/{state,logs},sandbox/state,workspaces}/`
+- `openclaw/{config/{immutable,overlay},state,logs,relay/{state,logs},sandbox/state,workspaces}/`
 - `optional/{mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
@@ -527,6 +527,10 @@ Runtime prerequisites for core OpenClaw:
 - versioned OpenClaw profile (runtime bootstrap):
   - `${AGENTIC_ROOT}/openclaw/config/integration-profile.v1.json`
   - `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json`
+- OpenClaw config layers:
+  - stack-owned immutable config: `${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json`
+  - validated operator overlay: `${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json`
+  - writable runtime state: `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json`
 
 ## Validation
 

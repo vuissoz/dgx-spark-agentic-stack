@@ -186,7 +186,11 @@ services:
       OPENCLAW_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
       HOME: /state/cli/openclaw-home
       OPENCLAW_HOME: /state/cli/openclaw-home
-      OPENCLAW_CONFIG_PATH: /state/cli/openclaw-home/openclaw.json
+      OPENCLAW_CONFIG_PATH: /tmp/openclaw.effective.json
+      OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw.stack-config.v1.json
+      OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw.operator-overlay.json
+      OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-home/openclaw.state.json
+      OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw.token
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
@@ -197,6 +201,7 @@ services:
       - 127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}:8111
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/overlay:/overlay
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
       - ${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openclaw/workspaces}:/workspace
@@ -246,6 +251,11 @@ services:
       OPENCLAW_GATEWAY_TAILSCALE_MODE: off
       HOME: /state/cli/openclaw-home
       OPENCLAW_HOME: /state/cli/openclaw-home
+      OPENCLAW_CONFIG_PATH: /tmp/openclaw.effective.json
+      OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw.stack-config.v1.json
+      OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw.operator-overlay.json
+      OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-home/openclaw.state.json
+      OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw.token
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-gateway,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
@@ -255,6 +265,8 @@ services:
     ports:
       - 127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}:8114
     volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/overlay:/overlay
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
       - ${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openclaw/workspaces}:/workspace

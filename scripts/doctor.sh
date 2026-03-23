@@ -1114,9 +1114,28 @@ optional_openclaw_sandbox_cid="$(service_container_id openclaw-sandbox)"
 optional_openclaw_relay_cid="$(service_container_id openclaw-relay)"
 optional_openclaw_profile_file="${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json"
 optional_openclaw_relay_targets_file="${AGENTIC_ROOT}/openclaw/config/relay_targets.json"
+optional_openclaw_immutable_file="${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json"
+optional_openclaw_overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
+optional_openclaw_state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+optional_openclaw_layer_helper="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_config_layers.py"
 if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
     doctor_fail "openclaw webhook bind must stay loopback-only on port ${openclaw_webhook_host_port}"
+  fi
+
+  if [[ ! -s "${optional_openclaw_immutable_file}" ]]; then
+    doctor_fail "openclaw immutable config is missing: ${optional_openclaw_immutable_file}"
+  fi
+  if [[ ! -s "${optional_openclaw_overlay_file}" ]]; then
+    doctor_fail "openclaw operator overlay is missing: ${optional_openclaw_overlay_file}"
+  fi
+  if [[ ! -f "${optional_openclaw_state_file}" ]]; then
+    doctor_fail "openclaw writable state config is missing: ${optional_openclaw_state_file}"
+  elif ! python3 "${optional_openclaw_layer_helper}" validate-host-layout \
+    --immutable-file "${optional_openclaw_immutable_file}" \
+    --overlay-file "${optional_openclaw_overlay_file}" \
+    --state-file "${optional_openclaw_state_file}" >/dev/null 2>&1; then
+    doctor_fail "openclaw layered config layout is invalid"
   fi
 
   if [[ ! -s "${optional_openclaw_profile_file}" ]]; then
@@ -1129,8 +1148,23 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! grep -q '^OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json"
   fi
+  if ! grep -q '^OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json"
+  fi
+  if ! grep -q '^OPENCLAW_OPERATOR_OVERLAY_FILE=/overlay/openclaw.operator-overlay.json$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_OPERATOR_OVERLAY_FILE=/overlay/openclaw.operator-overlay.json"
+  fi
+  if ! grep -q '^OPENCLAW_STATE_CONFIG_FILE=/state/cli/openclaw-home/openclaw.state.json$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_STATE_CONFIG_FILE=/state/cli/openclaw-home/openclaw.state.json"
+  fi
+  if ! grep -q '^OPENCLAW_CONFIG_PATH=/tmp/openclaw.effective.json$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_CONFIG_PATH=/tmp/openclaw.effective.json"
+  fi
   if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'command -v openclaw >/dev/null'; then
     doctor_fail "openclaw must provide openclaw CLI in-container"
+  fi
+  if ! mount_destination_present "${optional_openclaw_cid}" "/overlay"; then
+    doctor_fail "openclaw must mount /overlay for validated operator config"
   fi
   if ! mount_destination_present "${optional_openclaw_cid}" "/workspace"; then
     doctor_fail "openclaw must mount /workspace for persistent operator sessions"
@@ -1143,6 +1177,9 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
   dashboard_status="$(curl -sS -o /tmp/doctor-openclaw-dashboard.out -w '%{http_code}' "http://127.0.0.1:${openclaw_webhook_host_port}/dashboard" 2>/dev/null || true)"
   if [[ "${dashboard_status}" != "200" ]]; then
     doctor_fail "openclaw dashboard must be reachable on loopback (/dashboard, status=${dashboard_status:-unknown})"
+  fi
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw --version >/tmp/openclaw-layer-version.out && python3 /app/openclaw_config_layers.py check-runtime --immutable-file /config/immutable/openclaw.stack-config.v1.json --overlay-file /overlay/openclaw.operator-overlay.json --state-file /state/cli/openclaw-home/openclaw.state.json --effective-file /tmp/openclaw.effective.json --gateway-token-file /run/secrets/openclaw.token"; then
+    doctor_fail "openclaw layered config runtime check failed"
   fi
 fi
 
@@ -1158,11 +1195,23 @@ if [[ -n "${optional_openclaw_gateway_cid}" ]]; then
   if ! grep -q '^OPENCLAW_GATEWAY_PORT=18789$' <<<"${optional_openclaw_gateway_env}"; then
     doctor_fail "openclaw-gateway must set OPENCLAW_GATEWAY_PORT=18789"
   fi
+  if ! grep -q '^OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json$' <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "openclaw-gateway must set OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json"
+  fi
+  if ! grep -q '^OPENCLAW_OPERATOR_OVERLAY_FILE=/overlay/openclaw.operator-overlay.json$' <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "openclaw-gateway must set OPENCLAW_OPERATOR_OVERLAY_FILE=/overlay/openclaw.operator-overlay.json"
+  fi
+  if ! grep -q '^OPENCLAW_STATE_CONFIG_FILE=/state/cli/openclaw-home/openclaw.state.json$' <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "openclaw-gateway must set OPENCLAW_STATE_CONFIG_FILE=/state/cli/openclaw-home/openclaw.state.json"
+  fi
 
   if ! timeout 15 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'command -v openclaw >/dev/null'; then
     doctor_fail "openclaw-gateway must provide openclaw CLI in-container"
   fi
 
+  if ! mount_destination_present "${optional_openclaw_gateway_cid}" "/overlay"; then
+    doctor_fail "openclaw-gateway must mount /overlay for validated operator config"
+  fi
   if ! mount_destination_present "${optional_openclaw_gateway_cid}" "/workspace"; then
     doctor_fail "openclaw-gateway must mount /workspace for persistent operator sessions"
   elif ! mount_destination_matches_source "${optional_openclaw_gateway_cid}" "/workspace" "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"; then

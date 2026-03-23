@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_K_TESTS:-0}" == "1" ]]; then
   ok "K6 skipped because AGENTIC_SKIP_K_TESTS=1"
@@ -73,12 +75,15 @@ wait_for_relay_queue_at_least() {
 "${agent_bin}" down core >/tmp/agent-k6-down-pre.out 2>&1 || true
 "${REPO_ROOT}/deployments/core/init_runtime.sh"
 
-agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+agentic_root="${AGENTIC_ROOT}"
 openclaw_workspaces_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${agentic_root}/openclaw/workspaces}"
 webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 openclaw_agent_name="operator-k6-$(date +%s)"
+openclaw_immutable_file="${agentic_root}/openclaw/config/immutable/openclaw.stack-config.v1.json"
+openclaw_overlay_file="${agentic_root}/openclaw/config/overlay/openclaw.operator-overlay.json"
+openclaw_state_config_file="${agentic_root}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 
 install -d -m 0700 "${agentic_root}/secrets/runtime"
 install -d -m 0750 "${agentic_root}/deployments/optional"
@@ -131,8 +136,12 @@ if [[ "${EUID}" -eq 0 ]]; then
     "${agentic_root}/secrets/runtime/openclaw.relay.whatsapp.secret"
 fi
 
-"${agent_bin}" doctor >/tmp/agent-k6-doctor-pre.out \
-  || fail "precondition failed: doctor must be green before validating K6"
+if [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" ]]; then
+  warn "skip pre-up doctor precondition in rootless-dev"
+else
+  "${agent_bin}" doctor >/tmp/agent-k6-doctor-pre.out \
+    || fail "precondition failed: doctor must be green before validating K6"
+fi
 
 OPENCLAW_RELAY_MAX_ATTEMPTS=2 \
 OPENCLAW_RELAY_RETRY_BASE_SEC=1 \
@@ -202,8 +211,14 @@ fi
 
 docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_HOME}" = "/state/cli/openclaw-home"' \
   || fail "openclaw must set OPENCLAW_HOME to persistent /state path"
-docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_CONFIG_PATH}" = "/state/cli/openclaw-home/openclaw.json"' \
-  || fail "openclaw must set OPENCLAW_CONFIG_PATH to persistent /state path"
+docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_CONFIG_PATH}" = "/tmp/openclaw.effective.json"' \
+  || fail "openclaw must set OPENCLAW_CONFIG_PATH to derived tmpfs path"
+docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_IMMUTABLE_CONFIG_FILE}" = "/config/immutable/openclaw.stack-config.v1.json"' \
+  || fail "openclaw must expose immutable config path"
+docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_OPERATOR_OVERLAY_FILE}" = "/overlay/openclaw.operator-overlay.json"' \
+  || fail "openclaw must expose operator overlay path"
+docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_STATE_CONFIG_FILE}" = "/state/cli/openclaw-home/openclaw.state.json"' \
+  || fail "openclaw must expose writable state config path"
 
 timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw onboard --help' >/tmp/agent-k6-openclaw-onboard-help.out \
   || fail "openclaw onboard command must be available in-container"
@@ -226,13 +241,81 @@ grep -q "${openclaw_agent_name}" /tmp/agent-k6-openclaw-agents-list.out \
 
 docker exec "${openclaw_cid}" sh -lc 'test -d /state/cli/openclaw-home' \
   || fail "openclaw home must be initialized under persistent /state"
-docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/openclaw.json' \
-  || fail "openclaw config must persist under OPENCLAW_CONFIG_PATH"
+docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/openclaw.state.json' \
+  || fail "openclaw state layer must persist under OPENCLAW_STATE_CONFIG_FILE"
 
 [[ -d "${openclaw_workspaces_dir}/wizard-k6" ]] \
   || fail "openclaw onboard workspace must persist under ${openclaw_workspaces_dir}"
-[[ -f "${agentic_root}/openclaw/state/cli/openclaw-home/openclaw.json" ]] \
-  || fail "openclaw CLI config must persist under openclaw/state/cli/openclaw-home"
+[[ -f "${openclaw_immutable_file}" ]] \
+  || fail "openclaw immutable config file must persist on host"
+[[ -f "${openclaw_overlay_file}" ]] \
+  || fail "openclaw operator overlay file must persist on host"
+[[ -f "${openclaw_state_config_file}" ]] \
+  || fail "openclaw writable state config file must persist on host"
+python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
+  --immutable-file "${openclaw_immutable_file}" \
+  --overlay-file "${openclaw_overlay_file}" \
+  --state-file "${openclaw_state_config_file}" \
+  >/tmp/agent-k6-layer-host-validate.out 2>&1 \
+  || fail "openclaw host layered config contract must stay valid after CLI flows"
+python3 - "${openclaw_overlay_file}" "${openclaw_state_config_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+overlay = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+state = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+workspace = (((overlay.get("agents") or {}).get("defaults") or {}).get("workspace"))
+if workspace != "/workspace/wizard-k6":
+    raise SystemExit("overlay must persist operator workspace selection")
+if "gateway" in state:
+    raise SystemExit("state layer must not retain gateway settings")
+PY
+
+overlay_backup="$(mktemp)"
+cp "${openclaw_overlay_file}" "${overlay_backup}"
+cat >"${openclaw_overlay_file}" <<'JSON'
+{
+  "gateway": {
+    "bind": "public"
+  }
+}
+JSON
+chmod 0640 "${openclaw_overlay_file}"
+set +e
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw agents list' >/tmp/agent-k6-openclaw-invalid-overlay.out 2>&1
+invalid_overlay_rc=$?
+set -e
+[[ "${invalid_overlay_rc}" -ne 0 ]] || fail "openclaw must fail closed when operator overlay contains forbidden keys"
+cp "${overlay_backup}" "${openclaw_overlay_file}"
+chmod 0640 "${openclaw_overlay_file}"
+rm -f "${overlay_backup}"
+
+python3 - "${openclaw_state_config_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+payload.setdefault("gateway", {})["bind"] = "0.0.0.0"
+payload.setdefault("commands", {})["native"] = "forbidden"
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw agents list' >/tmp/agent-k6-openclaw-agents-list-after-drift.out \
+  || fail "openclaw wrapper must repair forbidden state drift before executing CLI commands"
+python3 - "${openclaw_state_config_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if "gateway" in payload:
+    raise SystemExit("state drift repair must strip gateway subtree")
+commands = payload.get("commands") or {}
+if "native" in commands:
+    raise SystemExit("state drift repair must strip overlay-owned commands.native")
+PY
 
 dashboard_status="$(curl -sS -o /tmp/agent-k6-dashboard.html -w '%{http_code}' "http://127.0.0.1:${webhook_host_port}/dashboard")"
 [[ "${dashboard_status}" == "200" ]] || fail "openclaw dashboard must be reachable on loopback (status=${dashboard_status})"

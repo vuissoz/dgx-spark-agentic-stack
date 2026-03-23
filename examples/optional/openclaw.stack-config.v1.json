@@ -1,0 +1,20 @@
+{
+  "_agentic": {
+    "schema_version": 1,
+    "owner": "stack",
+    "mode": "immutable"
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "__OPENCLAW_GATEWAY_TOKEN__"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  }
+}

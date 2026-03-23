@@ -20,6 +20,7 @@ if [[ -z "${gateway_token}" ]]; then
 fi
 
 export OPENCLAW_GATEWAY_TOKEN="${gateway_token}"
+export OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT=0
 gateway_pid=""
 proxy_pid=""
 

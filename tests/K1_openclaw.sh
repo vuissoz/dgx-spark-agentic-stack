@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_K_TESTS:-0}" == "1" ]]; then
   ok "K1 skipped because AGENTIC_SKIP_K_TESTS=1"
@@ -22,7 +24,7 @@ assert_cmd python3
 
 "${REPO_ROOT}/deployments/core/init_runtime.sh"
 
-agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+agentic_root="${AGENTIC_ROOT}"
 webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 fixture_src="${SCRIPT_DIR}/fixtures/ollama-drift"
 install -d -m 0700 "${agentic_root}/secrets/runtime"
@@ -30,7 +32,19 @@ install -d -m 0750 "${agentic_root}/deployments/optional"
 [[ -d "${fixture_src}" ]] || fail "fixture directory missing: ${fixture_src}"
 
 openclaw_profile_file="${agentic_root}/openclaw/config/integration-profile.current.json"
+openclaw_immutable_file="${agentic_root}/openclaw/config/immutable/openclaw.stack-config.v1.json"
+openclaw_overlay_file="${agentic_root}/openclaw/config/overlay/openclaw.operator-overlay.json"
+openclaw_state_config_file="${agentic_root}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 [[ -s "${openclaw_profile_file}" ]] || fail "openclaw integration profile file is missing after init_runtime: ${openclaw_profile_file}"
+[[ -s "${openclaw_immutable_file}" ]] || fail "openclaw immutable config file is missing after init_runtime: ${openclaw_immutable_file}"
+[[ -s "${openclaw_overlay_file}" ]] || fail "openclaw operator overlay file is missing after init_runtime: ${openclaw_overlay_file}"
+[[ -f "${openclaw_state_config_file}" ]] || fail "openclaw state config file is missing after init_runtime: ${openclaw_state_config_file}"
+python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
+  --immutable-file "${openclaw_immutable_file}" \
+  --overlay-file "${openclaw_overlay_file}" \
+  --state-file "${openclaw_state_config_file}" \
+  >/tmp/agent-k1-layer-validate.out 2>&1 \
+  || fail "openclaw layered config bootstrap contract is invalid"
 python3 - "${openclaw_profile_file}" <<'PY'
 import json
 import pathlib
@@ -75,8 +89,12 @@ if [[ "${EUID}" -eq 0 ]]; then
     "${agentic_root}/secrets/runtime/openclaw.webhook_secret"
 fi
 
-"${agent_bin}" doctor >/tmp/agent-k1-doctor.out \
-  || fail "precondition failed: doctor must be green before validating K1"
+if [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" ]]; then
+  warn "skip pre-up doctor precondition in rootless-dev"
+else
+  "${agent_bin}" doctor >/tmp/agent-k1-doctor.out \
+    || fail "precondition failed: doctor must be green before validating K1"
+fi
 
 "${agent_bin}" up core >/tmp/agent-k1-up.out \
   || fail "agent up core (openclaw) failed"

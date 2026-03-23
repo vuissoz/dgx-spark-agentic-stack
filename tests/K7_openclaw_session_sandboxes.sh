@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_K_TESTS:-0}" == "1" ]]; then
   ok "K7 skipped because AGENTIC_SKIP_K_TESTS=1"
@@ -88,7 +90,7 @@ wait_for_active_sandboxes() {
 "${agent_bin}" down core >/tmp/agent-k7-down-pre.out 2>&1 || true
 "${REPO_ROOT}/deployments/core/init_runtime.sh"
 
-agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+agentic_root="${AGENTIC_ROOT}"
 install -d -m 0700 "${agentic_root}/secrets/runtime"
 
 cat >"${agentic_root}/openclaw/config/tool_allowlist.txt" <<'ALLOW'

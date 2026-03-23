@@ -27,7 +27,7 @@ Security and CDC constraints still apply:
 ## Decision
 
 1. Install the upstream OpenClaw CLI in the shared OpenClaw runtime image via `https://openclaw.ai/install-cli.sh` and expose it as `openclaw` in-container.
-2. Persist OpenClaw CLI state with `OPENCLAW_HOME=/state/cli/openclaw-home` and `OPENCLAW_CONFIG_PATH=/state/cli/openclaw-home/openclaw.json`, with operator workspaces under `/workspace` mapped to `${AGENTIC_ROOT}/openclaw/{state,workspaces}`.
+2. Persist OpenClaw CLI state with `OPENCLAW_HOME=/state/cli/openclaw-home`, while ADR-0074 later moved `OPENCLAW_CONFIG_PATH` to a derived tmpfs file and split immutable/overlay/state ownership.
 3. Add dashboard endpoints in OpenClaw runtime:
    - `GET /dashboard` (operator UI)
    - `GET /v1/dashboard/status` (runtime + relay queue status)

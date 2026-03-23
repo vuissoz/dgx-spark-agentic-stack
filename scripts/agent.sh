@@ -531,6 +531,8 @@ core_service_build_inputs() {
       printf '%s\n' \
         "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_wrapper.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_config_layers.py" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_gateway_entrypoint.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/tcp_forward.py"
       ;;
@@ -813,6 +815,14 @@ load_runtime_env() {
     warn "invalid AGENTIC_AGENT_NO_NEW_PRIVILEGES='${AGENTIC_AGENT_NO_NEW_PRIVILEGES}', defaulting to true"
     AGENTIC_AGENT_NO_NEW_PRIVILEGES="true"
     export AGENTIC_AGENT_NO_NEW_PRIVILEGES
+  fi
+
+  local legacy_openclaw_workspaces_dir="${AGENTIC_ROOT}/optional/openclaw/workspaces"
+  local canonical_openclaw_workspaces_dir="${AGENTIC_ROOT}/openclaw/workspaces"
+  if [[ "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" == "${legacy_openclaw_workspaces_dir}" ]]; then
+    warn "migrating legacy AGENTIC_OPENCLAW_WORKSPACES_DIR to ${canonical_openclaw_workspaces_dir}"
+    AGENTIC_OPENCLAW_WORKSPACES_DIR="${canonical_openclaw_workspaces_dir}"
+    export AGENTIC_OPENCLAW_WORKSPACES_DIR
   fi
 }
 

@@ -163,10 +163,18 @@ openclaw agents add operator --workspace /workspace/wizard-default --non-interac
 openclaw agents list
 ```
 
-CLI state files persist under:
-- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/` (`OPENCLAW_HOME`)
-- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.json` (`OPENCLAW_CONFIG_PATH`)
-- `${AGENTIC_ROOT}/openclaw/workspaces/`
+CLI runtime now uses three explicit layers:
+- immutable stack-managed config:
+  - `${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json`
+  - owns gateway mode/bind/auth token wiring/tailscale posture
+- validated operator overlay:
+  - `${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json`
+  - allowed keys only: `agents.defaults.workspace`, `tools.profile`, `commands.{native,nativeSkills,restart,ownerDisplay}`, `session.dmScope`
+- writable runtime state:
+  - `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json`
+  - plus `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/` and `${AGENTIC_ROOT}/openclaw/workspaces/`
+
+`OPENCLAW_CONFIG_PATH` now points to a derived tmpfs file (`/tmp/openclaw.effective.json`) regenerated from those layers before each CLI invocation; it is no longer the source of truth.
 
 If you need a "brand-new install" reset (CLI-only or full module reset), follow:
 - `docs/runbooks/openclaw-explique-debutants.md` section `8. Reset "installation neuve" (clean reset)`
