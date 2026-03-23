@@ -153,13 +153,71 @@ other_session_sandbox_id="$(json_field "${response_other_session}" "sandbox_id")
 wait_for_active_sandboxes "${toolbox_cid}" "${claw_token}" 3 20
 status_payload="$(sandbox_status_payload "${toolbox_cid}" "${claw_token}")" \
   || fail "sandbox status endpoint failed"
-[[ "$(json_field "${status_payload}" "default_model")" == "${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}" ]] \
+status_default_model="$(json_field "${status_payload}" "default_model")" \
   || fail "sandbox status must expose default model"
+[[ -n "${status_default_model}" ]] \
+  || fail "sandbox status default model must not be empty"
+[[ "$(json_field "${status_payload}" "active_sessions")" == "2" ]] \
+  || fail "sandbox status must expose active session count"
+[[ "$(json_field "${status_payload}" "current_session_id")" == "beta" ]] \
+  || fail "sandbox status must expose the most recent session as current"
+
+operator_registry_file="${agentic_root}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
+[[ -s "${operator_registry_file}" ]] || fail "operator registry file missing: ${operator_registry_file}"
+operator_registry_report="$(python3 - "${operator_registry_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+sessions = payload.get("sessions") or {}
+sandboxes = payload.get("sandboxes") or {}
+alpha = sessions.get("alpha") or {}
+beta = sessions.get("beta") or {}
+
+print(f"current_session_id={payload.get('current_session_id', '')}")
+print(f"default_session_id={payload.get('default_session_id', '')}")
+print(f"default_model={payload.get('default_model', '')}")
+print(f"provider={payload.get('provider', '')}")
+print(f"policy_len={len(payload.get('policy_set') or [])}")
+print(f"active_sandboxes={len(sandboxes)}")
+print(f"active_sessions={len([item for item in sessions.values() if isinstance(item, dict) and item.get('active')])}")
+print(f"alpha_active_sandboxes={alpha.get('active_sandbox_count', -1)}")
+print(f"beta_current={str(beta.get('current', False)).lower()}")
+print(f"beta_last_health={beta.get('last_health', '')}")
+PY
+)"
+printf '%s\n' "${operator_registry_report}" | grep -q '^current_session_id=beta$' \
+  || fail "operator registry must track current session id"
+printf '%s\n' "${operator_registry_report}" | grep -q '^default_session_id=default-session$' \
+  || fail "operator registry must track default session id"
+printf '%s\n' "${operator_registry_report}" | grep -q "^default_model=${status_default_model}$" \
+  || fail "operator registry default model must match sandbox status payload"
+printf '%s\n' "${operator_registry_report}" | grep -q '^provider=ollama-gate$' \
+  || fail "operator registry must track provider label"
+printf '%s\n' "${operator_registry_report}" | grep -Eq '^policy_len=[1-9][0-9]*$' \
+  || fail "operator registry must track non-empty policy set"
+printf '%s\n' "${operator_registry_report}" | grep -q '^active_sandboxes=3$' \
+  || fail "operator registry must expose active sandbox count"
+printf '%s\n' "${operator_registry_report}" | grep -q '^active_sessions=2$' \
+  || fail "operator registry must expose active session count"
+printf '%s\n' "${operator_registry_report}" | grep -q '^alpha_active_sandboxes=2$' \
+  || fail "operator registry must aggregate active sandboxes per session"
+printf '%s\n' "${operator_registry_report}" | grep -q '^beta_current=true$' \
+  || fail "operator registry must mark the latest session as current"
+printf '%s\n' "${operator_registry_report}" | grep -q '^beta_last_health=ok$' \
+  || fail "operator registry must expose session health"
 
 ls_output="$("${agent_bin}" ls)"
 printf '%s\n' "${ls_output}" | grep -q '^tool' || fail "agent ls output is missing header"
-printf '%s\n' "${ls_output}" | grep -Eq '^openclaw.*sandboxes=3$' \
-  || fail "agent ls must expose active openclaw sandbox count"
+printf '%s\n' "${ls_output}" | grep -Eq '^openclaw.*sandboxes=3;sessions=2;current=beta;default_session=default-session;default_model=.*;provider=ollama-gate$' \
+  || fail "agent ls must expose operator-friendly openclaw runtime summary"
+
+"${agent_bin}" doctor >/tmp/agent-k7-doctor.out 2>&1 || true
+grep -q 'OK: openclaw operator registry is present, coherent, and secret-free' /tmp/agent-k7-doctor.out \
+  || fail "agent doctor must validate the openclaw operator registry when active"
+grep -q 'OK: openclaw-sandbox status endpoint exposes operator registry fields' /tmp/agent-k7-doctor.out \
+  || fail "agent doctor must validate the openclaw sandbox status contract when active"
 
 wait_for_active_sandboxes "${toolbox_cid}" "${claw_token}" 0 20
 status_after_expire="$(sandbox_status_payload "${toolbox_cid}" "${claw_token}")" \
@@ -188,6 +246,31 @@ print(len(payload.get("sandboxes") or {}))
 PY
 )"
 [[ "${registry_active}" == "0" ]] || fail "sandbox registry must be empty after TTL expiration"
+
+operator_post_expire="$(python3 - "${operator_registry_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+sessions = payload.get("sessions") or {}
+beta = sessions.get("beta") or {}
+
+print(f"active_sandboxes={len(payload.get('sandboxes') or {})}")
+print(f"recent_expired={len(payload.get('recent_expired') or [])}")
+print(f"beta_active={str(beta.get('active', True)).lower()}")
+print(f"beta_last_health={beta.get('last_health', '')}")
+PY
+)"
+printf '%s\n' "${operator_post_expire}" | grep -q '^active_sandboxes=0$' \
+  || fail "operator registry must drop active sandboxes after TTL expiration"
+recent_expired_count="$(printf '%s\n' "${operator_post_expire}" | awk -F= '/^recent_expired=/{print $2}')"
+[[ "${recent_expired_count}" =~ ^[0-9]+$ ]] && (( recent_expired_count >= 3 )) \
+  || fail "operator registry must retain recent expired sandboxes"
+printf '%s\n' "${operator_post_expire}" | grep -q '^beta_active=false$' \
+  || fail "operator registry must mark expired sessions inactive"
+printf '%s\n' "${operator_post_expire}" | grep -q '^beta_last_health=expired$' \
+  || fail "operator registry must preserve expired session health"
 
 audit_log="${agentic_root}/openclaw/logs/audit.jsonl"
 grep -q '"action":"lease_sandbox"' "${audit_log}" || fail "audit log must include sandbox lease actions"

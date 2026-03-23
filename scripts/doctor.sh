@@ -1118,6 +1118,10 @@ optional_openclaw_immutable_file="${AGENTIC_ROOT}/openclaw/config/immutable/open
 optional_openclaw_overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
 optional_openclaw_state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 optional_openclaw_approvals_dir="${AGENTIC_ROOT}/openclaw/state/approvals"
+optional_openclaw_sandbox_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
+optional_openclaw_operator_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
+optional_openclaw_token_file="${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
+optional_openclaw_webhook_secret_file="${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
 optional_openclaw_layer_helper="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_config_layers.py"
 if [[ -n "${optional_openclaw_cid}" ]]; then
   if ! assert_no_public_bind "${openclaw_webhook_host_port}"; then
@@ -1319,6 +1323,9 @@ if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
   if ! grep -q '^OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json$' <<<"${optional_openclaw_sandbox_env}"; then
     doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json"
   fi
+  if ! grep -q '^OPENCLAW_SANDBOX_OPERATOR_REGISTRY_FILE=/state/openclaw-state-registry.v1.json$' <<<"${optional_openclaw_sandbox_env}"; then
+    doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_OPERATOR_REGISTRY_FILE=/state/openclaw-state-registry.v1.json"
+  fi
   if ! grep -q '^OPENCLAW_APPROVALS_STATE_DIR=/approvals$' <<<"${optional_openclaw_sandbox_env}"; then
     doctor_fail "openclaw-sandbox must set OPENCLAW_APPROVALS_STATE_DIR=/approvals"
   fi
@@ -1333,9 +1340,9 @@ if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
   if [[ ! -d "${AGENTIC_ROOT}/openclaw/sandbox/workspaces" ]]; then
     doctor_fail "openclaw sandbox workspaces directory is missing: ${AGENTIC_ROOT}/openclaw/sandbox/workspaces"
   fi
-  if [[ ! -s "${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json" ]]; then
-    doctor_fail "openclaw sandbox registry is missing: ${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
-  elif ! python3 - "${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json" <<'PY' >/dev/null 2>&1
+  if [[ ! -s "${optional_openclaw_sandbox_registry_file}" ]]; then
+    doctor_fail "openclaw sandbox registry is missing: ${optional_openclaw_sandbox_registry_file}"
+  elif ! python3 - "${optional_openclaw_sandbox_registry_file}" <<'PY' >/dev/null 2>&1
 import json
 import pathlib
 import sys
@@ -1350,7 +1357,111 @@ if expired is not None and not isinstance(expired, list):
     raise SystemExit(1)
 PY
   then
-    doctor_fail "openclaw sandbox registry is invalid JSON: ${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
+    doctor_fail "openclaw sandbox registry is invalid JSON: ${optional_openclaw_sandbox_registry_file}"
+  else
+    ok "openclaw sandbox registry is present and valid"
+  fi
+  if [[ ! -s "${optional_openclaw_operator_registry_file}" ]]; then
+    doctor_fail "openclaw operator registry is missing: ${optional_openclaw_operator_registry_file}"
+  elif ! python3 - \
+    "${optional_openclaw_operator_registry_file}" \
+    "${optional_openclaw_sandbox_registry_file}" \
+    "${optional_openclaw_token_file}" \
+    "${optional_openclaw_webhook_secret_file}" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+operator_path = pathlib.Path(sys.argv[1])
+technical_path = pathlib.Path(sys.argv[2])
+secret_paths = [pathlib.Path(sys.argv[3]), pathlib.Path(sys.argv[4])]
+
+operator_raw = operator_path.read_text(encoding="utf-8")
+operator = json.loads(operator_raw)
+technical = json.loads(technical_path.read_text(encoding="utf-8"))
+
+if not isinstance(operator, dict):
+    raise SystemExit(1)
+if not isinstance(operator.get("sessions"), dict):
+    raise SystemExit(1)
+if not isinstance(operator.get("sandboxes"), dict):
+    raise SystemExit(1)
+if not isinstance(operator.get("recent_expired"), list):
+    raise SystemExit(1)
+
+default_model = operator.get("default_model")
+default_session_id = operator.get("default_session_id")
+provider = operator.get("provider")
+policy_set = operator.get("policy_set")
+if not isinstance(default_model, str) or not default_model:
+    raise SystemExit(1)
+if not isinstance(default_session_id, str) or not default_session_id:
+    raise SystemExit(1)
+if not isinstance(provider, str) or not provider:
+    raise SystemExit(1)
+if not isinstance(policy_set, list) or not policy_set or not all(isinstance(item, str) and item for item in policy_set):
+    raise SystemExit(1)
+
+technical_sandboxes = technical.get("sandboxes")
+if not isinstance(technical_sandboxes, dict):
+    raise SystemExit(1)
+operator_sandboxes = operator.get("sandboxes")
+if set(operator_sandboxes.keys()) != set(technical_sandboxes.keys()):
+    raise SystemExit(1)
+
+for record in operator_sandboxes.values():
+    if not isinstance(record, dict):
+        raise SystemExit(1)
+    for key in ("sandbox_id", "session_id", "model", "provider", "created_at", "workspace", "last_health"):
+        value = record.get(key)
+        if not isinstance(value, str):
+            raise SystemExit(1)
+    if not isinstance(record.get("current"), bool):
+        raise SystemExit(1)
+    if not isinstance(record.get("default"), bool):
+        raise SystemExit(1)
+    if not isinstance(record.get("policy_set"), list):
+        raise SystemExit(1)
+
+for session_id, record in operator.get("sessions").items():
+    if not isinstance(session_id, str) or not session_id or not isinstance(record, dict):
+        raise SystemExit(1)
+    if record.get("session_id") != session_id:
+        raise SystemExit(1)
+    for key in ("model", "provider", "created_at", "workspace", "last_health"):
+        value = record.get(key)
+        if not isinstance(value, str):
+            raise SystemExit(1)
+    if not isinstance(record.get("current"), bool):
+        raise SystemExit(1)
+    if not isinstance(record.get("default"), bool):
+        raise SystemExit(1)
+    if not isinstance(record.get("active"), bool):
+        raise SystemExit(1)
+    if not isinstance(record.get("active_sandbox_count"), int):
+        raise SystemExit(1)
+    models = record.get("models")
+    if not isinstance(models, list) or not all(isinstance(item, str) for item in models):
+        raise SystemExit(1)
+    policy = record.get("policy_set")
+    if not isinstance(policy, list) or not all(isinstance(item, str) and item for item in policy):
+        raise SystemExit(1)
+
+for path in secret_paths:
+    if not path.exists():
+        continue
+    secret = path.read_text(encoding="utf-8").strip()
+    if secret and secret in operator_raw:
+        raise SystemExit(1)
+
+for forbidden in ("token", "secret", "authorization"):
+    if forbidden in operator_raw.lower():
+        raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw operator registry is invalid or leaks sensitive data: ${optional_openclaw_operator_registry_file}"
+  else
+    ok "openclaw operator registry is present, coherent, and secret-free"
   fi
   if ! timeout 15 docker exec "${optional_openclaw_sandbox_cid}" sh -lc "python3 - <<'PY'
 import json
@@ -1365,10 +1476,12 @@ req = urllib.request.Request(
 )
 with urllib.request.urlopen(req, timeout=4) as resp:
     payload = json.loads(resp.read().decode('utf-8'))
-    if not isinstance(payload, dict) or 'active' not in payload:
+    if not isinstance(payload, dict) or 'active' not in payload or 'current_session_id' not in payload or 'sessions' not in payload:
         raise SystemExit(1)
 PY"; then
-    doctor_fail "openclaw-sandbox status endpoint must expose session sandbox registry (/v1/sandboxes/status)"
+    doctor_fail "openclaw-sandbox status endpoint must expose session/operator registry fields (/v1/sandboxes/status)"
+  else
+    ok "openclaw-sandbox status endpoint exposes operator registry fields"
   fi
 fi
 

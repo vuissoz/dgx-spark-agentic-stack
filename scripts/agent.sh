@@ -1362,6 +1362,56 @@ PY
 
 openclaw_runtime_summary() {
   local registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
+  local operator_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
+
+  if [[ -s "${operator_registry_file}" ]]; then
+    python3 - "${operator_registry_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    print("invalid-registry")
+    raise SystemExit(0)
+
+if not isinstance(payload, dict):
+    print("invalid-registry")
+    raise SystemExit(0)
+
+sandboxes = payload.get("sandboxes")
+sessions = payload.get("sessions")
+if not isinstance(sandboxes, dict) or not isinstance(sessions, dict):
+    print("invalid-registry")
+    raise SystemExit(0)
+
+active_sessions = [
+    record
+    for record in sessions.values()
+    if isinstance(record, dict) and bool(record.get("active"))
+]
+current_session = str(payload.get("current_session_id", "")).strip() or "-"
+default_session = str(payload.get("default_session_id", "")).strip() or "-"
+default_model = str(payload.get("default_model", "")).strip() or "-"
+provider = str(payload.get("provider", "")).strip() or "-"
+
+print(
+    ";".join(
+        [
+            f"sandboxes={len(sandboxes)}",
+            f"sessions={len(active_sessions)}",
+            f"current={current_session}",
+            f"default_session={default_session}",
+            f"default_model={default_model}",
+            f"provider={provider}",
+        ]
+    )
+)
+PY
+    return 0
+  fi
 
   if [[ ! -s "${registry_file}" ]]; then
     printf '%s\n' "-"

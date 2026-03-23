@@ -284,6 +284,34 @@ def sandbox_workspaces_root(cfg: dict[str, Any]) -> Path:
     return Path(str(cfg.get("workspaces_root", "/sandbox-workspaces")))
 
 
+def sandbox_operator_registry_path(cfg: dict[str, Any]) -> Path:
+    return Path(str(cfg.get("operator_registry_file", "/state/openclaw-state-registry.v1.json")))
+
+
+def sandbox_default_session_id(cfg: dict[str, Any]) -> str:
+    return str(cfg.get("default_session_id", "default-session")).strip() or "default-session"
+
+
+def sandbox_provider_label(cfg: dict[str, Any]) -> str:
+    return str(cfg.get("provider_label", "ollama-gate")).strip() or "ollama-gate"
+
+
+def sandbox_policy_set(cfg: dict[str, Any]) -> list[str]:
+    raw = cfg.get("policy_set", ["tool_allowlist", "approvals", "ttl_reaper"])
+    if not isinstance(raw, list):
+        raw = ["tool_allowlist", "approvals", "ttl_reaper"]
+
+    items: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        items.append(text)
+    return items
+
+
 def sandbox_registry_load(cfg: dict[str, Any]) -> dict[str, Any]:
     payload = read_json_file(sandbox_registry_path(cfg), {})
     if not isinstance(payload, dict):
@@ -302,6 +330,53 @@ def sandbox_registry_save(cfg: dict[str, Any], payload: dict[str, Any]) -> None:
     normalized["sandboxes"] = payload.get("sandboxes", {})
     normalized["expired"] = payload.get("expired", [])[-32:]
     write_json_file_atomic(sandbox_registry_path(cfg), normalized)
+
+
+def sandbox_operator_registry_load(cfg: dict[str, Any]) -> dict[str, Any]:
+    payload = read_json_file(sandbox_operator_registry_path(cfg), {})
+    if not isinstance(payload, dict):
+        payload = {}
+
+    sessions = payload.get("sessions")
+    if not isinstance(sessions, dict):
+        sessions = {}
+
+    sandboxes = payload.get("sandboxes")
+    if not isinstance(sandboxes, dict):
+        sandboxes = {}
+
+    recent_expired = payload.get("recent_expired")
+    if not isinstance(recent_expired, list):
+        recent_expired = []
+
+    return {
+        "version": 1,
+        "updated_at": str(payload.get("updated_at", "")),
+        "current_sandbox_id": str(payload.get("current_sandbox_id", "")),
+        "current_session_id": str(payload.get("current_session_id", "")),
+        "default_model": str(payload.get("default_model", cfg.get("default_model", ""))),
+        "default_session_id": str(payload.get("default_session_id", sandbox_default_session_id(cfg))),
+        "policy_set": sandbox_policy_set(cfg),
+        "provider": str(payload.get("provider", sandbox_provider_label(cfg))) or sandbox_provider_label(cfg),
+        "recent_expired": recent_expired[-32:],
+        "sandboxes": sandboxes,
+        "sessions": sessions,
+    }
+
+
+def sandbox_operator_registry_save(cfg: dict[str, Any], payload: dict[str, Any]) -> None:
+    normalized = sandbox_operator_registry_load({"operator_registry_file": str(sandbox_operator_registry_path(cfg))})
+    normalized["updated_at"] = str(payload.get("updated_at", now_ts()))
+    normalized["current_sandbox_id"] = str(payload.get("current_sandbox_id", ""))
+    normalized["current_session_id"] = str(payload.get("current_session_id", sandbox_default_session_id(cfg)))
+    normalized["default_session_id"] = str(payload.get("default_session_id", sandbox_default_session_id(cfg)))
+    normalized["default_model"] = str(payload.get("default_model", cfg.get("default_model", "")))
+    normalized["provider"] = str(payload.get("provider", sandbox_provider_label(cfg))) or sandbox_provider_label(cfg)
+    normalized["policy_set"] = payload.get("policy_set", sandbox_policy_set(cfg))
+    normalized["sessions"] = payload.get("sessions", {})
+    normalized["sandboxes"] = payload.get("sandboxes", {})
+    normalized["recent_expired"] = payload.get("recent_expired", [])[-32:]
+    write_json_file_atomic(sandbox_operator_registry_path(cfg), normalized)
 
 
 def sandbox_id_for(session_id: str, model: str) -> str:
@@ -325,6 +400,229 @@ def sandbox_metadata_summary(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def sandbox_operator_sandbox_summary(
+    cfg: dict[str, Any],
+    record: dict[str, Any],
+    *,
+    current_session_id: str,
+    current_sandbox_id: str,
+) -> dict[str, Any]:
+    session_id = str(record.get("session_id", ""))
+    model = str(record.get("model", ""))
+    default_session_id = sandbox_default_session_id(cfg)
+    default_model = str(cfg.get("default_model", ""))
+    workspace = str(record.get("workspace_hint", "")).strip() or str(record.get("workspace_dir", ""))
+    current = False
+    if current_sandbox_id:
+        current = str(record.get("sandbox_id", "")) == current_sandbox_id
+    elif current_session_id:
+        current = session_id == current_session_id
+
+    return {
+        "sandbox_id": str(record.get("sandbox_id", "")),
+        "session_id": session_id,
+        "current": current,
+        "default": session_id == default_session_id and model == default_model,
+        "model": model,
+        "provider": sandbox_provider_label(cfg),
+        "policy_set": sandbox_policy_set(cfg),
+        "created_at": str(record.get("created_at", "")),
+        "workspace": workspace,
+        "workspace_dir": str(record.get("workspace_dir", "")),
+        "last_health": "ok",
+        "last_health_at": str(record.get("last_used_at", "")) or now_ts(),
+        "expires_at": str(record.get("expires_at", "")),
+    }
+
+
+def sandbox_operator_recent_expired_entry(cfg: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    workspace = str(record.get("workspace_hint", "")).strip() or str(record.get("workspace_dir", ""))
+    return {
+        "sandbox_id": str(record.get("sandbox_id", "")),
+        "session_id": str(record.get("session_id", "")),
+        "model": str(record.get("model", "")),
+        "provider": sandbox_provider_label(cfg),
+        "policy_set": sandbox_policy_set(cfg),
+        "created_at": str(record.get("created_at", "")),
+        "workspace": workspace,
+        "last_health": "expired",
+        "last_health_at": str(record.get("expired_at", "")),
+        "expires_at": str(record.get("expires_at", "")),
+        "expired_at": str(record.get("expired_at", "")),
+        "expired_reason": str(record.get("expired_reason", "")),
+    }
+
+
+def sandbox_operator_session_baseline(cfg: dict[str, Any], session_id: str) -> dict[str, Any]:
+    return {
+        "session_id": session_id,
+        "current": False,
+        "default": session_id == sandbox_default_session_id(cfg),
+        "active": False,
+        "active_sandbox_count": 0,
+        "model": "",
+        "models": [],
+        "provider": sandbox_provider_label(cfg),
+        "policy_set": sandbox_policy_set(cfg),
+        "created_at": "",
+        "workspace": "",
+        "last_health": "unknown",
+        "last_health_at": "",
+        "last_sandbox_id": "",
+        "expires_at": "",
+    }
+
+
+def sync_sandbox_operator_registry(
+    cfg: dict[str, Any],
+    registry: dict[str, Any],
+    *,
+    current_session_id: str = "",
+    current_sandbox_id: str = "",
+) -> dict[str, Any]:
+    operator = sandbox_operator_registry_load(cfg)
+    previous_sessions = operator.get("sessions", {})
+    if not isinstance(previous_sessions, dict):
+        previous_sessions = {}
+
+    default_session_id = sandbox_default_session_id(cfg)
+    current_session = str(current_session_id or operator.get("current_session_id", "") or default_session_id)
+    current_sandbox = str(current_sandbox_id or operator.get("current_sandbox_id", ""))
+
+    recent_expired_raw = registry.get("expired", [])
+    if not isinstance(recent_expired_raw, list):
+        recent_expired_raw = []
+    recent_expired = [sandbox_operator_recent_expired_entry(cfg, item) for item in recent_expired_raw if isinstance(item, dict)][
+        -32:
+    ]
+
+    latest_expired_by_session: dict[str, dict[str, Any]] = {}
+    for item in recent_expired:
+        session_id = str(item.get("session_id", ""))
+        if session_id:
+            latest_expired_by_session[session_id] = item
+
+    sandboxes_raw = registry.get("sandboxes", {})
+    if not isinstance(sandboxes_raw, dict):
+        sandboxes_raw = {}
+
+    sessions: dict[str, dict[str, Any]] = {}
+    for session_id, entry in previous_sessions.items():
+        if isinstance(session_id, str) and session_id and isinstance(entry, dict):
+            session_entry = dict(entry)
+            session_entry["active"] = False
+            session_entry["active_sandbox_count"] = 0
+            session_entry["current"] = False
+            sessions[session_id] = session_entry
+
+    active_sandboxes: dict[str, dict[str, Any]] = {}
+    session_best_epoch: dict[str, int] = {}
+    for sandbox_id, record in sorted(sandboxes_raw.items()):
+        if not isinstance(record, dict):
+            continue
+        session_id = str(record.get("session_id", "")).strip() or default_session_id
+        summary = sandbox_operator_sandbox_summary(
+            cfg,
+            record,
+            current_session_id=current_session,
+            current_sandbox_id=current_sandbox,
+        )
+        active_sandboxes[sandbox_id] = summary
+
+        session_entry = sessions.get(session_id)
+        if not isinstance(session_entry, dict):
+            session_entry = sandbox_operator_session_baseline(cfg, session_id)
+            sessions[session_id] = session_entry
+
+        models = session_entry.get("models")
+        if not isinstance(models, list):
+            models = []
+        if summary["model"] and summary["model"] not in models:
+            models.append(summary["model"])
+
+        created_at = str(session_entry.get("created_at", "")).strip()
+        if not created_at:
+            created_at = summary["created_at"]
+        elif summary["created_at"] and summary["created_at"] < created_at:
+            created_at = summary["created_at"]
+
+        session_entry["session_id"] = session_id
+        session_entry["current"] = session_id == current_session
+        session_entry["default"] = session_id == default_session_id
+        session_entry["active"] = True
+        session_entry["active_sandbox_count"] = int(session_entry.get("active_sandbox_count", 0) or 0) + 1
+        session_entry["provider"] = sandbox_provider_label(cfg)
+        session_entry["policy_set"] = sandbox_policy_set(cfg)
+        session_entry["created_at"] = created_at
+        session_entry["workspace"] = summary["workspace"] or session_entry.get("workspace", "")
+        session_entry["last_health"] = "ok"
+        session_entry["last_health_at"] = summary["last_health_at"]
+        session_entry["expires_at"] = summary["expires_at"]
+        session_entry["models"] = sorted([item for item in models if isinstance(item, str) and item])
+
+        best_epoch = session_best_epoch.get(session_id, -1)
+        current_epoch = int(record.get("last_used_at_epoch", 0) or 0)
+        if current_epoch >= best_epoch:
+            session_best_epoch[session_id] = current_epoch
+            session_entry["model"] = summary["model"]
+            session_entry["last_sandbox_id"] = summary["sandbox_id"]
+
+    for session_id in list(sessions.keys()):
+        session_entry = sessions.get(session_id)
+        if not isinstance(session_entry, dict):
+            sessions.pop(session_id, None)
+            continue
+        session_entry["session_id"] = session_id
+        session_entry["current"] = session_id == current_session
+        session_entry["default"] = session_id == default_session_id
+        session_entry["provider"] = sandbox_provider_label(cfg)
+        session_entry["policy_set"] = sandbox_policy_set(cfg)
+        session_entry["active_sandbox_count"] = int(session_entry.get("active_sandbox_count", 0) or 0)
+        session_entry["active"] = session_entry["active_sandbox_count"] > 0
+
+        models = session_entry.get("models")
+        if not isinstance(models, list):
+            models = []
+        session_entry["models"] = sorted([item for item in models if isinstance(item, str) and item])
+
+        if session_entry["active"]:
+            continue
+
+        expired_entry = latest_expired_by_session.get(session_id)
+        if expired_entry is not None:
+            session_entry["last_health"] = "expired"
+            session_entry["last_health_at"] = expired_entry["last_health_at"]
+            session_entry["expires_at"] = expired_entry["expired_at"]
+            if expired_entry.get("model"):
+                session_entry["model"] = expired_entry["model"]
+            if expired_entry.get("workspace"):
+                session_entry["workspace"] = expired_entry["workspace"]
+            if expired_entry.get("sandbox_id"):
+                session_entry["last_sandbox_id"] = expired_entry["sandbox_id"]
+            if expired_entry.get("model") and expired_entry["model"] not in session_entry["models"]:
+                session_entry["models"].append(expired_entry["model"])
+                session_entry["models"] = sorted(session_entry["models"])
+
+        if not session_entry.get("last_health"):
+            session_entry["last_health"] = "unknown"
+
+    payload = {
+        "version": 1,
+        "updated_at": now_ts(),
+        "current_sandbox_id": current_sandbox if current_sandbox in active_sandboxes else "",
+        "current_session_id": current_session,
+        "default_model": str(cfg.get("default_model", "")),
+        "default_session_id": default_session_id,
+        "provider": sandbox_provider_label(cfg),
+        "policy_set": sandbox_policy_set(cfg),
+        "recent_expired": recent_expired,
+        "sandboxes": active_sandboxes,
+        "sessions": dict(sorted(sessions.items())),
+    }
+    sandbox_operator_registry_save(cfg, payload)
+    return payload
+
+
 def ensure_sandbox_registry_baseline(cfg: dict[str, Any]) -> None:
     state_root = sandbox_state_root(cfg)
     workspaces_root = sandbox_workspaces_root(cfg)
@@ -332,8 +630,26 @@ def ensure_sandbox_registry_baseline(cfg: dict[str, Any]) -> None:
     workspaces_root.mkdir(parents=True, exist_ok=True)
     registry_path = sandbox_registry_path(cfg)
     if registry_path.exists():
+        if not sandbox_operator_registry_path(cfg).exists():
+            sync_sandbox_operator_registry(cfg, sandbox_registry_load(cfg))
         return
     sandbox_registry_save(cfg, {"version": 1, "sandboxes": {}, "expired": []})
+    sandbox_operator_registry_save(
+        cfg,
+        {
+            "version": 1,
+            "updated_at": now_ts(),
+            "current_sandbox_id": "",
+            "current_session_id": sandbox_default_session_id(cfg),
+            "default_model": str(cfg.get("default_model", "")),
+            "default_session_id": sandbox_default_session_id(cfg),
+            "provider": sandbox_provider_label(cfg),
+            "policy_set": sandbox_policy_set(cfg),
+            "recent_expired": [],
+            "sandboxes": {},
+            "sessions": {},
+        },
+    )
 
 
 def _sandbox_expire_locked(
@@ -437,6 +753,12 @@ def lease_session_sandbox(
         sandboxes[sandbox_id] = existing
         sandbox_registry_save(cfg, registry)
         write_json_file_atomic(state_dir / "metadata.json", existing)
+        sync_sandbox_operator_registry(
+            cfg,
+            registry,
+            current_session_id=session_id,
+            current_sandbox_id=sandbox_id,
+        )
 
     return sandbox_metadata_summary(existing), reused
 
@@ -456,12 +778,24 @@ def sandbox_status_payload(cfg: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(sandboxes, dict):
             sandboxes = {}
         items = [sandbox_metadata_summary(record) for _, record in sorted(sandboxes.items()) if isinstance(record, dict)]
+        operator_registry = sync_sandbox_operator_registry(cfg, registry)
+        operator_sessions = operator_registry.get("sessions", {})
+        if not isinstance(operator_sessions, dict):
+            operator_sessions = {}
         payload = {
             "active": len(items),
+            "active_sessions": len(
+                [entry for entry in operator_sessions.values() if isinstance(entry, dict) and bool(entry.get("active"))]
+            ),
+            "current_session_id": str(operator_registry.get("current_session_id", "")),
+            "default_session_id": str(operator_registry.get("default_session_id", "")),
             "default_model": str(cfg.get("default_model", "")),
             "idle_ttl_sec": int(cfg.get("session_ttl_sec", 1800) or 1800),
+            "policy_set": sandbox_policy_set(cfg),
+            "provider": sandbox_provider_label(cfg),
             "recent_expired": registry.get("expired", [])[-8:],
             "sandboxes": items,
+            "sessions": list(operator_sessions.values()),
         }
 
     for item in expired_items:
@@ -496,6 +830,7 @@ def sandbox_reaper_loop(cfg: dict[str, Any], stop_event: threading.Event) -> Non
             expired_items = _sandbox_expire_locked(cfg, registry, now_epoch=epoch_now())
             if expired_items:
                 sandbox_registry_save(cfg, registry)
+            sync_sandbox_operator_registry(cfg, registry)
 
         for item in expired_items:
             append_audit(
@@ -1040,7 +1375,10 @@ async function loadStatus() {
       '<div>Sandbox: <strong class=\"' + (runtime.sandbox === 'reachable' ? 'ok' : 'bad') + '\">' + (runtime.sandbox || '-') + '</strong></div>';
     sandboxesEl.innerHTML =
       '<div>Active: <strong>' + (execPlane.active ?? '-') + '</strong></div>' +
+      '<div>Sessions: <strong>' + (execPlane.active_sessions ?? '-') + '</strong></div>' +
+      '<div>Current session: <strong>' + (execPlane.current_session_id || '-') + '</strong></div>' +
       '<div>Default model: <strong>' + (execPlane.default_model || '-') + '</strong></div>' +
+      '<div>Provider: <strong>' + (execPlane.provider || '-') + '</strong></div>' +
       '<div>Recent expired: <strong>' + ((execPlane.recent_expired || []).length ?? '-') + '</strong></div>';
     relayEl.innerHTML =
       '<div>Pending: <strong>' + (relay.pending ?? '-') + '</strong></div>' +
@@ -1113,7 +1451,15 @@ setInterval(loadStatus, 5000);
             except Exception:
                 relay = {"pending": None, "done": None, "dead": None}
 
-        execution_plane: dict[str, Any] = {"active": None, "default_model": None, "recent_expired": []}
+        execution_plane: dict[str, Any] = {
+            "active": None,
+            "active_sessions": None,
+            "current_session_id": "",
+            "default_model": None,
+            "default_session_id": "",
+            "provider": "",
+            "recent_expired": [],
+        }
         sandbox_status_url = str(self.cfg.get("sandbox_status_url", "")).strip()
         if sandbox_status_url:
             try:
@@ -1127,11 +1473,23 @@ setInterval(loadStatus, 5000);
                     if isinstance(payload, dict):
                         execution_plane = {
                             "active": payload.get("active"),
+                            "active_sessions": payload.get("active_sessions"),
+                            "current_session_id": payload.get("current_session_id", ""),
                             "default_model": payload.get("default_model"),
+                            "default_session_id": payload.get("default_session_id", ""),
+                            "provider": payload.get("provider", ""),
                             "recent_expired": payload.get("recent_expired", []),
                         }
             except Exception:
-                execution_plane = {"active": None, "default_model": None, "recent_expired": []}
+                execution_plane = {
+                    "active": None,
+                    "active_sessions": None,
+                    "current_session_id": "",
+                    "default_model": None,
+                    "default_session_id": "",
+                    "provider": "",
+                    "recent_expired": [],
+                }
 
         approvals: dict[str, Any] = {"pending": None, "approved": None, "denied": None, "expired": None}
         approvals_state_dir = str(self.cfg.get("approvals_state_dir", "")).strip()
@@ -2040,9 +2398,20 @@ def main() -> int:
             "allowlist_file": allowlist_file,
             "audit_log": audit_log,
             "default_model": os.environ.get("OPENCLAW_SANDBOX_DEFAULT_MODEL", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "default_session_id": os.environ.get("OPENCLAW_SANDBOX_DEFAULT_SESSION_ID", "default-session"),
+            "provider_label": os.environ.get("OPENCLAW_SANDBOX_PROVIDER_LABEL", "ollama-gate"),
+            "policy_set": [
+                "tool_allowlist",
+                "approvals",
+                "ttl_reaper",
+            ],
             "session_ttl_sec": int(os.environ.get("OPENCLAW_SANDBOX_SESSION_TTL_SEC", "1800") or 1800),
             "reap_interval_sec": float(os.environ.get("OPENCLAW_SANDBOX_REAP_INTERVAL_SEC", "15") or 15),
             "registry_file": os.environ.get("OPENCLAW_SANDBOX_REGISTRY_FILE", "/state/session-sandboxes.json"),
+            "operator_registry_file": os.environ.get(
+                "OPENCLAW_SANDBOX_OPERATOR_REGISTRY_FILE",
+                "/state/openclaw-state-registry.v1.json",
+            ),
             "sandboxes_state_root": os.environ.get("OPENCLAW_SANDBOX_STATE_ROOT", "/state/sandboxes"),
             "workspaces_root": os.environ.get("OPENCLAW_SANDBOX_WORKSPACES_DIR", "/sandbox-workspaces"),
             "sandbox_lock": threading.Lock(),
