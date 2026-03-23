@@ -7,11 +7,12 @@ source "${SCRIPT_DIR}/../../scripts/lib/runtime.sh"
 
 reason="manual"
 declare -a compose_files=()
+declare -a compose_overrides=()
 
 usage() {
   cat <<USAGE
 Usage:
-  snapshot.sh [--reason <reason>] [compose_file...]
+  snapshot.sh [--reason <reason>] [--compose-override <path>] [compose_file...]
 USAGE
 }
 
@@ -49,6 +50,11 @@ parse_args() {
         reason="$2"
         shift 2
         ;;
+      --compose-override)
+        [[ $# -ge 2 ]] || die "--compose-override requires a value"
+        compose_overrides+=("$2")
+        shift 2
+        ;;
       -h|--help|help)
         usage
         exit 0
@@ -76,6 +82,11 @@ main() {
   for compose_file in "${compose_files[@]}"; do
     [[ -f "${compose_file}" ]] || die "compose file not found: ${compose_file}"
     compose_args+=("-f" "${compose_file}")
+  done
+  local compose_override
+  for compose_override in "${compose_overrides[@]}"; do
+    [[ -f "${compose_override}" ]] || die "compose override file not found: ${compose_override}"
+    compose_args+=("-f" "${compose_override}")
   done
 
   local release_id release_dir current_link changes_log

@@ -82,11 +82,15 @@ Important:
 ### `./agent update`
 
 `agent update` fait, dans cet ordre:
-1. build local `core` (si necessaire),
-2. build local `agents` (si necessaire),
-3. `docker compose ... pull --ignore-pull-failures`,
-4. `docker compose ... up -d --remove-orphans`,
-5. snapshot release (digests + compose effectif + etat).
+1. resolution deterministe des valeurs operateur `latest` supportees:
+   - images Docker `:latest` -> digest `repo@sha256:...`,
+   - specs npm `@latest` -> version concrete,
+   - `AGENTIC_OPENCLAW_INSTALL_VERSION=latest` -> version concrete OpenClaw,
+2. build local `core` (si necessaire) avec ces valeurs resolues,
+3. build local `agents` (si necessaire) avec ces valeurs resolues,
+4. `docker compose ... pull --ignore-pull-failures`,
+5. `docker compose ... up -d --remove-orphans`,
+6. snapshot release (digests + compose effectif + etat) + artefacts de resolution.
 
 ## 3) Stamps de build (anti-rebuild inutile)
 
@@ -133,6 +137,9 @@ Artefacts cles:
 - `images.json` (image configuree + image resolue + repo digest si disponible),
 - `compose.effective.yml`,
 - `compose.files`,
+- `latest-resolution.json` (valeur demandee vs valeur resolue pour les entrees `latest` gerees),
+- `runtime.resolved.env` (valeurs concretes utilisees pendant `agent update`),
+- `compose.resolved.override.yml` (override compose digest-pinne utilise pour le deploiement),
 - `runtime.env` (sanitise),
 - `release.meta`.
 
@@ -145,6 +152,10 @@ Rollback deterministe:
 Note sur les images locales:
 - un `repo_digest` peut etre vide pour des tags purement locaux,
 - la trace reste exploitable via `configured_image` et `resolved_image`.
+
+Important:
+- `runtime.env` conserve l'intention operateur (`latest` peut y rester),
+- la release active est conforme seulement si `latest-resolution.json` existe et relie cette intention a des versions/digests concrets.
 
 ## 6) Forcer un rebuild propre
 

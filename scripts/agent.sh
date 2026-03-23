@@ -8,6 +8,7 @@ source "${SCRIPT_DIR}/lib/runtime.sh"
 AGENT_RUNTIME_ENV_FILE="${AGENTIC_ROOT}/deployments/runtime.env"
 AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapshot.sh"
 AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
+AGENT_RELEASE_RESOLVE_LATEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/resolve_latest.py"
 AGENT_BACKUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/backups/time_machine.sh"
 AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
@@ -580,6 +581,12 @@ core_service_build_fingerprint() {
   done
 
   (
+    case "${service}" in
+      openclaw)
+        printf 'openclaw_install_cli_script=%s\n' "${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT}"
+        printf 'openclaw_install_version=%s\n' "${AGENTIC_OPENCLAW_INSTALL_VERSION}"
+        ;;
+    esac
     for file in "${files[@]}"; do
       sha256sum "${file}"
     done
@@ -683,6 +690,15 @@ agent_base_build_fingerprint() {
     printf 'image=%s\n' "${AGENTIC_AGENT_BASE_IMAGE}"
     printf 'context=%s\n' "${context_real}"
     printf 'dockerfile=%s\n' "${dockerfile_real}"
+    printf 'install_mode=%s\n' "${AGENTIC_AGENT_CLI_INSTALL_MODE}"
+    printf 'codex_cli_npm_spec=%s\n' "${AGENTIC_CODEX_CLI_NPM_SPEC}"
+    printf 'claude_code_npm_spec=%s\n' "${AGENTIC_CLAUDE_CODE_NPM_SPEC}"
+    printf 'opencode_npm_spec=%s\n' "${AGENTIC_OPENCODE_NPM_SPEC}"
+    printf 'pi_coding_agent_npm_spec=%s\n' "${AGENTIC_PI_CODING_AGENT_NPM_SPEC}"
+    printf 'openhands_install_script=%s\n' "${AGENTIC_OPENHANDS_INSTALL_SCRIPT}"
+    printf 'openclaw_install_cli_script=%s\n' "${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT}"
+    printf 'openclaw_install_version=%s\n' "${AGENTIC_OPENCLAW_INSTALL_VERSION}"
+    printf 'vibe_install_script=%s\n' "${AGENTIC_VIBE_INSTALL_SCRIPT}"
     sha256sum "${dockerfile_real}"
     if [[ "${dockerfile_real}" == "${default_dockerfile_real}" ]]; then
       [[ -f "${default_entrypoint}" ]] || die "default agent entrypoint missing: ${default_entrypoint}"
@@ -756,6 +772,56 @@ build_agents_local_images() {
   fi
 
   assert_agent_base_image_contract "${image_ref}"
+}
+
+resolve_update_latest_inputs() {
+  local output_dir="$1"
+  shift
+  local -a compose_files=("$@")
+
+  require_cmd docker
+  require_cmd python3
+  [[ -f "${AGENT_RELEASE_RESOLVE_LATEST_SCRIPT}" ]] || die "latest resolver script missing: ${AGENT_RELEASE_RESOLVE_LATEST_SCRIPT}"
+
+  local -a cmd=(
+    python3 "${AGENT_RELEASE_RESOLVE_LATEST_SCRIPT}"
+    --project-name "${AGENTIC_COMPOSE_PROJECT}"
+    --output-dir "${output_dir}"
+  )
+  local compose_file
+  for compose_file in "${compose_files[@]}"; do
+    cmd+=(-f "${compose_file}")
+  done
+
+  "${cmd[@]}"
+}
+
+apply_resolved_runtime_env_file() {
+  local env_file="$1"
+  [[ -f "${env_file}" ]] || return 0
+
+  local line key value
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -n "${line}" ]] || continue
+    [[ "${line}" == *=* ]] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    export "${key}=${value}"
+  done < "${env_file}"
+}
+
+capture_update_resolution_artifacts() {
+  local release_id="$1"
+  local resolution_dir="$2"
+  local release_dir="${AGENTIC_ROOT}/deployments/releases/${release_id}"
+  [[ -d "${release_dir}" ]] || die "release directory missing after snapshot: ${release_dir}"
+
+  local artifact
+  for artifact in latest-resolution.json runtime.resolved.env compose.resolved.override.yml; do
+    [[ -f "${resolution_dir}/${artifact}" ]] || continue
+    install -m 0640 "${resolution_dir}/${artifact}" "${release_dir}/${artifact}"
+  done
 }
 
 service_container_id() {
@@ -2662,11 +2728,22 @@ cmd_update() {
   mapfile -t compose_files < <(existing_compose_files)
   [[ "${#compose_files[@]}" -gt 0 ]] || die "No compose files available to update"
 
+  local resolution_dir
+  resolution_dir="$(mktemp -d)"
+  cleanup_cmd_update_resolution() {
+    rm -rf "${resolution_dir}"
+  }
+  trap cleanup_cmd_update_resolution RETURN
+
+  resolve_update_latest_inputs "${resolution_dir}" "${compose_files[@]}"
+  apply_resolved_runtime_env_file "${resolution_dir}/runtime.resolved.env"
+
   local -a compose_args=()
   local compose_file
   for compose_file in "${compose_files[@]}"; do
     compose_args+=("-f" "${compose_file}")
   done
+  compose_args+=("-f" "${resolution_dir}/compose.resolved.override.yml")
 
   if [[ -f "$(stack_to_compose_file core)" ]]; then
     build_core_local_images "$(stack_to_compose_file core)"
@@ -2687,7 +2764,8 @@ cmd_update() {
   apply_core_network_policy
 
   local release_id
-  release_id="$("${AGENT_RELEASE_SNAPSHOT_SCRIPT}" --reason update "${compose_files[@]}")"
+  release_id="$("${AGENT_RELEASE_SNAPSHOT_SCRIPT}" --reason update --compose-override "${resolution_dir}/compose.resolved.override.yml" "${compose_files[@]}")"
+  capture_update_resolution_artifacts "${release_id}" "${resolution_dir}"
   printf 'update completed, release=%s\n' "${release_id}"
 }
 

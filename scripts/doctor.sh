@@ -1437,6 +1437,8 @@ if [[ ! -L "${current_release_dir}" && ! -d "${current_release_dir}" ]]; then
   doctor_fail_or_warn "no active release snapshot found at ${current_release_dir}"
 else
   release_images_file="${current_release_dir}/images.json"
+  release_runtime_env_file="${current_release_dir}/runtime.env"
+  release_latest_resolution_file="${current_release_dir}/latest-resolution.json"
   if [[ ! -s "${release_images_file}" ]]; then
     legacy_release_images_file="$(find "${current_release_dir}" -mindepth 2 -maxdepth 2 -type f -name images.json 2>/dev/null | sort | tail -n 1 || true)"
     if [[ -n "${legacy_release_images_file}" && -s "${legacy_release_images_file}" ]]; then
@@ -1447,6 +1449,101 @@ else
     fi
   else
     ok "active release images manifest is present"
+  fi
+
+  if ! python3 - "${release_images_file}" "${release_runtime_env_file}" "${release_latest_resolution_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+images_path = pathlib.Path(sys.argv[1])
+runtime_env_path = pathlib.Path(sys.argv[2])
+resolution_path = pathlib.Path(sys.argv[3])
+
+messages = []
+
+def image_is_mutable(ref: str) -> bool:
+    if not ref or "@sha256:" in ref:
+        return False
+    if ref.startswith("agentic/") or ref.endswith(":local"):
+        return False
+    base = ref.split("@", 1)[0]
+    last_slash = base.rfind("/")
+    last_colon = base.rfind(":")
+    if last_colon <= last_slash:
+        return True
+    return base.endswith(":latest")
+
+mutable_runtime_keys = {
+    "AGENTIC_CODEX_CLI_NPM_SPEC": "@latest",
+    "AGENTIC_CLAUDE_CODE_NPM_SPEC": "@latest",
+    "AGENTIC_OPENCODE_NPM_SPEC": "@latest",
+    "AGENTIC_PI_CODING_AGENT_NPM_SPEC": "@latest",
+    "AGENTIC_OPENCLAW_INSTALL_VERSION": "latest",
+}
+
+if resolution_path.is_file():
+    try:
+        payload = json.loads(resolution_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        messages.append(f"latest resolution manifest is unreadable: {exc}")
+    else:
+        runtime_inputs = payload.get("runtime_inputs")
+        docker_images = payload.get("docker_images")
+        if not isinstance(runtime_inputs, list) or not isinstance(docker_images, list):
+            messages.append("latest resolution manifest has an invalid schema")
+        else:
+            for item in runtime_inputs:
+                requested = str(item.get("requested") or "")
+                resolved = str(item.get("resolved") or "")
+                if requested.endswith("@latest") or requested == "latest":
+                    if not resolved or resolved == requested or resolved.endswith("@latest") or resolved == "latest":
+                        messages.append(
+                            f"runtime latest value is not deterministically resolved ({item.get('env', 'unknown')}: {requested} -> {resolved or '<empty>'})"
+                        )
+            for item in docker_images:
+                requested = str(item.get("requested") or "")
+                resolved = str(item.get("resolved") or "")
+                service = str(item.get("service") or "unknown")
+                if image_is_mutable(requested) and image_is_mutable(resolved):
+                    messages.append(
+                        f"service {service} still uses a mutable image after update ({requested} -> {resolved})"
+                    )
+else:
+    if images_path.is_file():
+        try:
+            images = json.loads(images_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            messages.append(f"images manifest is unreadable: {exc}")
+        else:
+            for item in images:
+                service = str(item.get("service") or "unknown")
+                configured = str(item.get("configured_image") or "")
+                if image_is_mutable(configured):
+                    messages.append(
+                        f"active release has no latest-resolution.json and service {service} still points to mutable image {configured}"
+                    )
+    if runtime_env_path.is_file():
+        for raw_line in runtime_env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            expected = mutable_runtime_keys.get(key)
+            if expected and value.strip().endswith(expected):
+                messages.append(
+                    f"active release has no latest-resolution.json and runtime input {key} still requests {value.strip()}"
+                )
+
+if messages:
+    for message in messages:
+        print(message)
+    raise SystemExit(1)
+PY
+  then
+    doctor_fail "active release contains mutable 'latest' values that were not resolved deterministically; run 'agent update'"
+  else
+    ok "active release latest values are deterministically resolved"
   fi
 fi
 

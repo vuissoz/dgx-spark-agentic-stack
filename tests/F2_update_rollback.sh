@@ -24,6 +24,7 @@ release_dir_a="${AGENTIC_ROOT:-/srv/agentic}/deployments/releases/${release_a}"
 [[ -f "${release_dir_a}/images.json" ]] || fail "missing images.json in first release ${release_a}"
 [[ -f "${release_dir_a}/compose.effective.yml" ]] || fail "missing compose.effective.yml in first release ${release_a}"
 [[ -f "${release_dir_a}/health_report.json" ]] || fail "missing health_report.json in first release ${release_a}"
+[[ -f "${release_dir_a}/latest-resolution.json" ]] || fail "missing latest-resolution.json in first release ${release_a}"
 ok "first update created complete snapshot ${release_a}"
 
 sleep 1
@@ -32,6 +33,7 @@ release_b="$(printf '%s\n' "${update_output_b}" | sed -n 's/^update completed, r
 [[ -n "${release_b}" ]] || fail "agent update did not return a release id (second update)"
 release_dir_b="${AGENTIC_ROOT:-/srv/agentic}/deployments/releases/${release_b}"
 [[ -f "${release_dir_b}/images.json" ]] || fail "missing images.json in second release ${release_b}"
+[[ -f "${release_dir_b}/latest-resolution.json" ]] || fail "missing latest-resolution.json in second release ${release_b}"
 ok "second update created snapshot ${release_b}"
 
 if cmp -s "${release_dir_a}/images.json" "${release_dir_b}/images.json"; then
