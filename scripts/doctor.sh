@@ -1221,6 +1221,52 @@ if [[ -n "${optional_openclaw_sandbox_cid}" ]]; then
   if ! grep -q '^OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json$' <<<"${optional_openclaw_sandbox_env}"; then
     doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_PROFILE_FILE=/config/integration-profile.current.json"
   fi
+  if ! grep -q '^OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json$' <<<"${optional_openclaw_sandbox_env}"; then
+    doctor_fail "openclaw-sandbox must set OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json"
+  fi
+  if ! mount_destination_present "${optional_openclaw_sandbox_cid}" "/sandbox-workspaces"; then
+    doctor_fail "openclaw-sandbox must mount /sandbox-workspaces for session-scoped workspaces"
+  fi
+  if [[ ! -d "${AGENTIC_ROOT}/openclaw/sandbox/workspaces" ]]; then
+    doctor_fail "openclaw sandbox workspaces directory is missing: ${AGENTIC_ROOT}/openclaw/sandbox/workspaces"
+  fi
+  if [[ ! -s "${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json" ]]; then
+    doctor_fail "openclaw sandbox registry is missing: ${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
+  elif ! python3 - "${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+if not isinstance(payload.get("sandboxes"), dict):
+    raise SystemExit(1)
+expired = payload.get("expired")
+if expired is not None and not isinstance(expired, list):
+    raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw sandbox registry is invalid JSON: ${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
+  fi
+  if ! timeout 15 docker exec "${optional_openclaw_sandbox_cid}" sh -lc "python3 - <<'PY'
+import json
+import pathlib
+import urllib.request
+
+token = pathlib.Path('/run/secrets/openclaw.token').read_text(encoding='utf-8').strip()
+req = urllib.request.Request(
+    'http://127.0.0.1:8112/v1/sandboxes/status',
+    headers={'Authorization': f'Bearer {token}'},
+    method='GET',
+)
+with urllib.request.urlopen(req, timeout=4) as resp:
+    payload = json.loads(resp.read().decode('utf-8'))
+    if not isinstance(payload, dict) or 'active' not in payload:
+        raise SystemExit(1)
+PY"; then
+    doctor_fail "openclaw-sandbox status endpoint must expose session sandbox registry (/v1/sandboxes/status)"
+  fi
 fi
 
 if [[ -n "${optional_openclaw_relay_cid}" ]]; then

@@ -1282,12 +1282,41 @@ else:
 PY
 }
 
+openclaw_runtime_summary() {
+  local registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
+
+  if [[ ! -s "${registry_file}" ]]; then
+    printf '%s\n' "-"
+    return 0
+  fi
+
+  python3 - "${registry_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    print("invalid-registry")
+    raise SystemExit(0)
+
+sandboxes = payload.get("sandboxes")
+if not isinstance(sandboxes, dict):
+    print("invalid-registry")
+    raise SystemExit(0)
+
+print(f"sandboxes={len(sandboxes)}")
+PY
+}
+
 cmd_ls() {
   require_cmd docker
 
-  printf 'tool\tservice\tstatus\ttmux\tworkspace\tsticky_model\n'
+  printf 'tool\tservice\tstatus\ttmux\tworkspace\tsticky_model\truntime\n'
 
-  local tool service container_id status tmux_status workspace_size sticky session_mode
+  local tool service container_id status tmux_status workspace_size sticky runtime session_mode
   for tool in "${AGENT_TOOLS[@]}"; do
     service="$(tool_to_service "${tool}")"
     container_id="$(service_container_id "${service}")"
@@ -1320,8 +1349,12 @@ cmd_ls() {
     fi
 
     sticky="$(sticky_model_for_session "${tool}")"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "${tool}" "${service}" "${status}" "${tmux_status}" "${workspace_size}" "${sticky}"
+    runtime="-"
+    if [[ "${tool}" == "openclaw" ]]; then
+      runtime="$(openclaw_runtime_summary)"
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "${tool}" "${service}" "${status}" "${tmux_status}" "${workspace_size}" "${sticky}" "${runtime}"
   done
 }
 

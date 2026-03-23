@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import urllib.error
@@ -16,6 +17,7 @@ from typing import Any
 
 
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+SANDBOX_ID_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def now_ts() -> str:
@@ -238,6 +240,271 @@ def write_json_file_atomic(path: Path, payload: Any) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, separators=(",", ":"), sort_keys=True), encoding="utf-8")
     tmp.replace(path)
+
+
+def normalize_runtime_label(value: Any, fallback: str, *, max_length: int = 128) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return fallback
+    text = re.sub(r"\s+", "-", text)
+    text = SANDBOX_ID_COMPONENT_RE.sub("-", text).strip(".-_")
+    if not text:
+        return fallback
+    return text[:max_length]
+
+
+def iso_from_epoch(value: int) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(value))
+
+
+def safe_rmtree(path: Path) -> None:
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        return
+
+
+def sandbox_registry_path(cfg: dict[str, Any]) -> Path:
+    return Path(str(cfg.get("registry_file", "/state/session-sandboxes.json")))
+
+
+def sandbox_state_root(cfg: dict[str, Any]) -> Path:
+    return Path(str(cfg.get("sandboxes_state_root", "/state/sandboxes")))
+
+
+def sandbox_workspaces_root(cfg: dict[str, Any]) -> Path:
+    return Path(str(cfg.get("workspaces_root", "/sandbox-workspaces")))
+
+
+def sandbox_registry_load(cfg: dict[str, Any]) -> dict[str, Any]:
+    payload = read_json_file(sandbox_registry_path(cfg), {})
+    if not isinstance(payload, dict):
+        payload = {}
+    sandboxes = payload.get("sandboxes")
+    if not isinstance(sandboxes, dict):
+        sandboxes = {}
+    expired = payload.get("expired")
+    if not isinstance(expired, list):
+        expired = []
+    return {"version": 1, "sandboxes": sandboxes, "expired": expired[-32:]}
+
+
+def sandbox_registry_save(cfg: dict[str, Any], payload: dict[str, Any]) -> None:
+    normalized = sandbox_registry_load({"registry_file": str(sandbox_registry_path(cfg))})
+    normalized["sandboxes"] = payload.get("sandboxes", {})
+    normalized["expired"] = payload.get("expired", [])[-32:]
+    write_json_file_atomic(sandbox_registry_path(cfg), normalized)
+
+
+def sandbox_id_for(session_id: str, model: str) -> str:
+    session_slug = normalize_runtime_label(session_id, "default", max_length=24)
+    model_slug = normalize_runtime_label(model.replace(":", "-"), "default-model", max_length=24)
+    digest = hashlib.sha256(f"{session_id}\0{model}".encode("utf-8")).hexdigest()[:12]
+    return f"sbx-{session_slug}-{model_slug}-{digest}"
+
+
+def sandbox_metadata_summary(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sandbox_id": str(record.get("sandbox_id", "")),
+        "session_id": str(record.get("session_id", "")),
+        "model": str(record.get("model", "")),
+        "created_at": str(record.get("created_at", "")),
+        "last_used_at": str(record.get("last_used_at", "")),
+        "expires_at": str(record.get("expires_at", "")),
+        "request_count": int(record.get("request_count", 0) or 0),
+        "workspace_dir": str(record.get("workspace_dir", "")),
+        "workspace_hint": str(record.get("workspace_hint", "")),
+    }
+
+
+def ensure_sandbox_registry_baseline(cfg: dict[str, Any]) -> None:
+    state_root = sandbox_state_root(cfg)
+    workspaces_root = sandbox_workspaces_root(cfg)
+    state_root.mkdir(parents=True, exist_ok=True)
+    workspaces_root.mkdir(parents=True, exist_ok=True)
+    registry_path = sandbox_registry_path(cfg)
+    if registry_path.exists():
+        return
+    sandbox_registry_save(cfg, {"version": 1, "sandboxes": {}, "expired": []})
+
+
+def _sandbox_expire_locked(
+    cfg: dict[str, Any],
+    registry: dict[str, Any],
+    *,
+    now_epoch: int,
+    forced_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    forced_ids = forced_ids or set()
+    sandboxes = registry.get("sandboxes", {})
+    if not isinstance(sandboxes, dict):
+        sandboxes = {}
+        registry["sandboxes"] = sandboxes
+    expired = registry.get("expired", [])
+    if not isinstance(expired, list):
+        expired = []
+        registry["expired"] = expired
+
+    expired_items: list[dict[str, Any]] = []
+    for sandbox_id, record in list(sandboxes.items()):
+        if not isinstance(record, dict):
+            sandboxes.pop(sandbox_id, None)
+            continue
+
+        expires_at_epoch = int(record.get("expires_at_epoch", 0) or 0)
+        should_expire = sandbox_id in forced_ids or (expires_at_epoch > 0 and expires_at_epoch <= now_epoch)
+        if not should_expire:
+            continue
+
+        state_dir = Path(str(record.get("state_dir", "")))
+        workspace_dir = Path(str(record.get("workspace_dir", "")))
+        if state_dir.is_absolute():
+            safe_rmtree(state_dir)
+        if workspace_dir.is_absolute():
+            safe_rmtree(workspace_dir)
+
+        expired_record = sandbox_metadata_summary(record)
+        expired_record["expired_at"] = iso_from_epoch(now_epoch)
+        expired_record["expired_reason"] = "forced" if sandbox_id in forced_ids else "idle_ttl"
+        expired.append(expired_record)
+        sandboxes.pop(sandbox_id, None)
+        expired_items.append(expired_record)
+
+    registry["expired"] = expired[-32:]
+    return expired_items
+
+
+def lease_session_sandbox(
+    cfg: dict[str, Any],
+    *,
+    session_id: str,
+    model: str,
+    request_id: str,
+    workspace_hint: str,
+) -> tuple[dict[str, Any], bool]:
+    ttl_sec = max(1, int(cfg.get("session_ttl_sec", 1800) or 1800))
+    now_epoch = epoch_now()
+    sandbox_id = sandbox_id_for(session_id, model)
+    state_dir = sandbox_state_root(cfg) / sandbox_id
+    workspace_dir = sandbox_workspaces_root(cfg) / sandbox_id
+    lock = cfg.get("sandbox_lock")
+    if lock is None:
+        lock = threading.Lock()
+        cfg["sandbox_lock"] = lock
+
+    with lock:
+        registry = sandbox_registry_load(cfg)
+        _sandbox_expire_locked(cfg, registry, now_epoch=now_epoch)
+        sandboxes = registry["sandboxes"]
+        existing = sandboxes.get(sandbox_id)
+        reused = isinstance(existing, dict)
+        if not reused:
+            state_dir.mkdir(parents=True, exist_ok=True)
+            workspace_dir.mkdir(parents=True, exist_ok=True)
+            existing = {
+                "sandbox_id": sandbox_id,
+                "session_id": session_id,
+                "model": model,
+                "created_at": iso_from_epoch(now_epoch),
+                "created_at_epoch": now_epoch,
+                "state_dir": str(state_dir),
+                "workspace_dir": str(workspace_dir),
+                "workspace_hint": workspace_hint,
+                "request_count": 0,
+            }
+        else:
+            state_dir.mkdir(parents=True, exist_ok=True)
+            workspace_dir.mkdir(parents=True, exist_ok=True)
+
+        existing["last_request_id"] = request_id
+        existing["last_used_at"] = iso_from_epoch(now_epoch)
+        existing["last_used_at_epoch"] = now_epoch
+        existing["expires_at_epoch"] = now_epoch + ttl_sec
+        existing["expires_at"] = iso_from_epoch(now_epoch + ttl_sec)
+        existing["request_count"] = int(existing.get("request_count", 0) or 0) + 1
+        existing["workspace_hint"] = workspace_hint
+        existing["workspace_dir"] = str(workspace_dir)
+        existing["state_dir"] = str(state_dir)
+
+        sandboxes[sandbox_id] = existing
+        sandbox_registry_save(cfg, registry)
+        write_json_file_atomic(state_dir / "metadata.json", existing)
+
+    return sandbox_metadata_summary(existing), reused
+
+
+def sandbox_status_payload(cfg: dict[str, Any]) -> dict[str, Any]:
+    lock = cfg.get("sandbox_lock")
+    if lock is None:
+        lock = threading.Lock()
+        cfg["sandbox_lock"] = lock
+
+    with lock:
+        registry = sandbox_registry_load(cfg)
+        expired_items = _sandbox_expire_locked(cfg, registry, now_epoch=epoch_now())
+        if expired_items:
+            sandbox_registry_save(cfg, registry)
+        sandboxes = registry.get("sandboxes", {})
+        if not isinstance(sandboxes, dict):
+            sandboxes = {}
+        items = [sandbox_metadata_summary(record) for _, record in sorted(sandboxes.items()) if isinstance(record, dict)]
+        payload = {
+            "active": len(items),
+            "default_model": str(cfg.get("default_model", "")),
+            "idle_ttl_sec": int(cfg.get("session_ttl_sec", 1800) or 1800),
+            "recent_expired": registry.get("expired", [])[-8:],
+            "sandboxes": items,
+        }
+
+    for item in expired_items:
+        append_audit(
+            str(cfg["audit_log"]),
+            {
+                "ts": now_ts(),
+                "module": "openclaw-sandbox",
+                "action": "sandbox_expire",
+                "decision": "allow",
+                "sandbox_id": item.get("sandbox_id", ""),
+                "session_id": item.get("session_id", ""),
+                "model": item.get("model", ""),
+                "reason": item.get("expired_reason", "idle_ttl"),
+            },
+        )
+
+    return payload
+
+
+def sandbox_reaper_loop(cfg: dict[str, Any], stop_event: threading.Event) -> None:
+    poll_interval = max(5.0, float(cfg.get("reap_interval_sec", 15.0) or 15.0))
+    while not stop_event.is_set():
+        lock = cfg.get("sandbox_lock")
+        if lock is None:
+            lock = threading.Lock()
+            cfg["sandbox_lock"] = lock
+
+        expired_items: list[dict[str, Any]] = []
+        with lock:
+            registry = sandbox_registry_load(cfg)
+            expired_items = _sandbox_expire_locked(cfg, registry, now_epoch=epoch_now())
+            if expired_items:
+                sandbox_registry_save(cfg, registry)
+
+        for item in expired_items:
+            append_audit(
+                str(cfg["audit_log"]),
+                {
+                    "ts": now_ts(),
+                    "module": "openclaw-sandbox",
+                    "action": "sandbox_expire",
+                    "decision": "allow",
+                    "sandbox_id": item.get("sandbox_id", ""),
+                    "session_id": item.get("session_id", ""),
+                    "model": item.get("model", ""),
+                    "reason": item.get("expired_reason", "idle_ttl"),
+                },
+            )
+
+        stop_event.wait(poll_interval)
 
 
 def load_openclaw_relay_targets(path: str) -> dict[str, str]:
@@ -525,6 +792,34 @@ class OptionalHandler(BaseHTTPRequestHandler):
 
         return uuid.uuid4().hex
 
+    def _session_context(self, payload: dict[str, Any] | None = None) -> tuple[str, str, str]:
+        payload = payload or {}
+
+        raw_session = (
+            payload.get("session_id")
+            or payload.get("session")
+            or self.headers.get("X-Agent-Session", "")
+            or self.headers.get("X-OpenClaw-Session", "")
+        )
+        session_id = normalize_runtime_label(raw_session, "default-session")
+
+        raw_model = (
+            payload.get("model")
+            or self.headers.get("X-Agent-Model", "")
+            or self.headers.get("X-OpenClaw-Model", "")
+            or self.cfg.get("default_model", "")
+            or "default-model"
+        )
+        model = str(raw_model).strip()[:128] or "default-model"
+
+        workspace_hint = str(payload.get("workspace", "")).strip()
+        if not workspace_hint:
+            project = normalize_runtime_label(self.headers.get("X-Agent-Project", ""), "", max_length=96)
+            if project:
+                workspace_hint = f"/workspace/{project}"
+
+        return session_id, model, workspace_hint
+
     def _auth_ok(self, expected_token: str | None = None) -> bool:
         expected = expected_token if expected_token is not None else self.cfg.get("token", "")
         if not bool(self.cfg.get("bearer_token_required", True)):
@@ -598,7 +893,16 @@ class OptionalHandler(BaseHTTPRequestHandler):
         except TimeoutError:
             return False, "sandbox_health_timeout"
 
-    def _forward_to_sandbox(self, request_id: str, tool: str, args: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def _forward_to_sandbox(
+        self,
+        request_id: str,
+        tool: str,
+        args: dict[str, Any],
+        *,
+        session_id: str,
+        model: str,
+        workspace_hint: str,
+    ) -> tuple[int, dict[str, Any]]:
         execute_url = str(self.cfg.get("sandbox_execute_url", "")).strip()
         timeout = float(self.cfg.get("sandbox_timeout_sec", 3.0))
         sandbox_token = str(self.cfg.get("sandbox_token", "")).strip()
@@ -613,6 +917,9 @@ class OptionalHandler(BaseHTTPRequestHandler):
                 "request_id": request_id,
                 "tool": tool,
                 "args": args,
+                "session_id": session_id,
+                "model": model,
+                "workspace_hint": workspace_hint,
             },
             separators=(",", ":"),
             sort_keys=True,
@@ -682,6 +989,10 @@ class OptionalHandler(BaseHTTPRequestHandler):
       <div id="runtime">loading...</div>
     </section>
     <section class="card">
+      <h2>Execution Plane</h2>
+      <div id="sandboxes">loading...</div>
+    </section>
+    <section class="card">
       <h2>Relay Queue</h2>
       <div id="relay">loading...</div>
     </section>
@@ -704,19 +1015,26 @@ async function loadStatus() {
     const r = await fetch('/v1/dashboard/status', {cache:'no-store'});
     const data = await r.json();
     const runtime = data.runtime || {};
+    const execPlane = data.execution_plane || {};
     const relay = data.relay || {};
     const runtimeEl = document.getElementById('runtime');
+    const sandboxesEl = document.getElementById('sandboxes');
     const relayEl = document.getElementById('relay');
     runtimeEl.innerHTML =
       '<div>Mode: <strong>' + (runtime.mode || '-') + '</strong></div>' +
       '<div>Profile: <strong>' + (runtime.profile_id || '-') + '</strong></div>' +
       '<div>Sandbox: <strong class=\"' + (runtime.sandbox === 'reachable' ? 'ok' : 'bad') + '\">' + (runtime.sandbox || '-') + '</strong></div>';
+    sandboxesEl.innerHTML =
+      '<div>Active: <strong>' + (execPlane.active ?? '-') + '</strong></div>' +
+      '<div>Default model: <strong>' + (execPlane.default_model || '-') + '</strong></div>' +
+      '<div>Recent expired: <strong>' + ((execPlane.recent_expired || []).length ?? '-') + '</strong></div>';
     relayEl.innerHTML =
       '<div>Pending: <strong>' + (relay.pending ?? '-') + '</strong></div>' +
       '<div>Done: <strong>' + (relay.done ?? '-') + '</strong></div>' +
       '<div>Dead: <strong class=\"' + ((relay.dead || 0) > 0 ? 'warn' : 'ok') + '\">' + (relay.dead ?? '-') + '</strong></div>';
   } catch (err) {
     document.getElementById('runtime').textContent = 'status unavailable';
+    document.getElementById('sandboxes').textContent = 'status unavailable';
     document.getElementById('relay').textContent = 'status unavailable';
   }
 }
@@ -775,7 +1093,27 @@ setInterval(loadStatus, 5000);
             except Exception:
                 relay = {"pending": None, "done": None, "dead": None}
 
-        return {"relay": relay, "runtime": runtime}
+        execution_plane: dict[str, Any] = {"active": None, "default_model": None, "recent_expired": []}
+        sandbox_status_url = str(self.cfg.get("sandbox_status_url", "")).strip()
+        if sandbox_status_url:
+            try:
+                headers: dict[str, str] = {}
+                sandbox_token = str(self.cfg.get("sandbox_token", "")).strip()
+                if sandbox_token:
+                    headers["Authorization"] = f"Bearer {sandbox_token}"
+                req = urllib.request.Request(sandbox_status_url, headers=headers, method="GET")
+                with urllib.request.urlopen(req, timeout=2.0) as resp:
+                    payload = decode_json_bytes(resp.read())
+                    if isinstance(payload, dict):
+                        execution_plane = {
+                            "active": payload.get("active"),
+                            "default_model": payload.get("default_model"),
+                            "recent_expired": payload.get("recent_expired", []),
+                        }
+            except Exception:
+                execution_plane = {"active": None, "default_model": None, "recent_expired": []}
+
+        return {"execution_plane": execution_plane, "relay": relay, "runtime": runtime}
 
     def _handle_openclaw_relay_ingest(self) -> None:
         request_id = self._request_id()
@@ -894,6 +1232,15 @@ setInterval(loadStatus, 5000);
             self._json_response(404, {"error": "not_found"})
             return
 
+        if self.cfg["mode"] == "openclaw-sandbox" and self.path in self.cfg.get(
+            "endpoint_sandbox_status_paths", {"/v1/sandboxes/status", "/v1/sandboxes"}
+        ):
+            if not self._auth_ok(expected_token=self.cfg.get("token", "")):
+                self._deny_auth("status_sandboxes", self._request_id(), module="openclaw-sandbox")
+                return
+            self._json_response(200, sandbox_status_payload(self.cfg))
+            return
+
         health_paths = self.cfg.get("endpoint_health_paths", {"/healthz"})
         if self.path in health_paths:
             if self.cfg["mode"] == "openclaw":
@@ -910,6 +1257,12 @@ setInterval(loadStatus, 5000);
                             "status": "degraded",
                         },
                     )
+                return
+
+            if self.cfg["mode"] == "openclaw-sandbox":
+                payload = sandbox_status_payload(self.cfg)
+                payload.update({"mode": "openclaw-sandbox", "status": "ok"})
+                self._json_response(200, payload)
                 return
 
             self._json_response(200, {"mode": self.cfg["mode"], "status": "ok"})
@@ -986,6 +1339,9 @@ setInterval(loadStatus, 5000);
             return
 
         if self.cfg["mode"] == "openclaw-sandbox":
+            if self.path in self.cfg.get("endpoint_sandbox_lease_paths", {"/v1/sandboxes/lease"}):
+                self._handle_openclaw_sandbox_lease()
+                return
             self._handle_openclaw_sandbox_execute()
             return
 
@@ -1101,6 +1457,7 @@ setInterval(loadStatus, 5000);
         args = payload.get("args", {})
         if not isinstance(args, dict):
             args = {}
+        session_id, model, workspace_hint = self._session_context(payload)
 
         if not tool:
             self._json_response(400, {"error": "tool_required", "request_id": request_id})
@@ -1117,6 +1474,8 @@ setInterval(loadStatus, 5000);
                     "decision": "deny",
                     "reason": "tool_not_allowlisted",
                     "request_id": request_id,
+                    "session_id": session_id,
+                    "model": model,
                     "tool": tool,
                 },
             )
@@ -1134,6 +1493,8 @@ setInterval(loadStatus, 5000);
                     "decision": "deny",
                     "reason": "sandbox_unreachable",
                     "request_id": request_id,
+                    "session_id": session_id,
+                    "model": model,
                     "tool": tool,
                     "detail": sandbox_reason,
                 },
@@ -1148,7 +1509,14 @@ setInterval(loadStatus, 5000);
             )
             return
 
-        status_code, sandbox_payload = self._forward_to_sandbox(request_id, tool, args)
+        status_code, sandbox_payload = self._forward_to_sandbox(
+            request_id,
+            tool,
+            args,
+            session_id=session_id,
+            model=model,
+            workspace_hint=workspace_hint,
+        )
         decision = "allow" if status_code == 200 else "deny"
 
         audit_payload: dict[str, Any] = {
@@ -1157,9 +1525,15 @@ setInterval(loadStatus, 5000);
             "action": "execute_tool",
             "decision": decision,
             "request_id": request_id,
+            "session_id": session_id,
+            "model": model,
             "tool": tool,
             "sandbox_status": status_code,
         }
+        if isinstance(sandbox_payload, dict):
+            sandbox_id = str(sandbox_payload.get("sandbox_id", "")).strip()
+            if sandbox_id:
+                audit_payload["sandbox_id"] = sandbox_id
         if status_code != 200:
             audit_payload["reason"] = str(sandbox_payload.get("error", "sandbox_execution_failed"))
 
@@ -1195,6 +1569,7 @@ setInterval(loadStatus, 5000);
         args = payload.get("args", {})
         if not isinstance(args, dict):
             args = {}
+        session_id, model, workspace_hint = self._session_context(payload)
 
         allowlist = self.cfg["allowlist"]
         if tool not in allowlist:
@@ -1207,12 +1582,35 @@ setInterval(loadStatus, 5000);
                     "decision": "deny",
                     "reason": "tool_not_allowlisted",
                     "request_id": request_id,
+                    "session_id": session_id,
+                    "model": model,
                     "tool": tool,
                 },
             )
             self._json_response(403, {"error": "tool_not_allowlisted", "request_id": request_id})
             return
 
+        sandbox_info, reused = lease_session_sandbox(
+            self.cfg,
+            session_id=session_id,
+            model=model,
+            request_id=request_id,
+            workspace_hint=workspace_hint,
+        )
+        append_audit(
+            self.cfg["audit_log"],
+            {
+                "ts": now_ts(),
+                "module": "openclaw-sandbox",
+                "action": "lease_sandbox",
+                "decision": "allow",
+                "request_id": request_id,
+                "session_id": session_id,
+                "model": model,
+                "sandbox_id": sandbox_info["sandbox_id"],
+                "sandbox_reused": reused,
+            },
+        )
         status_code, payload_out = self._execute_sandbox_tool(tool, args)
         decision = "allow" if status_code == 200 else "deny"
         audit_payload: dict[str, Any] = {
@@ -1221,6 +1619,10 @@ setInterval(loadStatus, 5000);
             "action": "execute_tool",
             "decision": decision,
             "request_id": request_id,
+            "session_id": session_id,
+            "model": model,
+            "sandbox_id": sandbox_info["sandbox_id"],
+            "sandbox_reused": reused,
             "tool": tool,
             "status_code": status_code,
         }
@@ -1228,8 +1630,47 @@ setInterval(loadStatus, 5000);
             audit_payload["reason"] = str(payload_out.get("error", "execution_failed"))
 
         append_audit(self.cfg["audit_log"], audit_payload)
+        payload_out.setdefault("model", model)
         payload_out.setdefault("request_id", request_id)
+        payload_out.setdefault("sandbox_id", sandbox_info["sandbox_id"])
+        payload_out.setdefault("sandbox_reused", reused)
+        payload_out.setdefault("session_id", session_id)
+        payload_out.setdefault("workspace_dir", sandbox_info.get("workspace_dir", ""))
         self._json_response(status_code, payload_out)
+
+    def _handle_openclaw_sandbox_lease(self) -> None:
+        payload = decode_json_bytes(self._read_body_bytes())
+        request_id = self._request_id(payload)
+        if not self._auth_ok(expected_token=self.cfg.get("token", "")):
+            self._deny_auth("lease_sandbox", request_id, module="openclaw-sandbox")
+            return
+
+        session_id, model, workspace_hint = self._session_context(payload)
+        sandbox_info, reused = lease_session_sandbox(
+            self.cfg,
+            session_id=session_id,
+            model=model,
+            request_id=request_id,
+            workspace_hint=workspace_hint,
+        )
+        append_audit(
+            self.cfg["audit_log"],
+            {
+                "ts": now_ts(),
+                "module": "openclaw-sandbox",
+                "action": "lease_sandbox",
+                "decision": "allow",
+                "request_id": request_id,
+                "session_id": session_id,
+                "model": model,
+                "sandbox_id": sandbox_info["sandbox_id"],
+                "sandbox_reused": reused,
+            },
+        )
+        response = dict(sandbox_info)
+        response["request_id"] = request_id
+        response["sandbox_reused"] = reused
+        self._json_response(200, response)
 
     def _handle_mcp_execute(self) -> None:
         if self.path != "/v1/tools/execute":
@@ -1340,7 +1781,9 @@ def main() -> int:
             "sandbox_token": read_token(sandbox_token_file),
             "sandbox_health_url": f"{sandbox_base_url}/healthz",
             "sandbox_execute_url": f"{sandbox_base_url}/v1/tools/execute",
+            "sandbox_status_url": os.environ.get("OPENCLAW_SANDBOX_STATUS_URL", f"{sandbox_base_url}/v1/sandboxes/status"),
             "audit_log": audit_log,
+            "default_model": os.environ.get("OPENCLAW_DEFAULT_MODEL", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
             "profile_id": profile_cfg["profile_id"],
             "profile_version": profile_cfg["profile_version"],
             "profile_hash": profile_cfg["profile_hash"],
@@ -1402,8 +1845,17 @@ def main() -> int:
             "token": read_token(token_file),
             "allowlist": allowlist,
             "audit_log": audit_log,
+            "default_model": os.environ.get("OPENCLAW_SANDBOX_DEFAULT_MODEL", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "session_ttl_sec": int(os.environ.get("OPENCLAW_SANDBOX_SESSION_TTL_SEC", "1800") or 1800),
+            "reap_interval_sec": float(os.environ.get("OPENCLAW_SANDBOX_REAP_INTERVAL_SEC", "15") or 15),
+            "registry_file": os.environ.get("OPENCLAW_SANDBOX_REGISTRY_FILE", "/state/session-sandboxes.json"),
+            "sandboxes_state_root": os.environ.get("OPENCLAW_SANDBOX_STATE_ROOT", "/state/sandboxes"),
+            "workspaces_root": os.environ.get("OPENCLAW_SANDBOX_WORKSPACES_DIR", "/sandbox-workspaces"),
+            "sandbox_lock": threading.Lock(),
             "endpoint_health_paths": profile_cfg["endpoints"]["health"],
             "endpoint_sandbox_execute_paths": profile_cfg["endpoints"]["sandbox_execute"],
+            "endpoint_sandbox_status_paths": {"/v1/sandboxes/status", "/v1/sandboxes"},
+            "endpoint_sandbox_lease_paths": {"/v1/sandboxes/lease"},
             "bearer_token_required": profile_cfg["bearer_token_required"],
         }
 
@@ -1488,6 +1940,8 @@ def main() -> int:
 
     relay_stop_event = threading.Event()
     relay_thread: threading.Thread | None = None
+    sandbox_stop_event = threading.Event()
+    sandbox_thread: threading.Thread | None = None
     if args.mode == "openclaw-relay":
         relay_state_dir = Path(str(cfg.get("state_dir", "/state")))
         (relay_state_dir / "queue" / "pending").mkdir(parents=True, exist_ok=True)
@@ -1500,6 +1954,15 @@ def main() -> int:
             name="openclaw-relay-worker",
         )
         relay_thread.start()
+    elif args.mode == "openclaw-sandbox":
+        ensure_sandbox_registry_baseline(cfg)
+        sandbox_thread = threading.Thread(
+            target=sandbox_reaper_loop,
+            kwargs={"cfg": cfg, "stop_event": sandbox_stop_event},
+            daemon=True,
+            name="openclaw-sandbox-reaper",
+        )
+        sandbox_thread.start()
 
     server = ThreadingHTTPServer((bind_host, bind_port), OptionalHandler)
     server.cfg = cfg  # type: ignore[attr-defined]
@@ -1513,6 +1976,9 @@ def main() -> int:
         relay_stop_event.set()
         if relay_thread is not None:
             relay_thread.join(timeout=2.0)
+        sandbox_stop_event.set()
+        if sandbox_thread is not None:
+            sandbox_thread.join(timeout=2.0)
 
     return 0
 

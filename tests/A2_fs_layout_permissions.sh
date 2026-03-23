@@ -74,6 +74,7 @@ required_dirs=(
   "${AGENTIC_ROOT}/openclaw/relay/logs"
   "${AGENTIC_ROOT}/openclaw/sandbox"
   "${AGENTIC_ROOT}/openclaw/sandbox/state"
+  "${AGENTIC_ROOT}/openclaw/sandbox/workspaces"
   "${AGENTIC_ROOT}/optional"
   "${AGENTIC_ROOT}/optional/pi-mono"
   "${AGENTIC_ROOT}/optional/pi-mono/state"

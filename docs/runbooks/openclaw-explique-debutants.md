@@ -39,6 +39,10 @@ Modele mental simple:
 - reste en loopback host uniquement.
 
 ## `openclaw-sandbox` (execution)
+- sert de plan d'execution distinct du control-plane,
+- loue un sandbox dedie par paire `session+model`,
+- reutilise ce sandbox tant que la session reste active,
+- expire/nettoie ce sandbox apres TTL d'inactivite,
 - execute les actions outils autorisees dans un perimetre plus strict,
 - utilise une allowlist dediee,
 - n'est pas expose sur une interface hote publique.
@@ -51,6 +55,7 @@ Modele mental simple:
 Pourquoi cette separation:
 - reduire le blast radius,
 - separer les concerns API et execution,
+- garder un gateway/control-plane toujours actif sans partager le meme runtime outils entre toutes les sessions,
 - faciliter l'audit de politique.
 
 ## 3. Bases securite a connaitre
@@ -208,6 +213,8 @@ Variables courantes du service:
 - `OPENCLAW_PROFILE_FILE=/config/integration-profile.current.json`
 - `OPENCLAW_SANDBOX_URL=http://openclaw-sandbox:8112`
 - `OPENCLAW_SANDBOX_AUTH_TOKEN_FILE=/run/secrets/openclaw.token`
+- `OPENCLAW_SANDBOX_SESSION_TTL_SEC` (TTL d'inactivite des sandboxes de session)
+- `OPENCLAW_SANDBOX_REGISTRY_FILE=/state/session-sandboxes.json`
 
 En pratique, vous n'editez pas ces chemins conteneur directement.
 Vous editez les fichiers cote hote sous `${AGENTIC_ROOT}`.

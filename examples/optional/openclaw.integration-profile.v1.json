@@ -73,6 +73,8 @@
       "webhook_signature_hmac_sha256",
       "tool_allowlist",
       "sandbox_forwarding",
+      "session_scoped_sandboxes",
+      "control_plane_execution_plane_split",
       "jsonl_audit",
       "request_id_correlation"
     ]

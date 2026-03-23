@@ -25,7 +25,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Beads (tests setup OpenClaw CLI):
   - `dgx-spark-agentic-stack-x00` (couverture tests setup/config OpenClaw CLI + variantes) [CLOSED]
 - Beads (OpenClaw sandboxes de session):
-  - `dgx-spark-agentic-stack-4xu` (inspiration NemoClaw/OpenShell: gateway toujours actif + sous-agents OpenClaw isoles dans un sandbox dedie par session) [OPEN]
+  - `dgx-spark-agentic-stack-4xu` (inspiration NemoClaw/OpenShell: gateway toujours actif + sous-agents OpenClaw isoles dans un sandbox dedie par session) [CLOSED]
 - Beads (OpenClaw config split):
   - `dgx-spark-agentic-stack-lhm` (separer config immuable, overlay valide et etat writable pour OpenClaw) [OPEN]
 - Beads (OpenClaw approvals egress interactives):
@@ -131,10 +131,6 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
 - Follow-up `dgx-spark-agentic-stack-0ik`: remplacer les mounts ComfyUI fragmentes (`models/input/output/user/custom_nodes`) par un mount persistant unique couvrant toute l'arborescence runtime ComfyUI, puis aligner doctor/tests/runbooks.
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
-- Follow-up `dgx-spark-agentic-stack-4xu`: faire evoluer OpenClaw vers un modele a deux plans:
-  - control-plane toujours actif (`optional-openclaw` + `optional-openclaw-gateway`),
-  - execution-plane isole par session/sous-agent (sandbox dedie, reutilise pendant la session puis expire),
-  - avec inspiration NemoClaw/OpenShell sur l'isolation par session, sans reprendre les choix d'auth plus faibles de NemoClaw.
 - Follow-up `dgx-spark-agentic-stack-lhm`: separer l'etat OpenClaw en trois couches:
   - config immuable geree par la stack,
   - overlay operateur valide sur un sous-ensemble de cles safe,

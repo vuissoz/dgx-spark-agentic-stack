@@ -65,6 +65,7 @@ set_openclaw_runtime_permissions() {
   local openclaw_state_dir="${AGENTIC_ROOT}/openclaw/state"
   local openclaw_logs_dir="${AGENTIC_ROOT}/openclaw/logs"
   local openclaw_sandbox_state_dir="${AGENTIC_ROOT}/openclaw/sandbox/state"
+  local openclaw_sandbox_workspaces_dir="${AGENTIC_ROOT}/openclaw/sandbox/workspaces"
   local openclaw_relay_state_dir="${AGENTIC_ROOT}/openclaw/relay/state"
   local openclaw_relay_logs_dir="${AGENTIC_ROOT}/openclaw/relay/logs"
   local openclaw_token="${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
@@ -77,6 +78,7 @@ set_openclaw_runtime_permissions() {
       "${openclaw_state_dir}" \
       "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
       "${openclaw_sandbox_state_dir}" \
+      "${openclaw_sandbox_workspaces_dir}" \
       "${openclaw_relay_state_dir}" \
       "${openclaw_relay_logs_dir}" \
       "${openclaw_logs_dir}" || true
@@ -91,6 +93,7 @@ set_openclaw_runtime_permissions() {
     "${openclaw_state_dir}" \
     "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
     "${openclaw_sandbox_state_dir}" \
+    "${openclaw_sandbox_workspaces_dir}" \
     "${openclaw_relay_state_dir}" \
     "${openclaw_relay_logs_dir}" \
     "${openclaw_logs_dir}"
@@ -303,6 +306,7 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   install -d -m 0750 "${AGENTIC_ROOT}/openclaw/sandbox"
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/sandbox/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/openclaw/sandbox/workspaces"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
 

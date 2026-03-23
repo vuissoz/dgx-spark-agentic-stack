@@ -58,7 +58,7 @@ Dossiers persistants clés:
 - `comfyui/{models,input,output,user,custom_nodes}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
-- `openclaw/{config,state,logs,relay/{state,logs},sandbox/state,workspaces}/`
+- `openclaw/{config,state,logs,relay/{state,logs},sandbox/{state,workspaces},workspaces}/`
 - `optional/{mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
@@ -352,10 +352,15 @@ Exemples:
 Notes:
 - `agent stop` gère les tools `claude|codex|opencode|vibestral|openclaw|pi-mono|goose`.
 - `agent <tool> [project]` attache une session persistante: `claude|codex|opencode|vibestral|pi-mono` utilisent tmux (`Ctrl-b d` pour détacher), `goose` lance directement la CLI Goose dans `/workspace/<project>` (pas de tmux dans l'image upstream), et `openclaw` ouvre un shell opérateur dans le service core `openclaw` avec rappel des endpoints API loopback, Web UI (`18789`) et Gateway WS (`ws://127.0.0.1:18789`).
+- `agent ls` expose aussi un résumé runtime pour OpenClaw (`sandboxes=<n>`), dérivé du registre persistant de l'execution-plane.
 - `agent sudo-mode on` active `sudo` dans les conteneurs agents (en relachant uniquement `no-new-privileges` pour ces services); `agent sudo-mode off` revient au mode durci.
 - `agent rollback all` exige un `release_id`.
 - Utiliser `--skip-d5-tests` (ou `AGENTIC_SKIP_D5_TESTS=1`) pour ignorer uniquement `D5_gate_external_providers.sh` avec un warning si l'accès API externe n'est pas disponible.
 - `agent cleanup` supprime aussi les images Docker locales de la stack et purge l'état sans suivre les symlinks.
+
+OpenClaw fonctionne désormais avec un modèle à deux plans:
+- control-plane toujours actif: `openclaw` + `openclaw-gateway` + `openclaw-relay`,
+- execution-plane: `openclaw-sandbox`, qui loue des sandboxes dédiés par paire `session+model`, les réutilise pendant la session, puis les expire sur TTL d'inactivité.
 
 ## Ollama: preload et lien de modèles
 

@@ -287,7 +287,16 @@ curl -sS -o /tmp/openclaw-auth.out -w '%{http_code}\n' \
 # Relay queue visibility.
 relay_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 curl -fsS "http://127.0.0.1:${relay_port}/v1/queue/status"
+
+# Execution-plane visibility (private docker network).
+toolbox_cid="$(docker ps --filter "label=com.docker.compose.service=toolbox" --format '{{.ID}}' | head -n1)"
+docker exec "${toolbox_cid}" sh -lc "curl -fsS -H 'Authorization: Bearer ${openclaw_token}' http://openclaw-sandbox:8112/v1/sandboxes/status"
 ```
+
+Expected:
+- `./agent ls` shows `openclaw ... sandboxes=<n>` in the runtime column,
+- `http://127.0.0.1:${openclaw_port}/v1/dashboard/status` includes `execution_plane.active`,
+- `openclaw-sandbox` reports the active `session+model` sandboxes via `/v1/sandboxes/status`.
 
 Loopback-only host bind check:
 

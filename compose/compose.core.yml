@@ -180,8 +180,10 @@ services:
       OPENCLAW_SANDBOX_URL: http://openclaw-sandbox:8112
       OPENCLAW_SANDBOX_TIMEOUT_SEC: 3
       OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_SANDBOX_STATUS_URL: http://openclaw-sandbox:8112/v1/sandboxes/status
       OPENCLAW_DASHBOARD_ENABLED: "1"
       OPENCLAW_RELAY_STATUS_URL: http://openclaw-relay:8113/v1/queue/status
+      OPENCLAW_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
       HOME: /state/cli/openclaw-home
       OPENCLAW_HOME: /state/cli/openclaw-home
       OPENCLAW_CONFIG_PATH: /state/cli/openclaw-home/openclaw.json
@@ -299,12 +301,19 @@ services:
       OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw.token
       OPENCLAW_SANDBOX_TOOL_ALLOWLIST_FILE: /config/tool_allowlist.txt
       OPENCLAW_SANDBOX_PROFILE_FILE: /config/integration-profile.current.json
+      OPENCLAW_SANDBOX_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
+      OPENCLAW_SANDBOX_SESSION_TTL_SEC: ${OPENCLAW_SANDBOX_SESSION_TTL_SEC:-1800}
+      OPENCLAW_SANDBOX_REAP_INTERVAL_SEC: ${OPENCLAW_SANDBOX_REAP_INTERVAL_SEC:-15}
+      OPENCLAW_SANDBOX_REGISTRY_FILE: /state/session-sandboxes.json
+      OPENCLAW_SANDBOX_STATE_ROOT: /state/sandboxes
+      OPENCLAW_SANDBOX_WORKSPACES_DIR: /sandbox-workspaces
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-sandbox,localhost,127.0.0.1
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/sandbox/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/sandbox/workspaces:/sandbox-workspaces
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
     healthcheck:
