@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_K_TESTS:-0}" == "1" ]]; then
   ok "K3 skipped because AGENTIC_SKIP_K_TESTS=1"
@@ -21,7 +23,7 @@ assert_cmd curl
 
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
-agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+agentic_root="${AGENTIC_ROOT}"
 install -d -m 0750 "${agentic_root}/deployments/optional"
 
 cat >"${agentic_root}/deployments/optional/portainer.request" <<'REQ'

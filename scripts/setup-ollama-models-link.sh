@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/lib/runtime.sh"
 
 runtime_env_file="${AGENTIC_ROOT}/deployments/runtime.env"
 link_path="${AGENTIC_OLLAMA_MODELS_LINK:-${AGENTIC_REPO_ROOT}/.runtime/ollama-models}"
-default_target_dir="${AGENTIC_REPO_ROOT}/.runtime/ollama-models-data"
+default_target_dir="${AGENTIC_ROOT}/ollama/models"
 target_dir="${AGENTIC_OLLAMA_MODELS_TARGET_DIR:-}"
 link_backups_dir="${AGENTIC_OLLAMA_LINK_BACKUPS_DIR:-${AGENTIC_ROOT}/deployments/ollama-link/backups}"
 changes_log="${AGENTIC_ROOT}/deployments/changes.log"

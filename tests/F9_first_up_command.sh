@@ -25,6 +25,10 @@ export AGENTIC_ROOT='${runtime_root}'
 export AGENTIC_COMPOSE_PROJECT='agentic-first-up-test'
 EOF
 
+profile_output="$(set -a; source "${env_file}"; set +a; "${agent_bin}" profile)"
+printf '%s\n' "${profile_output}" | grep -Fq "ollama_models_link=${runtime_root}/deployments/ollama-link/models" \
+  || fail "rootless profile should scope the default ollama models link under AGENTIC_ROOT"
+
 if ! AGENTIC_PROFILE=strict-prod AGENTIC_ONBOARD_OUTPUT="${env_file}" \
   "${agent_bin}" first-up --dry-run >"${output_file}" 2>&1; then
   cat "${output_file}" >&2 || true

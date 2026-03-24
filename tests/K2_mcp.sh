@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_K_TESTS:-0}" == "1" ]]; then
   ok "K2 skipped because AGENTIC_SKIP_K_TESTS=1"
@@ -21,8 +23,8 @@ assert_cmd curl
 
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
-agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
-agentic_profile="${AGENTIC_PROFILE:-strict-prod}"
+agentic_root="${AGENTIC_ROOT}"
+agentic_profile="${AGENTIC_PROFILE}"
 if [[ -n "${AGENTIC_AGENT_WORKSPACES_ROOT:-}" ]]; then
   agent_workspaces_root="${AGENTIC_AGENT_WORKSPACES_ROOT}"
 elif [[ "${agentic_profile}" == "rootless-dev" ]]; then

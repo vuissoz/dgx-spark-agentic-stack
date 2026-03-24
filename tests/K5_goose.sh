@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_K_TESTS:-0}" == "1" ]]; then
   ok "K5 skipped because AGENTIC_SKIP_K_TESTS=1"
@@ -19,8 +21,8 @@ assert_cmd docker
 "${agent_bin}" down optional >/tmp/agent-k5-down-pre.out 2>&1 || true
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
-agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
-goose_workspaces_dir="${AGENTIC_GOOSE_WORKSPACES_DIR:-${agentic_root}/optional/goose/workspaces}"
+agentic_root="${AGENTIC_ROOT}"
+goose_workspaces_dir="${AGENTIC_GOOSE_WORKSPACES_DIR}"
 goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
 runtime_goose_context_limit_file="${agentic_root}/deployments/runtime.env"
 if [[ -f "${runtime_goose_context_limit_file}" ]]; then

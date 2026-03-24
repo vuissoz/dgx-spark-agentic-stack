@@ -102,8 +102,8 @@ Notes:
 | Variable | Valeurs possibles | Defaut | Stockage |
 |---|---|---|---|
 | `OLLAMA_MODELS_DIR` | chemin absolu | `strict-prod`: `${AGENTIC_ROOT}/ollama/models` ; `rootless-dev` (onboarding): `${HOME}/wkdir/open-webui/ollama_data/models` | shell, `runtime.env` |
-| `AGENTIC_OLLAMA_MODELS_LINK` | chemin absolu (symlink rootless) | `${REPO}/.runtime/ollama-models` | shell, `runtime.env` |
-| `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | chemin absolu (target rootless) | `${REPO}/.runtime/ollama-models-data` (ou valeur derivee de `OLLAMA_MODELS_DIR` quand fournie par onboarding) | shell, `runtime.env` |
+| `AGENTIC_OLLAMA_MODELS_LINK` | chemin absolu (symlink rootless) | `${AGENTIC_ROOT}/deployments/ollama-link/models` | shell, `runtime.env` |
+| `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | chemin absolu (target rootless) | `${AGENTIC_ROOT}/ollama/models` (ou valeur derivee de `OLLAMA_MODELS_DIR` quand fournie par onboarding) | shell, `runtime.env` |
 | `OLLAMA_CONTAINER_MODELS_PATH` | chemin interne conteneur | `/root/.ollama/models` | `/tmp/ollama/models` en `rootless-dev` |
 | `OLLAMA_MODELS_MOUNT_MODE` | `rw` ou `ro` | `rw` | `runtime.env` |
 | `AGENTIC_DEFAULT_MODEL` | identifiant de modele | `qwen3-coder:30b` | shell, `runtime.env` |

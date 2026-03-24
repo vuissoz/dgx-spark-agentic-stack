@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_K_TESTS:-0}" == "1" ]]; then
   ok "K4 skipped because AGENTIC_SKIP_K_TESTS=1"
@@ -19,8 +21,8 @@ assert_cmd docker
 "${agent_bin}" down optional >/tmp/agent-k4-down-pre.out 2>&1 || true
 "${REPO_ROOT}/deployments/optional/init_runtime.sh"
 
-agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
-pi_mono_workspaces_dir="${AGENTIC_PI_MONO_WORKSPACES_DIR:-${agentic_root}/optional/pi-mono/workspaces}"
+agentic_root="${AGENTIC_ROOT}"
+pi_mono_workspaces_dir="${AGENTIC_PI_MONO_WORKSPACES_DIR}"
 install -d -m 0750 "${agentic_root}/deployments/optional"
 
 cat >"${agentic_root}/deployments/optional/pi-mono.request" <<'REQ'
