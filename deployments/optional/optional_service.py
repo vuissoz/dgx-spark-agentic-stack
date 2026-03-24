@@ -1672,7 +1672,27 @@ setInterval(loadStatus, 5000);
             except Exception:
                 approvals = {"pending": None, "approved": None, "denied": None, "expired": None}
 
-        return {"approvals": approvals, "execution_plane": execution_plane, "relay": relay, "runtime": runtime}
+        provider_bridge: dict[str, Any] = {"ready": None, "providers": {}, "warnings": []}
+        provider_bridge_status_file = str(self.cfg.get("provider_bridge_status_file", "")).strip()
+        if provider_bridge_status_file:
+            try:
+                payload = decode_json_bytes(Path(provider_bridge_status_file).read_bytes())
+                if isinstance(payload, dict):
+                    provider_bridge = {
+                        "ready": payload.get("ready"),
+                        "providers": payload.get("providers", {}),
+                        "warnings": payload.get("warnings", []),
+                    }
+            except Exception:
+                provider_bridge = {"ready": None, "providers": {}, "warnings": []}
+
+        return {
+            "approvals": approvals,
+            "execution_plane": execution_plane,
+            "provider_bridge": provider_bridge,
+            "relay": relay,
+            "runtime": runtime,
+        }
 
     def _check_approval_policy(
         self,
@@ -2632,6 +2652,10 @@ def main() -> int:
             "bearer_token_required": profile_cfg["bearer_token_required"],
             "dashboard_enabled": env_flag("OPENCLAW_DASHBOARD_ENABLED", True),
             "relay_status_url": os.environ.get("OPENCLAW_RELAY_STATUS_URL", "http://openclaw-relay:8113/v1/queue/status"),
+            "provider_bridge_status_file": os.environ.get(
+                "OPENCLAW_PROVIDER_BRIDGE_STATUS_FILE",
+                "/state/provider-bridge-status.json",
+            ),
             "approvals_state_dir": os.environ.get("OPENCLAW_APPROVALS_STATE_DIR", "/state/approvals"),
             "approvals_pending_ttl_sec": int(os.environ.get("OPENCLAW_APPROVALS_PENDING_TTL_SEC", "604800") or 604800),
         }

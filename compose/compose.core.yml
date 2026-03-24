@@ -193,31 +193,120 @@ services:
       OPENCLAW_HOME: /state/cli/openclaw-home
       OPENCLAW_CONFIG_PATH: /tmp/openclaw.effective.json
       OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw.stack-config.v1.json
+      OPENCLAW_PROVIDER_BRIDGE_FILE: /config/bridge/openclaw.provider-bridge.json
       OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw.operator-overlay.json
       OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-home/openclaw.state.json
       OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram.bot_token
+      OPENCLAW_DISCORD_BOT_TOKEN_FILE: /run/secrets/discord.bot_token
+      OPENCLAW_SLACK_BOT_TOKEN_FILE: /run/secrets/slack.bot_token
+      OPENCLAW_SLACK_APP_TOKEN_FILE: /run/secrets/slack.app_token
+      OPENCLAW_SLACK_SIGNING_SECRET_FILE: /run/secrets/slack.signing_secret
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
     depends_on:
+      openclaw-provider-bridge:
+        condition: service_healthy
       openclaw-sandbox:
         condition: service_healthy
     ports:
       - 127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}:8111
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/bridge:/config/bridge:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/overlay:/overlay
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
       - ${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openclaw/workspaces}:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.webhook_secret:/run/secrets/openclaw.webhook_secret:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/telegram.bot_token:/run/secrets/telegram.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/discord.bot_token:/run/secrets/discord.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.bot_token:/run/secrets/slack.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.app_token:/run/secrets/slack.app_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.signing_secret:/run/secrets/slack.signing_secret:ro
     healthcheck:
       test:
         - CMD-SHELL
         - >
           python3 -c 'import sys,urllib.request;
           sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8111/healthz", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic
+      - agentic-egress
+
+  openclaw-provider-bridge:
+    image: agentic/optional-modules:local
+    build:
+      context: ..
+      dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_INSTALL_VERSION:-latest}
+    entrypoint:
+      - python3
+      - /app/openclaw_provider_bridge.py
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPENCLAW_PROVIDER_BRIDGE_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPENCLAW_PROVIDER_BRIDGE_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      HOME: /state/cli/openclaw-home
+      OPENCLAW_HOME: /state/cli/openclaw-home
+      OPENCLAW_CONFIG_PATH: /tmp/openclaw.effective.json
+      OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw.stack-config.v1.json
+      OPENCLAW_PROVIDER_BRIDGE_FILE: /config/bridge/openclaw.provider-bridge.json
+      OPENCLAW_PROVIDER_BRIDGE_STATUS_FILE: /state/provider-bridge-status.json
+      OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw.operator-overlay.json
+      OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-home/openclaw.state.json
+      OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram.bot_token
+      OPENCLAW_DISCORD_BOT_TOKEN_FILE: /run/secrets/discord.bot_token
+      OPENCLAW_SLACK_BOT_TOKEN_FILE: /run/secrets/slack.bot_token
+      OPENCLAW_SLACK_APP_TOKEN_FILE: /run/secrets/slack.app_token
+      OPENCLAW_SLACK_SIGNING_SECRET_FILE: /run/secrets/slack.signing_secret
+      OPENCLAW_PROVIDER_BRIDGE_TELEGRAM_TOKEN_FILE: /run/secrets/telegram.bot_token
+      OPENCLAW_PROVIDER_BRIDGE_DISCORD_TOKEN_FILE: /run/secrets/discord.bot_token
+      OPENCLAW_PROVIDER_BRIDGE_SLACK_BOT_TOKEN_FILE: /run/secrets/slack.bot_token
+      OPENCLAW_PROVIDER_BRIDGE_SLACK_APP_TOKEN_FILE: /run/secrets/slack.app_token
+      OPENCLAW_PROVIDER_BRIDGE_SLACK_SIGNING_SECRET_FILE: /run/secrets/slack.signing_secret
+      OPENCLAW_PROVIDER_BRIDGE_WHATSAPP_ENABLE: ${OPENCLAW_PROVIDER_WHATSAPP_ENABLE:-false}
+      OPENCLAW_PROVIDER_BRIDGE_WHATSAPP_PLUGIN_SPEC: ${OPENCLAW_PROVIDER_WHATSAPP_PLUGIN_SPEC:-@openclaw/whatsapp}
+      OPENCLAW_PROVIDER_BRIDGE_SYNC_INTERVAL_SEC: ${OPENCLAW_PROVIDER_BRIDGE_SYNC_INTERVAL_SEC:-30}
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-gateway,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/bridge:/config/bridge
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/overlay:/overlay
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/telegram.bot_token:/run/secrets/telegram.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/discord.bot_token:/run/secrets/discord.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.bot_token:/run/secrets/slack.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.app_token:/run/secrets/slack.app_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.signing_secret:/run/secrets/slack.signing_secret:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import json,pathlib,sys;
+          payload=json.loads(pathlib.Path("/state/provider-bridge-status.json").read_text(encoding="utf-8"));
+          sys.exit(0 if isinstance(payload, dict) and "ready" in payload else 1)'
       interval: 30s
       timeout: 10s
       retries: 5
@@ -254,28 +343,43 @@ services:
       OPENCLAW_GATEWAY_AUTH_MODE: token
       OPENCLAW_GATEWAY_BIND_MODE: loopback
       OPENCLAW_GATEWAY_TAILSCALE_MODE: off
+      OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT: "0"
       HOME: /state/cli/openclaw-home
       OPENCLAW_HOME: /state/cli/openclaw-home
       OPENCLAW_CONFIG_PATH: /tmp/openclaw.effective.json
       OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw.stack-config.v1.json
+      OPENCLAW_PROVIDER_BRIDGE_FILE: /config/bridge/openclaw.provider-bridge.json
       OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw.operator-overlay.json
       OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-home/openclaw.state.json
       OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram.bot_token
+      OPENCLAW_DISCORD_BOT_TOKEN_FILE: /run/secrets/discord.bot_token
+      OPENCLAW_SLACK_BOT_TOKEN_FILE: /run/secrets/slack.bot_token
+      OPENCLAW_SLACK_APP_TOKEN_FILE: /run/secrets/slack.app_token
+      OPENCLAW_SLACK_SIGNING_SECRET_FILE: /run/secrets/slack.signing_secret
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-gateway,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
     depends_on:
+      openclaw-provider-bridge:
+        condition: service_healthy
       openclaw:
         condition: service_healthy
     ports:
       - 127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}:8114
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/bridge:/config/bridge:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/overlay:/overlay
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
       - ${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openclaw/workspaces}:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/telegram.bot_token:/run/secrets/telegram.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/discord.bot_token:/run/secrets/discord.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.bot_token:/run/secrets/slack.bot_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.app_token:/run/secrets/slack.app_token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.signing_secret:/run/secrets/slack.signing_secret:ro
     healthcheck:
       test:
         - CMD-SHELL

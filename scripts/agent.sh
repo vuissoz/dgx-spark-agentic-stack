@@ -1528,7 +1528,7 @@ cmd_stop_tool() {
   case "${service}" in
     openclaw)
       compose_file="$(stack_to_compose_file core)"
-      services_to_stop+=(openclaw-gateway openclaw-sandbox openclaw-relay)
+      services_to_stop+=(openclaw-gateway openclaw-provider-bridge openclaw-sandbox openclaw-relay)
       ;;
     optional-pi-mono|optional-goose)
       compose_file="$(stack_to_compose_file optional)"
@@ -1738,14 +1738,14 @@ forget_target_services() {
     opencode) printf '%s\n' agentic-opencode ;;
     vibestral) printf '%s\n' agentic-vibestral ;;
     comfyui) printf '%s\n' comfyui comfyui-loopback ;;
-    openclaw) printf '%s\n' openclaw openclaw-gateway openclaw-sandbox openclaw-relay ;;
+    openclaw) printf '%s\n' openclaw openclaw-gateway openclaw-provider-bridge openclaw-sandbox openclaw-relay ;;
     openhands) printf '%s\n' openhands ;;
     openwebui) printf '%s\n' openwebui ;;
     qdrant) printf '%s\n' qdrant rag-retriever rag-worker opensearch ;;
     obs) printf '%s\n' prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter ;;
     all)
       printf '%s\n' \
-        openclaw openclaw-gateway openclaw-sandbox \
+        openclaw openclaw-gateway openclaw-provider-bridge openclaw-sandbox \
         openclaw-relay \
         qdrant rag-retriever rag-worker opensearch \
         prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter \

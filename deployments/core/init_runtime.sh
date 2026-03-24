@@ -129,10 +129,12 @@ PY
 
 set_openclaw_runtime_permissions() {
   local openclaw_config_dir="${AGENTIC_ROOT}/openclaw/config"
+  local openclaw_config_bridge_dir="${AGENTIC_ROOT}/openclaw/config/bridge"
   local openclaw_config_immutable_dir="${AGENTIC_ROOT}/openclaw/config/immutable"
   local openclaw_config_module_dir="${AGENTIC_ROOT}/openclaw/config/module"
   local openclaw_config_overlay_dir="${AGENTIC_ROOT}/openclaw/config/overlay"
   local openclaw_overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
+  local openclaw_bridge_file="${AGENTIC_ROOT}/openclaw/config/bridge/openclaw.provider-bridge.json"
   local openclaw_state_dir="${AGENTIC_ROOT}/openclaw/state"
   local openclaw_logs_dir="${AGENTIC_ROOT}/openclaw/logs"
   local openclaw_sandbox_state_dir="${AGENTIC_ROOT}/openclaw/sandbox/state"
@@ -143,12 +145,18 @@ set_openclaw_runtime_permissions() {
   local openclaw_webhook_secret="${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   local openclaw_relay_telegram_secret="${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
   local openclaw_relay_whatsapp_secret="${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
+  local openclaw_provider_telegram_token="${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token"
+  local openclaw_provider_discord_token="${AGENTIC_ROOT}/secrets/runtime/discord.bot_token"
+  local openclaw_provider_slack_bot_token="${AGENTIC_ROOT}/secrets/runtime/slack.bot_token"
+  local openclaw_provider_slack_app_token="${AGENTIC_ROOT}/secrets/runtime/slack.app_token"
+  local openclaw_provider_slack_signing_secret="${AGENTIC_ROOT}/secrets/runtime/slack.signing_secret"
 
   if [[ "${EUID}" -eq 0 ]]; then
     chmod 0750 "${openclaw_config_dir}" "${openclaw_config_immutable_dir}" "${openclaw_config_module_dir}"
-    chmod 0770 "${openclaw_config_overlay_dir}"
-    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_config_overlay_dir}" || true
+    chmod 0770 "${openclaw_config_bridge_dir}" "${openclaw_config_overlay_dir}"
+    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_config_bridge_dir}" "${openclaw_config_overlay_dir}" || true
     [[ -f "${openclaw_overlay_file}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_overlay_file}" || true
+    [[ -f "${openclaw_bridge_file}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_bridge_file}" || true
     chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
       "${openclaw_state_dir}" \
       "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
@@ -161,10 +169,16 @@ set_openclaw_runtime_permissions() {
     [[ -f "${openclaw_webhook_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_webhook_secret}" || true
     [[ -f "${openclaw_relay_telegram_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_relay_telegram_secret}" || true
     [[ -f "${openclaw_relay_whatsapp_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_relay_whatsapp_secret}" || true
+    [[ -f "${openclaw_provider_telegram_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_provider_telegram_token}" || true
+    [[ -f "${openclaw_provider_discord_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_provider_discord_token}" || true
+    [[ -f "${openclaw_provider_slack_bot_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_provider_slack_bot_token}" || true
+    [[ -f "${openclaw_provider_slack_app_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_provider_slack_app_token}" || true
+    [[ -f "${openclaw_provider_slack_signing_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_provider_slack_signing_secret}" || true
     return 0
   fi
 
   chmod 0770 \
+    "${openclaw_config_bridge_dir}" \
     "${openclaw_config_overlay_dir}" \
     "${openclaw_state_dir}" \
     "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" \
@@ -374,6 +388,7 @@ main() {
   install -d -m 0755 "${AGENTIC_ROOT}/proxy/logs"
   install -d -m 0750 "${AGENTIC_ROOT}/openclaw"
   install -d -m 0750 "${AGENTIC_ROOT}/openclaw/config"
+  install -d -m 0750 "${AGENTIC_ROOT}/openclaw/config/bridge"
   install -d -m 0750 "${AGENTIC_ROOT}/openclaw/config/immutable"
   install -d -m 0750 "${AGENTIC_ROOT}/openclaw/config/module"
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/config/overlay"
@@ -405,6 +420,7 @@ main() {
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.operator-runtime.v1.json" "${AGENTIC_ROOT}/openclaw/config/operator-runtime.v1.json" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.module-manifest.v1.json" "${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.stack-config.v1.json" "${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json" 0640
+  copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.provider-bridge.v1.json" "${AGENTIC_ROOT}/openclaw/config/bridge/openclaw.provider-bridge.json" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.operator-overlay.v1.json" "${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.relay_targets.json" "${AGENTIC_ROOT}/openclaw/config/relay_targets.json" 0640
   if [[ ! -f "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json" ]]; then
@@ -424,11 +440,13 @@ main() {
     "${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json" \
     "${AGENTIC_ROOT}/openclaw/config/operator-runtime.v1.json" \
     "${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json" \
+    "${AGENTIC_ROOT}/openclaw/config/bridge/openclaw.provider-bridge.json" \
     "${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json" \
     "${AGENTIC_ROOT}/openclaw/config/relay_targets.json"
   chmod 0640 "${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
   python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
     --immutable-file "${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json" \
+    --bridge-file "${AGENTIC_ROOT}/openclaw/config/bridge/openclaw.provider-bridge.json" \
     --overlay-file "${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json" \
     --state-file "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
   ensure_gate_mode_file
@@ -438,12 +456,22 @@ main() {
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
+  [[ -f "${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token" ]] || install -D -m 0600 /dev/null "${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token"
+  [[ -f "${AGENTIC_ROOT}/secrets/runtime/discord.bot_token" ]] || install -D -m 0600 /dev/null "${AGENTIC_ROOT}/secrets/runtime/discord.bot_token"
+  [[ -f "${AGENTIC_ROOT}/secrets/runtime/slack.bot_token" ]] || install -D -m 0600 /dev/null "${AGENTIC_ROOT}/secrets/runtime/slack.bot_token"
+  [[ -f "${AGENTIC_ROOT}/secrets/runtime/slack.app_token" ]] || install -D -m 0600 /dev/null "${AGENTIC_ROOT}/secrets/runtime/slack.app_token"
+  [[ -f "${AGENTIC_ROOT}/secrets/runtime/slack.signing_secret" ]] || install -D -m 0600 /dev/null "${AGENTIC_ROOT}/secrets/runtime/slack.signing_secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/discord.bot_token"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/slack.bot_token"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/slack.app_token"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/slack.signing_secret"
   set_gate_runtime_permissions
   set_proxy_runtime_permissions
   set_openclaw_runtime_permissions

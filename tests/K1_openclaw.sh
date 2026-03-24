@@ -33,14 +33,17 @@ install -d -m 0750 "${agentic_root}/deployments/optional"
 
 openclaw_profile_file="${agentic_root}/openclaw/config/integration-profile.current.json"
 openclaw_immutable_file="${agentic_root}/openclaw/config/immutable/openclaw.stack-config.v1.json"
+openclaw_provider_bridge_file="${agentic_root}/openclaw/config/bridge/openclaw.provider-bridge.json"
 openclaw_overlay_file="${agentic_root}/openclaw/config/overlay/openclaw.operator-overlay.json"
 openclaw_state_config_file="${agentic_root}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 [[ -s "${openclaw_profile_file}" ]] || fail "openclaw integration profile file is missing after init_runtime: ${openclaw_profile_file}"
 [[ -s "${openclaw_immutable_file}" ]] || fail "openclaw immutable config file is missing after init_runtime: ${openclaw_immutable_file}"
+[[ -f "${openclaw_provider_bridge_file}" ]] || fail "openclaw provider bridge file is missing after init_runtime: ${openclaw_provider_bridge_file}"
 [[ -s "${openclaw_overlay_file}" ]] || fail "openclaw operator overlay file is missing after init_runtime: ${openclaw_overlay_file}"
 [[ -f "${openclaw_state_config_file}" ]] || fail "openclaw state config file is missing after init_runtime: ${openclaw_state_config_file}"
 python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
   --immutable-file "${openclaw_immutable_file}" \
+  --bridge-file "${openclaw_provider_bridge_file}" \
   --overlay-file "${openclaw_overlay_file}" \
   --state-file "${openclaw_state_config_file}" \
   >/tmp/agent-k1-layer-validate.out 2>&1 \

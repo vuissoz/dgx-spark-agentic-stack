@@ -72,6 +72,25 @@ wait_for_relay_queue_at_least() {
   fail "relay queue '${field}' did not reach ${minimum} within ${timeout_sec}s (last=${value:-unknown})"
 }
 
+gateway_rpc_probe() {
+  local gateway_cid="$1"
+  timeout 10 docker exec "${gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT=0 openclaw gateway status --json --require-rpc --url ws://127.0.0.1:18789 --token "${token}" >/tmp/agent-k6-gateway-health.json'
+}
+
+wait_for_gateway_rpc() {
+  local gateway_cid="$1"
+  local timeout_sec="${2:-30}"
+  local elapsed=0
+  while (( elapsed < timeout_sec )); do
+    if gateway_rpc_probe "${gateway_cid}"; then
+      return 0
+    fi
+    sleep 1
+    ((elapsed += 1))
+  done
+  return 1
+}
+
 "${agent_bin}" down core >/tmp/agent-k6-down-pre.out 2>&1 || true
 "${REPO_ROOT}/deployments/core/init_runtime.sh"
 
@@ -82,6 +101,8 @@ gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 openclaw_agent_name="operator-k6-$(date +%s)"
 openclaw_immutable_file="${agentic_root}/openclaw/config/immutable/openclaw.stack-config.v1.json"
+openclaw_provider_bridge_file="${agentic_root}/openclaw/config/bridge/openclaw.provider-bridge.json"
+openclaw_provider_bridge_status_file="${agentic_root}/openclaw/state/provider-bridge-status.json"
 openclaw_overlay_file="${agentic_root}/openclaw/config/overlay/openclaw.operator-overlay.json"
 openclaw_state_config_file="${agentic_root}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 
@@ -128,12 +149,32 @@ whatsapp_secret="k6-whatsapp-secret-$(date +%s)"
 printf '%s\n' "${whatsapp_secret}" >"${agentic_root}/secrets/runtime/openclaw.relay.whatsapp.secret"
 chmod 0600 "${agentic_root}/secrets/runtime/openclaw.relay.whatsapp.secret"
 
+telegram_bot_token="123456:k6-telegram-token-$(date +%s)"
+printf '%s\n' "${telegram_bot_token}" >"${agentic_root}/secrets/runtime/telegram.bot_token"
+chmod 0600 "${agentic_root}/secrets/runtime/telegram.bot_token"
+
+discord_bot_token="k6-discord-token-$(date +%s)"
+printf '%s\n' "${discord_bot_token}" >"${agentic_root}/secrets/runtime/discord.bot_token"
+chmod 0600 "${agentic_root}/secrets/runtime/discord.bot_token"
+
+slack_bot_token="xoxb-k6-token-$(date +%s)"
+printf '%s\n' "${slack_bot_token}" >"${agentic_root}/secrets/runtime/slack.bot_token"
+chmod 0600 "${agentic_root}/secrets/runtime/slack.bot_token"
+
+slack_app_token="xapp-k6-token-$(date +%s)"
+printf '%s\n' "${slack_app_token}" >"${agentic_root}/secrets/runtime/slack.app_token"
+chmod 0600 "${agentic_root}/secrets/runtime/slack.app_token"
+
 if [[ "${EUID}" -eq 0 ]]; then
   chown "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}" \
     "${agentic_root}/secrets/runtime/openclaw.token" \
     "${agentic_root}/secrets/runtime/openclaw.webhook_secret" \
     "${agentic_root}/secrets/runtime/openclaw.relay.telegram.secret" \
-    "${agentic_root}/secrets/runtime/openclaw.relay.whatsapp.secret"
+    "${agentic_root}/secrets/runtime/openclaw.relay.whatsapp.secret" \
+    "${agentic_root}/secrets/runtime/telegram.bot_token" \
+    "${agentic_root}/secrets/runtime/discord.bot_token" \
+    "${agentic_root}/secrets/runtime/slack.bot_token" \
+    "${agentic_root}/secrets/runtime/slack.app_token"
 fi
 
 if [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" ]]; then
@@ -152,25 +193,30 @@ OPENCLAW_RELAY_POLL_INTERVAL_SEC=0.5 \
 
 openclaw_cid="$(require_service_container openclaw)" || exit 1
 gateway_cid="$(require_service_container openclaw-gateway)" || exit 1
+provider_bridge_cid="$(require_service_container openclaw-provider-bridge)" || exit 1
 sandbox_cid="$(require_service_container openclaw-sandbox)" || exit 1
 relay_cid="$(require_service_container openclaw-relay)" || exit 1
 toolbox_cid="$(require_service_container toolbox)" || exit 1
 
 wait_for_container_ready "${openclaw_cid}" 90 || fail "openclaw did not become ready"
 wait_for_container_ready "${gateway_cid}" 90 || fail "openclaw-gateway did not become ready"
+wait_for_container_ready "${provider_bridge_cid}" 90 || fail "openclaw-provider-bridge did not become ready"
 wait_for_container_ready "${sandbox_cid}" 90 || fail "openclaw-sandbox did not become ready"
 wait_for_container_ready "${relay_cid}" 90 || fail "openclaw-relay did not become ready"
 
 assert_container_security "${openclaw_cid}" || fail "openclaw container security baseline failed"
 assert_container_security "${gateway_cid}" || fail "openclaw-gateway container security baseline failed"
+assert_container_security "${provider_bridge_cid}" || fail "openclaw-provider-bridge container security baseline failed"
 assert_container_security "${sandbox_cid}" || fail "openclaw-sandbox container security baseline failed"
 assert_container_security "${relay_cid}" || fail "openclaw-relay container security baseline failed"
 assert_proxy_enforced "${openclaw_cid}" || fail "openclaw proxy env baseline failed"
 assert_proxy_enforced "${gateway_cid}" || fail "openclaw-gateway proxy env baseline failed"
+assert_proxy_enforced "${provider_bridge_cid}" || fail "openclaw-provider-bridge proxy env baseline failed"
 assert_proxy_enforced "${sandbox_cid}" || fail "openclaw-sandbox proxy env baseline failed"
 assert_proxy_enforced "${relay_cid}" || fail "openclaw-relay proxy env baseline failed"
 assert_no_docker_sock_mount "${openclaw_cid}" || fail "openclaw must not mount docker.sock"
 assert_no_docker_sock_mount "${gateway_cid}" || fail "openclaw-gateway must not mount docker.sock"
+assert_no_docker_sock_mount "${provider_bridge_cid}" || fail "openclaw-provider-bridge must not mount docker.sock"
 assert_no_docker_sock_mount "${sandbox_cid}" || fail "openclaw-sandbox must not mount docker.sock"
 assert_no_docker_sock_mount "${relay_cid}" || fail "openclaw-relay must not mount docker.sock"
 openclaw_mount_dump="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%v\n" .Source .Destination .RW}}{{end}}' "${openclaw_cid}")"
@@ -252,16 +298,46 @@ docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/.openclaw
   || fail "openclaw onboard workspace must persist under ${openclaw_workspaces_dir}"
 [[ -f "${openclaw_immutable_file}" ]] \
   || fail "openclaw immutable config file must persist on host"
+[[ -f "${openclaw_provider_bridge_file}" ]] \
+  || fail "openclaw provider bridge file must persist on host"
+[[ -f "${openclaw_provider_bridge_status_file}" ]] \
+  || fail "openclaw provider bridge status file must persist on host"
 [[ -f "${openclaw_overlay_file}" ]] \
   || fail "openclaw operator overlay file must persist on host"
 [[ -f "${openclaw_state_config_file}" ]] \
   || fail "openclaw writable state config file must persist on host"
 python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
   --immutable-file "${openclaw_immutable_file}" \
+  --bridge-file "${openclaw_provider_bridge_file}" \
   --overlay-file "${openclaw_overlay_file}" \
   --state-file "${openclaw_state_config_file}" \
   >/tmp/agent-k6-layer-host-validate.out 2>&1 \
   || fail "openclaw host layered config contract must stay valid after CLI flows"
+python3 - "${openclaw_provider_bridge_file}" "${openclaw_provider_bridge_status_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+bridge = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+status = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+channels = bridge.get("channels") or {}
+telegram = channels.get("telegram") or {}
+discord = channels.get("discord") or {}
+slack = channels.get("slack") or {}
+
+if telegram.get("botToken", {}).get("id") != "TELEGRAM_BOT_TOKEN":
+    raise SystemExit("provider bridge must seed Telegram SecretRef")
+if discord.get("token", {}).get("id") != "DISCORD_BOT_TOKEN":
+    raise SystemExit("provider bridge must seed Discord SecretRef")
+if slack.get("botToken", {}).get("id") != "SLACK_BOT_TOKEN":
+    raise SystemExit("provider bridge must seed Slack bot SecretRef")
+if slack.get("appToken", {}).get("id") != "SLACK_APP_TOKEN":
+    raise SystemExit("provider bridge must seed Slack app SecretRef")
+providers = status.get("providers") or {}
+for provider in ("telegram", "discord", "slack", "whatsapp"):
+    if provider not in providers:
+        raise SystemExit(f"provider bridge status missing {provider}")
+PY
 python3 - "${openclaw_overlay_file}" "${openclaw_state_config_file}" <<'PY'
 import json
 import pathlib
@@ -364,20 +440,31 @@ import sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 runtime = payload.get("runtime")
 relay = payload.get("relay")
+provider_bridge = payload.get("provider_bridge")
 if not isinstance(runtime, dict) or runtime.get("mode") != "openclaw":
     raise SystemExit("dashboard runtime payload is invalid")
 if not isinstance(relay, dict):
     raise SystemExit("dashboard relay payload is invalid")
+if not isinstance(provider_bridge, dict):
+    raise SystemExit("dashboard provider_bridge payload is invalid")
 for field in ("pending", "done", "dead"):
     if field not in relay:
         raise SystemExit(f"dashboard relay payload missing field: {field}")
+for provider in ("telegram", "discord", "slack", "whatsapp"):
+    if provider not in (provider_bridge.get("providers") or {}):
+        raise SystemExit(f"dashboard provider bridge missing provider: {provider}")
 PY
 
 gateway_ui_status="$(curl -sS -o /tmp/agent-k6-gateway-ui.html -w '%{http_code}' "http://127.0.0.1:${gateway_host_port}/")"
 [[ "${gateway_ui_status}" == "200" ]] || fail "openclaw gateway Web UI must be reachable on loopback (status=${gateway_ui_status})"
+grep -q 'assets/index-' /tmp/agent-k6-gateway-ui.html \
+  || fail "openclaw gateway Web UI must serve the real Control UI asset bundle"
+if grep -q 'Fallback control UI page provided by the agentic stack' /tmp/agent-k6-gateway-ui.html; then
+  fail "openclaw gateway Web UI must not serve the fallback placeholder page"
+fi
 
-timeout 25 docker exec "${gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && openclaw gateway health --json --url ws://127.0.0.1:18789 --token "${token}" >/tmp/agent-k6-gateway-health.json' \
-  || fail "openclaw gateway WS health check must succeed with token auth"
+wait_for_gateway_rpc "${gateway_cid}" 45 \
+  || fail "openclaw gateway WS RPC probe must succeed with token auth"
 
 relay_body='{"message":"relay hello from k6","target":"discord:user:test"}'
 relay_ts="$(date +%s)"

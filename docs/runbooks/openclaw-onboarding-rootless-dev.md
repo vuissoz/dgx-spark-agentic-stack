@@ -281,10 +281,13 @@ openclaw agents add operator --workspace /workspace/wizard-default --non-interac
 openclaw agents list
 ```
 
-CLI runtime now uses three explicit layers:
+CLI runtime now uses four explicit layers:
 - immutable stack-managed config:
   - `${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json`
   - owns gateway mode/bind/auth token wiring/tailscale posture
+- provider bridge layer:
+  - `${AGENTIC_ROOT}/openclaw/config/bridge/openclaw.provider-bridge.json`
+  - generated from stack-managed provider secret files and used to seed Telegram/Slack/Discord channel wiring plus optional WhatsApp bootstrap
 - validated operator overlay:
   - `${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json`
   - allowed keys only: `agents.defaults.workspace`, `tools.profile`, `commands.{native,nativeSkills,restart,ownerDisplay}`, `session.dmScope`
@@ -293,6 +296,13 @@ CLI runtime now uses three explicit layers:
   - plus `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/` and `${AGENTIC_ROOT}/openclaw/workspaces/`
 
 `OPENCLAW_CONFIG_PATH` now points to a derived tmpfs file (`/tmp/openclaw.effective.json`) regenerated from those layers before each CLI invocation; it is no longer the source of truth.
+
+Provider secret file contract used by the bridge:
+- Telegram: `${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token`
+- Discord: `${AGENTIC_ROOT}/secrets/runtime/discord.bot_token`
+- Slack Socket Mode: `${AGENTIC_ROOT}/secrets/runtime/slack.bot_token` and `${AGENTIC_ROOT}/secrets/runtime/slack.app_token`
+- Slack HTTP mode fallback: `${AGENTIC_ROOT}/secrets/runtime/slack.signing_secret`
+- WhatsApp: no static bot token; set `OPENCLAW_PROVIDER_WHATSAPP_ENABLE=true` before `./agent up core`, then complete `openclaw channels login --channel whatsapp` for QR pairing
 
 If you need a "brand-new install" reset (CLI-only or full module reset), follow:
 - `docs/runbooks/openclaw-explique-debutants.md` section `8. Reset "installation neuve" (clean reset)`

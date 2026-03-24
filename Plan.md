@@ -521,3 +521,22 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - ne pas exposer de secrets, tokens, chemins sensibles ou details privilegies,
     - ne pas contourner la separation entre main agent, API interne et CLI operateur,
     - documenter explicitement que cette UX vient apres les travaux de securite et de confinement.
+
+## Addendum (2026-03-24, parite OpenClaw UI + providers)
+- Beads `dgx-spark-agentic-stack-433`: restaurer le vrai Control UI OpenClaw sur `127.0.0.1:18789` au lieu de la page fallback. [OPEN]
+  - Constats:
+    - le paquet CLI `openclaw` installe le runtime gateway et les helpers `control-ui-*`, mais pas l'arborescence complete `dist/control-ui/assets/*`,
+    - l'image optionnelle masquait ce manque en generant un `index.html` factice, ce qui rendait `18789` trompeur par rapport au comportement attendu d'OpenClaw.
+  - Cible:
+    - construire/capturer les assets UI a partir du tag source OpenClaw correspondant a la version installee,
+    - copier `dist/control-ui/*` dans l'image optionnelle,
+    - faire verifier par tests/doctor qu'on sert bien la vraie UI et non une page placebo.
+- Beads `dgx-spark-agentic-stack-qik`: ajouter un bridge providers OpenClaw stack-managed pour Telegram/Slack/Discord et un bootstrap WhatsApp conforme au modele de securite de la stack. [OPEN]
+  - Constats:
+    - la stack possede deja `openclaw-gateway` upstream, donc il faut eviter de dupliquer le runtime chat upstream,
+    - le besoin reel est un pont entre secrets fichiers/root-only de la stack et la config/channels OpenClaw, en gardant les services locaux loopback-only.
+  - Cible:
+    - ajouter un service `openclaw-provider-bridge` sans port public, qui genere une couche config derivee `channels.*` a partir de secrets fichiers,
+    - exporter les env vars attendues par OpenClaw (`TELEGRAM_BOT_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `DISCORD_BOT_TOKEN`, etc.) uniquement dans le conteneur gateway,
+    - activer Telegram, Slack en mode socket et Discord quand les secrets sont presents,
+    - preparer WhatsApp via installation plugin/bootstrap explicite, tout en laissant le QR login a l'operateur.

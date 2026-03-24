@@ -33,12 +33,28 @@ def load_json(path: pathlib.Path, *, default: Any | None = None) -> Any:
     return payload
 
 
+def _render_json(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, indent=2, sort_keys=False) + "\n"
+
+
 def write_json(path: pathlib.Path, payload: dict[str, Any], *, mode: int = 0o600) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    rendered = _render_json(payload)
+    if path.exists():
+        try:
+            current = path.read_text(encoding="utf-8")
+        except OSError:
+            current = None
+        else:
+            if current == rendered:
+                try:
+                    os.chmod(path, mode)
+                except OSError:
+                    pass
+                return
     tmp_path = path.with_name(f"{path.name}.tmp")
     with tmp_path.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2, sort_keys=False)
-        fh.write("\n")
+        fh.write(rendered)
     os.chmod(tmp_path, mode)
     tmp_path.replace(path)
 
@@ -174,6 +190,12 @@ def resolve_immutable(payload: dict[str, Any], gateway_token: str) -> dict[str, 
     return prune_empty(normalized)
 
 
+def resolve_bridge(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = deep_copy(payload)
+    normalized.pop("_agentic", None)
+    return prune_empty(normalized)
+
+
 def strip_paths(payload: dict[str, Any], paths: set[tuple[str, ...]]) -> dict[str, Any]:
     result = deep_copy(payload)
     for path in sorted(paths):
@@ -192,6 +214,7 @@ def extract_overlay(payload: dict[str, Any]) -> dict[str, Any]:
 
 def materialize_effective(
     immutable_file: pathlib.Path,
+    bridge_file: pathlib.Path,
     overlay_file: pathlib.Path,
     state_file: pathlib.Path,
     effective_file: pathlib.Path,
@@ -202,12 +225,14 @@ def materialize_effective(
         raise SystemExit(f"{gateway_token_file}: gateway token file is empty")
 
     immutable = resolve_immutable(load_json(immutable_file), gateway_token)
+    bridge = resolve_bridge(load_json(bridge_file, default={}))
     overlay = validate_overlay(load_json(overlay_file, default={}), overlay_file)
     state = load_json(state_file, default={})
 
     immutable_paths = collect_leaf_paths(immutable)
-    state = strip_paths(state, immutable_paths | ALLOWED_OVERLAY_PATHS)
-    effective = deep_merge(deep_merge(immutable, overlay), state)
+    bridge_paths = collect_leaf_paths(bridge)
+    state = strip_paths(state, immutable_paths | bridge_paths | ALLOWED_OVERLAY_PATHS)
+    effective = deep_merge(deep_merge(deep_merge(immutable, bridge), overlay), state)
 
     write_json(effective_file, effective, mode=0o600)
     if not state_file.exists():
@@ -216,6 +241,7 @@ def materialize_effective(
 
 def capture_layers(
     immutable_file: pathlib.Path,
+    bridge_file: pathlib.Path,
     overlay_file: pathlib.Path,
     state_file: pathlib.Path,
     effective_file: pathlib.Path,
@@ -226,12 +252,14 @@ def capture_layers(
         raise SystemExit(f"{gateway_token_file}: gateway token file is empty")
 
     immutable = resolve_immutable(load_json(immutable_file), gateway_token)
+    bridge = resolve_bridge(load_json(bridge_file, default={}))
     effective = load_json(effective_file)
 
     overlay_candidate = extract_overlay(effective)
     overlay = validate_overlay(overlay_candidate, overlay_file)
     immutable_paths = collect_leaf_paths(immutable)
-    state = strip_paths(effective, immutable_paths | ALLOWED_OVERLAY_PATHS)
+    bridge_paths = collect_leaf_paths(bridge)
+    state = strip_paths(effective, immutable_paths | bridge_paths | ALLOWED_OVERLAY_PATHS)
 
     write_json(overlay_file, overlay, mode=0o640)
     write_json(state_file, state, mode=0o600)
@@ -239,6 +267,7 @@ def capture_layers(
 
 def validate_host_layout(
     immutable_file: pathlib.Path,
+    bridge_file: pathlib.Path,
     overlay_file: pathlib.Path,
     state_file: pathlib.Path,
 ) -> None:
@@ -257,12 +286,14 @@ def validate_host_layout(
         raise SystemExit(f"{immutable_file}: gateway.bind must stay 'loopback'")
     if gateway_auth_mode != "token":
         raise SystemExit(f"{immutable_file}: gateway.auth.mode must stay 'token'")
+    load_json(bridge_file, default={})
     validate_overlay(load_json(overlay_file, default={}), overlay_file)
     load_json(state_file, default={})
 
 
 def check_runtime(
     immutable_file: pathlib.Path,
+    bridge_file: pathlib.Path,
     overlay_file: pathlib.Path,
     state_file: pathlib.Path,
     effective_file: pathlib.Path,
@@ -273,19 +304,21 @@ def check_runtime(
         raise SystemExit(f"{gateway_token_file}: gateway token file is empty")
 
     immutable = resolve_immutable(load_json(immutable_file), gateway_token)
+    bridge = resolve_bridge(load_json(bridge_file, default={}))
     overlay = validate_overlay(load_json(overlay_file, default={}), overlay_file)
     state = load_json(state_file, default={})
     effective = load_json(effective_file)
 
     immutable_paths = collect_leaf_paths(immutable)
-    forbidden_in_state = collect_leaf_paths(state) & (immutable_paths | ALLOWED_OVERLAY_PATHS)
+    bridge_paths = collect_leaf_paths(bridge)
+    forbidden_in_state = collect_leaf_paths(state) & (immutable_paths | bridge_paths | ALLOWED_OVERLAY_PATHS)
     if forbidden_in_state:
         rendered = ", ".join(".".join(parts) for parts in sorted(forbidden_in_state))
-        raise SystemExit(f"{state_file}: state file must not persist immutable/overlay keys: {rendered}")
+        raise SystemExit(f"{state_file}: state file must not persist immutable/bridge/overlay keys: {rendered}")
 
-    expected = deep_merge(deep_merge(immutable, overlay), state)
+    expected = deep_merge(deep_merge(deep_merge(immutable, bridge), overlay), state)
     if expected != effective:
-        raise SystemExit(f"{effective_file}: effective config drifted from immutable+overlay+state layers")
+        raise SystemExit(f"{effective_file}: effective config drifted from immutable+bridge+overlay+state layers")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -294,6 +327,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_common(command: argparse.ArgumentParser, *, with_effective: bool = True, with_token: bool = True) -> None:
         command.add_argument("--immutable-file", required=True, type=pathlib.Path)
+        command.add_argument("--bridge-file", required=True, type=pathlib.Path)
         command.add_argument("--overlay-file", required=True, type=pathlib.Path)
         command.add_argument("--state-file", required=True, type=pathlib.Path)
         if with_effective:
@@ -315,6 +349,7 @@ def main() -> int:
     if args.command == "materialize":
         materialize_effective(
             args.immutable_file,
+            args.bridge_file,
             args.overlay_file,
             args.state_file,
             args.effective_file,
@@ -324,6 +359,7 @@ def main() -> int:
     if args.command == "capture":
         capture_layers(
             args.immutable_file,
+            args.bridge_file,
             args.overlay_file,
             args.state_file,
             args.effective_file,
@@ -331,11 +367,12 @@ def main() -> int:
         )
         return 0
     if args.command == "validate-host-layout":
-        validate_host_layout(args.immutable_file, args.overlay_file, args.state_file)
+        validate_host_layout(args.immutable_file, args.bridge_file, args.overlay_file, args.state_file)
         return 0
     if args.command == "check-runtime":
         check_runtime(
             args.immutable_file,
+            args.bridge_file,
             args.overlay_file,
             args.state_file,
             args.effective_file,

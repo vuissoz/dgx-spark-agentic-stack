@@ -58,7 +58,7 @@ goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_M
 service_requires_proxy_env() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
       return 0
       ;;
     *)
@@ -1050,6 +1050,7 @@ fi
 
 optional_openclaw_cid="$(service_container_id openclaw)"
 optional_openclaw_gateway_cid="$(service_container_id openclaw-gateway)"
+optional_openclaw_provider_bridge_cid="$(service_container_id openclaw-provider-bridge)"
 optional_openclaw_sandbox_cid="$(service_container_id openclaw-sandbox)"
 optional_openclaw_relay_cid="$(service_container_id openclaw-relay)"
 optional_openclaw_profile_file="${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json"
@@ -1057,6 +1058,8 @@ optional_openclaw_operator_runtime_file="${AGENTIC_ROOT}/openclaw/config/operato
 optional_openclaw_relay_targets_file="${AGENTIC_ROOT}/openclaw/config/relay_targets.json"
 optional_openclaw_manifest_file="${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json"
 optional_openclaw_immutable_file="${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json"
+optional_openclaw_provider_bridge_file="${AGENTIC_ROOT}/openclaw/config/bridge/openclaw.provider-bridge.json"
+optional_openclaw_provider_bridge_status_file="${AGENTIC_ROOT}/openclaw/state/provider-bridge-status.json"
 optional_openclaw_overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
 optional_openclaw_state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 optional_openclaw_chat_status_plugin_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
@@ -1085,6 +1088,7 @@ if [[ -n "${optional_openclaw_cid}" ]]; then
     doctor_fail "openclaw writable state config is missing: ${optional_openclaw_state_file}"
   elif ! python3 "${optional_openclaw_layer_helper}" validate-host-layout \
     --immutable-file "${optional_openclaw_immutable_file}" \
+    --bridge-file "${optional_openclaw_provider_bridge_file}" \
     --overlay-file "${optional_openclaw_overlay_file}" \
     --state-file "${optional_openclaw_state_file}" >/dev/null 2>&1; then
     doctor_fail "openclaw layered config layout is invalid"
@@ -1136,6 +1140,9 @@ PY
   fi
   if ! grep -q '^OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json"
+  fi
+  if ! grep -q '^OPENCLAW_PROVIDER_BRIDGE_FILE=/config/bridge/openclaw.provider-bridge.json$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_PROVIDER_BRIDGE_FILE=/config/bridge/openclaw.provider-bridge.json"
   fi
   if ! grep -q '^OPENCLAW_OPERATOR_OVERLAY_FILE=/overlay/openclaw.operator-overlay.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_OPERATOR_OVERLAY_FILE=/overlay/openclaw.operator-overlay.json"
@@ -1212,7 +1219,7 @@ PY
   then
     doctor_fail "openclaw dashboard status must expose approvals queue counters"
   fi
-  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw --version >/tmp/openclaw-layer-version.out && python3 /app/openclaw_config_layers.py check-runtime --immutable-file /config/immutable/openclaw.stack-config.v1.json --overlay-file /overlay/openclaw.operator-overlay.json --state-file /state/cli/openclaw-home/openclaw.state.json --effective-file /tmp/openclaw.effective.json --gateway-token-file /run/secrets/openclaw.token"; then
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw --version >/tmp/openclaw-layer-version.out && python3 /app/openclaw_config_layers.py check-runtime --immutable-file /config/immutable/openclaw.stack-config.v1.json --bridge-file /config/bridge/openclaw.provider-bridge.json --overlay-file /overlay/openclaw.operator-overlay.json --state-file /state/cli/openclaw-home/openclaw.state.json --effective-file /tmp/openclaw.effective.json --gateway-token-file /run/secrets/openclaw.token"; then
     doctor_fail "openclaw layered config runtime check failed"
   fi
   if [[ ! -s "${optional_openclaw_chat_status_manifest_file}" ]]; then
@@ -1279,6 +1286,9 @@ if [[ -n "${optional_openclaw_gateway_cid}" ]]; then
   if ! grep -q '^OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json$' <<<"${optional_openclaw_gateway_env}"; then
     doctor_fail "openclaw-gateway must set OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json"
   fi
+  if ! grep -q '^OPENCLAW_PROVIDER_BRIDGE_FILE=/config/bridge/openclaw.provider-bridge.json$' <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "openclaw-gateway must set OPENCLAW_PROVIDER_BRIDGE_FILE=/config/bridge/openclaw.provider-bridge.json"
+  fi
   if ! grep -q '^OPENCLAW_OPERATOR_OVERLAY_FILE=/overlay/openclaw.operator-overlay.json$' <<<"${optional_openclaw_gateway_env}"; then
     doctor_fail "openclaw-gateway must set OPENCLAW_OPERATOR_OVERLAY_FILE=/overlay/openclaw.operator-overlay.json"
   fi
@@ -1333,10 +1343,49 @@ PY
   gateway_ui_status="$(curl -sS -o /tmp/doctor-openclaw-gateway-ui.out -w '%{http_code}' "http://127.0.0.1:${openclaw_gateway_host_port}/" 2>/dev/null || true)"
   if [[ "${gateway_ui_status}" != "200" ]]; then
     doctor_fail "openclaw-gateway Web UI must be reachable on loopback (/, status=${gateway_ui_status:-unknown})"
+  elif ! grep -q 'assets/index-' /tmp/doctor-openclaw-gateway-ui.out; then
+    doctor_fail "openclaw-gateway must serve the real Control UI asset bundle"
+  elif grep -q 'Fallback control UI page provided by the agentic stack' /tmp/doctor-openclaw-gateway-ui.out; then
+    doctor_fail "openclaw-gateway must not serve the fallback placeholder page"
   fi
 
-  if ! timeout 20 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && openclaw gateway health --json --url ws://127.0.0.1:18789 --token "${token}" >/tmp/openclaw-gateway-health.out'; then
-    doctor_fail "openclaw-gateway WS endpoint must answer token-auth health check on ws://127.0.0.1:18789"
+  if ! timeout 20 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT=0 openclaw gateway status --json --require-rpc --url ws://127.0.0.1:18789 --token "${token}" >/tmp/openclaw-gateway-health.out'; then
+    doctor_fail "openclaw-gateway WS endpoint must answer token-auth RPC probe on ws://127.0.0.1:18789"
+  fi
+fi
+
+if [[ -n "${optional_openclaw_provider_bridge_cid}" ]]; then
+  optional_openclaw_provider_bridge_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_openclaw_provider_bridge_cid}" 2>/dev/null || true)"
+  if ! grep -q '^OPENCLAW_PROVIDER_BRIDGE_FILE=/config/bridge/openclaw.provider-bridge.json$' <<<"${optional_openclaw_provider_bridge_env}"; then
+    doctor_fail "openclaw-provider-bridge must set OPENCLAW_PROVIDER_BRIDGE_FILE=/config/bridge/openclaw.provider-bridge.json"
+  fi
+  if ! grep -q '^OPENCLAW_PROVIDER_BRIDGE_STATUS_FILE=/state/provider-bridge-status.json$' <<<"${optional_openclaw_provider_bridge_env}"; then
+    doctor_fail "openclaw-provider-bridge must set OPENCLAW_PROVIDER_BRIDGE_STATUS_FILE=/state/provider-bridge-status.json"
+  fi
+  if ! mount_destination_present "${optional_openclaw_provider_bridge_cid}" "/config/bridge"; then
+    doctor_fail "openclaw-provider-bridge must mount /config/bridge"
+  fi
+  if [[ ! -s "${optional_openclaw_provider_bridge_file}" ]]; then
+    doctor_fail "openclaw provider bridge file is missing: ${optional_openclaw_provider_bridge_file}"
+  fi
+  if [[ ! -s "${optional_openclaw_provider_bridge_status_file}" ]]; then
+    doctor_fail "openclaw provider bridge status file is missing: ${optional_openclaw_provider_bridge_status_file}"
+  elif ! python3 - "${optional_openclaw_provider_bridge_status_file}" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+providers = payload.get("providers")
+if not isinstance(providers, dict):
+    raise SystemExit(1)
+if "ready" not in payload:
+    raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw provider bridge status payload is invalid"
   fi
 fi
 
