@@ -1222,6 +1222,30 @@ detect_project_name() {
   printf '%s\n' "${project}"
 }
 
+bootstrap_container_bash_home() {
+  local container_id="$1"
+  local home_dir="$2"
+
+  docker exec "${container_id}" sh -lc "
+    home_dir='${home_dir}'
+    mkdir -p \"\${home_dir}\" \"\${home_dir}/.config\" \"\${home_dir}/.cache\" \"\${home_dir}/.local/bin\"
+    if [ ! -f \"\${home_dir}/.bash_profile\" ]; then
+      printf '%s\n' \
+        'if [ -f \"\${HOME}/.bashrc\" ]; then' \
+        '  . \"\${HOME}/.bashrc\"' \
+        'fi' >\"\${home_dir}/.bash_profile\"
+    fi
+    if [ ! -f \"\${home_dir}/.bashrc\" ]; then
+      printf '%s\n' 'export PATH=\"\${HOME}/.local/bin:\${PATH}\"' >\"\${home_dir}/.bashrc\"
+    elif ! grep -Eq '/\\.local/bin' \"\${home_dir}/.bashrc\"; then
+      printf '%s\n' 'export PATH=\"\${HOME}/.local/bin:\${PATH}\"' >>\"\${home_dir}/.bashrc\"
+    fi
+    chmod 0700 \"\${home_dir}\" \"\${home_dir}/.config\" \"\${home_dir}/.cache\" 2>/dev/null || true
+    chmod 0755 \"\${home_dir}/.local\" \"\${home_dir}/.local/bin\" 2>/dev/null || true
+    chmod 0600 \"\${home_dir}/.bash_profile\" \"\${home_dir}/.bashrc\" 2>/dev/null || true
+  "
+}
+
 prepare_tool_session() {
   local tool="$1"
   local project="$2"
@@ -1263,6 +1287,7 @@ prepare_tool_session() {
     openclaw-shell)
       docker exec "${container_id}" sh -lc "command -v openclaw >/dev/null" \
         || die "openclaw CLI is missing in openclaw container"
+      bootstrap_container_bash_home "${container_id}" "/state/cli/openclaw-home"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -1327,7 +1352,7 @@ cmd_tool_attach() {
       exec docker exec -it "${container_id}" sh -lc "cd '${workspace}' && exec goose"
       ;;
     openclaw-shell)
-      exec docker exec -it "${container_id}" sh -lc "cd '${workspace}' && exec sh"
+      exec docker exec -it "${container_id}" sh -lc "export HOME='/state/cli/openclaw-home'; cd '${workspace}' && exec bash -l"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -2717,7 +2742,8 @@ cmd_openclaw_operator() {
             printf 'prepared sandbox=%s container=%s workspace=%s\n' "${sandbox_id}" "${sandbox_cid}" "${workspace_dir}"
             return 0
           fi
-          exec docker exec -it "${sandbox_cid}" sh -lc "cd '${workspace_dir}' && exec sh"
+          bootstrap_container_bash_home "${sandbox_cid}" "/state/shell-home"
+          exec docker exec -it "${sandbox_cid}" sh -lc "export HOME='/state/shell-home'; cd '${workspace_dir}' && exec bash -l"
           ;;
         *)
           die "Usage: agent openclaw sandbox [ls [--json] | attach <sandbox_id> | destroy <sandbox_id> [--json]]"

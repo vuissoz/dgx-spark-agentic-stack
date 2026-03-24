@@ -111,6 +111,10 @@ grep -q 'core OpenClaw service shell' /tmp/agent-k1-openclaw-entrypoint.out \
   || fail "agent openclaw output must mention core OpenClaw service shell"
 grep -q "127.0.0.1:${webhook_host_port}" /tmp/agent-k1-openclaw-entrypoint.out \
   || fail "agent openclaw output must mention loopback OpenClaw endpoint"
+docker exec "${claw_cid}" sh -lc 'test -f /state/cli/openclaw-home/.bash_profile && test -f /state/cli/openclaw-home/.bashrc' \
+  || fail "agent openclaw must bootstrap a persistent bash login shell home"
+docker exec "${claw_cid}" sh -lc "grep -q '/.local/bin' /state/cli/openclaw-home/.bashrc" \
+  || fail "agent openclaw bash bootstrap must preserve ~/.local/bin on PATH"
 
 set +e
 timeout 5 "${agent_bin}" logs openclaw >/tmp/agent-k1-openclaw-logs.out 2>&1
