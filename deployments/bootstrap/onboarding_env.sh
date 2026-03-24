@@ -6,6 +6,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 preseed_goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT-}"
 # shellcheck source=scripts/lib/runtime.sh
 source "${REPO_ROOT}/scripts/lib/runtime.sh"
+# shellcheck source=scripts/lib/ollama_context.sh
+source "${REPO_ROOT}/scripts/lib/ollama_context.sh"
 OPTIONAL_TEMPLATE_DIR="${REPO_ROOT}/examples/optional"
 
 profile_override=""
@@ -69,6 +71,7 @@ summary_generated_files=()
 summary_deferred=()
 summary_blockers=()
 summary_modules=()
+context_estimate_summary=()
 
 usage() {
   cat <<'USAGE'
@@ -1311,6 +1314,97 @@ collect_mem_limit() {
   fi
 }
 
+recommend_default_model_context_window() {
+  local model="$1"
+  local current_context="$2"
+  local mem_limit_raw="$3"
+  local context_override_value="${4:-}"
+  local report_file=""
+  local key value
+  local model_max_context=0
+  local estimated_required_bytes=0
+  local estimated_required_gib=0
+  local estimated_max_fitting_context=0
+  local recommendation=""
+  local candidate=""
+
+  report_file="$(mktemp)"
+  if ! ollama_context_estimate_report "${model}" "${current_context}" "${mem_limit_raw}" >"${report_file}" 2>/dev/null; then
+    rm -f "${report_file}"
+    return 1
+  fi
+
+  while IFS='=' read -r key value; do
+    [[ -n "${key}" ]] || continue
+    case "${key}" in
+      model_max_context) model_max_context="${value}" ;;
+      estimated_required_bytes) estimated_required_bytes="${value}" ;;
+      estimated_max_fitting_context) estimated_max_fitting_context="${value}" ;;
+      *) ;;
+    esac
+  done <"${report_file}"
+  rm -f "${report_file}"
+
+  if (( estimated_required_bytes > 0 )); then
+    estimated_required_gib="$(bytes_to_gib_ceil "${estimated_required_bytes}")"
+  fi
+
+  if (( estimated_max_fitting_context <= 0 )); then
+    context_estimate_summary=(
+      "model=${model}"
+      "memory_limit=${mem_limit_raw}"
+      "max_context=0"
+      "model_cap=${model_max_context}"
+    )
+    return 0
+  fi
+
+  recommendation="${estimated_max_fitting_context}"
+  context_estimate_summary=(
+    "model=${model}"
+    "memory_limit=${mem_limit_raw}"
+    "max_context=${recommendation}"
+    "model_cap=${model_max_context}"
+  )
+
+  if [[ -n "${context_override_value}" ]]; then
+    if (( current_context > recommendation )); then
+      warn "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=${current_context} exceeds the estimated max fitting context ${recommendation} for ${model} under AGENTIC_LIMIT_OLLAMA_MEM=${mem_limit_raw}"
+    fi
+    return 0
+  fi
+
+  if [[ "${non_interactive}" -eq 1 ]]; then
+    if (( current_context != recommendation )); then
+      info "Using recommended AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=${recommendation} for ${model} under AGENTIC_LIMIT_OLLAMA_MEM=${mem_limit_raw} (configured ${current_context} would need about ${estimated_required_gib}GiB)."
+      default_model_context_window="${recommendation}"
+      if [[ -z "${preseed_goose_context_limit:-}" ]]; then
+        goose_context_limit="${default_model_context_window}"
+      fi
+    fi
+    return 0
+  fi
+
+  if (( current_context == recommendation )); then
+    return 0
+  fi
+
+  info "Estimated max fitting context for ${model} with AGENTIC_LIMIT_OLLAMA_MEM=${mem_limit_raw}: ${recommendation} tokens (model max ${model_max_context}; configured ${current_context} would need about ${estimated_required_gib}GiB)."
+  while true; do
+    candidate="$(prompt_with_default "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${recommendation}")"
+    if validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${candidate}"; then
+      default_model_context_window="${candidate}"
+      if [[ -z "${preseed_goose_context_limit:-}" ]]; then
+        goose_context_limit="${default_model_context_window}"
+      fi
+      if (( candidate > recommendation )); then
+        warn "selected AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=${candidate} exceeds the estimated max fitting context ${recommendation}; agent doctor will warn until AGENTIC_LIMIT_OLLAMA_MEM or context is adjusted"
+      fi
+      break
+    fi
+  done
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile)
@@ -1641,7 +1735,7 @@ collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_net
 
 collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_ollama_models_for_profile "${profile}" "${root_path}")" "${ollama_models_override}" "OLLAMA_MODELS_DIR points to the shared Ollama model storage path on host."
 collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
-collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model."
+collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model. Onboarding may recommend a lower value later once AGENTIC_LIMIT_OLLAMA_MEM is known."
 goose_context_limit="${preseed_goose_context_limit:-${default_model_context_window}}"
 validate_context_window_value "AGENTIC_GOOSE_CONTEXT_LIMIT" "${goose_context_limit}" || die "invalid AGENTIC_GOOSE_CONTEXT_LIMIT"
 grafana_admin_user="${grafana_admin_user_override:-${GRAFANA_ADMIN_USER:-admin}}"
@@ -1659,6 +1753,9 @@ collect_mem_limit limits_default_mem "AGENTIC_LIMIT_DEFAULT_MEM" "$(default_limi
 collect_cpu_limit limits_core_cpus "AGENTIC_LIMIT_CORE_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "core")" "${limits_core_cpus_override}" "AGENTIC_LIMIT_CORE_CPUS/AGENTIC_LIMIT_CORE_MEM set defaults for core services."
 collect_mem_limit limits_core_mem "AGENTIC_LIMIT_CORE_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "core")" "${limits_core_mem_override}"
 collect_mem_limit limits_ollama_mem "AGENTIC_LIMIT_OLLAMA_MEM" "$(default_limits_ollama_mem_for_profile "${profile}")" "${limits_ollama_mem_override}" "AGENTIC_LIMIT_OLLAMA_MEM overrides Ollama memory only. Increase it for larger local models."
+recommend_default_model_context_window "${default_model}" "${default_model_context_window}" "${limits_ollama_mem}" "${default_model_context_window_override:-}" || true
+goose_context_limit="${preseed_goose_context_limit:-${default_model_context_window}}"
+validate_context_window_value "AGENTIC_GOOSE_CONTEXT_LIMIT" "${goose_context_limit}" || die "invalid AGENTIC_GOOSE_CONTEXT_LIMIT"
 
 collect_cpu_limit limits_agents_cpus "AGENTIC_LIMIT_AGENTS_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "agents")" "${limits_agents_cpus_override}" "AGENTIC_LIMIT_AGENTS_CPUS/AGENTIC_LIMIT_AGENTS_MEM set defaults for agent containers."
 collect_mem_limit limits_agents_mem "AGENTIC_LIMIT_AGENTS_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "agents")" "${limits_agents_mem_override}"
@@ -2122,6 +2219,13 @@ fi
 if [[ "${#summary_deferred[@]}" -gt 0 ]]; then
   echo "Deferred actions:"
   for item in "${summary_deferred[@]}"; do
+    echo "  - ${item}"
+  done
+fi
+
+if [[ "${#context_estimate_summary[@]}" -gt 0 ]]; then
+  echo "Context estimate:"
+  for item in "${context_estimate_summary[@]}"; do
     echo "  - ${item}"
   done
 fi

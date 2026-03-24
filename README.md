@@ -38,7 +38,9 @@ export COMPOSE_PROFILES=trt
 
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `qwen3-coder:30b`) et réutilisé pour le preload Ollama.
-La fenêtre de contexte est pilotée par `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (défaut `262144`) et propagée vers `OLLAMA_CONTEXT_LENGTH`.
+La fenêtre de contexte est pilotée par `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` et propagée vers `OLLAMA_CONTEXT_LENGTH`.
+Quand `./agent onboard` peut lire les métadonnées Ollama du modèle choisi, il propose automatiquement la fenêtre maximale estimée qui tient dans `AGENTIC_LIMIT_OLLAMA_MEM`; sinon il retombe sur le fallback historique `262144`.
+`./agent doctor` remonte aussi cette fenêtre maximale estimée pour aider à corriger un contexte trop grand.
 Pour Goose (`optional-goose`), la limite de contexte client est pilotée séparément par `AGENTIC_GOOSE_CONTEXT_LIMIT` (défaut: `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}`) et propagée vers `GOOSE_CONTEXT_LIMIT`.
 
 ## Arborescence runtime (résumé)

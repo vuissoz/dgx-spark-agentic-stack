@@ -15,9 +15,11 @@ override_env_file="${work_dir}/override.env.generated.sh"
 default_log="${work_dir}/default.log"
 override_log="${work_dir}/override.log"
 non_interactive_env_file="${work_dir}/non-interactive.env.generated.sh"
+recommended_context_env_file="${work_dir}/recommended-context.env.generated.sh"
 rootless_default_env_file="${work_dir}/rootless-default.env.generated.sh"
 openclaw_env_file="${work_dir}/openclaw-secrets.env.generated.sh"
 openclaw_log="${work_dir}/openclaw-secrets.log"
+ollama_fixtures_dir="${REPO_ROOT}/tests/fixtures/ollama"
 
 trap 'rm -rf "${work_dir}"' EXIT
 mkdir -p "${work_dir}"
@@ -457,5 +459,31 @@ grep -q '^registry.ollama.ai$' "${non_interactive_allowlist_file}" \
   || fail "default allowlist must include registry.ollama.ai"
 assert_git_ignored "${non_interactive_env_file}"
 ok "wizard non-interactive flags mode works"
+
+if ! AGENTIC_PROFILE=strict-prod \
+  AGENTIC_OLLAMA_ESTIMATOR_TAGS_FILE="${ollama_fixtures_dir}/tags.context-estimator.json" \
+  AGENTIC_OLLAMA_ESTIMATOR_SHOW_FILE="${ollama_fixtures_dir}/show.nemotron-cascade-2-30b.json" \
+  "${wizard_script}" \
+  --non-interactive \
+  --profile rootless-dev \
+  --root "${work_dir}/recommended-root" \
+  --skip-ui-bootstrap \
+  --skip-network-bootstrap \
+  --skip-secret-bootstrap \
+  --default-model nemotron-cascade-2:30b \
+  --limits-ollama-mem 110g \
+  --output "${recommended_context_env_file}" >/dev/null 2>&1; then
+  fail "wizard recommended-context mode failed"
+fi
+assert_generated_file_baseline "${recommended_context_env_file}"
+grep -q "^export AGENTIC_DEFAULT_MODEL='nemotron-cascade-2:30b'$" "${recommended_context_env_file}" \
+  || fail "recommended-context flow must export the selected model"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='108883'$" "${recommended_context_env_file}" \
+  || fail "recommended-context flow must auto-select the max fitting context"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='108883'$" "${recommended_context_env_file}" \
+  || fail "recommended-context flow must propagate OLLAMA_CONTEXT_LENGTH"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='108883'$" "${recommended_context_env_file}" \
+  || fail "recommended-context flow must align AGENTIC_GOOSE_CONTEXT_LIMIT with the recommended context"
+ok "wizard auto-selects the estimated max fitting context when metadata is available"
 
 ok "00_onboarding_env_wizard passed"

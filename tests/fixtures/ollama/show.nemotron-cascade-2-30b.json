@@ -1,0 +1,10 @@
+{
+  "model_info": {
+    "nemotron.block_count": 52,
+    "nemotron.attention.head_count": 32,
+    "nemotron.attention.head_count_kv": 32,
+    "nemotron.attention.key_length": 128,
+    "nemotron.embedding_length": 2688,
+    "nemotron.context_length": 262144
+  }
+}

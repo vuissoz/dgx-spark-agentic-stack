@@ -126,6 +126,13 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `D8_gate_protocol_compat`: PASS
   - `E2_agents_confinement`: PASS (runtime rootless-dev avec `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false`).
 
+## Addendum (2026-03-24, recommandation contexte max-fit Ollama)
+- Beads `dgx-spark-agentic-stack-goh`: derivee partagee du contexte maximal qui tient dans `AGENTIC_LIMIT_OLLAMA_MEM` a partir des metadonnees Ollama du modele. [CLOSED]
+  - Correctif: facteur commun `scripts/lib/ollama_context.sh` pour calculer taille modele, KV-cache/token, memoire requise et `estimated_max_fitting_context`.
+  - `agent doctor`: remonte maintenant explicitement le contexte maximal estime qui tient dans le budget memoire et propose la valeur a appliquer a `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` / `OLLAMA_CONTEXT_LENGTH` / `AGENTIC_GOOSE_CONTEXT_LIMIT` quand le contexte configure est trop grand.
+  - `agent onboard`: reutilise le meme calcul; en non-interactif il auto-selectionne la valeur recommandee quand aucune fenetre explicite n'est fournie, et en interactif il repropose la valeur estimee apres saisie de `AGENTIC_LIMIT_OLLAMA_MEM`.
+  - Couverture: ajout du test hermetique `tests/00_ollama_context_estimator.sh` + extension `tests/00_onboarding_env_wizard.sh` pour un cas `nemotron-cascade-2:30b` / `110g` => `108883`.
+
 ## Remaining Work (open)
 - Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).

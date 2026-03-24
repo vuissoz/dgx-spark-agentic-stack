@@ -1,0 +1,10 @@
+{
+  "model_info": {
+    "general.architecture.context_length": 262144,
+    "qwen3.block_count": 48,
+    "qwen3.attention.head_count": 32,
+    "qwen3.attention.head_count_kv": 4,
+    "qwen3.attention.key_length": 128,
+    "qwen3.embedding_length": 2048
+  }
+}
