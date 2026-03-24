@@ -133,6 +133,22 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `agent onboard`: reutilise le meme calcul; en non-interactif il auto-selectionne la valeur recommandee quand aucune fenetre explicite n'est fournie, et en interactif il repropose la valeur estimee apres saisie de `AGENTIC_LIMIT_OLLAMA_MEM`.
   - Couverture: ajout du test hermetique `tests/00_ollama_context_estimator.sh` + extension `tests/00_onboarding_env_wizard.sh` pour un cas `nemotron-cascade-2:30b` / `110g` => `108883`.
 
+## Addendum (2026-03-24, seuils de compaction exposes aux agents)
+- Beads `dgx-spark-agentic-stack-wj3`: informer explicitement les agents des seuils de compaction derives du budget de contexte effectif. [OPEN]
+  - Besoin: aujourd'hui la stack expose la fenetre de contexte mais pas de seuil explicite indiquant quand un agent doit commencer a compacter/synthetiser son historique avant d'approcher la limite dure.
+  - Cible: derivation stack-side d'au moins deux bornes coherentes par modele/runtime:
+    - seuil de compaction "soft" (debut de resume/compactage),
+    - seuil "danger" / proche limite (avant depassement du budget effectif).
+  - Implementation visee:
+    - etendre `scripts/lib/ollama_context.sh` pour deriver une politique de seuils a partir de `estimated_max_fitting_context`,
+    - propager ces seuils dans les configurations/runtime env exposes aux agents (`codex`, `claude`, `opencode`, `vibestral`, `openhands`, `goose` quand applicable),
+    - garder `agent doctor` capable de verifier la coherence entre budget memoire, contexte effectif et seuils exposes,
+    - documenter le partage des responsabilites: stack = politique/signaux, agent = compaction semantique, backend = enforcement memoire/cache.
+  - Couverture attendue:
+    - tests hermetiques de derivation des seuils,
+    - tests onboarding/runtime verifiant l'export des seuils aux agents,
+    - doc/ADR explicitant la politique par defaut (par ex. compactage a 80-90% du budget utile, zone danger a 95%).
+
 ## Remaining Work (open)
 - Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
