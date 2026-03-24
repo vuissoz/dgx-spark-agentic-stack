@@ -1060,6 +1060,7 @@ optional_openclaw_immutable_file="${AGENTIC_ROOT}/openclaw/config/immutable/open
 optional_openclaw_overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
 optional_openclaw_state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 optional_openclaw_chat_status_plugin_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
+optional_openclaw_chat_status_runtime_dir="/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
 optional_openclaw_chat_status_manifest_file="${optional_openclaw_chat_status_plugin_dir}/openclaw.plugin.json"
 optional_openclaw_chat_status_skill_file="${optional_openclaw_chat_status_plugin_dir}/skills/openclaw/SKILL.md"
 optional_openclaw_approvals_dir="${AGENTIC_ROOT}/openclaw/state/approvals"
@@ -1220,13 +1221,14 @@ PY
   if [[ ! -s "${optional_openclaw_chat_status_skill_file}" ]]; then
     doctor_fail "managed openclaw slash-command skill is missing: ${optional_openclaw_chat_status_skill_file}"
   fi
-  if ! python3 - "${optional_openclaw_state_file}" "${optional_openclaw_chat_status_manifest_file}" <<'PY' >/dev/null 2>&1
+  if ! python3 - "${optional_openclaw_state_file}" "${optional_openclaw_chat_status_manifest_file}" "${optional_openclaw_chat_status_runtime_dir}" <<'PY' >/dev/null 2>&1
 import json
 import pathlib
 import sys
 
 state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 manifest = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+plugin_dir = str(pathlib.Path(sys.argv[3]))
 if manifest.get("id") != "openclaw-chat-status":
     raise SystemExit(1)
 skills = manifest.get("skills")
@@ -1244,9 +1246,21 @@ if not isinstance(entries, dict):
 entry = entries.get("openclaw-chat-status")
 if not isinstance(entry, dict) or entry.get("enabled") is not True:
     raise SystemExit(1)
+installs = plugins.get("installs")
+if not isinstance(installs, dict):
+    raise SystemExit(1)
+install = installs.get("openclaw-chat-status")
+if not isinstance(install, dict):
+    raise SystemExit(1)
+if install.get("source") != "path":
+    raise SystemExit(1)
+if install.get("sourcePath") != plugin_dir:
+    raise SystemExit(1)
+if install.get("installPath") != plugin_dir:
+    raise SystemExit(1)
 PY
   then
-    doctor_fail "openclaw writable state must pin-trust and enable the managed /openclaw status plugin"
+    doctor_fail "openclaw writable state must pin-trust, enable, and record path provenance for the managed /openclaw status plugin"
   fi
 fi
 

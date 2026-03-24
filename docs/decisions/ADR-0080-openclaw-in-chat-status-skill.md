@@ -47,9 +47,10 @@ Design choices:
    - active sandbox/session counts,
    - approval queue counters,
    - relay queue counters.
-4. The runtime state file pins trust and enables the managed plugin:
+4. The runtime state file pins trust, enables the managed plugin, and records install provenance:
    - `plugins.allow += ["openclaw-chat-status"]`
    - `plugins.entries.openclaw-chat-status.enabled = true`
+   - `plugins.installs.openclaw-chat-status = { source: "path", sourcePath: "<plugin root>", installPath: "<plugin root>" }`
 
 ## Consequences
 
@@ -62,10 +63,11 @@ Design choices:
 
 ## Validation
 
-- `deployments/core/init_runtime.sh` bootstraps the managed plugin and enables it in runtime state.
+- `deployments/core/init_runtime.sh` bootstraps the managed plugin and writes allow/entry/install provenance metadata in runtime state.
 - `tests/K6_openclaw_cli_dashboard_relay.sh` verifies:
   - managed plugin files are present under `OPENCLAW_HOME`,
-  - runtime state pins/enables the plugin,
+  - runtime state pins/enables the plugin and records path provenance,
   - `openclaw plugins list` exposes the plugin,
+  - `openclaw plugins list` does not emit untracked provenance warnings for the managed plugin,
   - `openclaw skills list` exposes the `/openclaw` skill.
-- `scripts/doctor.sh` validates the managed plugin manifest/skill presence and state enablement.
+- `scripts/doctor.sh` validates the managed plugin manifest/skill presence, state enablement, and install provenance metadata.

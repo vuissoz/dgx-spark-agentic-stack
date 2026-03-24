@@ -269,6 +269,7 @@ import sys
 
 overlay = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 state = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+plugin_dir = "/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
 workspace = (((overlay.get("agents") or {}).get("defaults") or {}).get("workspace"))
 if workspace != "/workspace/wizard-k6":
     raise SystemExit("overlay must persist operator workspace selection")
@@ -278,16 +279,25 @@ plugins = state.get("plugins") or {}
 allow = plugins.get("allow") or []
 entries = plugins.get("entries") or {}
 plugin = entries.get("openclaw-chat-status") or {}
+installs = plugins.get("installs") or {}
+install = installs.get("openclaw-chat-status") or {}
 if "openclaw-chat-status" not in allow:
     raise SystemExit("state layer must pin-trust the managed openclaw chat-status plugin")
 if plugin.get("enabled") is not True:
     raise SystemExit("state layer must enable the managed openclaw chat-status plugin")
+if install.get("source") != "path":
+    raise SystemExit("state layer must record the managed plugin as a path install")
+if install.get("sourcePath") != plugin_dir or install.get("installPath") != plugin_dir:
+    raise SystemExit("state layer must record managed plugin provenance paths")
 PY
 
-timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw plugins list >/tmp/agent-k6-openclaw-plugins-list.out' \
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw plugins list >/tmp/agent-k6-openclaw-plugins-list.out 2>/tmp/agent-k6-openclaw-plugins-list.err' \
   || fail "openclaw plugins list must succeed with the managed chat-status plugin present"
 docker exec "${openclaw_cid}" sh -lc "grep -q 'openclaw-chat-status' /tmp/agent-k6-openclaw-plugins-list.out" \
   || fail "openclaw plugins list must expose the managed openclaw-chat-status plugin"
+if docker exec "${openclaw_cid}" sh -lc "grep -q 'loaded without install/load-path provenance' /tmp/agent-k6-openclaw-plugins-list.err"; then
+  fail "managed openclaw chat-status plugin must not emit provenance warnings once installs metadata is recorded"
+fi
 
 timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw skills list >/tmp/agent-k6-openclaw-skills-list.out' \
   || fail "openclaw skills list must succeed with the managed slash-command skill present"
