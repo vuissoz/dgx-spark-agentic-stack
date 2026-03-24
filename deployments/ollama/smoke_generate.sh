@@ -4,6 +4,7 @@ set -euo pipefail
 OLLAMA_API_URL="${OLLAMA_API_URL:-http://127.0.0.1:11434}"
 OLLAMA_SMOKE_TIMEOUT_SECONDS="${OLLAMA_SMOKE_TIMEOUT_SECONDS:-45}"
 OLLAMA_SMOKE_MODEL="${OLLAMA_SMOKE_MODEL:-}"
+OLLAMA_SMOKE_GENERATE_MODEL="${OLLAMA_SMOKE_GENERATE_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-${AGENTIC_DEFAULT_MODEL:-}}}"
 
 die() {
   echo "ERROR: $*" >&2
@@ -22,7 +23,23 @@ resolve_model() {
 
   local tags_json
   tags_json="$(curl -fsS --max-time 12 "${OLLAMA_API_URL}/api/tags")" || return 1
-  printf '%s\n' "${tags_json}" | grep -o '"name":"[^"]*"' | head -n 1 | cut -d'"' -f4
+  if [[ -n "${OLLAMA_SMOKE_GENERATE_MODEL}" ]] && printf '%s\n' "${tags_json}" | grep -Fq "\"name\":\"${OLLAMA_SMOKE_GENERATE_MODEL}\""; then
+    printf '%s\n' "${OLLAMA_SMOKE_GENERATE_MODEL}"
+    return 0
+  fi
+
+  printf '%s\n' "${tags_json}" \
+    | grep -o '"name":"[^"]*"' \
+    | cut -d'"' -f4 \
+    | while IFS= read -r candidate; do
+        case "${candidate}" in
+          *embed*|*embedding*)
+            continue
+            ;;
+        esac
+        printf '%s\n' "${candidate}"
+        break
+      done
 }
 
 main() {

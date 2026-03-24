@@ -149,8 +149,19 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - tests onboarding/runtime verifiant l'export des seuils aux agents,
     - doc/ADR explicitant la politique par defaut (par ex. compactage a 80-90% du budget utile, zone danger a 95%).
 
+## Addendum (2026-03-24, finalisation globale de l'umbrella `de9`)
+- Beads `dgx-spark-agentic-stack-de9`: cloture des ecarts restants du plan. [CLOSED]
+  - Correctif: `deployments/ollama/smoke_generate.sh` priorise maintenant le modele de generation configure (`OLLAMA_PRELOAD_GENERATE_MODEL`, puis `AGENTIC_DEFAULT_MODEL`) avant le fallback sur `/api/tags`, et ignore les tags d'embeddings evidents lors du fallback.
+  - Validation rootless-dev:
+    - `COMPOSE_PROFILES=trt ./agent doctor` => READY
+    - `COMPOSE_PROFILES=trt ./agent test C` => PASS (`C1`, `C2`, `C3`)
+    - `COMPOSE_PROFILES=trt bash tests/F2_update_rollback.sh` => PASS
+    - `COMPOSE_PROFILES=trt bash tests/F3_doctor.sh` => SKIP attendu en `rootless-dev`
+    - `COMPOSE_PROFILES=trt bash tests/J2_rag_smoke.sh` => PASS
+    - `COMPOSE_PROFILES=trt bash tests/K1_openclaw.sh` => PASS
+    - `COMPOSE_PROFILES=trt bash tests/K3_portainer.sh` => PASS
+
 ## Remaining Work (open)
-- Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
 - Follow-up `dgx-spark-agentic-stack-lhm`: separer l'etat OpenClaw en trois couches:
   - config immuable geree par la stack,
