@@ -222,6 +222,32 @@ The shared operator runtime file is:
 The module blueprint/manifest is:
 - `${AGENTIC_ROOT}/openclaw/config/module/openclaw.module-manifest.v1.json`
 
+## Step 3d: Use the In-Chat Status Command
+
+The stack now bootstraps a managed OpenClaw slash command for quick operator checks in chat:
+
+```text
+/openclaw status
+```
+
+Behavior:
+- this is a UX shortcut, not an admin surface,
+- it reads the existing local OpenClaw status API (`/v1/dashboard/status`),
+- it returns a short sanitized summary:
+  - module/sandbox health,
+  - current/default session,
+  - default model/provider,
+  - active sandbox/session counts,
+  - approvals and relay queue counters.
+
+Non-goals:
+- no secret/token/path disclosure,
+- no lifecycle or policy mutation from chat,
+- no bypass of `agent openclaw ...` or the internal sandbox API.
+
+Note:
+- OpenClaw snapshots skills per session, so after enabling/updating the stack you may need a new chat session before the slash command appears.
+
 ## Step 4: Start Services
 
 Start the core stack:

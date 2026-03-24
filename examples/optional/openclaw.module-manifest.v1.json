@@ -28,6 +28,8 @@
       "${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json",
       "${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json",
       "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json",
+      "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status/openclaw.plugin.json",
+      "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status/skills/openclaw/SKILL.md",
       "${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json",
       "${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
     ],
@@ -58,6 +60,7 @@
     ],
     "status": [
       "./agent openclaw status",
+      "/openclaw status",
       "./agent openclaw sandbox ls",
       "./agent doctor"
     ],

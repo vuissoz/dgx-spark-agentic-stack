@@ -1119,6 +1119,9 @@ optional_openclaw_manifest_file="${AGENTIC_ROOT}/openclaw/config/module/openclaw
 optional_openclaw_immutable_file="${AGENTIC_ROOT}/openclaw/config/immutable/openclaw.stack-config.v1.json"
 optional_openclaw_overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
 optional_openclaw_state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+optional_openclaw_chat_status_plugin_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
+optional_openclaw_chat_status_manifest_file="${optional_openclaw_chat_status_plugin_dir}/openclaw.plugin.json"
+optional_openclaw_chat_status_skill_file="${optional_openclaw_chat_status_plugin_dir}/skills/openclaw/SKILL.md"
 optional_openclaw_approvals_dir="${AGENTIC_ROOT}/openclaw/state/approvals"
 optional_openclaw_sandbox_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
 optional_openclaw_operator_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
@@ -1270,6 +1273,40 @@ PY
   fi
   if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw --version >/tmp/openclaw-layer-version.out && python3 /app/openclaw_config_layers.py check-runtime --immutable-file /config/immutable/openclaw.stack-config.v1.json --overlay-file /overlay/openclaw.operator-overlay.json --state-file /state/cli/openclaw-home/openclaw.state.json --effective-file /tmp/openclaw.effective.json --gateway-token-file /run/secrets/openclaw.token"; then
     doctor_fail "openclaw layered config runtime check failed"
+  fi
+  if [[ ! -s "${optional_openclaw_chat_status_manifest_file}" ]]; then
+    doctor_fail "managed openclaw chat-status plugin manifest is missing: ${optional_openclaw_chat_status_manifest_file}"
+  fi
+  if [[ ! -s "${optional_openclaw_chat_status_skill_file}" ]]; then
+    doctor_fail "managed openclaw slash-command skill is missing: ${optional_openclaw_chat_status_skill_file}"
+  fi
+  if ! python3 - "${optional_openclaw_state_file}" "${optional_openclaw_chat_status_manifest_file}" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+manifest = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+if manifest.get("id") != "openclaw-chat-status":
+    raise SystemExit(1)
+skills = manifest.get("skills")
+if not isinstance(skills, list) or "./skills" not in skills:
+    raise SystemExit(1)
+plugins = state.get("plugins")
+if not isinstance(plugins, dict):
+    raise SystemExit(1)
+allow = plugins.get("allow")
+if not isinstance(allow, list) or "openclaw-chat-status" not in allow:
+    raise SystemExit(1)
+entries = plugins.get("entries")
+if not isinstance(entries, dict):
+    raise SystemExit(1)
+entry = entries.get("openclaw-chat-status")
+if not isinstance(entry, dict) or entry.get("enabled") is not True:
+    raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw writable state must pin-trust and enable the managed /openclaw status plugin"
   fi
 fi
 

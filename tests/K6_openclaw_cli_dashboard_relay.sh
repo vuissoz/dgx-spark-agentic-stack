@@ -243,6 +243,10 @@ docker exec "${openclaw_cid}" sh -lc 'test -d /state/cli/openclaw-home' \
   || fail "openclaw home must be initialized under persistent /state"
 docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/openclaw.state.json' \
   || fail "openclaw state layer must persist under OPENCLAW_STATE_CONFIG_FILE"
+docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status/openclaw.plugin.json' \
+  || fail "managed openclaw chat-status plugin manifest must persist under OPENCLAW_HOME"
+docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status/skills/openclaw/SKILL.md' \
+  || fail "managed openclaw slash-command skill must persist under OPENCLAW_HOME"
 
 [[ -d "${openclaw_workspaces_dir}/wizard-k6" ]] \
   || fail "openclaw onboard workspace must persist under ${openclaw_workspaces_dir}"
@@ -270,7 +274,25 @@ if workspace != "/workspace/wizard-k6":
     raise SystemExit("overlay must persist operator workspace selection")
 if "gateway" in state:
     raise SystemExit("state layer must not retain gateway settings")
+plugins = state.get("plugins") or {}
+allow = plugins.get("allow") or []
+entries = plugins.get("entries") or {}
+plugin = entries.get("openclaw-chat-status") or {}
+if "openclaw-chat-status" not in allow:
+    raise SystemExit("state layer must pin-trust the managed openclaw chat-status plugin")
+if plugin.get("enabled") is not True:
+    raise SystemExit("state layer must enable the managed openclaw chat-status plugin")
 PY
+
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw plugins list >/tmp/agent-k6-openclaw-plugins-list.out' \
+  || fail "openclaw plugins list must succeed with the managed chat-status plugin present"
+docker exec "${openclaw_cid}" sh -lc "grep -q 'openclaw-chat-status' /tmp/agent-k6-openclaw-plugins-list.out" \
+  || fail "openclaw plugins list must expose the managed openclaw-chat-status plugin"
+
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw skills list >/tmp/agent-k6-openclaw-skills-list.out' \
+  || fail "openclaw skills list must succeed with the managed slash-command skill present"
+docker exec "${openclaw_cid}" sh -lc "grep -q 'openclaw' /tmp/agent-k6-openclaw-skills-list.out" \
+  || fail "openclaw skills list must expose the managed /openclaw slash-command skill"
 
 overlay_backup="$(mktemp)"
 cp "${openclaw_overlay_file}" "${overlay_backup}"

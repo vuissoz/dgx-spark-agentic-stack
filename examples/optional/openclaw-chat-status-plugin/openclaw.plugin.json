@@ -1,0 +1,14 @@
+{
+  "id": "openclaw-chat-status",
+  "name": "DGX Spark OpenClaw Chat Status",
+  "description": "Adds a loopback-safe /openclaw status slash command backed by the local DGX Spark runtime status API.",
+  "version": "1.0.0",
+  "skills": [
+    "./skills"
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

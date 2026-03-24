@@ -63,6 +63,56 @@ copy_if_missing() {
   log "created runtime file: ${dst}"
 }
 
+sync_runtime_file() {
+  local src="$1"
+  local dst="$2"
+  local mode="$3"
+
+  [[ -f "$src" ]] || die "template not found: ${src}"
+  install -D -m "$mode" "$src" "$dst"
+}
+
+ensure_openclaw_chat_status_plugin() {
+  local plugin_src_dir="${OPTIONAL_TEMPLATE_DIR}/openclaw-chat-status-plugin"
+  local plugin_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
+  local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+
+  install -d -m 0770 "${plugin_dst_dir}" "${plugin_dst_dir}/skills/openclaw"
+  sync_runtime_file "${plugin_src_dir}/package.json" "${plugin_dst_dir}/package.json" 0644
+  sync_runtime_file "${plugin_src_dir}/openclaw.plugin.json" "${plugin_dst_dir}/openclaw.plugin.json" 0644
+  sync_runtime_file "${plugin_src_dir}/index.ts" "${plugin_dst_dir}/index.ts" 0644
+  sync_runtime_file "${plugin_src_dir}/skills/openclaw/SKILL.md" "${plugin_dst_dir}/skills/openclaw/SKILL.md" 0644
+
+  python3 - "${state_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+state_path = pathlib.Path(sys.argv[1])
+payload = json.loads(state_path.read_text(encoding="utf-8"))
+
+plugins = payload.setdefault("plugins", {})
+allow = plugins.setdefault("allow", [])
+if not isinstance(allow, list):
+    allow = []
+    plugins["allow"] = allow
+if "openclaw-chat-status" not in allow:
+    allow.append("openclaw-chat-status")
+
+entries = plugins.setdefault("entries", {})
+if not isinstance(entries, dict):
+    entries = {}
+    plugins["entries"] = entries
+entry = entries.setdefault("openclaw-chat-status", {})
+if not isinstance(entry, dict):
+    entry = {}
+    entries["openclaw-chat-status"] = entry
+entry.setdefault("enabled", True)
+
+state_path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+PY
+}
+
 set_openclaw_runtime_permissions() {
   local openclaw_config_dir="${AGENTIC_ROOT}/openclaw/config"
   local openclaw_config_immutable_dir="${AGENTIC_ROOT}/openclaw/config/immutable"
@@ -347,6 +397,7 @@ main() {
     install -D -m 0600 /dev/null "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
     printf '%s\n' '{}' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
   fi
+  ensure_openclaw_chat_status_plugin
   ensure_allowlist_baseline_entries "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt"
   chmod 0640 "${AGENTIC_ROOT}/gate/config/model_routes.yml"
   chmod 0644 "${AGENTIC_ROOT}/dns/unbound.conf"

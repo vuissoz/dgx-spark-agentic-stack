@@ -18,6 +18,12 @@ Dans ce depot, OpenClaw fait partie du `core` avec quatre services:
 - `openclaw-sandbox`: backend d'execution d'outils restreint,
 - `openclaw-relay`: relay webhook provider avec queue durable et injection locale.
 
+En plus des surfaces operateur shell (`./agent openclaw ...`), la stack fournit aussi une petite commande de chat:
+- `/openclaw status`
+
+Cette commande sert uniquement a lire un resume d'etat sans quitter le chat.
+Elle n'ajoute aucun droit d'administration.
+
 Modele mental simple:
 1. une requete arrive sur OpenClaw,
 2. OpenClaw authentifie et valide,
