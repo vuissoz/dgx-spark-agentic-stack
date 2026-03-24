@@ -11,7 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    COMFYUI_HOME=/opt/comfyui
+    COMFYUI_HOME=/opt/comfyui \
+    COMFYUI_RUNTIME_ROOT=/comfyui
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -41,20 +42,45 @@ RUN python3 -m pip install --upgrade pip setuptools wheel \
     if [ -f "${COMFYUI_HOME}/custom_nodes/ComfyUI-Manager/requirements.txt" ]; then \
       python3 -m pip install -r "${COMFYUI_HOME}/custom_nodes/ComfyUI-Manager/requirements.txt"; \
     fi; \
-  fi
+  fi \
+  && COMFYUI_ENABLE_CUDA_TORCH="${COMFYUI_ENABLE_CUDA_TORCH}" COMFYUI_TORCH_INDEX_URL="${COMFYUI_TORCH_INDEX_URL}" python3 - <<'PY' > /tmp/comfyui-torch-build.json
+import json
+import os
+import platform
+
+payload = {
+    "build_machine": platform.machine().lower(),
+    "cuda_index_url": os.environ.get("COMFYUI_TORCH_INDEX_URL", ""),
+    "cuda_install_requested": os.environ.get("COMFYUI_ENABLE_CUDA_TORCH", "0") == "1",
+}
+
+try:
+    import torch
+
+    payload["torch_version"] = getattr(torch, "__version__", "")
+    payload["torch_cuda_version"] = getattr(getattr(torch, "version", None), "cuda", None)
+    payload["torch_cuda_compiled"] = bool(payload["torch_cuda_version"])
+except Exception as exc:  # pragma: no cover - build-time diagnostics best effort
+    payload["torch_import_error"] = str(exc)
+
+print(json.dumps(payload, sort_keys=True))
+PY
 
 RUN mkdir -p /opt/comfyui-defaults \
   && cp -a "${COMFYUI_HOME}/custom_nodes" /opt/comfyui-defaults/custom_nodes \
-  && mkdir -p /comfyui/models /comfyui/input /comfyui/output /comfyui/user /tmp/comfyui-temp \
+  && install -m 0644 /tmp/comfyui-torch-build.json /opt/comfyui-defaults/torch-build.json \
+  && mkdir -p /comfyui/models /comfyui/input /comfyui/output /comfyui/user /comfyui/custom_nodes /tmp/comfyui-temp \
   && rm -rf \
     "${COMFYUI_HOME}/models" \
     "${COMFYUI_HOME}/input" \
     "${COMFYUI_HOME}/output" \
     "${COMFYUI_HOME}/user" \
+    "${COMFYUI_HOME}/custom_nodes" \
   && ln -s /comfyui/models "${COMFYUI_HOME}/models" \
   && ln -s /comfyui/input "${COMFYUI_HOME}/input" \
   && ln -s /comfyui/output "${COMFYUI_HOME}/output" \
   && ln -s /comfyui/user "${COMFYUI_HOME}/user" \
+  && ln -s /comfyui/custom_nodes "${COMFYUI_HOME}/custom_nodes" \
   && chown -R 1000:1000 "${COMFYUI_HOME}" /opt/comfyui-defaults /comfyui /tmp/comfyui-temp
 
 COPY deployments/images/comfyui/entrypoint.sh /usr/local/bin/comfyui-entrypoint

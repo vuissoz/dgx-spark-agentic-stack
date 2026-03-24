@@ -294,6 +294,8 @@ Entrees/sorties:
 - Service interne principal, avec stockage sur `${AGENTIC_ROOT}/comfyui/*`.
 - Utilise GPU (`gpus: all`) avec profil low-priority dans cette stack.
 - Extension `ComfyUI-Manager` preinstallee dans l'image (model manager dispo des le premier demarrage).
+- L'hote persiste maintenant toute l'arborescence runtime via un mount unique (`${AGENTIC_ROOT}/comfyui:/comfyui`).
+- En `rootless-dev` sur `arm64`, si aucun backend CUDA effectif n'est detecte, la stack enregistre une politique unsupported explicite et demarre ComfyUI en fallback CPU au lieu de laisser croire que l'acceleration GPU fonctionne.
 
 Liens officiels:
 - ComfyUI docs: https://docs.comfy.org/

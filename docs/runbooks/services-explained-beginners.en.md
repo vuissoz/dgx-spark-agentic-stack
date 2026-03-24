@@ -291,6 +291,8 @@ Inputs/outputs:
 - Main internal service with storage in `${AGENTIC_ROOT}/comfyui/*`.
 - Uses GPU (`gpus: all`) with low-priority profile marker in this stack.
 - `ComfyUI-Manager` extension is preinstalled in the image (model manager available on first startup).
+- The host now persists the whole runtime tree with one mount (`${AGENTIC_ROOT}/comfyui:/comfyui`).
+- On `arm64` in `rootless-dev`, if no effective CUDA backend is detected, the stack records an explicit unsupported policy and starts ComfyUI in CPU fallback instead of pretending GPU acceleration is active.
 
 Official links:
 - ComfyUI docs: https://docs.comfy.org/

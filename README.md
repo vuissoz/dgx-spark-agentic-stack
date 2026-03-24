@@ -55,7 +55,7 @@ Dossiers persistants clés:
 - `dns/`
 - `openwebui/`
 - `openhands/{config,state,logs,workspaces}/`
-- `comfyui/{models,input,output,user,custom_nodes}/`
+- `comfyui/` (runtime root unique; contient `models/`, `input/`, `output/`, `user/`, `custom_nodes/`)
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
 - `openclaw/{config/{immutable,overlay},state,logs,relay/{state,logs},sandbox/{state,workspaces},workspaces}/`
@@ -414,6 +414,8 @@ Sans `--hf-token-file`, le script lit automatiquement `${AGENTIC_ROOT}/secrets/r
 Notes:
 - Flux.1-dev est un dépôt gated (licence HF + token requis).
 - Le Journal ComfyUI passe par WebSocket `/ws` via `comfyui-loopback`.
+- Le runtime ComfyUI est persistant via un mount hôte unique `${AGENTIC_ROOT}/comfyui:/comfyui`.
+- En `rootless-dev` sur `arm64`, la stack publie un diagnostic explicite dans `${AGENTIC_ROOT}/comfyui/user/agentic-runtime/torch-runtime.json`; si aucun backend CUDA effectif n'est détecté, ComfyUI démarre volontairement en `--cpu`.
 
 Test e2e du modèle par défaut (Ollama, gate, agents, OpenWebUI, OpenHands):
 

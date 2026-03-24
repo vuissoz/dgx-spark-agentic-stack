@@ -41,7 +41,7 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Beads (Plugin UX in-chat OpenClaw):
   - `dgx-spark-agentic-stack-irt` (ajouter une commande slash OpenClaw de statut dans le chat, branchee au registre/runtime sans fuite de secrets) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
-  - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [OPEN]
+  - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [CLOSED]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -128,8 +128,6 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 
 ## Remaining Work (open)
 - Step 15: finalisation globale (tests cibles, commit atomique, `bd sync`, push).
-- Follow-up `dgx-spark-agentic-stack-6nn`: valider une trajectoire CUDA effective pour ComfyUI (arm64 rootless-dev) ou formaliser une politique unsupported explicite avec test/alerte opérateur.
-- Follow-up `dgx-spark-agentic-stack-0ik`: remplacer les mounts ComfyUI fragmentes (`models/input/output/user/custom_nodes`) par un mount persistant unique couvrant toute l'arborescence runtime ComfyUI, puis aligner doctor/tests/runbooks.
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
 - Follow-up `dgx-spark-agentic-stack-lhm`: separer l'etat OpenClaw en trois couches:
   - config immuable geree par la stack,
@@ -239,6 +237,21 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 - Beads `dgx-spark-agentic-stack-0ik`: en rootless-dev, les mutations ComfyUI peuvent impacter toute l'arborescence (pas seulement `input/output`).
   - Exigence ajoutee: basculer vers un mount hote persistant unique pour toute l'arborescence runtime ComfyUI (point canonique sous `${AGENTIC_ROOT}/comfyui`).
   - Impact attendu: persistance deterministe des changements ComfyUI hors `input/output`, avec alignement compose/bootstrap/doctor/tests/runbooks.
+
+## Addendum (2026-03-24, ComfyUI runtime root + CUDA arm64/rootless-dev)
+- Beads `dgx-spark-agentic-stack-0ik` et `dgx-spark-agentic-stack-6nn`: livraison conjointe.
+  - Persistence:
+    - le service `comfyui` utilise maintenant un mount hote unique `${AGENTIC_ROOT}/comfyui:/comfyui`,
+    - les chemins mutables du source tree (`models`, `input`, `output`, `user`, `custom_nodes`) sont symlinkes vers `/comfyui/*`,
+    - `agent forget comfyui` cible desormais `${AGENTIC_ROOT}/comfyui` comme unite canonique.
+  - Contrat CUDA:
+    - l'image enregistre un diagnostic build/runtime PyTorch,
+    - l'entrypoint publie `${AGENTIC_ROOT}/comfyui/user/agentic-runtime/torch-runtime.json`,
+    - en `arm64/rootless-dev`, la politique expose `effective` si `torch.cuda.is_available()` est vrai, sinon `unsupported-explicit` avec fallback `--cpu`.
+  - Verification:
+    - `tests/I1_comfyui.sh` verifie le mount unique, l'absence des anciens mounts fragmentes, le symlink `custom_nodes` et le diagnostic CUDA,
+    - `agent doctor` controle le contrat mount unique + diagnostic CUDA sur `arm64/rootless-dev`,
+    - validation locale observee le 2026-03-24: backend CUDA ComfyUI effectif sur la machine de dev `aarch64`.
 
 ## Addendum (2026-03-13, Prometheus metrics for TCP forwarder)
 - Beads `dgx-spark-agentic-stack-wlx`: exporter des metriques Prometheus natives pour les forwarders TCP OpenClaw (notamment le forwarder `optional-openclaw-gateway`).

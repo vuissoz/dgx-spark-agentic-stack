@@ -20,13 +20,10 @@ Step I requires a ComfyUI web service for image generation while keeping the sec
   - host bind `127.0.0.1:${COMFYUI_HOST_PORT:-8188}:8188` is published by a dedicated loopback reverse-proxy sidecar (`comfyui-loopback`) attached to both `agentic` and `agentic-egress`,
   - GPU request enabled (`gpus: all`),
   - low-priority GPU profile marker (`AGENTIC_GPU_PROFILE=lowprio`, `agentic.gpu-profile=lowprio`),
-  - data volumes:
-    - `${AGENTIC_ROOT}/comfyui/models:/comfyui/models`
-    - `${AGENTIC_ROOT}/comfyui/input:/comfyui/input`
-    - `${AGENTIC_ROOT}/comfyui/output:/comfyui/output`
-    - `${AGENTIC_ROOT}/comfyui/user:/comfyui/user`
-    - `${AGENTIC_ROOT}/comfyui/custom_nodes:/opt/comfyui/custom_nodes` (kept inside the ComfyUI source tree so ComfyUI-Manager resolves the correct git root)
-  - custom nodes are seeded on first start from the image defaults so `ComfyUI-Manager` remains available even with an empty persistent mount,
+  - single runtime root mount:
+    - `${AGENTIC_ROOT}/comfyui:/comfyui`
+  - the source tree keeps symlinks (`models`, `input`, `output`, `user`, `custom_nodes`) toward `/comfyui/*`, so `ComfyUI-Manager` still resolves the correct git root while every runtime mutation remains persistent under one host subtree,
+  - custom nodes are seeded on first start from the image defaults so `ComfyUI-Manager` remains available even with an empty persistent runtime root,
   - hardening baseline (`read_only: true`, `tmpfs: /tmp`, `cap_drop: [ALL]`, `no-new-privileges`).
 - Extend `deployments/ui/init_runtime.sh` to create ComfyUI runtime directories.
 - Add `tests/I1_comfyui.sh`:
@@ -38,7 +35,7 @@ Step I requires a ComfyUI web service for image generation while keeping the sec
 - ComfyUI is available without widening host exposure.
 - The stack no longer depends on a non-existent/unofficial prebuilt ComfyUI image registry path.
 - GPU usage is explicit and traceable as a low-priority workload.
-- Model/output persistence is explicit and auditable under `/srv/agentic`.
+- Runtime persistence is explicit and auditable under `/srv/agentic/comfyui`.
 - Smoke generation is deterministic only when at least one checkpoint exists locally.
 
 ## Notes

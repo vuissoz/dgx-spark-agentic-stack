@@ -26,7 +26,7 @@ timeout 20 docker exec "${comfy_cid}" sh -lc 'cd /opt/comfyui && git rev-parse -
 ok "comfyui source tree is a git repository"
 
 mounts_json="$(docker inspect --format '{{json .Mounts}}' "${comfy_cid}" 2>/dev/null || true)"
-python3 - "${mounts_json}" "${AGENTIC_ROOT:-/srv/agentic}/comfyui/custom_nodes" <<'PY'
+python3 - "${mounts_json}" "${AGENTIC_ROOT:-/srv/agentic}/comfyui" <<'PY'
 import json
 import sys
 
@@ -40,18 +40,52 @@ except json.JSONDecodeError:
 if not isinstance(mounts, list):
     raise SystemExit("comfyui mounts payload is not a list")
 
+has_runtime_root = False
 for mount in mounts:
     if not isinstance(mount, dict):
         continue
-    if mount.get("Destination") == "/opt/comfyui/custom_nodes" and mount.get("Source") == expected_source:
-        raise SystemExit(0)
+    destination = mount.get("Destination")
+    if destination == "/comfyui" and mount.get("Source") == expected_source:
+        has_runtime_root = True
+        continue
+    if destination in {
+        "/opt/comfyui/custom_nodes",
+        "/comfyui/models",
+        "/comfyui/input",
+        "/comfyui/output",
+        "/comfyui/user",
+        "/comfyui/custom_nodes",
+    }:
+        raise SystemExit(
+            f"unexpected fragmented comfyui mount still present: {destination}"
+        )
 
-raise SystemExit(
-    "comfyui custom_nodes mount is missing or points to an unexpected destination; "
-    "expected host /srv path mapped to /opt/comfyui/custom_nodes"
-)
+if not has_runtime_root:
+    raise SystemExit(
+        "comfyui runtime root mount is missing or points to an unexpected destination; "
+        "expected host /srv path mapped to /comfyui"
+    )
 PY
-ok "comfyui custom_nodes persistence is mounted on /opt/comfyui/custom_nodes"
+ok "comfyui runtime persistence uses the single /comfyui host mount"
+
+timeout 20 docker exec "${comfy_cid}" sh -lc 'test -L /opt/comfyui/custom_nodes && test "$(readlink /opt/comfyui/custom_nodes)" = "/comfyui/custom_nodes"' \
+  || fail "comfyui custom_nodes source-tree link is missing or incorrect"
+ok "comfyui source tree keeps custom_nodes linked to the runtime root"
+
+persist_probe=".agentic-persist-${RANDOM}-$$.txt"
+persist_probe_container="/comfyui/custom_nodes/${persist_probe}"
+persist_probe_host="${AGENTIC_ROOT:-/srv/agentic}/comfyui/custom_nodes/${persist_probe}"
+timeout 20 docker exec "${comfy_cid}" sh -lc "printf 'persist\\n' > '${persist_probe_container}'" \
+  || fail "unable to create comfyui persistence probe under ${persist_probe_container}"
+[[ -f "${persist_probe_host}" ]] || fail "comfyui persistence probe was not written to host runtime root (${persist_probe_host})"
+
+docker restart "${comfy_cid}" >/dev/null || fail "unable to restart comfyui for persistence verification"
+wait_for_container_ready "${comfy_cid}" 180 || fail "comfyui did not recover after restart during persistence verification"
+timeout 20 docker exec "${comfy_cid}" sh -lc "test -f '${persist_probe_container}'" \
+  || fail "comfyui persistence probe under custom_nodes did not survive container restart"
+ok "comfyui custom_nodes persistence survives restart via the single runtime root"
+
+rm -f "${persist_probe_host}"
 
 gpu_requests_json="$(docker inspect --format '{{json .HostConfig.DeviceRequests}}' "${comfy_cid}" 2>/dev/null || true)"
 python3 - "${gpu_requests_json}" <<'PY'
@@ -87,6 +121,41 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${comfy_cid
   | grep -q '^AGENTIC_GPU_PROFILE=lowprio$' \
   || fail "comfyui is missing AGENTIC_GPU_PROFILE=lowprio"
 ok "comfyui low-priority GPU profile marker is present"
+
+cuda_diag_path="/comfyui/user/agentic-runtime/torch-runtime.json"
+cuda_diag_json="$(timeout 20 docker exec "${comfy_cid}" sh -lc "cat ${cuda_diag_path}" 2>/dev/null || true)"
+[[ -n "${cuda_diag_json}" ]] || fail "comfyui CUDA diagnostics are missing at ${cuda_diag_path}"
+python3 - "${cuda_diag_json}" "${AGENTIC_PROFILE:-strict-prod}" <<'PY'
+import json
+import platform
+import sys
+
+payload = json.loads(sys.argv[1])
+profile = sys.argv[2]
+policy = payload.get("policy")
+
+if not isinstance(policy, str) or not policy:
+    raise SystemExit("comfyui CUDA diagnostics are missing the policy field")
+
+if profile == "rootless-dev" and platform.machine().lower() in {"aarch64", "arm64"}:
+    if policy not in {"effective", "unsupported-explicit"}:
+        raise SystemExit(
+            f"unexpected arm64/rootless-dev ComfyUI CUDA policy {policy!r}"
+        )
+    if policy == "unsupported-explicit":
+        if payload.get("torch_cuda_available") not in (False, None):
+            raise SystemExit(
+                "unsupported-explicit CUDA policy must not report torch_cuda_available=true"
+            )
+        if payload.get("cpu_fallback_expected") is not True:
+            raise SystemExit(
+                "unsupported-explicit CUDA policy must declare cpu_fallback_expected=true"
+            )
+else:
+    if policy not in {"standard", "effective", "unsupported-explicit"}:
+        raise SystemExit(f"unexpected ComfyUI CUDA policy {policy!r}")
+PY
+ok "comfyui CUDA runtime diagnostics are present and coherent"
 
 assert_proxy_enforced "${comfy_cid}" || fail "comfyui proxy environment baseline is not enforced"
 

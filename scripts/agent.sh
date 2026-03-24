@@ -1640,12 +1640,7 @@ forget_target_paths() {
         "$(agent_workspace_dir "${target}")"
       ;;
     comfyui)
-      printf '%s\n' \
-        "${AGENTIC_ROOT}/comfyui/models" \
-        "${AGENTIC_ROOT}/comfyui/input" \
-        "${AGENTIC_ROOT}/comfyui/output" \
-        "${AGENTIC_ROOT}/comfyui/user" \
-        "${AGENTIC_ROOT}/comfyui/custom_nodes"
+      printf '%s\n' "${AGENTIC_ROOT}/comfyui"
       ;;
     openclaw)
       printf '%s\n' \

@@ -46,6 +46,7 @@ critical_ports=()
 if [[ -n "${AGENTIC_DOCTOR_CRITICAL_PORTS:-}" ]]; then
   read -r -a critical_ports <<<"${AGENTIC_DOCTOR_CRITICAL_PORTS//,/ }"
 fi
+host_machine="$(uname -m 2>/dev/null || printf 'unknown')"
 portainer_host_port="${PORTAINER_HOST_PORT:-9001}"
 openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 openclaw_gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
@@ -795,6 +796,51 @@ for row in "${running_services[@]}"; do
     fi
   fi
 
+  if [[ "${service}" == "comfyui" ]]; then
+    if ! mount_destination_matches_source "${cid}" "/comfyui" "${AGENTIC_ROOT}/comfyui"; then
+      doctor_fail_or_warn "comfyui must mount ${AGENTIC_ROOT}/comfyui on /comfyui"
+    fi
+
+    comfy_mounts="$(docker inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "${cid}" 2>/dev/null || true)"
+    if printf '%s\n' "${comfy_mounts}" | grep -Eq '^/comfyui/(models|input|output|user|custom_nodes)$|^/opt/comfyui/custom_nodes$'; then
+      doctor_fail_or_warn "comfyui must use a single /comfyui runtime root mount; fragmented ComfyUI mounts are no longer supported"
+    fi
+
+    if ! timeout 15 docker exec "${cid}" sh -lc 'test -L /opt/comfyui/custom_nodes && test "$(readlink /opt/comfyui/custom_nodes)" = "/comfyui/custom_nodes"'; then
+      doctor_fail_or_warn "comfyui source tree must symlink /opt/comfyui/custom_nodes to /comfyui/custom_nodes"
+    fi
+
+    if [[ "${AGENTIC_PROFILE}" == "rootless-dev" && "${host_machine}" =~ ^(aarch64|arm64)$ ]]; then
+      comfy_cuda_diag="$(timeout 15 docker exec "${cid}" sh -lc 'cat /comfyui/user/agentic-runtime/torch-runtime.json' 2>/dev/null || true)"
+      if [[ -z "${comfy_cuda_diag}" ]]; then
+        doctor_fail_or_warn "comfyui CUDA diagnostics missing at /comfyui/user/agentic-runtime/torch-runtime.json"
+      else
+        comfy_cuda_summary="$(
+          python3 - "${comfy_cuda_diag}" <<'PY' 2>/dev/null || true
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+policy = payload.get("policy", "")
+reason = str(payload.get("reason", "")).strip()
+
+if policy not in {"effective", "unsupported-explicit"}:
+    raise SystemExit(1)
+
+print(f"{policy}|{reason}")
+PY
+        )"
+        if [[ -z "${comfy_cuda_summary}" ]]; then
+          doctor_fail_or_warn "comfyui CUDA diagnostics are invalid for arm64/rootless-dev"
+        elif [[ "${comfy_cuda_summary%%|*}" == "effective" ]]; then
+          ok "comfyui arm64/rootless-dev CUDA backend is effective"
+        else
+          warn "comfyui arm64/rootless-dev CUDA policy is explicit unsupported; ${comfy_cuda_summary#*|}"
+        fi
+      fi
+    fi
+  fi
+
   if [[ "${service}" == "ollama" ]]; then
     env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
     runtime_ctx="$(printf '%s\n' "${env_dump}" | sed -n 's/^OLLAMA_CONTEXT_LENGTH=//p' | head -n 1)"
@@ -1096,6 +1142,9 @@ check_default_model_context_resources
 
 comfyui_cid="$(service_container_id comfyui)"
 if [[ -n "${comfyui_cid}" ]]; then
+  if [[ ! -d "${AGENTIC_ROOT}/comfyui" ]]; then
+    doctor_fail_or_warn "comfyui runtime root is missing: ${AGENTIC_ROOT}/comfyui"
+  fi
   allowlist_file="${AGENTIC_ROOT}/proxy/allowlist.txt"
   if [[ ! -f "${allowlist_file}" ]]; then
     doctor_fail_or_warn "proxy allowlist file is missing: ${allowlist_file}"

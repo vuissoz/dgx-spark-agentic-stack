@@ -249,11 +249,9 @@ Primary CLI contract per baseline service:
 - Internal service endpoint: `comfyui:8188`
 - Role: GPU-enabled visual workflow runtime.
 - Persistence:
-  - `${AGENTIC_ROOT}/comfyui/models`
-  - `${AGENTIC_ROOT}/comfyui/input`
-  - `${AGENTIC_ROOT}/comfyui/output`
-  - `${AGENTIC_ROOT}/comfyui/user`
-  - `${AGENTIC_ROOT}/comfyui/custom_nodes`
+  - single runtime root: `${AGENTIC_ROOT}/comfyui`
+  - contains `models/`, `input/`, `output/`, `user/`, `custom_nodes/`
+  - writes CUDA diagnostics under `${AGENTIC_ROOT}/comfyui/user/agentic-runtime/torch-runtime.json`
 
 ### `comfyui-loopback`
 - Host URL: `http://127.0.0.1:${COMFYUI_HOST_PORT:-8188}`

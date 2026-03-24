@@ -138,6 +138,7 @@ services:
     tmpfs:
       - /tmp
     environment:
+      AGENTIC_PROFILE: ${AGENTIC_PROFILE:-strict-prod}
       AGENTIC_GPU_PROFILE: lowprio
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
@@ -147,11 +148,7 @@ services:
     labels:
       - agentic.gpu-profile=lowprio
     volumes:
-      - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/models:/comfyui/models
-      - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/input:/comfyui/input
-      - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/output:/comfyui/output
-      - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/user:/comfyui/user
-      - ${AGENTIC_ROOT:-/srv/agentic}/comfyui/custom_nodes:/opt/comfyui/custom_nodes
+      - ${AGENTIC_ROOT:-/srv/agentic}/comfyui:/comfyui
     healthcheck:
       test:
         - CMD-SHELL
