@@ -17,10 +17,10 @@ override_log="${work_dir}/override.log"
 non_interactive_env_file="${work_dir}/non-interactive.env.generated.sh"
 recommended_context_env_file="${work_dir}/recommended-context.env.generated.sh"
 rootless_default_env_file="${work_dir}/rootless-default.env.generated.sh"
-blocked_default_model_env_file="${work_dir}/blocked-default-model.env.generated.sh"
-blocked_default_model_log="${work_dir}/blocked-default-model.log"
-blocked_openhands_model_env_file="${work_dir}/blocked-openhands-model.env.generated.sh"
-blocked_openhands_model_log="${work_dir}/blocked-openhands-model.log"
+warned_default_model_env_file="${work_dir}/warned-default-model.env.generated.sh"
+warned_default_model_log="${work_dir}/warned-default-model.log"
+warned_openhands_model_env_file="${work_dir}/warned-openhands-model.env.generated.sh"
+warned_openhands_model_log="${work_dir}/warned-openhands-model.log"
 openclaw_env_file="${work_dir}/openclaw-secrets.env.generated.sh"
 openclaw_log="${work_dir}/openclaw-secrets.log"
 ollama_fixtures_dir="${REPO_ROOT}/tests/fixtures/ollama"
@@ -359,47 +359,48 @@ grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama-gate:11435'$" "${rootl
   || fail "rootless default OPENWEBUI_OLLAMA_BASE_URL must be http://ollama-gate:11435"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
 
-set +e
-AGENTIC_PROFILE=strict-prod "${wizard_script}" \
+if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --non-interactive \
   --profile rootless-dev \
-  --root "${work_dir}/blocked-default-model-root" \
+  --root "${work_dir}/warned-default-model-root" \
   --skip-ui-bootstrap \
   --skip-network-bootstrap \
   --skip-secret-bootstrap \
   --default-model qwen3.5:35b \
-  --output "${blocked_default_model_env_file}" >"${blocked_default_model_log}" 2>&1
-blocked_default_model_rc=$?
-set -e
+  --output "${warned_default_model_env_file}" >"${warned_default_model_log}" 2>&1; then
+  cat "${warned_default_model_log}" >&2 || true
+  fail "wizard must allow qwen3.5:35b as AGENTIC_DEFAULT_MODEL while emitting a regression warning"
+fi
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3.5:35b'$" "${warned_default_model_env_file}" \
+  || fail "wizard warned default model flow must still export qwen3.5:35b"
+grep -q "AGENTIC_DEFAULT_MODEL='qwen3.5:35b' has a known stack tool-calling regression" "${warned_default_model_log}" \
+  || fail "wizard warned default model output must explain the stack regression"
+grep -q "qwen3-coder:30b" "${warned_default_model_log}" \
+  || fail "wizard warned default model output must suggest qwen3-coder:30b"
+ok "wizard allows qwen3.5:35b as default model with an explicit regression warning"
 
-[[ "${blocked_default_model_rc}" -ne 0 ]] \
-  || fail "wizard must reject qwen3.5:35b as AGENTIC_DEFAULT_MODEL"
-grep -q "AGENTIC_DEFAULT_MODEL='qwen3.5:35b' is blocked" "${blocked_default_model_log}" \
-  || fail "wizard blocked default model output must explain the rejection"
-grep -q "qwen3-coder:30b" "${blocked_default_model_log}" \
-  || fail "wizard blocked default model output must suggest qwen3-coder:30b"
-ok "wizard rejects qwen3.5:35b as default agentic model"
-
-set +e
-AGENTIC_PROFILE=strict-prod "${wizard_script}" \
+if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --non-interactive \
   --profile rootless-dev \
-  --root "${work_dir}/blocked-openhands-model-root" \
+  --root "${work_dir}/warned-openhands-model-root" \
   --skip-network-bootstrap \
   --skip-secret-bootstrap \
   --default-model qwen3-coder:30b \
   --openhands-llm-model openai/qwen3.5:35b \
-  --output "${blocked_openhands_model_env_file}" >"${blocked_openhands_model_log}" 2>&1
-blocked_openhands_model_rc=$?
-set -e
-
-[[ "${blocked_openhands_model_rc}" -ne 0 ]] \
-  || fail "wizard must reject qwen3.5:35b as OpenHands LLM_MODEL"
-grep -q "LLM_MODEL='openai/qwen3.5:35b' is blocked" "${blocked_openhands_model_log}" \
-  || fail "wizard blocked OpenHands model output must explain the rejection"
-grep -q "pseudo tool tags" "${blocked_openhands_model_log}" \
-  || fail "wizard blocked OpenHands model output must mention pseudo tool tags"
-ok "wizard rejects qwen3.5:35b as OpenHands model"
+  --output "${warned_openhands_model_env_file}" >"${warned_openhands_model_log}" 2>&1; then
+  cat "${warned_openhands_model_log}" >&2 || true
+  fail "wizard must allow qwen3.5:35b as OpenHands LLM_MODEL while emitting a regression warning"
+fi
+grep -q "LLM_MODEL='openai/qwen3.5:35b' has a known stack tool-calling regression" "${warned_openhands_model_log}" \
+  || fail "wizard warned OpenHands model output must explain the stack regression"
+grep -q "pseudo tool tags" "${warned_openhands_model_log}" \
+  || fail "wizard warned OpenHands model output must mention pseudo tool tags"
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3-coder:30b'$" "${warned_openhands_model_env_file}" \
+  || fail "wizard warned OpenHands model flow must keep the selected default model"
+warned_openhands_env_path="${work_dir}/warned-openhands-model-root/openhands/config/openhands.env"
+grep -q "^LLM_MODEL=openai/qwen3.5:35b$" "${warned_openhands_env_path}" \
+  || fail "wizard warned OpenHands model flow must still write openai/qwen3.5:35b into openhands.env"
+ok "wizard allows qwen3.5:35b as OpenHands model with an explicit regression warning"
 
 run_openclaw_secret_answers
 assert_generated_file_baseline "${openclaw_env_file}"

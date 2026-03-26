@@ -288,22 +288,22 @@ check_default_model_context_resources() {
   cleanup_context_check_files
 }
 
-check_default_model_tool_call_compatibility() {
+check_default_model_tool_call_regression_notice() {
   local default_model="${AGENTIC_DEFAULT_MODEL:-}"
   local reason=""
   local recommendation=""
 
   [[ -n "${default_model}" ]] || return 0
 
-  if reason="$(agentic_tool_call_model_incompatibility_reason "${default_model}")"; then
-    recommendation="$(agentic_tool_call_model_recommendation "${default_model}" 2>/dev/null || true)"
+  if reason="$(agentic_tool_call_model_regression_reason "${default_model}")"; then
+    recommendation="$(agentic_tool_call_regression_recommendation "${default_model}" 2>/dev/null || true)"
     if [[ -n "${recommendation}" ]]; then
-      doctor_fail "default model '${default_model}' is incompatible with the stack agentic tool-calling path: ${reason}; set AGENTIC_DEFAULT_MODEL='${recommendation}'"
+      warn "default model '${default_model}' has a known stack tool-calling regression: ${reason}; if you need a stable fallback today, use AGENTIC_DEFAULT_MODEL='${recommendation}'"
     else
-      doctor_fail "default model '${default_model}' is incompatible with the stack agentic tool-calling path: ${reason}"
+      warn "default model '${default_model}' has a known stack tool-calling regression: ${reason}"
     fi
   else
-    ok "default model '${default_model}' passes tool-calling compatibility policy"
+    ok "default model '${default_model}' has no known stack tool-calling regression notice"
   fi
 }
 
@@ -965,13 +965,13 @@ PY
     if [[ -z "${openhands_runtime_model}" ]]; then
       doctor_fail "openhands missing LLM_MODEL"
     else
-      openhands_reason="$(agentic_tool_call_model_incompatibility_reason "${openhands_runtime_model}" 2>/dev/null || true)"
+      openhands_reason="$(agentic_tool_call_model_regression_reason "${openhands_runtime_model}" 2>/dev/null || true)"
       if [[ -n "${openhands_reason}" ]]; then
-        openhands_recommendation="$(agentic_tool_call_model_recommendation "${openhands_runtime_model}" 2>/dev/null || true)"
+        openhands_recommendation="$(agentic_tool_call_regression_recommendation "${openhands_runtime_model}" 2>/dev/null || true)"
         if [[ -n "${openhands_recommendation}" ]]; then
-          doctor_fail "openhands LLM_MODEL='${openhands_runtime_model}' is incompatible with the stack agentic tool-calling path: ${openhands_reason}; use '${openhands_recommendation}'"
+          warn "openhands LLM_MODEL='${openhands_runtime_model}' has a known stack tool-calling regression: ${openhands_reason}; if you need a stable fallback today, use '${openhands_recommendation}'"
         else
-          doctor_fail "openhands LLM_MODEL='${openhands_runtime_model}' is incompatible with the stack agentic tool-calling path: ${openhands_reason}"
+          warn "openhands LLM_MODEL='${openhands_runtime_model}' has a known stack tool-calling regression: ${openhands_reason}"
         fi
       fi
     fi
@@ -1068,7 +1068,7 @@ if [[ ! -d "${AGENTIC_ROOT}/gate/mcp/logs" ]]; then
   doctor_fail "gate MCP audit log directory is missing: ${AGENTIC_ROOT}/gate/mcp/logs"
 fi
 
-check_default_model_tool_call_compatibility
+check_default_model_tool_call_regression_notice
 check_default_model_context_resources
 
 comfyui_cid="$(service_container_id comfyui)"

@@ -192,7 +192,7 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
   - `LLM_API_KEY`
   - `LLM_BASE_URL`
 - default model source: `AGENTIC_DEFAULT_MODEL` (onboarding flag: `--default-model`)
-- known guardrail: `qwen3.5:35b` is blocked for stack-default agentic use because Codex/OpenHands can emit pseudo tool tags instead of real tool calls
+- known runtime notice: `qwen3.5:35b` is allowed but warned because this stack has observed Codex/OpenHands pseudo tool tags instead of real tool calls; treat that as an integration bug to investigate, not as upstream proof that the model lacks tool support
 - for local routing through `ollama-gate`, `LLM_API_KEY` can be any non-empty placeholder (example: `local-ollama`)
 - first-run preconfiguration also creates `${AGENTIC_ROOT}/openhands/state/settings.json` so OpenHands does not stop on AI provider setup screen.
 

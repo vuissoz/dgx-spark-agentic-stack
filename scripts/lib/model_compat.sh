@@ -7,7 +7,7 @@ agentic_normalize_model_id() {
   printf '%s\n' "${model}"
 }
 
-agentic_tool_call_model_incompatibility_reason() {
+agentic_tool_call_model_regression_reason() {
   local model normalized
 
   model="${1:-}"
@@ -15,7 +15,7 @@ agentic_tool_call_model_incompatibility_reason() {
 
   case "${normalized}" in
     qwen3.5:35b)
-      printf '%s\n' "known tool-calling regression: Codex/OpenHands can emit pseudo tool tags (for example <read_file>...</read_file>) instead of real tool calls"
+      printf '%s\n' "observed stack tool-calling regression: Codex/OpenHands can emit pseudo tool tags (for example <read_file>...</read_file>) instead of real tool calls"
       return 0
       ;;
     *)
@@ -24,7 +24,7 @@ agentic_tool_call_model_incompatibility_reason() {
   esac
 }
 
-agentic_tool_call_model_recommendation() {
+agentic_tool_call_regression_recommendation() {
   local model normalized
 
   model="${1:-}"
@@ -39,4 +39,12 @@ agentic_tool_call_model_recommendation() {
       return 1
       ;;
   esac
+}
+
+agentic_tool_call_model_incompatibility_reason() {
+  agentic_tool_call_model_regression_reason "$@"
+}
+
+agentic_tool_call_model_recommendation() {
+  agentic_tool_call_regression_recommendation "$@"
 }

@@ -1,4 +1,4 @@
-# ADR-0084: Guardrails for Default Tool-Calling Models
+# ADR-0084: Notices for Default Tool-Calling Model Regressions
 
 ## Status
 Accepted
@@ -11,19 +11,18 @@ The stack baseline assumes that the default local model is usable for agentic to
 
 Issue `dgx-spark-agentic-stack-0uk` captured a concrete regression with `qwen3.5:35b` in `rootless-dev`: the model can emit pseudo tool tags such as `<read_file>...</read_file>` instead of real tool-call events.
 
-Leaving this model selectable as the stack default makes onboarding succeed while core agent workflows fail later in a confusing way.
+At the same time, Ollama upstream advertises Qwen 3.5 with `tools` support, so this repository should treat the regression as a stack integration bug until disproven, not as a permanent model incompatibility contract.
 
 ## Decision
-1. Introduce an explicit tool-calling compatibility policy in `scripts/lib/model_compat.sh`.
-2. Block known-incompatible models from:
-   - `AGENTIC_DEFAULT_MODEL` during onboarding,
-   - `LLM_MODEL` for OpenHands during onboarding.
-3. Extend `agent doctor` to fail explicitly when:
-   - `AGENTIC_DEFAULT_MODEL` is a known-incompatible tool-calling model,
-   - or the running OpenHands container is configured with one.
-4. Recommend `qwen3-coder:30b` as the default replacement for the current known-bad case.
+1. Introduce an explicit stack regression notice policy in `scripts/lib/model_compat.sh`.
+2. Keep onboarding permissive:
+   - allow `AGENTIC_DEFAULT_MODEL`,
+   - allow OpenHands `LLM_MODEL`,
+   - but emit an explicit warning when a model has a known stack tool-calling regression.
+3. Extend `agent doctor` to surface the same situation as a warning, not a compliance failure.
+4. Recommend `qwen3-coder:30b` as a temporary fallback for operators who need a stable local default while the real integration bug remains open.
 
 ## Consequences
-- Operators get a deterministic, actionable failure before relying on a broken default model.
-- Existing runtimes that still pin `qwen3.5:35b` are surfaced by `agent doctor` instead of failing silently during Codex/OpenHands sessions.
-- The compatibility list stays explicit and small until more validated cases need to be added.
+- Operators get a deterministic, actionable warning without losing access to models that upstream says should support tools.
+- Existing runtimes that pin `qwen3.5:35b` are surfaced by `agent doctor` instead of failing silently during Codex/OpenHands sessions.
+- The notice list stays explicit and small until the integration bug is fixed or more validated cases need to be tracked.
