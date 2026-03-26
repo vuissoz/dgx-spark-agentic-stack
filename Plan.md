@@ -44,6 +44,10 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [CLOSED]
 - Beads (Arbitrage dynamique backends LLM locaux/distants):
   - `dgx-spark-agentic-stack-ahl` (etendre `agent llm backend` a `ollama|trtllm|both|remote`, ajouter l'arbitrage runtime pilote par `ollama-gate`, des garde-fous anti-thrash et les checks doctor/tests associes) [CLOSED]
+- Beads (UX operateur modeles locaux):
+  - `dgx-spark-agentic-stack-1r0` (ajouter une commande `./agent` pour decharger explicitement un modele local, en parite operateur avec l'action visible dans OpenWebUI) [OPEN]
+- Beads (Onboarding TRT explicite):
+  - `dgx-spark-agentic-stack-cx9` (ajouter au wizard `agent onboard` une question d'activation TRT quand le profil n'est pas actif, puis la saisie de la liste des modeles TRT a charger/router) [OPEN]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -203,6 +207,18 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - lecture d'un etat deja expose par le registre/runtime/API interne OpenClaw,
   - sortie utile pour l'operateur: statut module, sandbox/session courant, modele/provider, sante recente,
   - sans contourner la separation entre confinement, API interne machine et CLI operateur.
+- Follow-up `dgx-spark-agentic-stack-1r0`: ajouter une commande operateur pour decharger explicitement un modele local a la demande:
+  - constat: en rootless-dev, OpenWebUI expose une action explicite de dechargement de modele, mais la stack ne fournit pas d'equivalent via `./agent`,
+  - cible: proposer une commande du type `agent ollama unload <model>` (ou equivalent plus canonique) pour liberer GPU/RAM sans passer par l'UI,
+  - clarifier le perimetre initial: backend Ollama uniquement ou extension prevue vers `trtllm`,
+  - definir les cas operateur a couvrir: modele non charge, backend inactif, modele encore reference par des sessions, audit/logs de l'action,
+  - verifier que la commande reste compatible avec les invariants CDC (loopback-only, pas de `docker.sock`, pas d'ouverture reseau supplementaire).
+- Follow-up `dgx-spark-agentic-stack-cx9`: etendre l'onboarding pour rendre l'activation TRT et les modeles TRT explicites:
+  - constat: le wizard `agent onboard` ne pose aujourd'hui aucune question dediee a l'activation du profil `trt` quand il n'est pas deja actif,
+  - constat: le wizard ne demande pas non plus quelle liste de modeles TRT doit etre chargee/routée (`TRTLLM_MODELS` ou equivalent canonique),
+  - cible interactive: si TRT n'est pas actif, proposer explicitement son activation, puis demander la liste des modeles TRT a charger/router,
+  - cible non interactive: ajouter des flags/variables explicites pour activer TRT et fournir la liste de modeles sans ambiguite entre `COMPOSE_PROFILES=trt`, runtime env et backend desired/effective,
+  - aligner ensuite `agent doctor`, la doc onboarding et les tests de wizard pour couvrir ce premier setup TRT de bout en bout.
 
 ## Sync Note (2026-03-07)
 - Step 8 (`dgx-spark-agentic-stack-3xx`) ferme le 2026-03-06.
