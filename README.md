@@ -300,7 +300,8 @@ agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
 agent <claude|codex|opencode|vibestral|openclaw|pi-mono|goose> [project]
 agent ls
 agent ps
-agent llm mode [local|hybrid|remote]
+agent llm mode [local|hybrid|mixed|remote]
+agent llm backend [ollama|trtllm|both]
 agent llm test-mode [on|off]
 agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
 agent logs <service>
@@ -443,8 +444,12 @@ Prérequis runtime:
 ## Modes LLM + quotas externes (D6)
 
 - `./agent llm mode local` : bloque explicitement les providers externes.
-- `./agent llm mode hybrid` : local prioritaire + externe selon routage.
+- `./agent llm mode hybrid` : local + remote autorisés, avec routage dynamique selon le modèle.
+- `./agent llm mode mixed` : alias CLI de `hybrid`.
 - `./agent llm mode remote` : providers externes autorisés (et possibilité d'arrêter `ollama`/`trtllm` pour libérer GPU/RAM).
+- `./agent llm backend ollama` : n'autorise que le backend local `ollama`.
+- `./agent llm backend trtllm` : n'autorise que le backend local `trtllm`.
+- `./agent llm backend both` : autorise `ollama` et `trtllm`, avec bascule dynamique suivant le modèle routé.
 - `./agent llm test-mode off` : valeur par défaut (production), dry-run gate désactivé.
 - `./agent llm test-mode on` : activation explicite pour campagnes de test.
 
@@ -457,6 +462,7 @@ Exemple mode `remote` avec pause locale:
 
 State runtime:
 - mode: `${AGENTIC_ROOT}/gate/state/llm_mode.json`
+- backend local: `${AGENTIC_ROOT}/gate/state/llm_backend.json`
 - compteurs quotas: `${AGENTIC_ROOT}/gate/state/quotas_state.json`
 - métriques: `external_requests_total`, `external_tokens_total`, `external_quota_remaining`
 

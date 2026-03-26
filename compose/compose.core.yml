@@ -64,8 +64,10 @@ services:
       GATE_STATE_DIR: /gate/state
       GATE_STICKY_FILE: /gate/state/sticky_sessions.json
       GATE_MODE_FILE: /gate/state/llm_mode.json
+      GATE_BACKEND_FILE: /gate/state/llm_backend.json
       GATE_QUOTAS_FILE: /gate/state/quotas_state.json
       GATE_LLM_MODE: ${AGENTIC_LLM_MODE:-hybrid}
+      GATE_LLM_BACKEND: ${AGENTIC_LLM_BACKEND:-both}
       GATE_LOG_FILE: /gate/logs/gate.jsonl
       GATE_ENABLE_TEST_MODE: ${GATE_ENABLE_TEST_MODE:-0}
       GATE_MAX_TEST_SLEEP_SECONDS: 15

@@ -49,7 +49,8 @@ Usage:
   agent openclaw approvals [list [--status <pending|approved|denied|expired|all>] [--json] | approve <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] | deny <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] [--reason <text>] | promote <id>]
   agent ls
   agent ps
-  agent llm mode [local|hybrid|remote]
+  agent llm mode [local|hybrid|mixed|remote]
+  agent llm backend [ollama|trtllm|both]
   agent llm test-mode [on|off]
   agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
   agent logs <service>
@@ -869,7 +870,7 @@ load_runtime_env() {
           export "${key}=${value}"
         fi
         ;;
-      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|AGENTIC_AGENT_WORKSPACES_ROOT|AGENTIC_CLAUDE_WORKSPACES_DIR|AGENTIC_CODEX_WORKSPACES_DIR|AGENTIC_OPENCODE_WORKSPACES_DIR|AGENTIC_VIBESTRAL_WORKSPACES_DIR|AGENTIC_OPENHANDS_WORKSPACES_DIR|AGENTIC_OPENCLAW_WORKSPACES_DIR|AGENTIC_PI_MONO_WORKSPACES_DIR|AGENTIC_GOOSE_WORKSPACES_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|AGENTIC_DEFAULT_MODEL|AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|AGENTIC_GOOSE_CONTEXT_LIMIT|OLLAMA_CONTEXT_LENGTH|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_AGENT_NO_NEW_PRIVILEGES|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_PI_CODING_AGENT_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
+      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_LLM_BACKEND|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|AGENTIC_AGENT_WORKSPACES_ROOT|AGENTIC_CLAUDE_WORKSPACES_DIR|AGENTIC_CODEX_WORKSPACES_DIR|AGENTIC_OPENCODE_WORKSPACES_DIR|AGENTIC_VIBESTRAL_WORKSPACES_DIR|AGENTIC_OPENHANDS_WORKSPACES_DIR|AGENTIC_OPENCLAW_WORKSPACES_DIR|AGENTIC_PI_MONO_WORKSPACES_DIR|AGENTIC_GOOSE_WORKSPACES_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|AGENTIC_DEFAULT_MODEL|AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|AGENTIC_GOOSE_CONTEXT_LIMIT|OLLAMA_CONTEXT_LENGTH|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_AGENT_NO_NEW_PRIVILEGES|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_PI_CODING_AGENT_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
         export "${key}=${value}"
         ;;
       *)
@@ -949,6 +950,7 @@ ensure_runtime_env() {
     "AGENTIC_OPENCLAW_INSTALL_VERSION=${AGENTIC_OPENCLAW_INSTALL_VERSION}"
     "AGENTIC_VIBE_INSTALL_SCRIPT=${AGENTIC_VIBE_INSTALL_SCRIPT}"
     "AGENTIC_LLM_MODE=${AGENTIC_LLM_MODE}"
+    "AGENTIC_LLM_BACKEND=${AGENTIC_LLM_BACKEND}"
     "GATE_ENABLE_TEST_MODE=${GATE_ENABLE_TEST_MODE:-0}"
     "AGENTIC_OPENAI_DAILY_TOKENS=${AGENTIC_OPENAI_DAILY_TOKENS}"
     "AGENTIC_OPENAI_MONTHLY_TOKENS=${AGENTIC_OPENAI_MONTHLY_TOKENS}"
@@ -1050,6 +1052,7 @@ cmd_profile() {
   printf 'openclaw_install_version=%s\n' "${AGENTIC_OPENCLAW_INSTALL_VERSION}"
   printf 'vibe_install_script=%s\n' "${AGENTIC_VIBE_INSTALL_SCRIPT}"
   printf 'llm_mode=%s\n' "${AGENTIC_LLM_MODE}"
+  printf 'llm_backend=%s\n' "${AGENTIC_LLM_BACKEND}"
   printf 'gate_test_mode=%s\n' "${GATE_ENABLE_TEST_MODE:-0}"
   printf 'egress_network=%s\n' "${AGENTIC_EGRESS_NETWORK}"
   printf 'openai_daily_tokens=%s\n' "${AGENTIC_OPENAI_DAILY_TOKENS}"
@@ -2463,6 +2466,61 @@ normalize_gate_test_mode_value() {
   esac
 }
 
+normalize_llm_mode_value() {
+  local raw="${1:-hybrid}"
+  case "${raw}" in
+    local|hybrid|remote)
+      printf '%s\n' "${raw}"
+      ;;
+    mixed)
+      printf 'hybrid\n'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+normalize_llm_backend_value() {
+  local raw="${1:-both}"
+  case "${raw}" in
+    ollama|trtllm|both)
+      printf '%s\n' "${raw}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+read_gate_state_value() {
+  local file_path="$1"
+  local field_name="$2"
+  local default_value="$3"
+
+  python3 - "${file_path}" "${field_name}" "${default_value}" <<'PY'
+import json
+import sys
+
+path, field_name, default_value = sys.argv[1:4]
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    print(default_value)
+    raise SystemExit(0)
+
+if isinstance(data, dict):
+    value = data.get(field_name)
+else:
+    value = data
+if isinstance(value, str) and value.strip():
+    print(value.strip().lower())
+else:
+    print(default_value)
+PY
+}
+
 set_gate_test_mode_value() {
   local enabled="$1"
   local restart_if_running="${2:-1}"
@@ -2494,35 +2552,15 @@ cmd_llm() {
 
   case "${action}" in
     mode)
-      local mode="${1:-}"
+      local mode_input="${1:-}"
       local mode_file="${AGENTIC_ROOT}/gate/state/llm_mode.json"
       local actor="${SUDO_USER:-${USER:-unknown}}"
       local current_mode
+      local mode
 
-      if [[ -z "${mode}" ]]; then
+      if [[ -z "${mode_input}" ]]; then
         if [[ -f "${mode_file}" ]]; then
-          current_mode="$(python3 - "${mode_file}" <<'PY'
-import json
-import sys
-
-path = sys.argv[1]
-try:
-    with open(path, "r", encoding="utf-8") as fh:
-        data = json.load(fh)
-except Exception:
-    print("hybrid")
-    raise SystemExit(0)
-
-if isinstance(data, dict):
-    mode = data.get("mode")
-else:
-    mode = data
-if isinstance(mode, str) and mode.strip():
-    print(mode.strip().lower())
-else:
-    print("hybrid")
-PY
-)"
+          current_mode="$(read_gate_state_value "${mode_file}" "mode" "hybrid")"
           printf 'llm mode=%s\n' "${current_mode}"
         else
           printf 'llm mode=%s\n' "${AGENTIC_LLM_MODE:-hybrid}"
@@ -2530,10 +2568,8 @@ PY
         return 0
       fi
 
-      case "${mode}" in
-        local|hybrid|remote) ;;
-        *) die "Usage: agent llm mode [local|hybrid|remote]" ;;
-      esac
+      mode="$(normalize_llm_mode_value "${mode_input}" 2>/dev/null)" \
+        || die "Usage: agent llm mode [local|hybrid|mixed|remote]"
 
       ensure_runtime_env
       set_runtime_env_value "AGENTIC_LLM_MODE" "${mode}"
@@ -2552,6 +2588,45 @@ JSON
       printf 'llm mode set to %s (state=%s)\n' "${mode}" "${mode_file}"
       if [[ "${mode}" == "remote" ]]; then
         printf 'tip: to free local GPU/RAM, run: agent stop service ollama trtllm\n'
+      fi
+      ;;
+    backend)
+      local backend_input="${1:-}"
+      local backend_file="${AGENTIC_ROOT}/gate/state/llm_backend.json"
+      local actor="${SUDO_USER:-${USER:-unknown}}"
+      local current_backend
+      local backend
+
+      if [[ -z "${backend_input}" ]]; then
+        if [[ -f "${backend_file}" ]]; then
+          current_backend="$(read_gate_state_value "${backend_file}" "backend" "both")"
+          printf 'llm backend=%s\n' "${current_backend}"
+        else
+          printf 'llm backend=%s\n' "${AGENTIC_LLM_BACKEND:-both}"
+        fi
+        return 0
+      fi
+
+      backend="$(normalize_llm_backend_value "${backend_input}" 2>/dev/null)" \
+        || die "Usage: agent llm backend [ollama|trtllm|both]"
+
+      ensure_runtime_env
+      set_runtime_env_value "AGENTIC_LLM_BACKEND" "${backend}"
+      export AGENTIC_LLM_BACKEND="${backend}"
+
+      install -d -m 0770 "${AGENTIC_ROOT}/gate/state"
+      if [[ "${EUID}" -eq 0 ]]; then
+        chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${AGENTIC_ROOT}/gate/state" || true
+      fi
+      cat >"${backend_file}" <<JSON
+{"backend":"${backend}","updated_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","updated_by":"${actor}"}
+JSON
+      chmod 0640 "${backend_file}" || true
+      chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${backend_file}" || true
+
+      printf 'llm backend set to %s (state=%s)\n' "${backend}" "${backend_file}"
+      if [[ "${backend}" == "both" ]]; then
+        printf 'tip: model routes can now switch dynamically between ollama and trtllm\n'
       fi
       ;;
     test-mode)
@@ -2591,7 +2666,7 @@ JSON
       fi
       ;;
     *)
-      die "Usage: agent llm mode [local|hybrid|remote] | agent llm test-mode [on|off]"
+      die "Usage: agent llm mode [local|hybrid|mixed|remote] | agent llm backend [ollama|trtllm|both] | agent llm test-mode [on|off]"
       ;;
   esac
 }

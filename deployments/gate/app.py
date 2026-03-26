@@ -72,16 +72,30 @@ class BackendAuthError(RuntimeError):
 
 
 ALLOWED_LLM_MODES = {"local", "hybrid", "remote"}
+LLM_MODE_ALIASES = {"mixed": "hybrid"}
+ALLOWED_LLM_BACKENDS = {"ollama", "trtllm", "both"}
+KNOWN_LOCAL_BACKENDS = {"ollama", "trtllm"}
 
 
 def normalize_llm_mode(raw: str | None, default: str = "hybrid") -> str:
     if isinstance(raw, str):
         candidate = raw.strip().lower()
+        candidate = LLM_MODE_ALIASES.get(candidate, candidate)
         if candidate in ALLOWED_LLM_MODES:
             return candidate
     if default in ALLOWED_LLM_MODES:
         return default
     return "hybrid"
+
+
+def normalize_llm_backend(raw: str | None, default: str = "both") -> str:
+    if isinstance(raw, str):
+        candidate = raw.strip().lower()
+        if candidate in ALLOWED_LLM_BACKENDS:
+            return candidate
+    if default in ALLOWED_LLM_BACKENDS:
+        return default
+    return "both"
 
 
 def parse_positive_int(value: Any) -> int:
@@ -122,10 +136,16 @@ class GateState:
             os.getenv("GATE_STICKY_FILE", str(self.state_dir / "sticky_sessions.json"))
         )
         self.mode_file = Path(os.getenv("GATE_MODE_FILE", str(self.state_dir / "llm_mode.json")))
+        self.backend_file = Path(
+            os.getenv("GATE_BACKEND_FILE", str(self.state_dir / "llm_backend.json"))
+        )
         self.quotas_file = Path(os.getenv("GATE_QUOTAS_FILE", str(self.state_dir / "quotas_state.json")))
         self.default_llm_mode = normalize_llm_mode(os.getenv("GATE_LLM_MODE", "hybrid"))
+        self.default_llm_backend = normalize_llm_backend(os.getenv("GATE_LLM_BACKEND", "both"))
         self.llm_mode = self.default_llm_mode
+        self.llm_backend = self.default_llm_backend
         self._llm_mode_mtime = 0.0
+        self._llm_backend_mtime = 0.0
 
         self.sem = asyncio.Semaphore(self.concurrency)
         self.lock = asyncio.Lock()
@@ -147,11 +167,13 @@ class GateState:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.sticky_file.parent.mkdir(parents=True, exist_ok=True)
         self.mode_file.parent.mkdir(parents=True, exist_ok=True)
+        self.backend_file.parent.mkdir(parents=True, exist_ok=True)
         self.quotas_file.parent.mkdir(parents=True, exist_ok=True)
 
         self._load_sticky()
         self._load_model_routes()
         self._load_mode()
+        self._load_backend()
         self._load_quotas()
 
     def _load_sticky(self) -> None:
@@ -324,12 +346,33 @@ class GateState:
             return normalize_llm_mode(raw, default=self.default_llm_mode)
         return self.default_llm_mode
 
+    def _read_backend_file(self) -> str:
+        if not self.backend_file.exists():
+            return self.default_llm_backend
+        try:
+            raw = json.loads(self.backend_file.read_text(encoding="utf-8"))
+        except Exception:
+            return self.default_llm_backend
+
+        if isinstance(raw, dict):
+            return normalize_llm_backend(raw.get("backend"), default=self.default_llm_backend)
+        if isinstance(raw, str):
+            return normalize_llm_backend(raw, default=self.default_llm_backend)
+        return self.default_llm_backend
+
     def _load_mode(self) -> None:
         self.llm_mode = self._read_mode_file()
         try:
             self._llm_mode_mtime = self.mode_file.stat().st_mtime
         except FileNotFoundError:
             self._llm_mode_mtime = 0.0
+
+    def _load_backend(self) -> None:
+        self.llm_backend = self._read_backend_file()
+        try:
+            self._llm_backend_mtime = self.backend_file.stat().st_mtime
+        except FileNotFoundError:
+            self._llm_backend_mtime = 0.0
 
     def refresh_mode_if_needed(self) -> None:
         try:
@@ -341,9 +384,23 @@ class GateState:
             return
         self._load_mode()
 
+    def refresh_backend_if_needed(self) -> None:
+        try:
+            backend_mtime = self.backend_file.stat().st_mtime
+        except FileNotFoundError:
+            backend_mtime = 0.0
+
+        if backend_mtime == self._llm_backend_mtime:
+            return
+        self._load_backend()
+
     def get_llm_mode(self) -> str:
         self.refresh_mode_if_needed()
         return self.llm_mode
+
+    def get_llm_backend(self) -> str:
+        self.refresh_backend_if_needed()
+        return self.llm_backend
 
     def persist_llm_mode(self, mode: str, actor: str) -> str:
         normalized = normalize_llm_mode(mode, default=self.default_llm_mode)
@@ -357,6 +414,67 @@ class GateState:
         os.replace(tmp, self.mode_file)
         self._load_mode()
         return self.llm_mode
+
+    def persist_llm_backend(self, backend: str, actor: str) -> str:
+        normalized = normalize_llm_backend(backend, default=self.default_llm_backend)
+        payload = {
+            "backend": normalized,
+            "updated_at": now_iso(),
+            "updated_by": actor if isinstance(actor, str) and actor.strip() else "api",
+        }
+        tmp = self.backend_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, self.backend_file)
+        self._load_backend()
+        return self.llm_backend
+
+    def local_backend_allowed(self, backend_name: str, llm_backend: str | None = None) -> bool:
+        selected = llm_backend or self.get_llm_backend()
+        if selected == "both":
+            return True
+        return backend_name == selected
+
+    def backend_allowed(self, backend_name: str, llm_mode: str | None = None, llm_backend: str | None = None) -> bool:
+        mode = llm_mode or self.get_llm_mode()
+        selected_backend = llm_backend or self.get_llm_backend()
+        provider = self.backend_provider(backend_name)
+        if provider_is_external(provider):
+            return mode != "local"
+        if mode == "remote":
+            return False
+        if backend_name in KNOWN_LOCAL_BACKENDS:
+            return self.local_backend_allowed(backend_name, selected_backend)
+        return selected_backend == "both"
+
+    def catalog_backends(self, llm_mode: str | None = None, llm_backend: str | None = None) -> list[str]:
+        mode = llm_mode or self.get_llm_mode()
+        selected_backend = llm_backend or self.get_llm_backend()
+        ordered: list[str] = []
+
+        if mode != "remote":
+            preferred_local: list[str]
+            if selected_backend == "both":
+                preferred_local = []
+                if self.default_backend in KNOWN_LOCAL_BACKENDS:
+                    preferred_local.append(self.default_backend)
+                for candidate in sorted(KNOWN_LOCAL_BACKENDS):
+                    if candidate not in preferred_local:
+                        preferred_local.append(candidate)
+            else:
+                preferred_local = [selected_backend]
+            for candidate in preferred_local:
+                if candidate in self.backends and candidate not in ordered:
+                    ordered.append(candidate)
+
+        if mode != "local":
+            for backend_name in sorted(self.backends):
+                provider = self.backend_provider(backend_name)
+                if provider_is_external(provider) and backend_name not in ordered:
+                    ordered.append(backend_name)
+
+        if not ordered and self.default_backend in self.backends:
+            ordered.append(self.default_backend)
+        return ordered
 
     def _blank_window(self, period: str) -> Dict[str, Any]:
         return {"period": period, "requests": 0, "tokens": 0}
@@ -960,13 +1078,17 @@ def gate_response_headers(
     backend: str,
     provider: str,
     llm_mode: str,
+    llm_backend: str | None = None,
     model_served: str | None = None,
 ) -> Dict[str, str]:
+    if llm_backend is None:
+        llm_backend = state.get_llm_backend()
     headers = {
         "X-Gate-Decision": decision,
         "X-Gate-Backend": backend,
         "X-Gate-Provider": provider,
         "X-Gate-LLM-Mode": llm_mode,
+        "X-Gate-LLM-Backend": llm_backend,
     }
     if isinstance(model_served, str) and model_served:
         headers["X-Model-Served"] = model_served
@@ -979,6 +1101,7 @@ def upstream_response_with_gate_headers(
     backend: str,
     provider: str,
     llm_mode: str,
+    llm_backend: str | None = None,
     model_served: str | None = None,
 ) -> Response:
     headers = gate_response_headers(
@@ -986,6 +1109,7 @@ def upstream_response_with_gate_headers(
         backend=backend,
         provider=provider,
         llm_mode=llm_mode,
+        llm_backend=llm_backend,
         model_served=model_served,
     )
     content_type = upstream.headers.get("content-type")
@@ -1007,6 +1131,36 @@ def llm_mode_block_response(provider: str, endpoint: str, llm_mode: str) -> JSON
                 "provider": provider,
                 "endpoint": endpoint,
                 "llm_mode": llm_mode,
+            }
+        },
+    )
+
+
+def local_backend_block_response(backend: str, endpoint: str, llm_mode: str, llm_backend: str) -> JSONResponse:
+    if llm_mode == "remote":
+        message = (
+            f"local backend '{backend}' is disabled while gate is in llm_mode='{llm_mode}'. "
+            "Switch to 'local' or 'hybrid' to allow local backends."
+        )
+        reason = "local_backend_disabled_by_mode"
+    else:
+        message = (
+            f"local backend '{backend}' is disabled while gate is in llm_backend='{llm_backend}'. "
+            f"Switch to 'both' or '{backend}' to allow it."
+        )
+        reason = "local_backend_disabled"
+
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": {
+                "message": message,
+                "type": "local_backend_disabled",
+                "reason": reason,
+                "backend": backend,
+                "endpoint": endpoint,
+                "llm_mode": llm_mode,
+                "llm_backend": llm_backend,
             }
         },
     )
@@ -1222,8 +1376,13 @@ async def resolve_model(session: str, requested: str | None, allow_switch: bool)
 
     chosen = requested
     if not chosen:
-        models = await fetch_backend_models(state.default_backend)
-        chosen = models[0] if models else "unknown"
+        for backend_name in state.catalog_backends():
+            models = await fetch_backend_models(backend_name)
+            if models:
+                chosen = models[0]
+                break
+        if not chosen:
+            chosen = "unknown"
     await state.set_sticky_model(session, chosen)
     return chosen, False
 
@@ -1285,6 +1444,7 @@ def event_base(
     model_switch: bool = False,
     reason: str | None = None,
     llm_mode: str | None = None,
+    llm_backend: str | None = None,
     external_tokens: int | None = None,
 ) -> Dict[str, Any]:
     return {
@@ -1302,6 +1462,7 @@ def event_base(
         "status_code": status_code,
         "reason": reason,
         "llm_mode": llm_mode,
+        "llm_backend": llm_backend,
         "external_tokens": external_tokens,
     }
 
@@ -1315,6 +1476,7 @@ async def healthz() -> Dict[str, str]:
 async def metrics() -> PlainTextResponse:
     m = await state.snapshot_metrics()
     llm_mode = state.get_llm_mode()
+    llm_backend = state.get_llm_backend()
     external = await state.snapshot_external_metrics()
     lines = [
         "# TYPE queue_depth gauge",
@@ -1331,6 +1493,8 @@ async def metrics() -> PlainTextResponse:
         f"gate_decision_denied_total {m['decisions_denied_total']}",
         "# TYPE gate_llm_mode gauge",
         f"gate_llm_mode{{mode=\"{llm_mode}\"}} 1",
+        "# TYPE gate_llm_backend gauge",
+        f"gate_llm_backend{{backend=\"{llm_backend}\"}} 1",
     ]
     for provider, stats in external.items():
         lines.extend(
@@ -1391,6 +1555,7 @@ async def proxy_ollama_api(
     session = request.headers.get("X-Agent-Session", session_default)
     project = request.headers.get("X-Agent-Project", "-")
     llm_mode = state.get_llm_mode()
+    llm_backend = state.get_llm_backend()
     allow_switch = header_bool(request.headers.get("X-Model-Switch"))
     started = time.monotonic()
     acquired = False
@@ -1440,6 +1605,14 @@ async def proxy_ollama_api(
         backend = state.resolve_backend(model_served)
         provider = backend_provider_name(backend)
         llm_mode = state.get_llm_mode()
+        llm_backend = state.get_llm_backend()
+
+        if not state.backend_allowed(backend, llm_mode=llm_mode, llm_backend=llm_backend):
+            status_code = 403
+            reason = "external_provider_disabled" if provider_is_external(provider) else "local_backend_disabled"
+            if provider_is_external(provider):
+                return llm_mode_block_response(provider, endpoint, llm_mode)
+            return local_backend_block_response(backend, endpoint, llm_mode, llm_backend)
 
         cfg = state.backend_config(backend)
         if cfg is None:
@@ -1513,6 +1686,7 @@ async def proxy_ollama_api(
             backend=backend,
             provider=provider,
             llm_mode=llm_mode,
+            llm_backend=llm_backend,
             model_served=model_served,
         )
     finally:
@@ -1622,6 +1796,7 @@ async def v1_models(request: Request) -> JSONResponse:
     session = request.headers.get("X-Agent-Session", "models-list")
     project = request.headers.get("X-Agent-Project", "-")
     llm_mode = state.get_llm_mode()
+    llm_backend = state.get_llm_backend()
     started = time.monotonic()
     acquired = False
     decision = "active"
@@ -1656,12 +1831,22 @@ async def v1_models(request: Request) -> JSONResponse:
     status_code = 200
     reason = None
     try:
-        provider = backend_provider_name(backend)
-        if llm_mode == "local" and provider_is_external(provider):
-            status_code = 403
-            reason = "external_provider_disabled"
-            return llm_mode_block_response(provider, "/v1/models", llm_mode)
-        records = await fetch_backend_model_catalog(backend)
+        records: list[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        backends = state.catalog_backends(llm_mode=llm_mode, llm_backend=llm_backend)
+        if backends:
+            backend = backends[0]
+            provider = backend_provider_name(backend)
+        for backend_name in backends:
+            if not state.backend_allowed(backend_name, llm_mode=llm_mode, llm_backend=llm_backend):
+                continue
+            backend_records = await fetch_backend_model_catalog(backend_name)
+            for record in backend_records:
+                record_id = record.get("id")
+                if not isinstance(record_id, str) or not record_id or record_id in seen_ids:
+                    continue
+                seen_ids.add(record_id)
+                records.append(record)
         response = {
             "object": "list",
             "data": records,
@@ -1674,6 +1859,7 @@ async def v1_models(request: Request) -> JSONResponse:
                 "X-Gate-Backend": backend,
                 "X-Gate-Provider": provider,
                 "X-Gate-LLM-Mode": llm_mode,
+                "X-Gate-LLM-Backend": llm_backend,
             },
         )
     except BackendAuthError as exc:
@@ -2104,6 +2290,7 @@ async def handle_chat_completion_endpoint(
     project = request.headers.get("X-Agent-Project", "-")
     allow_switch = header_bool(request.headers.get("X-Model-Switch"))
     llm_mode = state.get_llm_mode()
+    llm_backend = state.get_llm_backend()
     queue_wait_timeout_seconds = extract_queue_timeout_seconds(request)
     started = time.monotonic()
     acquired = False
@@ -2127,6 +2314,7 @@ async def handle_chat_completion_endpoint(
                 provider=backend_provider_name(state.default_backend),
                 reason="queue_timeout",
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
             )
         )
         return JSONResponse(
@@ -2168,11 +2356,14 @@ async def handle_chat_completion_endpoint(
         provider = backend_provider_name(backend)
         is_external_provider = provider_is_external(provider)
         llm_mode = state.get_llm_mode()
+        llm_backend = state.get_llm_backend()
 
-        if llm_mode == "local" and is_external_provider:
+        if not state.backend_allowed(backend, llm_mode=llm_mode, llm_backend=llm_backend):
             status_code = 403
-            reason = "external_provider_disabled"
-            return llm_mode_block_response(provider, endpoint, llm_mode)
+            reason = "external_provider_disabled" if is_external_provider else "local_backend_disabled"
+            if is_external_provider:
+                return llm_mode_block_response(provider, endpoint, llm_mode)
+            return local_backend_block_response(backend, endpoint, llm_mode, llm_backend)
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
         if is_external_provider:
@@ -2305,6 +2496,7 @@ async def handle_chat_completion_endpoint(
                 backend=backend,
                 provider=provider,
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
                 model_served=effective_model,
             )
             headers["Content-Type"] = "text/event-stream; charset=utf-8"
@@ -2323,6 +2515,7 @@ async def handle_chat_completion_endpoint(
                 backend=backend,
                 provider=provider,
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
                 model_served=effective_model,
             ),
         )
@@ -2345,6 +2538,7 @@ async def handle_chat_completion_endpoint(
                 model_switch=model_switch,
                 reason=reason,
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
                 external_tokens=external_tokens_used if is_external_provider else None,
             )
         )
@@ -3403,6 +3597,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
     project = request.headers.get("X-Agent-Project", "-")
     allow_switch = header_bool(request.headers.get("X-Model-Switch"))
     llm_mode = state.get_llm_mode()
+    llm_backend = state.get_llm_backend()
     queue_wait_timeout_seconds = extract_queue_timeout_seconds(request)
     started = time.monotonic()
     acquired = False
@@ -3426,6 +3621,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 provider=backend_provider_name(state.default_backend),
                 reason="queue_timeout",
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
             )
         )
         return JSONResponse(
@@ -3467,11 +3663,14 @@ async def v1_embeddings(request: Request) -> JSONResponse:
         provider = backend_provider_name(backend)
         is_external_provider = provider_is_external(provider)
         llm_mode = state.get_llm_mode()
+        llm_backend = state.get_llm_backend()
 
-        if llm_mode == "local" and is_external_provider:
+        if not state.backend_allowed(backend, llm_mode=llm_mode, llm_backend=llm_backend):
             status_code = 403
-            reason = "external_provider_disabled"
-            return llm_mode_block_response(provider, "/v1/embeddings", llm_mode)
+            reason = "external_provider_disabled" if is_external_provider else "local_backend_disabled"
+            if is_external_provider:
+                return llm_mode_block_response(provider, "/v1/embeddings", llm_mode)
+            return local_backend_block_response(backend, "/v1/embeddings", llm_mode, llm_backend)
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
         if is_external_provider:
@@ -3598,6 +3797,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 "X-Gate-Backend": backend,
                 "X-Gate-Provider": provider,
                 "X-Gate-LLM-Mode": llm_mode,
+                "X-Gate-LLM-Backend": llm_backend,
             },
         )
     finally:
@@ -3619,6 +3819,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 model_switch=model_switch,
                 reason=reason,
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
                 external_tokens=external_tokens_used if is_external_provider else None,
             )
         )
@@ -3674,13 +3875,17 @@ async def admin_session(session_id: str) -> JSONResponse:
 @app.get("/admin/llm-mode")
 async def admin_llm_mode() -> JSONResponse:
     llm_mode = state.get_llm_mode()
+    llm_backend = state.get_llm_backend()
     external = await state.snapshot_external_metrics()
     return JSONResponse(
         status_code=200,
         content={
             "llm_mode": llm_mode,
             "default_llm_mode": state.default_llm_mode,
+            "llm_backend": llm_backend,
+            "default_llm_backend": state.default_llm_backend,
             "mode_file": str(state.mode_file),
+            "backend_file": str(state.backend_file),
             "quotas_file": str(state.quotas_file),
             "external": external,
         },
@@ -3690,8 +3895,11 @@ async def admin_llm_mode() -> JSONResponse:
 @app.put("/admin/llm-mode")
 async def admin_set_llm_mode(request: Request) -> JSONResponse:
     payload = await request.json()
-    mode = payload.get("mode")
-    if not isinstance(mode, str) or mode.strip().lower() not in ALLOWED_LLM_MODES:
+    raw_mode = payload.get("mode")
+    if not isinstance(raw_mode, str):
+        raw_mode = ""
+    mode = LLM_MODE_ALIASES.get(raw_mode.strip().lower(), raw_mode.strip().lower())
+    if mode not in ALLOWED_LLM_MODES:
         return JSONResponse(
             status_code=400,
             content={"error": {"message": "mode must be one of: local, hybrid, remote", "type": "invalid_mode"}},
@@ -3710,9 +3918,62 @@ async def admin_set_llm_mode(request: Request) -> JSONResponse:
             latency_ms=0,
             reason="admin_mode_set",
             llm_mode=updated_mode,
+            llm_backend=state.get_llm_backend(),
         )
     )
     return JSONResponse(status_code=200, content={"ok": True, "llm_mode": updated_mode})
+
+
+@app.get("/admin/llm-backend")
+async def admin_llm_backend() -> JSONResponse:
+    return JSONResponse(
+        status_code=200,
+        content={
+            "llm_backend": state.get_llm_backend(),
+            "default_llm_backend": state.default_llm_backend,
+            "backend_file": str(state.backend_file),
+            "llm_mode": state.get_llm_mode(),
+            "default_llm_mode": state.default_llm_mode,
+            "mode_file": str(state.mode_file),
+        },
+    )
+
+
+@app.put("/admin/llm-backend")
+async def admin_set_llm_backend(request: Request) -> JSONResponse:
+    payload = await request.json()
+    raw_backend = payload.get("backend")
+    if not isinstance(raw_backend, str):
+        raw_backend = ""
+    backend = raw_backend.strip().lower()
+    if backend not in ALLOWED_LLM_BACKENDS:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "backend must be one of: ollama, trtllm, both",
+                    "type": "invalid_backend",
+                }
+            },
+        )
+
+    updated_backend = state.persist_llm_backend(backend, request.headers.get("X-Agent-Actor", "api"))
+    state.write_log(
+        event_base(
+            session="admin",
+            project=request.headers.get("X-Agent-Project", "-"),
+            endpoint="/admin/llm-backend",
+            decision="admin_backend_set",
+            model_requested=None,
+            model_served=None,
+            status_code=200,
+            latency_ms=0,
+            reason="admin_backend_set",
+            llm_mode=state.get_llm_mode(),
+            llm_backend=updated_backend,
+        )
+    )
+    return JSONResponse(status_code=200, content={"ok": True, "llm_backend": updated_backend})
 
 
 @app.get("/admin/quotas")
