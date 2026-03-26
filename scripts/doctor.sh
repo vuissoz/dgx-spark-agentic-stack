@@ -479,6 +479,145 @@ PY
   rm -f "${response_file}" "${response_err_file}"
 }
 
+check_llm_backend_runtime_policy() {
+  local desired_backend_file="${AGENTIC_ROOT}/gate/state/llm_backend.json"
+  local runtime_backend_file="${AGENTIC_ROOT}/gate/state/llm_backend_runtime.json"
+  local llm_mode="${AGENTIC_LLM_MODE:-hybrid}"
+  local desired_backend="${AGENTIC_LLM_BACKEND:-both}"
+  local cooldown_seconds="${AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS:-3}"
+  local parsed_json
+  local file_backend runtime_desired runtime_effective runtime_cooldown_epoch runtime_cooldown
+
+  case "${desired_backend}" in
+    ollama|trtllm|both|remote) ;;
+    *)
+      doctor_fail_or_warn "AGENTIC_LLM_BACKEND must be one of ollama|trtllm|both|remote (got: ${desired_backend})"
+      return 0
+      ;;
+  esac
+
+  if ! [[ "${cooldown_seconds}" =~ ^[0-9]+$ ]]; then
+    doctor_fail_or_warn "AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS must be an integer >= 0 (got: ${cooldown_seconds})"
+    return 0
+  fi
+
+  if [[ ! -f "${desired_backend_file}" ]]; then
+    doctor_fail_or_warn "LLM backend policy file is missing: ${desired_backend_file}"
+    return 0
+  fi
+  if [[ ! -f "${runtime_backend_file}" ]]; then
+    doctor_fail_or_warn "LLM backend runtime file is missing: ${runtime_backend_file}"
+    return 0
+  fi
+
+  if ! parsed_json="$(
+    python3 - "${desired_backend_file}" "${runtime_backend_file}" 2>&1 <<'PY'
+import json
+import pathlib
+import sys
+
+policy_path = pathlib.Path(sys.argv[1])
+runtime_path = pathlib.Path(sys.argv[2])
+policy = json.loads(policy_path.read_text(encoding="utf-8"))
+runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+
+def extract_policy(payload):
+    if isinstance(payload, dict):
+        return str(payload.get("backend", "")).strip().lower()
+    if isinstance(payload, str):
+        return payload.strip().lower()
+    return ""
+
+if not isinstance(runtime, dict):
+    raise SystemExit("runtime state must be a JSON object")
+
+allowed_desired = {"ollama", "trtllm", "both", "remote"}
+allowed_effective = {"ollama", "trtllm", "remote"}
+
+policy_backend = extract_policy(policy)
+if policy_backend not in allowed_desired:
+    raise SystemExit(f"backend policy file contains invalid backend={policy_backend!r}")
+
+runtime_desired = str(runtime.get("desired_backend", "")).strip().lower()
+runtime_effective = str(runtime.get("effective_backend", "")).strip().lower()
+if runtime_desired not in allowed_desired:
+    raise SystemExit(f"runtime desired_backend is invalid: {runtime_desired!r}")
+if runtime_effective not in allowed_effective:
+    raise SystemExit(f"runtime effective_backend is invalid: {runtime_effective!r}")
+
+cooldown_epoch = runtime.get("cooldown_until_epoch", 0)
+try:
+    cooldown_epoch = int(cooldown_epoch)
+except (TypeError, ValueError):
+    raise SystemExit("runtime cooldown_until_epoch must be an integer")
+if cooldown_epoch < 0:
+    raise SystemExit("runtime cooldown_until_epoch must be >= 0")
+
+cooldown_until = runtime.get("cooldown_until", "")
+if cooldown_until is None:
+    cooldown_until = ""
+cooldown_until = str(cooldown_until)
+
+print(f"policy_backend={policy_backend}")
+print(f"runtime_desired={runtime_desired}")
+print(f"runtime_effective={runtime_effective}")
+print(f"cooldown_epoch={cooldown_epoch}")
+print(f"cooldown_until={cooldown_until}")
+PY
+  )"; then
+    doctor_fail_or_warn "LLM backend runtime state is invalid: ${parsed_json}"
+    return 0
+  fi
+
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      policy_backend) file_backend="${value}" ;;
+      runtime_desired) runtime_desired="${value}" ;;
+      runtime_effective) runtime_effective="${value}" ;;
+      cooldown_epoch) runtime_cooldown_epoch="${value}" ;;
+      cooldown_until) runtime_cooldown="${value}" ;;
+      *) ;;
+    esac
+  done <<<"${parsed_json}"
+
+  if [[ "${file_backend}" != "${desired_backend}" ]]; then
+    doctor_fail_or_warn "LLM backend policy file (${desired_backend_file}) is out of sync with AGENTIC_LLM_BACKEND=${desired_backend} (file=${file_backend})"
+  fi
+  if [[ "${runtime_desired}" != "${file_backend}" ]]; then
+    doctor_fail_or_warn "LLM backend runtime desired_backend (${runtime_desired}) does not match policy backend (${file_backend})"
+  fi
+
+  case "${file_backend}" in
+    ollama|trtllm)
+      if [[ "${runtime_effective}" != "${file_backend}" && "${runtime_effective}" != "remote" ]]; then
+        doctor_fail_or_warn "LLM backend runtime effective_backend (${runtime_effective}) must stay on '${file_backend}' or 'remote' when desired backend is '${file_backend}'"
+      fi
+      ;;
+    remote)
+      if [[ "${runtime_effective}" != "remote" ]]; then
+        doctor_fail_or_warn "LLM backend runtime effective_backend (${runtime_effective}) must match desired backend 'remote'"
+      fi
+      ;;
+    both)
+      case "${runtime_effective}" in
+        ollama|trtllm|remote) ;;
+        *)
+          doctor_fail_or_warn "LLM backend runtime effective_backend must be ollama|trtllm|remote when desired backend is 'both' (got: ${runtime_effective})"
+          ;;
+      esac
+      ;;
+  esac
+
+  if [[ "${file_backend}" == "remote" && "${llm_mode}" == "local" ]]; then
+    doctor_fail_or_warn "AGENTIC_LLM_BACKEND=remote is incompatible with AGENTIC_LLM_MODE=local; external providers remain blocked"
+  fi
+
+  ok "llm backend policy '${file_backend}' runtime effective='${runtime_effective}' cooldown=${cooldown_seconds}s state=${runtime_backend_file}"
+  if [[ "${runtime_cooldown_epoch:-0}" =~ ^[0-9]+$ ]] && (( runtime_cooldown_epoch > 0 )); then
+    ok "llm backend runtime cooldown_until='${runtime_cooldown:-}'"
+  fi
+}
+
 doctor_stream_payload() {
   local model="$1"
   local tool_name="$2"
@@ -1242,6 +1381,7 @@ fi
 
 check_default_model_tool_call_regression_notice
 check_default_model_context_resources
+check_llm_backend_runtime_policy
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"

@@ -20,9 +20,11 @@ agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
 model_routes_file="${agentic_root}/gate/config/model_routes.yml"
 mode_file="${agentic_root}/gate/state/llm_mode.json"
 backend_file="${agentic_root}/gate/state/llm_backend.json"
+backend_runtime_file="${agentic_root}/gate/state/llm_backend_runtime.json"
 quota_file="${agentic_root}/gate/state/quotas_state.json"
 gate_log="${agentic_root}/gate/logs/gate.jsonl"
 openai_key_file="${agentic_root}/secrets/runtime/openai.api_key"
+local_switch_cooldown_sec="${AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS:-3}"
 
 [[ -f "${model_routes_file}" ]] || fail "model routes file missing: ${model_routes_file}"
 [[ -f "${gate_log}" ]] || fail "gate log file missing: ${gate_log}"
@@ -40,9 +42,11 @@ refresh_gate_cid() {
 routes_backup="$(mktemp)"
 mode_backup="$(mktemp)"
 backend_backup="$(mktemp)"
+backend_runtime_backup="$(mktemp)"
 quota_backup="$(mktemp)"
 mode_had_file=0
 backend_had_file=0
+backend_runtime_had_file=0
 quota_had_file=0
 
 cp "${model_routes_file}" "${routes_backup}"
@@ -53,6 +57,10 @@ fi
 if [[ -f "${backend_file}" ]]; then
   cp "${backend_file}" "${backend_backup}"
   backend_had_file=1
+fi
+if [[ -f "${backend_runtime_file}" ]]; then
+  cp "${backend_runtime_file}" "${backend_runtime_backup}"
+  backend_runtime_had_file=1
 fi
 if [[ -f "${quota_file}" ]]; then
   cp "${quota_file}" "${quota_backup}"
@@ -82,6 +90,14 @@ restore() {
     rm -f "${backend_file}" || true
   fi
   rm -f "${backend_backup}" || true
+
+  if [[ "${backend_runtime_had_file}" == "1" ]]; then
+    cp "${backend_runtime_backup}" "${backend_runtime_file}" || true
+    chmod 0640 "${backend_runtime_file}" || true
+  else
+    rm -f "${backend_runtime_file}" || true
+  fi
+  rm -f "${backend_runtime_backup}" || true
 
   if [[ "${quota_had_file}" == "1" ]]; then
     cp "${quota_backup}" "${quota_file}" || true
@@ -214,19 +230,38 @@ assert_log_contains "${session_local}" '"llm_mode":"hybrid"'
 assert_log_contains "${session_local}" '"llm_backend":"both"'
 ok "hybrid+both keeps default local models on ollama"
 
+session_trt_cooldown="d12-trt-cooldown-$$"
+resp_trt_cooldown="$(call_chat "${session_trt_cooldown}" "d12-trt-a")"
+code_trt_cooldown="$(extract_code "${resp_trt_cooldown}")"
+body_trt_cooldown="$(extract_body "${resp_trt_cooldown}")"
+[[ "${code_trt_cooldown}" == "429" ]] || {
+  printf '%s\n' "${body_trt_cooldown}" >&2
+  fail "rapid ollama->trtllm switch must be throttled by anti-thrash cooldown"
+}
+printf '%s\n' "${body_trt_cooldown}" | grep -q '"type":"backend_switch_cooldown"' \
+  || fail "anti-thrash response must expose backend_switch_cooldown"
+printf '%s\n' "${body_trt_cooldown}" | grep -q '"current_backend":"ollama"' \
+  || fail "anti-thrash response must expose current_backend=ollama"
+printf '%s\n' "${body_trt_cooldown}" | grep -q '"target_backend":"trtllm"' \
+  || fail "anti-thrash response must expose target_backend=trtllm"
+ok "hybrid+both throttles rapid local backend flips"
+
+sleep "${local_switch_cooldown_sec}"
+
 session_trt="d12-trt-$$"
 resp_trt="$(call_chat "${session_trt}" "d12-trt-a")"
 code_trt="$(extract_code "${resp_trt}")"
 body_trt="$(extract_body "${resp_trt}")"
 [[ "${code_trt}" == "200" ]] || {
   printf '%s\n' "${body_trt}" >&2
-  fail "hybrid/both must allow trtllm-routed local models"
+  fail "hybrid/both must allow trtllm-routed local models after cooldown"
 }
 printf '%s\n' "${body_trt}" | grep -q 'backend=trtllm' \
   || fail "trtllm dry-run response must expose backend=trtllm"
 assert_log_contains "${session_trt}" '"backend":"trtllm"'
 assert_log_contains "${session_trt}" '"llm_backend":"both"'
-ok "hybrid+both routes trtllm-tagged models to trtllm"
+assert_log_contains "${session_trt}" '"llm_backend_effective":"trtllm"'
+ok "hybrid+both routes trtllm-tagged models to trtllm after cooldown"
 
 session_remote="d12-remote-$$"
 resp_remote="$(call_chat "${session_remote}" "d12-remote-a" 1)"
@@ -242,6 +277,7 @@ assert_log_contains "${session_remote}" '"backend":"openai"'
 assert_log_contains "${session_remote}" '"provider":"openai"'
 assert_log_contains "${session_remote}" '"llm_mode":"hybrid"'
 assert_log_contains "${session_remote}" '"llm_backend":"both"'
+assert_log_contains "${session_remote}" '"llm_backend_effective":"remote"'
 ok "hybrid+both routes remote-tagged models to external providers"
 
 "${agent_bin}" llm backend ollama >/tmp/agent-d12-backend-ollama.out
@@ -273,6 +309,37 @@ printf '%s\n' "${body_ollama_blocked}" | grep -q '"type":"local_backend_disabled
 printf '%s\n' "${body_ollama_blocked}" | grep -q '"llm_backend":"trtllm"' \
   || fail "trtllm-only rejection must expose llm_backend=trtllm"
 ok "llm backend=trtllm blocks ollama-routed models explicitly"
+
+"${agent_bin}" llm mode hybrid >/tmp/agent-d12-hybrid-2.out
+"${agent_bin}" llm backend remote >/tmp/agent-d12-backend-remote.out
+session_remote_backend_local="d12-remote-backend-local-$$"
+resp_remote_backend_local="$(call_chat "${session_remote_backend_local}" "d12-local-a")"
+code_remote_backend_local="$(extract_code "${resp_remote_backend_local}")"
+body_remote_backend_local="$(extract_body "${resp_remote_backend_local}")"
+[[ "${code_remote_backend_local}" == "403" ]] || {
+  printf '%s\n' "${body_remote_backend_local}" >&2
+  fail "llm backend=remote must block local routed models"
+}
+printf '%s\n' "${body_remote_backend_local}" | grep -q '"type":"local_backend_disabled"' \
+  || fail "remote backend local rejection must expose local_backend_disabled"
+printf '%s\n' "${body_remote_backend_local}" | grep -q '"llm_backend":"remote"' \
+  || fail "remote backend local rejection must expose llm_backend=remote"
+ok "llm backend=remote blocks local backends explicitly"
+
+session_remote_backend_remote="d12-remote-backend-remote-$$"
+resp_remote_backend_remote="$(call_chat "${session_remote_backend_remote}" "d12-remote-a" 1)"
+code_remote_backend_remote="$(extract_code "${resp_remote_backend_remote}")"
+body_remote_backend_remote="$(extract_body "${resp_remote_backend_remote}")"
+[[ "${code_remote_backend_remote}" == "200" ]] || {
+  printf '%s\n' "${body_remote_backend_remote}" >&2
+  fail "llm backend=remote must keep remote-routed models available"
+}
+printf '%s\n' "${body_remote_backend_remote}" | grep -q 'backend=openai' \
+  || fail "remote backend dry-run response must expose backend=openai"
+assert_log_contains "${session_remote_backend_remote}" '"backend":"openai"'
+assert_log_contains "${session_remote_backend_remote}" '"llm_backend":"remote"'
+assert_log_contains "${session_remote_backend_remote}" '"llm_backend_effective":"remote"'
+ok "llm backend=remote keeps provider-routed models available"
 
 "${agent_bin}" llm backend both >/tmp/agent-d12-backend-both-2.out
 "${agent_bin}" llm mode remote >/tmp/agent-d12-remote-mode.out

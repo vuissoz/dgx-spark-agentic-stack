@@ -301,7 +301,7 @@ agent <claude|codex|opencode|vibestral|openclaw|pi-mono|goose> [project]
 agent ls
 agent ps
 agent llm mode [local|hybrid|mixed|remote]
-agent llm backend [ollama|trtllm|both]
+agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
 agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
 agent logs <service>
@@ -450,6 +450,7 @@ Prérequis runtime:
 - `./agent llm backend ollama` : n'autorise que le backend local `ollama`.
 - `./agent llm backend trtllm` : n'autorise que le backend local `trtllm`.
 - `./agent llm backend both` : autorise `ollama` et `trtllm`, avec bascule dynamique suivant le modèle routé.
+- `./agent llm backend remote` : n'autorise plus aucun backend local; seuls les modèles routés vers des providers externes restent valides.
 - `./agent llm test-mode off` : valeur par défaut (production), dry-run gate désactivé.
 - `./agent llm test-mode on` : activation explicite pour campagnes de test.
 
@@ -463,8 +464,14 @@ Exemple mode `remote` avec pause locale:
 State runtime:
 - mode: `${AGENTIC_ROOT}/gate/state/llm_mode.json`
 - backend local: `${AGENTIC_ROOT}/gate/state/llm_backend.json`
+- arbitrage backend effectif: `${AGENTIC_ROOT}/gate/state/llm_backend_runtime.json`
 - compteurs quotas: `${AGENTIC_ROOT}/gate/state/quotas_state.json`
-- métriques: `external_requests_total`, `external_tokens_total`, `external_quota_remaining`
+- métriques: `external_requests_total`, `external_tokens_total`, `external_quota_remaining`, `gate_backend_switch_total`, `gate_llm_backend_effective`
+
+Notes d'exploitation:
+- `ollama-gate` maintient un backend effectif distinct de la politique désirée (`desired_backend` vs `effective_backend`).
+- en mode `both`, les bascules locales `ollama <-> trtllm` passent par un cooldown anti-thrash (`AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS`, défaut `3`).
+- `agent doctor` vérifie la cohérence entre `AGENTIC_LLM_BACKEND`, `llm_backend.json` et `llm_backend_runtime.json`.
 
 ## Veille drift Ollama (Step 14)
 

@@ -42,6 +42,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-irt` (ajouter une commande slash OpenClaw de statut dans le chat, branchee au registre/runtime sans fuite de secrets) [OPEN]
 - Beads (ComfyUI persistence rootless-dev):
   - `dgx-spark-agentic-stack-0ik` (ComfyUI: persister toute l'arborescence avec un mount hote unique) [CLOSED]
+- Beads (Arbitrage dynamique backends LLM locaux/distants):
+  - `dgx-spark-agentic-stack-ahl` (etendre `agent llm backend` a `ollama|trtllm|both|remote`, ajouter l'arbitrage runtime pilote par `ollama-gate`, des garde-fous anti-thrash et les checks doctor/tests associes) [OPEN]
 
 ## Scope
 - Changer `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
@@ -218,6 +220,25 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
 ## Addendum (2026-03-08, onboarding secret Hugging Face)
 - Beads `dgx-spark-agentic-stack-p94`: ajout du token HF dans le bootstrap secrets onboarding.
   - Correctif: `agent onboard` accepte `--huggingface-token` et, en interactif, propose `huggingface.token (optional, for ComfyUI gated HF models)`.
+
+## Addendum (2026-03-26, arbitrage dynamique backends LLM)
+- Beads `dgx-spark-agentic-stack-ahl`: completer la politique backend LLM au-dela du simple filtrage `ollama|trtllm|both`. [OPEN]
+  - Constat: l'etat actuel permet deja `agent llm backend ollama|trtllm|both` avec routage dynamique par modele et persistance de `llm_backend.json`, mais ne couvre pas encore:
+    - `agent llm backend remote`,
+    - un etat runtime separant politique demandee vs backend actif/effectif,
+    - un arbitrage automatique pilote par `ollama-gate` pour activer le bon backend local/distal selon le modele route,
+    - des garde-fous anti-thrash (cooldown, verrou de bascule, preference backend courant),
+    - des verifications `agent doctor` et tests associes a ce nouveau mode.
+  - Cible:
+    - exposer une commande unique `agent llm backend ollama|trtllm|both|remote`,
+    - garder `agent llm mode` pour la politique local/hybride/remote cote providers externes,
+    - ajouter un registre runtime minimal de l'arbitrage backend (desire/effectif/updated_at/cooldown),
+    - laisser `ollama-gate` decider du backend actif/effectif en fonction du routage modele et de la disponibilite runtime,
+    - eviter les oscillations rapides entre `ollama`, `trtllm` et `remote` quand les requetes alternent.
+  - Validation attendue:
+    - tests gate/CLI couvrant `ollama`, `trtllm`, `both`, `remote`,
+    - preuve des blocages/fallbacks/coherences dans `doctor`,
+    - doc runtime et exploitation mises a jour avec l'etat backend effectif.
   - Stockage: `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` (mode `0600`).
   - Ergonomie Flux: `agent comfyui flux-1-dev --download` consomme automatiquement ce fichier si `--hf-token-file` n'est pas fourni.
   - Vérif: extensions tests onboarding (`00_onboarding_env_wizard`, `00_onboarding_full_setup_wizard`) pour couvrir le secret HF.

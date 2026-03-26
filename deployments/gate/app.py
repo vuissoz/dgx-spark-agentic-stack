@@ -52,6 +52,16 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def iso_from_epoch(epoch_seconds: int) -> str:
+    if epoch_seconds <= 0:
+        return ""
+    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat()
+
+
+def current_epoch_seconds() -> int:
+    return int(time.time())
+
+
 def deterministic_embedding_vector(text: str, size: int = 32) -> list[float]:
     seed = text.encode("utf-8")
     values: list[float] = []
@@ -73,7 +83,7 @@ class BackendAuthError(RuntimeError):
 
 ALLOWED_LLM_MODES = {"local", "hybrid", "remote"}
 LLM_MODE_ALIASES = {"mixed": "hybrid"}
-ALLOWED_LLM_BACKENDS = {"ollama", "trtllm", "both"}
+ALLOWED_LLM_BACKENDS = {"ollama", "trtllm", "both", "remote"}
 KNOWN_LOCAL_BACKENDS = {"ollama", "trtllm"}
 
 
@@ -139,13 +149,21 @@ class GateState:
         self.backend_file = Path(
             os.getenv("GATE_BACKEND_FILE", str(self.state_dir / "llm_backend.json"))
         )
+        self.backend_runtime_file = Path(
+            os.getenv("GATE_BACKEND_RUNTIME_FILE", str(self.state_dir / "llm_backend_runtime.json"))
+        )
         self.quotas_file = Path(os.getenv("GATE_QUOTAS_FILE", str(self.state_dir / "quotas_state.json")))
         self.default_llm_mode = normalize_llm_mode(os.getenv("GATE_LLM_MODE", "hybrid"))
         self.default_llm_backend = normalize_llm_backend(os.getenv("GATE_LLM_BACKEND", "both"))
+        self.backend_switch_cooldown_seconds = max(
+            0, env_int("GATE_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS", 3)
+        )
         self.llm_mode = self.default_llm_mode
         self.llm_backend = self.default_llm_backend
+        self.backend_runtime: Dict[str, Any] = {}
         self._llm_mode_mtime = 0.0
         self._llm_backend_mtime = 0.0
+        self._backend_runtime_mtime = 0.0
 
         self.sem = asyncio.Semaphore(self.concurrency)
         self.lock = asyncio.Lock()
@@ -153,6 +171,7 @@ class GateState:
         self.active_requests = 0
         self.requests_total = 0
         self.decisions_total: Dict[str, int] = {"active": 0, "queued": 0, "denied": 0}
+        self.backend_switch_total = 0
         self.sticky_models: Dict[str, str] = {}
         self._sticky_dirty = False
 
@@ -168,12 +187,18 @@ class GateState:
         self.sticky_file.parent.mkdir(parents=True, exist_ok=True)
         self.mode_file.parent.mkdir(parents=True, exist_ok=True)
         self.backend_file.parent.mkdir(parents=True, exist_ok=True)
+        self.backend_runtime_file.parent.mkdir(parents=True, exist_ok=True)
         self.quotas_file.parent.mkdir(parents=True, exist_ok=True)
 
         self._load_sticky()
         self._load_model_routes()
         self._load_mode()
         self._load_backend()
+        if not self.backend_file.exists():
+            self.persist_llm_backend(self.llm_backend, "gate")
+        self._load_backend_runtime()
+        if not self.backend_runtime_file.exists():
+            self._write_backend_runtime(self.backend_runtime)
         self._load_quotas()
 
     def _load_sticky(self) -> None:
@@ -360,6 +385,92 @@ class GateState:
             return normalize_llm_backend(raw, default=self.default_llm_backend)
         return self.default_llm_backend
 
+    def default_effective_backend(self, desired_backend: str | None = None) -> str:
+        desired = normalize_llm_backend(desired_backend, default=self.get_llm_backend())
+        if desired in KNOWN_LOCAL_BACKENDS or desired == "remote":
+            return desired
+        if self.default_backend in KNOWN_LOCAL_BACKENDS:
+            return self.default_backend
+        return "ollama"
+
+    def effective_backend_allowed(self, effective_backend: str, desired_backend: str) -> bool:
+        if desired_backend == "both":
+            return effective_backend in KNOWN_LOCAL_BACKENDS or effective_backend == "remote"
+        if desired_backend == "remote":
+            return effective_backend == "remote"
+        return effective_backend == desired_backend
+
+    def _default_backend_runtime_payload(self, desired_backend: str | None = None) -> Dict[str, Any]:
+        desired = normalize_llm_backend(desired_backend, default=self.default_llm_backend)
+        effective = self.default_effective_backend(desired)
+        return {
+            "desired_backend": desired,
+            "effective_backend": effective,
+            "last_switch_reason": "bootstrap",
+            "last_route_backend": "",
+            "last_route_model": "",
+            "last_switch_at": "",
+            "switch_count": 0,
+            "cooldown_until_epoch": 0,
+            "cooldown_until": "",
+            "updated_at": now_iso(),
+            "updated_by": "gate",
+        }
+
+    def _normalize_backend_runtime_payload(self, raw: Any) -> Dict[str, Any]:
+        default_payload = self._default_backend_runtime_payload(self.get_llm_backend())
+        if not isinstance(raw, dict):
+            return default_payload
+
+        desired = normalize_llm_backend(
+            raw.get("desired_backend") or raw.get("backend"),
+            default=default_payload["desired_backend"],
+        )
+        effective_raw = raw.get("effective_backend")
+        effective = str(effective_raw).strip().lower() if isinstance(effective_raw, str) else ""
+        if effective not in KNOWN_LOCAL_BACKENDS and effective != "remote":
+            effective = self.default_effective_backend(desired)
+        if not self.effective_backend_allowed(effective, desired):
+            effective = self.default_effective_backend(desired)
+
+        cooldown_until_epoch = parse_positive_int(raw.get("cooldown_until_epoch"))
+        switch_count = parse_positive_int(raw.get("switch_count"))
+        last_switch_at = raw.get("last_switch_at") if isinstance(raw.get("last_switch_at"), str) else ""
+        updated_at = raw.get("updated_at") if isinstance(raw.get("updated_at"), str) else now_iso()
+        updated_by = raw.get("updated_by") if isinstance(raw.get("updated_by"), str) and raw.get("updated_by") else "gate"
+        last_switch_reason = (
+            raw.get("last_switch_reason") if isinstance(raw.get("last_switch_reason"), str) else ""
+        )
+        last_route_backend = (
+            raw.get("last_route_backend") if isinstance(raw.get("last_route_backend"), str) else ""
+        )
+        last_route_model = (
+            raw.get("last_route_model") if isinstance(raw.get("last_route_model"), str) else ""
+        )
+
+        return {
+            "desired_backend": desired,
+            "effective_backend": effective,
+            "last_switch_reason": last_switch_reason,
+            "last_route_backend": last_route_backend,
+            "last_route_model": last_route_model,
+            "last_switch_at": last_switch_at,
+            "switch_count": switch_count,
+            "cooldown_until_epoch": cooldown_until_epoch,
+            "cooldown_until": iso_from_epoch(cooldown_until_epoch),
+            "updated_at": updated_at,
+            "updated_by": updated_by,
+        }
+
+    def _read_backend_runtime_file(self) -> Dict[str, Any]:
+        if not self.backend_runtime_file.exists():
+            return self._default_backend_runtime_payload(self.get_llm_backend())
+        try:
+            raw = json.loads(self.backend_runtime_file.read_text(encoding="utf-8"))
+        except Exception:
+            return self._default_backend_runtime_payload(self.get_llm_backend())
+        return self._normalize_backend_runtime_payload(raw)
+
     def _load_mode(self) -> None:
         self.llm_mode = self._read_mode_file()
         try:
@@ -373,6 +484,13 @@ class GateState:
             self._llm_backend_mtime = self.backend_file.stat().st_mtime
         except FileNotFoundError:
             self._llm_backend_mtime = 0.0
+
+    def _load_backend_runtime(self) -> None:
+        self.backend_runtime = self._read_backend_runtime_file()
+        try:
+            self._backend_runtime_mtime = self.backend_runtime_file.stat().st_mtime
+        except FileNotFoundError:
+            self._backend_runtime_mtime = 0.0
 
     def refresh_mode_if_needed(self) -> None:
         try:
@@ -394,6 +512,16 @@ class GateState:
             return
         self._load_backend()
 
+    def refresh_backend_runtime_if_needed(self) -> None:
+        try:
+            runtime_mtime = self.backend_runtime_file.stat().st_mtime
+        except FileNotFoundError:
+            runtime_mtime = 0.0
+
+        if runtime_mtime == self._backend_runtime_mtime:
+            return
+        self._load_backend_runtime()
+
     def get_llm_mode(self) -> str:
         self.refresh_mode_if_needed()
         return self.llm_mode
@@ -401,6 +529,21 @@ class GateState:
     def get_llm_backend(self) -> str:
         self.refresh_backend_if_needed()
         return self.llm_backend
+
+    def get_backend_runtime(self) -> Dict[str, Any]:
+        self.refresh_backend_runtime_if_needed()
+        runtime = self._normalize_backend_runtime_payload(self.backend_runtime)
+        desired = self.get_llm_backend()
+        if runtime.get("desired_backend") != desired:
+            runtime["desired_backend"] = desired
+            if not self.effective_backend_allowed(str(runtime.get("effective_backend", "")), desired):
+                runtime["effective_backend"] = self.default_effective_backend(desired)
+                runtime["cooldown_until_epoch"] = 0
+                runtime["cooldown_until"] = ""
+                runtime["last_switch_reason"] = "policy_sync"
+                runtime["last_switch_at"] = now_iso()
+        self.backend_runtime = runtime
+        return dict(runtime)
 
     def persist_llm_mode(self, mode: str, actor: str) -> str:
         normalized = normalize_llm_mode(mode, default=self.default_llm_mode)
@@ -428,10 +571,61 @@ class GateState:
         self._load_backend()
         return self.llm_backend
 
+    def _write_backend_runtime(self, payload: Dict[str, Any]) -> None:
+        normalized = self._normalize_backend_runtime_payload(payload)
+        tmp = self.backend_runtime_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(normalized, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, self.backend_runtime_file)
+        self.backend_runtime = normalized
+        try:
+            self._backend_runtime_mtime = self.backend_runtime_file.stat().st_mtime
+        except FileNotFoundError:
+            self._backend_runtime_mtime = 0.0
+
+    async def set_effective_backend(
+        self,
+        desired_backend: str,
+        effective_backend: str,
+        *,
+        actor: str = "gate",
+        reason: str = "",
+        route_backend: str = "",
+        model_name: str = "",
+        switched: bool = False,
+        refresh_cooldown: bool = False,
+    ) -> Dict[str, Any]:
+        async with self.lock:
+            runtime = self.get_backend_runtime()
+            runtime["desired_backend"] = normalize_llm_backend(desired_backend, default=self.default_llm_backend)
+            runtime["effective_backend"] = effective_backend
+            runtime["last_route_backend"] = route_backend
+            runtime["last_route_model"] = model_name
+            runtime["last_switch_reason"] = reason
+            runtime["updated_at"] = now_iso()
+            runtime["updated_by"] = actor
+            if switched:
+                runtime["last_switch_at"] = runtime["updated_at"]
+                runtime["switch_count"] = parse_positive_int(runtime.get("switch_count")) + 1
+                self.backend_switch_total += 1
+            if switched or refresh_cooldown:
+                if effective_backend in KNOWN_LOCAL_BACKENDS:
+                    cooldown_until_epoch = current_epoch_seconds() + self.backend_switch_cooldown_seconds
+                else:
+                    cooldown_until_epoch = 0
+                runtime["cooldown_until_epoch"] = cooldown_until_epoch
+                runtime["cooldown_until"] = iso_from_epoch(cooldown_until_epoch)
+            elif effective_backend not in KNOWN_LOCAL_BACKENDS:
+                runtime["cooldown_until_epoch"] = 0
+                runtime["cooldown_until"] = ""
+            self._write_backend_runtime(runtime)
+            return dict(runtime)
+
     def local_backend_allowed(self, backend_name: str, llm_backend: str | None = None) -> bool:
         selected = llm_backend or self.get_llm_backend()
         if selected == "both":
             return True
+        if selected == "remote":
+            return False
         return backend_name == selected
 
     def backend_allowed(self, backend_name: str, llm_mode: str | None = None, llm_backend: str | None = None) -> bool:
@@ -440,7 +634,7 @@ class GateState:
         provider = self.backend_provider(backend_name)
         if provider_is_external(provider):
             return mode != "local"
-        if mode == "remote":
+        if mode == "remote" or selected_backend == "remote":
             return False
         if backend_name in KNOWN_LOCAL_BACKENDS:
             return self.local_backend_allowed(backend_name, selected_backend)
@@ -449,13 +643,17 @@ class GateState:
     def catalog_backends(self, llm_mode: str | None = None, llm_backend: str | None = None) -> list[str]:
         mode = llm_mode or self.get_llm_mode()
         selected_backend = llm_backend or self.get_llm_backend()
+        runtime = self.get_backend_runtime()
+        effective_backend = str(runtime.get("effective_backend", "")).strip().lower()
         ordered: list[str] = []
 
-        if mode != "remote":
+        if mode != "remote" and selected_backend != "remote":
             preferred_local: list[str]
             if selected_backend == "both":
                 preferred_local = []
-                if self.default_backend in KNOWN_LOCAL_BACKENDS:
+                if effective_backend in KNOWN_LOCAL_BACKENDS:
+                    preferred_local.append(effective_backend)
+                elif self.default_backend in KNOWN_LOCAL_BACKENDS:
                     preferred_local.append(self.default_backend)
                 for candidate in sorted(KNOWN_LOCAL_BACKENDS):
                     if candidate not in preferred_local:
@@ -472,7 +670,7 @@ class GateState:
                 if provider_is_external(provider) and backend_name not in ordered:
                     ordered.append(backend_name)
 
-        if not ordered and self.default_backend in self.backends:
+        if not ordered and selected_backend != "remote" and mode != "remote" and self.default_backend in self.backends:
             ordered.append(self.default_backend)
         return ordered
 
@@ -764,6 +962,7 @@ class GateState:
                 "decisions_active_total": self.decisions_total.get("active", 0),
                 "decisions_queued_total": self.decisions_total.get("queued", 0),
                 "decisions_denied_total": self.decisions_total.get("denied", 0),
+                "backend_switch_total": self.backend_switch_total,
             }
 
     async def snapshot_external_metrics(self) -> Dict[str, Dict[str, int]]:
@@ -1079,10 +1278,13 @@ def gate_response_headers(
     provider: str,
     llm_mode: str,
     llm_backend: str | None = None,
+    llm_backend_effective: str | None = None,
     model_served: str | None = None,
 ) -> Dict[str, str]:
     if llm_backend is None:
         llm_backend = state.get_llm_backend()
+    if llm_backend_effective is None:
+        llm_backend_effective = str(state.get_backend_runtime().get("effective_backend", "")).strip().lower()
     headers = {
         "X-Gate-Decision": decision,
         "X-Gate-Backend": backend,
@@ -1090,6 +1292,8 @@ def gate_response_headers(
         "X-Gate-LLM-Mode": llm_mode,
         "X-Gate-LLM-Backend": llm_backend,
     }
+    if llm_backend_effective:
+        headers["X-Gate-LLM-Backend-Effective"] = llm_backend_effective
     if isinstance(model_served, str) and model_served:
         headers["X-Model-Served"] = model_served
     return headers
@@ -1102,6 +1306,7 @@ def upstream_response_with_gate_headers(
     provider: str,
     llm_mode: str,
     llm_backend: str | None = None,
+    llm_backend_effective: str | None = None,
     model_served: str | None = None,
 ) -> Response:
     headers = gate_response_headers(
@@ -1110,6 +1315,7 @@ def upstream_response_with_gate_headers(
         provider=provider,
         llm_mode=llm_mode,
         llm_backend=llm_backend,
+        llm_backend_effective=llm_backend_effective,
         model_served=model_served,
     )
     content_type = upstream.headers.get("content-type")
@@ -1161,6 +1367,32 @@ def local_backend_block_response(backend: str, endpoint: str, llm_mode: str, llm
                 "endpoint": endpoint,
                 "llm_mode": llm_mode,
                 "llm_backend": llm_backend,
+            }
+        },
+    )
+
+
+def backend_switch_cooldown_response(
+    current_backend: str,
+    target_backend: str,
+    endpoint: str,
+    llm_backend: str,
+    cooldown_until: str,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": {
+                "message": (
+                    f"backend switch from '{current_backend}' to '{target_backend}' is cooling down while "
+                    f"llm_backend='{llm_backend}'. Retry after {cooldown_until}."
+                ),
+                "type": "backend_switch_cooldown",
+                "current_backend": current_backend,
+                "target_backend": target_backend,
+                "endpoint": endpoint,
+                "llm_backend": llm_backend,
+                "cooldown_until": cooldown_until,
             }
         },
     )
@@ -1387,6 +1619,63 @@ async def resolve_model(session: str, requested: str | None, allow_switch: bool)
     return chosen, False
 
 
+async def prepare_backend_runtime_for_request(
+    *,
+    backend: str,
+    provider: str,
+    endpoint: str,
+    llm_mode: str,
+    llm_backend: str,
+    model_served: str | None,
+) -> tuple[JSONResponse | None, str]:
+    if not state.backend_allowed(backend, llm_mode=llm_mode, llm_backend=llm_backend):
+        if provider_is_external(provider):
+            return llm_mode_block_response(provider, endpoint, llm_mode), ""
+        return local_backend_block_response(backend, endpoint, llm_mode, llm_backend), ""
+
+    runtime = state.get_backend_runtime()
+    current_effective = str(runtime.get("effective_backend", "")).strip().lower()
+    target_effective = "remote" if provider_is_external(provider) else backend
+
+    if (
+        llm_backend == "both"
+        and current_effective in KNOWN_LOCAL_BACKENDS
+        and target_effective in KNOWN_LOCAL_BACKENDS
+        and current_effective != target_effective
+    ):
+        cooldown_until_epoch = parse_positive_int(runtime.get("cooldown_until_epoch"))
+        if cooldown_until_epoch > current_epoch_seconds():
+            cooldown_until = str(runtime.get("cooldown_until", "") or iso_from_epoch(cooldown_until_epoch))
+            return (
+                backend_switch_cooldown_response(
+                    current_backend=current_effective,
+                    target_backend=target_effective,
+                    endpoint=endpoint,
+                    llm_backend=llm_backend,
+                    cooldown_until=cooldown_until,
+                ),
+                current_effective,
+            )
+
+    switched = current_effective != target_effective
+    if provider_is_external(provider):
+        reason = "external_route_switch" if switched else "external_route"
+    else:
+        reason = "local_route_switch" if switched else "local_route"
+
+    runtime = await state.set_effective_backend(
+        llm_backend,
+        target_effective,
+        actor="gate",
+        reason=reason,
+        route_backend=backend,
+        model_name=model_served or "",
+        switched=switched,
+        refresh_cooldown=(llm_backend == "both" and target_effective in KNOWN_LOCAL_BACKENDS),
+    )
+    return None, str(runtime.get("effective_backend", "")).strip().lower()
+
+
 def extract_queue_timeout_seconds(request: Request) -> float:
     raw = request.headers.get("X-Gate-Queue-Timeout-Seconds")
     if not raw:
@@ -1445,6 +1734,7 @@ def event_base(
     reason: str | None = None,
     llm_mode: str | None = None,
     llm_backend: str | None = None,
+    llm_backend_effective: str | None = None,
     external_tokens: int | None = None,
 ) -> Dict[str, Any]:
     return {
@@ -1463,6 +1753,7 @@ def event_base(
         "reason": reason,
         "llm_mode": llm_mode,
         "llm_backend": llm_backend,
+        "llm_backend_effective": llm_backend_effective,
         "external_tokens": external_tokens,
     }
 
@@ -1477,6 +1768,9 @@ async def metrics() -> PlainTextResponse:
     m = await state.snapshot_metrics()
     llm_mode = state.get_llm_mode()
     llm_backend = state.get_llm_backend()
+    llm_backend_effective = str(state.get_backend_runtime().get("effective_backend", "")).strip().lower()
+    backend_runtime = state.get_backend_runtime()
+    effective_backend = str(backend_runtime.get("effective_backend", "")).strip().lower()
     external = await state.snapshot_external_metrics()
     lines = [
         "# TYPE queue_depth gauge",
@@ -1485,6 +1779,8 @@ async def metrics() -> PlainTextResponse:
         f"gate_active_requests {m['active_requests']}",
         "# TYPE gate_requests_total counter",
         f"gate_requests_total {m['requests_total']}",
+        "# TYPE gate_backend_switch_total counter",
+        f"gate_backend_switch_total {m['backend_switch_total']}",
         "# TYPE gate_decision_active_total counter",
         f"gate_decision_active_total {m['decisions_active_total']}",
         "# TYPE gate_decision_queued_total counter",
@@ -1496,6 +1792,13 @@ async def metrics() -> PlainTextResponse:
         "# TYPE gate_llm_backend gauge",
         f"gate_llm_backend{{backend=\"{llm_backend}\"}} 1",
     ]
+    if effective_backend:
+        lines.extend(
+            [
+                "# TYPE gate_llm_backend_effective gauge",
+                f"gate_llm_backend_effective{{backend=\"{effective_backend}\"}} 1",
+            ]
+        )
     for provider, stats in external.items():
         lines.extend(
             [
@@ -1567,6 +1870,7 @@ async def proxy_ollama_api(
     provider = backend_provider_name(backend)
     status_code = 200
     reason = None
+    llm_backend_effective = str(state.get_backend_runtime().get("effective_backend", "")).strip().lower()
 
     try:
         decision, acquired = await acquire_gate_slot(queue_wait_timeout_seconds)
@@ -1587,6 +1891,8 @@ async def proxy_ollama_api(
                 provider=provider,
                 reason="queue_timeout",
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
             )
         )
         return JSONResponse(
@@ -1606,13 +1912,24 @@ async def proxy_ollama_api(
         provider = backend_provider_name(backend)
         llm_mode = state.get_llm_mode()
         llm_backend = state.get_llm_backend()
-
-        if not state.backend_allowed(backend, llm_mode=llm_mode, llm_backend=llm_backend):
-            status_code = 403
-            reason = "external_provider_disabled" if provider_is_external(provider) else "local_backend_disabled"
-            if provider_is_external(provider):
-                return llm_mode_block_response(provider, endpoint, llm_mode)
-            return local_backend_block_response(backend, endpoint, llm_mode, llm_backend)
+        runtime_error, llm_backend_effective = await prepare_backend_runtime_for_request(
+            backend=backend,
+            provider=provider,
+            endpoint=endpoint,
+            llm_mode=llm_mode,
+            llm_backend=llm_backend,
+            model_served=model_served,
+        )
+        if runtime_error is not None:
+            status_code = runtime_error.status_code
+            reason = (
+                "external_provider_disabled"
+                if provider_is_external(provider) and status_code == 403
+                else "backend_switch_cooldown"
+                if status_code == 429
+                else "local_backend_disabled"
+            )
+            return runtime_error
 
         cfg = state.backend_config(backend)
         if cfg is None:
@@ -1687,6 +2004,7 @@ async def proxy_ollama_api(
             provider=provider,
             llm_mode=llm_mode,
             llm_backend=llm_backend,
+            llm_backend_effective=llm_backend_effective,
             model_served=model_served,
         )
     finally:
@@ -1708,6 +2026,8 @@ async def proxy_ollama_api(
                 model_switch=model_switch,
                 reason=reason,
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
             )
         )
 
@@ -1821,6 +2141,8 @@ async def v1_models(request: Request) -> JSONResponse:
                 provider=provider,
                 reason="queue_timeout",
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
             )
         )
         return JSONResponse(
@@ -1860,6 +2182,7 @@ async def v1_models(request: Request) -> JSONResponse:
                 "X-Gate-Provider": provider,
                 "X-Gate-LLM-Mode": llm_mode,
                 "X-Gate-LLM-Backend": llm_backend,
+                "X-Gate-LLM-Backend-Effective": llm_backend_effective,
             },
         )
     except BackendAuthError as exc:
@@ -1898,6 +2221,8 @@ async def v1_models(request: Request) -> JSONResponse:
                 provider=provider,
                 reason=reason,
                 llm_mode=llm_mode,
+                llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
             )
         )
 
@@ -2295,6 +2620,7 @@ async def handle_chat_completion_endpoint(
     started = time.monotonic()
     acquired = False
     decision = "active"
+    llm_backend_effective = str(state.get_backend_runtime().get("effective_backend", "")).strip().lower()
     try:
         decision, acquired = await acquire_gate_slot(queue_wait_timeout_seconds)
     except asyncio.TimeoutError:
@@ -2315,6 +2641,7 @@ async def handle_chat_completion_endpoint(
                 reason="queue_timeout",
                 llm_mode=llm_mode,
                 llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
             )
         )
         return JSONResponse(
@@ -2357,13 +2684,24 @@ async def handle_chat_completion_endpoint(
         is_external_provider = provider_is_external(provider)
         llm_mode = state.get_llm_mode()
         llm_backend = state.get_llm_backend()
-
-        if not state.backend_allowed(backend, llm_mode=llm_mode, llm_backend=llm_backend):
-            status_code = 403
-            reason = "external_provider_disabled" if is_external_provider else "local_backend_disabled"
-            if is_external_provider:
-                return llm_mode_block_response(provider, endpoint, llm_mode)
-            return local_backend_block_response(backend, endpoint, llm_mode, llm_backend)
+        runtime_error, llm_backend_effective = await prepare_backend_runtime_for_request(
+            backend=backend,
+            provider=provider,
+            endpoint=endpoint,
+            llm_mode=llm_mode,
+            llm_backend=llm_backend,
+            model_served=model_served,
+        )
+        if runtime_error is not None:
+            status_code = runtime_error.status_code
+            reason = (
+                "external_provider_disabled"
+                if is_external_provider and status_code == 403
+                else "backend_switch_cooldown"
+                if status_code == 429
+                else "local_backend_disabled"
+            )
+            return runtime_error
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
         if is_external_provider:
@@ -2497,6 +2835,7 @@ async def handle_chat_completion_endpoint(
                 provider=provider,
                 llm_mode=llm_mode,
                 llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
                 model_served=effective_model,
             )
             headers["Content-Type"] = "text/event-stream; charset=utf-8"
@@ -2516,6 +2855,7 @@ async def handle_chat_completion_endpoint(
                 provider=provider,
                 llm_mode=llm_mode,
                 llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
                 model_served=effective_model,
             ),
         )
@@ -2539,6 +2879,7 @@ async def handle_chat_completion_endpoint(
                 reason=reason,
                 llm_mode=llm_mode,
                 llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
                 external_tokens=external_tokens_used if is_external_provider else None,
             )
         )
@@ -3602,6 +3943,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
     started = time.monotonic()
     acquired = False
     decision = "active"
+    llm_backend_effective = str(state.get_backend_runtime().get("effective_backend", "")).strip().lower()
     try:
         decision, acquired = await acquire_gate_slot(queue_wait_timeout_seconds)
     except asyncio.TimeoutError:
@@ -3622,6 +3964,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 reason="queue_timeout",
                 llm_mode=llm_mode,
                 llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
             )
         )
         return JSONResponse(
@@ -3664,13 +4007,24 @@ async def v1_embeddings(request: Request) -> JSONResponse:
         is_external_provider = provider_is_external(provider)
         llm_mode = state.get_llm_mode()
         llm_backend = state.get_llm_backend()
-
-        if not state.backend_allowed(backend, llm_mode=llm_mode, llm_backend=llm_backend):
-            status_code = 403
-            reason = "external_provider_disabled" if is_external_provider else "local_backend_disabled"
-            if is_external_provider:
-                return llm_mode_block_response(provider, "/v1/embeddings", llm_mode)
-            return local_backend_block_response(backend, "/v1/embeddings", llm_mode, llm_backend)
+        runtime_error, llm_backend_effective = await prepare_backend_runtime_for_request(
+            backend=backend,
+            provider=provider,
+            endpoint="/v1/embeddings",
+            llm_mode=llm_mode,
+            llm_backend=llm_backend,
+            model_served=model_served,
+        )
+        if runtime_error is not None:
+            status_code = runtime_error.status_code
+            reason = (
+                "external_provider_disabled"
+                if is_external_provider and status_code == 403
+                else "backend_switch_cooldown"
+                if status_code == 429
+                else "local_backend_disabled"
+            )
+            return runtime_error
 
         use_dry_run = state.enable_test_mode and header_bool(request.headers.get("X-Gate-Dry-Run"))
         if is_external_provider:
@@ -3798,6 +4152,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 "X-Gate-Provider": provider,
                 "X-Gate-LLM-Mode": llm_mode,
                 "X-Gate-LLM-Backend": llm_backend,
+                "X-Gate-LLM-Backend-Effective": llm_backend_effective,
             },
         )
     finally:
@@ -3820,6 +4175,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 reason=reason,
                 llm_mode=llm_mode,
                 llm_backend=llm_backend,
+                llm_backend_effective=llm_backend_effective,
                 external_tokens=external_tokens_used if is_external_provider else None,
             )
         )
@@ -3876,6 +4232,7 @@ async def admin_session(session_id: str) -> JSONResponse:
 async def admin_llm_mode() -> JSONResponse:
     llm_mode = state.get_llm_mode()
     llm_backend = state.get_llm_backend()
+    backend_runtime = state.get_backend_runtime()
     external = await state.snapshot_external_metrics()
     return JSONResponse(
         status_code=200,
@@ -3886,6 +4243,8 @@ async def admin_llm_mode() -> JSONResponse:
             "default_llm_backend": state.default_llm_backend,
             "mode_file": str(state.mode_file),
             "backend_file": str(state.backend_file),
+            "backend_runtime_file": str(state.backend_runtime_file),
+            "backend_runtime": backend_runtime,
             "quotas_file": str(state.quotas_file),
             "external": external,
         },
@@ -3926,15 +4285,19 @@ async def admin_set_llm_mode(request: Request) -> JSONResponse:
 
 @app.get("/admin/llm-backend")
 async def admin_llm_backend() -> JSONResponse:
+    backend_runtime = state.get_backend_runtime()
     return JSONResponse(
         status_code=200,
         content={
             "llm_backend": state.get_llm_backend(),
             "default_llm_backend": state.default_llm_backend,
             "backend_file": str(state.backend_file),
+            "backend_runtime_file": str(state.backend_runtime_file),
+            "backend_runtime": backend_runtime,
             "llm_mode": state.get_llm_mode(),
             "default_llm_mode": state.default_llm_mode,
             "mode_file": str(state.mode_file),
+            "backend_switch_cooldown_seconds": state.backend_switch_cooldown_seconds,
         },
     )
 
@@ -3951,13 +4314,26 @@ async def admin_set_llm_backend(request: Request) -> JSONResponse:
             status_code=400,
             content={
                 "error": {
-                    "message": "backend must be one of: ollama, trtllm, both",
+                    "message": "backend must be one of: ollama, trtllm, both, remote",
                     "type": "invalid_backend",
                 }
             },
         )
 
     updated_backend = state.persist_llm_backend(backend, request.headers.get("X-Agent-Actor", "api"))
+    current_runtime = state.get_backend_runtime()
+    effective_backend = str(current_runtime.get("effective_backend", "")).strip().lower()
+    if backend != "both" or effective_backend not in KNOWN_LOCAL_BACKENDS.union({"remote"}):
+        effective_backend = state.default_effective_backend(updated_backend)
+    runtime = await state.set_effective_backend(
+        updated_backend,
+        effective_backend,
+        actor=request.headers.get("X-Agent-Actor", "api"),
+        reason="admin_backend_set",
+        route_backend="",
+        model_name="",
+        switched=False,
+    )
     state.write_log(
         event_base(
             session="admin",
@@ -3971,9 +4347,17 @@ async def admin_set_llm_backend(request: Request) -> JSONResponse:
             reason="admin_backend_set",
             llm_mode=state.get_llm_mode(),
             llm_backend=updated_backend,
+            llm_backend_effective=str(runtime.get("effective_backend", "")).strip().lower(),
         )
     )
-    return JSONResponse(status_code=200, content={"ok": True, "llm_backend": updated_backend})
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ok": True,
+            "llm_backend": updated_backend,
+            "llm_backend_effective": str(runtime.get("effective_backend", "")).strip().lower(),
+        },
+    )
 
 
 @app.get("/admin/quotas")

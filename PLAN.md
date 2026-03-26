@@ -78,7 +78,8 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - `agent down <…>`
 - `agent ps`
 - `agent logs <service>`
-- `agent llm mode <local|hybrid|remote>` (pilotage backend LLM sans casser les agents)
+- `agent llm mode <local|hybrid|remote>` (pilotage providers externes/local sans casser les agents)
+- `agent llm backend <ollama|trtllm|both|remote>` (politique backend desiree + arbitrage runtime)
 - `agent llm test-mode [on|off]` (mode test runtime du gate pour campagnes automatisées)
 - `agent forget <target> --yes` (reset destructif ciblé d’un domaine persistant)
 - `agent backup <run|list|restore <snapshot_id>>` (snapshots incrémentaux des données persistantes + config non-secrète)

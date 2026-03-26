@@ -32,6 +32,8 @@ fi
   || fail "agent doctor failed in nominal state"
 grep -q "default model '.*' executes a direct tool-call probe through ollama-gate" /tmp/agent-f3-doctor-nominal.out \
   || fail "doctor nominal output must include the default model tool-call probe"
+grep -q "llm backend policy '.*' runtime effective='.*' cooldown=.* state=" /tmp/agent-f3-doctor-nominal.out \
+  || fail "doctor nominal output must include the llm backend runtime policy check"
 ok "doctor passes in nominal state"
 
 tmp_server_log="$(mktemp)"
