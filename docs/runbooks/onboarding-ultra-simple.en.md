@@ -7,9 +7,11 @@ Goal: understand what the platform does and operate basic actions safely.
 
 This platform runs local AI, web interfaces, and monitoring tools with a security-first setup (local-only exposure + controlled outbound traffic).
 
+This quickstart assumes the current day-to-day mode: `rootless-dev`.
+
 ## 2) The 6 building blocks
 
-1. `core` = technical heart (AI + DNS + proxy).
+1. `core` = technical heart (AI + DNS + proxy + internal control services such as OpenClaw and `gate-mcp`).
 2. `agents` = assistants working in isolated workspaces.
 3. `ui` = web screens you open.
 4. `obs` = dashboards (health, logs, metrics).
@@ -28,11 +30,18 @@ Important: these are local addresses. From another machine, use SSH/Tailscale tu
 ## 4) Minimum command set
 
 ```bash
+export AGENTIC_PROFILE=rootless-dev
 ./agent profile
-./agent up core
-./agent up agents,ui,obs,rag
+./agent first-up
 ./agent ps
 ./agent doctor
+```
+
+If you prefer the explicit step-by-step path:
+
+```bash
+./agent up core
+./agent up agents,ui,obs,rag
 ```
 
 To stop cleanly:
@@ -85,3 +94,5 @@ Rollback:
 - Detailed beginner guide: `docs/runbooks/services-expliques-debutants.md`
 - English equivalent beginner guide: `docs/runbooks/services-explained-beginners.en.md`
 - Full setup: `docs/runbooks/first-time-setup.md`
+- Standard Chinese quickstart: `docs/runbooks/onboarding-ultra-simple.cn.md`
+- Hindi quickstart: `docs/runbooks/onboarding-ultra-simple.hi.md`

@@ -595,11 +595,13 @@ Préconditions (runtime) pour OpenClaw core:
   - `docs/runbooks/configuration-explained-beginners.en.md`
 - Images de developpement (build local, overrides, stamps, update/rollback):
   - `docs/runbooks/images-developpement.md`
-- Onboarding ultra-simplifié non-tech (FR/EN/DE/IT):
+- Onboarding ultra-simplifié non-tech (FR/EN/DE/IT/CN/HI):
   - `docs/runbooks/onboarding-ultra-simple.fr.md`
   - `docs/runbooks/onboarding-ultra-simple.en.md`
   - `docs/runbooks/onboarding-ultra-simple.de.md`
   - `docs/runbooks/onboarding-ultra-simple.it.md`
+  - `docs/runbooks/onboarding-ultra-simple.cn.md`
+  - `docs/runbooks/onboarding-ultra-simple.hi.md`
 - Profils d'exécution:
   - `docs/runbooks/profiles.md`
 - Modules optionnels:

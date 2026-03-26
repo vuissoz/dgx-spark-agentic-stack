@@ -10,9 +10,11 @@ Objectif: savoir ouvrir une session, comprendre `tmux`, et gerer correctement `m
 - Le conteneur garde un etat persistant entre les sessions:
   - `${AGENTIC_ROOT}/codex/state`
   - `${AGENTIC_ROOT}/codex/logs`
-  - `${AGENTIC_ROOT}/codex/workspaces`
+  - `${AGENTIC_CODEX_WORKSPACES_DIR}`
 - En `strict-prod`, `AGENTIC_ROOT=/srv/agentic`.
 - En `rootless-dev`, `AGENTIC_ROOT=${HOME}/.local/share/agentic`.
+- En `strict-prod`, le chemin workspace par defaut est `${AGENTIC_ROOT}/codex/workspaces`.
+- En `rootless-dev`, le chemin workspace par defaut est `${AGENTIC_ROOT}/agent-workspaces/codex/workspaces`.
 
 ## 2) Prerequis minimum
 
@@ -55,7 +57,7 @@ Exemple:
 
 Le dossier vise est:
 - dans le conteneur: `/workspace/mon-projet`
-- sur l'hote: `${AGENTIC_ROOT}/codex/workspaces/mon-projet`
+- sur l'hote: `${AGENTIC_CODEX_WORKSPACES_DIR}/mon-projet`
 
 Comportement:
 - si le dossier n'existe pas: il est cree automatiquement,
@@ -74,7 +76,7 @@ Important:
 ```
 
 Effet:
-- creation de `${AGENTIC_ROOT}/codex/workspaces/projet-neuf`,
+- creation de `${AGENTIC_CODEX_WORKSPACES_DIR}/projet-neuf`,
 - ouverture/attache de la session `tmux` `codex`,
 - positionnement dans `/workspace/projet-neuf`.
 
@@ -171,4 +173,4 @@ AGENT_NO_ATTACH=1 ./agent codex mon-projet
   - en `strict-prod`, executer les commandes avec privileges adaptes.
 - Tu ne retrouves pas tes fichiers:
   - verifier le nom utilise dans `./agent codex <nom>`,
-  - verifier le chemin `${AGENTIC_ROOT}/codex/workspaces/`.
+  - verifier le chemin `${AGENTIC_CODEX_WORKSPACES_DIR}/`.

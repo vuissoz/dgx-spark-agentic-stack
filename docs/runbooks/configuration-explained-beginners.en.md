@@ -70,6 +70,10 @@ If you are unsure, use these defaults:
 | `AGENTIC_LLM_NETWORK` | Docker network name | `agentic-llm` | `agentic-dev-llm` | shell, `runtime.env` |
 | `AGENTIC_EGRESS_NETWORK` | Docker network name | `agentic-egress` | `agentic-dev-egress` | shell, `runtime.env` |
 
+Practical note:
+- In `rootless-dev`, baseline agent workspaces are rooted under `AGENTIC_AGENT_WORKSPACES_ROOT=${AGENTIC_ROOT}/agent-workspaces`.
+- So the effective default paths become `${AGENTIC_ROOT}/agent-workspaces/<tool>/workspaces` for `claude`, `codex`, `opencode`, and `vibestral`.
+
 ## 3.2 Stack Selection and Compose Profiles
 
 | Variable | Allowed values | Default | Stored in |
@@ -105,7 +109,7 @@ Notes:
 
 | Variable | Allowed values | Default | Stored in |
 |---|---|---|---|
-| `OLLAMA_MODELS_DIR` | absolute path | `strict-prod`: `${AGENTIC_ROOT}/ollama/models`; `rootless-dev` (onboarding): `${HOME}/wkdir/open-webui/ollama_data/models` | shell, `runtime.env` |
+| `OLLAMA_MODELS_DIR` | absolute path | `strict-prod`: `${AGENTIC_ROOT}/ollama/models`; raw `rootless-dev` runtime default: `${AGENTIC_OLLAMA_MODELS_LINK}`; interactive onboarding often proposes `${HOME}/wkdir/open-webui/ollama_data/models` | shell, `runtime.env` |
 | `AGENTIC_OLLAMA_MODELS_LINK` | absolute path (rootless symlink path) | `${AGENTIC_ROOT}/deployments/ollama-link/models` | shell, `runtime.env` |
 | `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | absolute path (rootless real target) | `${AGENTIC_ROOT}/ollama/models` (or value derived from `OLLAMA_MODELS_DIR` when onboarding provides one) | shell, `runtime.env` |
 | `OLLAMA_CONTAINER_MODELS_PATH` | container path | `/root/.ollama/models` | `/tmp/ollama/models` in `rootless-dev` |
@@ -197,6 +201,7 @@ Common toggles (`0` or `1`):
 Other useful operational variables:
 - `AGENT_LOG_TAIL` (default `200` for `agent logs`)
 - `AGENT_PROJECT_NAME` (one-shot override for the current shell invocation)
+- `AGENTIC_AGENT_WORKSPACES_ROOT` (baseline agent workspace root; default `${AGENTIC_ROOT}` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces` in `rootless-dev`)
 - `AGENTIC_CLAUDE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-claude`)
 - `AGENTIC_CODEX_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-codex`)
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-opencode`)

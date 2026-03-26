@@ -17,6 +17,11 @@ For configuration variables, accepted values, storage locations, and secrets han
 For the versioned Ollama integration compatibility matrix (launch-supported vs internal adapters):
 - `docs/runbooks/ollama-agent-integration-matrix.md`
 
+Unless explicitly stated otherwise, examples in this document describe the current recommended development flow in `rootless-dev`.
+For baseline agent workspace paths, prefer the `AGENTIC_*_WORKSPACES_DIR` variables over hardcoded host paths:
+- `strict-prod` defaults to `${AGENTIC_ROOT}/{claude,codex,opencode,vibestral}/workspaces`
+- `rootless-dev` defaults to `${AGENTIC_ROOT}/agent-workspaces/{claude,codex,opencode,vibestral}/workspaces`
+
 ## Platform Features (Cross-Cutting)
 
 ### Loopback-only host exposure
@@ -175,7 +180,7 @@ Primary CLI contract per baseline service:
 - Persistence:
   - `${AGENTIC_ROOT}/claude/state`
   - `${AGENTIC_ROOT}/claude/logs`
-  - `${AGENTIC_ROOT}/claude/workspaces`
+  - `${AGENTIC_CLAUDE_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/claude/workspaces` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces/claude/workspaces` in `rootless-dev`)
 - Why it exists:
   - provides isolated state/log/workspace paths for Claude workflows.
 
@@ -185,7 +190,7 @@ Primary CLI contract per baseline service:
 - Persistence:
   - `${AGENTIC_ROOT}/codex/state`
   - `${AGENTIC_ROOT}/codex/logs`
-  - `${AGENTIC_ROOT}/codex/workspaces`
+  - `${AGENTIC_CODEX_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/codex/workspaces` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces/codex/workspaces` in `rootless-dev`)
 - Why it exists:
   - same controlled runtime model as other agents, specialized for Codex usage.
 
@@ -195,7 +200,7 @@ Primary CLI contract per baseline service:
 - Persistence:
   - `${AGENTIC_ROOT}/opencode/state`
   - `${AGENTIC_ROOT}/opencode/logs`
-  - `${AGENTIC_ROOT}/opencode/workspaces`
+  - `${AGENTIC_OPENCODE_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/opencode/workspaces` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces/opencode/workspaces` in `rootless-dev`)
 - Why it exists:
   - allows running multiple agent tools with a consistent operational contract.
 
@@ -205,7 +210,7 @@ Primary CLI contract per baseline service:
 - Persistence:
   - `${AGENTIC_ROOT}/vibestral/state`
   - `${AGENTIC_ROOT}/vibestral/logs`
-  - `${AGENTIC_ROOT}/vibestral/workspaces`
+  - `${AGENTIC_VIBESTRAL_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/vibestral/workspaces` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces/vibestral/workspaces` in `rootless-dev`)
 - Why it exists:
   - extends the same hardened, persistent agent runtime model to a fourth first-class agent tool.
 

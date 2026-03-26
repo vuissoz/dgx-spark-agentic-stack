@@ -7,9 +7,11 @@ But: comprendre ce que fait la plateforme et savoir l'utiliser sans jargon.
 
 Cette plateforme fait tourner une IA locale, des interfaces web, et des outils de supervision, de maniere securisee (acces local uniquement + controle de sortie reseau).
 
+Ce guide rapide suppose le mode de travail courant: `rootless-dev`.
+
 ## 2) Les 6 briques a retenir
 
-1. `core` = le coeur technique (IA + DNS + proxy).
+1. `core` = le coeur technique (IA + DNS + proxy + services de controle internes comme OpenClaw et `gate-mcp`).
 2. `agents` = les assistants qui travaillent dans des espaces separes.
 3. `ui` = les ecrans web que vous ouvrez.
 4. `obs` = les tableaux de bord (sante, logs, metriques).
@@ -28,11 +30,18 @@ Important: ces adresses sont locales. Depuis un autre poste, il faut un tunnel S
 ## 4) Les commandes minimales
 
 ```bash
+export AGENTIC_PROFILE=rootless-dev
 ./agent profile
-./agent up core
-./agent up agents,ui,obs,rag
+./agent first-up
 ./agent ps
 ./agent doctor
+```
+
+Si vous preferez le demarrage etape par etape:
+
+```bash
+./agent up core
+./agent up agents,ui,obs,rag
 ```
 
 Pour arreter proprement:
@@ -99,3 +108,5 @@ Revenir a une version precedente:
 - Guide debutant detaille: `docs/runbooks/services-expliques-debutants.md`
 - Guide equivalent en anglais: `docs/runbooks/services-explained-beginners.en.md`
 - Installation complete: `docs/runbooks/first-time-setup.md`
+- Guide ultra-simple en chinois standard: `docs/runbooks/onboarding-ultra-simple.cn.md`
+- Guide ultra-simple en hindi: `docs/runbooks/onboarding-ultra-simple.hi.md`

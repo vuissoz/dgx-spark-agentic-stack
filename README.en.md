@@ -567,11 +567,13 @@ Runtime prerequisites for core OpenClaw:
   - `docs/runbooks/configuration-explained-beginners.en.md`
 - Development images runbook (French, local builds/overrides/stamps/update/rollback):
   - `docs/runbooks/images-developpement.md`
-- Ultra-simplified non-technical onboarding (FR/EN/DE/IT):
+- Ultra-simplified non-technical onboarding (FR/EN/DE/IT/CN/HI):
   - `docs/runbooks/onboarding-ultra-simple.fr.md`
   - `docs/runbooks/onboarding-ultra-simple.en.md`
   - `docs/runbooks/onboarding-ultra-simple.de.md`
   - `docs/runbooks/onboarding-ultra-simple.it.md`
+  - `docs/runbooks/onboarding-ultra-simple.cn.md`
+  - `docs/runbooks/onboarding-ultra-simple.hi.md`
 - Execution profiles:
   - `docs/runbooks/profiles.md`
 - Optional modules:

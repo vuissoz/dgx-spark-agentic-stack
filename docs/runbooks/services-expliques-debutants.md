@@ -12,6 +12,10 @@ Ce document complete `docs/runbooks/introduction.md` (le "pourquoi") et `docs/ru
 Version anglaise equivalente: `docs/runbooks/services-explained-beginners.en.md`.
 Pour la configuration complete (variables, valeurs, stockage, secrets): `docs/runbooks/configuration-expliquee-debutants.md`.
 
+Note de lecture:
+- les exemples et chemins ci-dessous decrivent l'etat actuel de la stack, avec `rootless-dev` comme mode de travail courant.
+- pour les workspaces agents, les variables `AGENTIC_*_WORKSPACES_DIR` font foi si un chemin differe selon le profil.
+
 ## 1) Mini glossaire (bases utiles)
 
 - Service: definition logique dans un fichier Compose (ex: `openwebui`).
@@ -31,7 +35,7 @@ Liens officiels utiles:
 
 La stack est divisee en 6 plans:
 
-1. `core` (socle): modele IA + controle egress + DNS + outils de debug.
+1. `core` (socle): modele IA + controle egress + DNS + outils de debug + surfaces OpenClaw/MCP internes.
 2. `agents` (execution): conteneurs de sessions agentiques (`claude`, `codex`, `opencode`, `vibestral`).
 3. `ui` (interface): OpenWebUI, OpenHands, ComfyUI.
 4. `obs` (observabilite): Prometheus, Grafana, Loki, exporters.
@@ -82,6 +86,18 @@ Entrees/sorties:
 Liens officiels (technos de base utilisees):
 - FastAPI: https://fastapi.tiangolo.com/
 - API Ollama (backend vise): https://docs.ollama.com/api/introduction
+
+### Service `gate-mcp`
+
+Role simple:
+- Petite passerelle MCP interne autour de `ollama-gate`.
+
+Pourquoi il existe:
+- Donner aux agents locaux quelques outils de pilotage/visibilite sans exposer ces controles sur un port public.
+
+Entrees/sorties:
+- Service interne uniquement (`http://gate-mcp:8123`).
+- Etat/logs persistants dans `${AGENTIC_ROOT}/gate/mcp/{state,logs}`.
 
 ### Service `unbound`
 
@@ -195,6 +211,10 @@ Les 4 services ci-dessous partagent la meme logique:
 - ils ont chacun leurs dossiers `state/logs/workspaces` separes.
 - l'image commune embarque les CLIs `codex`, `claude`, `opencode`, `vibe` (et aussi `openhands`, `openclaw` pour usages CLI transverses).
 
+Chemins a retenir:
+- en `strict-prod`, les workspaces par defaut sont sous `${AGENTIC_ROOT}/{claude,codex,opencode,vibestral}/workspaces`.
+- en `rootless-dev`, ils sont sous `${AGENTIC_ROOT}/agent-workspaces/{claude,codex,opencode,vibestral}/workspaces`.
+
 ### Service `agentic-claude`
 
 Role simple:
@@ -275,7 +295,7 @@ Pour debutant:
 
 Entrees/sorties:
 - Port hote: `127.0.0.1:${OPENHANDS_HOST_PORT:-3000}`.
-- Dossiers: `${AGENTIC_ROOT}/openhands/{state,logs,workspaces}`.
+- Dossiers: `${AGENTIC_ROOT}/openhands/{state,logs}` et `${AGENTIC_OPENHANDS_WORKSPACES_DIR}`.
 - `docker.sock` non monte (choix securite du stack).
 
 Liens officiels:

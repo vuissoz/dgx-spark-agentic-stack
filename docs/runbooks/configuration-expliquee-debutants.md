@@ -66,6 +66,10 @@ Point important:
 | `AGENTIC_LLM_NETWORK` | nom reseau Docker | `agentic-llm` | `agentic-dev-llm` | shell, `runtime.env` |
 | `AGENTIC_EGRESS_NETWORK` | nom reseau Docker | `agentic-egress` | `agentic-dev-egress` | shell, `runtime.env` |
 
+Note pratique:
+- En `rootless-dev`, les workspaces des agents de base passent par `AGENTIC_AGENT_WORKSPACES_ROOT=${AGENTIC_ROOT}/agent-workspaces`.
+- Donc les chemins effectifs par defaut deviennent `${AGENTIC_ROOT}/agent-workspaces/<tool>/workspaces` pour `claude`, `codex`, `opencode` et `vibestral`.
+
 ## 3.2 Selection des stacks et profiles Compose
 
 | Variable | Valeurs possibles | Defaut | Stockage |
@@ -101,7 +105,7 @@ Notes:
 
 | Variable | Valeurs possibles | Defaut | Stockage |
 |---|---|---|---|
-| `OLLAMA_MODELS_DIR` | chemin absolu | `strict-prod`: `${AGENTIC_ROOT}/ollama/models` ; `rootless-dev` (onboarding): `${HOME}/wkdir/open-webui/ollama_data/models` | shell, `runtime.env` |
+| `OLLAMA_MODELS_DIR` | chemin absolu | `strict-prod`: `${AGENTIC_ROOT}/ollama/models` ; `rootless-dev` runtime brut: `${AGENTIC_OLLAMA_MODELS_LINK}` ; onboarding interactif propose souvent `${HOME}/wkdir/open-webui/ollama_data/models` | shell, `runtime.env` |
 | `AGENTIC_OLLAMA_MODELS_LINK` | chemin absolu (symlink rootless) | `${AGENTIC_ROOT}/deployments/ollama-link/models` | shell, `runtime.env` |
 | `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | chemin absolu (target rootless) | `${AGENTIC_ROOT}/ollama/models` (ou valeur derivee de `OLLAMA_MODELS_DIR` quand fournie par onboarding) | shell, `runtime.env` |
 | `OLLAMA_CONTAINER_MODELS_PATH` | chemin interne conteneur | `/root/.ollama/models` | `/tmp/ollama/models` en `rootless-dev` |
@@ -193,6 +197,7 @@ Toggles frequents (`0` ou `1`):
 Autres variables utiles:
 - `AGENT_LOG_TAIL` (defaut `200`)
 - `AGENT_PROJECT_NAME` (override ponctuel pour l'invocation courante)
+- `AGENTIC_AGENT_WORKSPACES_ROOT` (racine des workspaces agents de base; defaut `${AGENTIC_ROOT}` en `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces` en `rootless-dev`)
 - `AGENTIC_CLAUDE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-claude`)
 - `AGENTIC_CODEX_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-codex`)
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-opencode`)

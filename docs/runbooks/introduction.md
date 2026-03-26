@@ -81,8 +81,8 @@ Reasoning:
 Think in planes, not individual containers:
 
 1. Control/Policy Plane (`core`)
-- `ollama`, `ollama-gate`, `unbound`, `egress-proxy`, `toolbox`
-- defines inference gateway behavior and outbound policy path.
+- `ollama`, `ollama-gate`, `gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `unbound`, `egress-proxy`, `toolbox`
+- defines inference gateway behavior, local operator control surfaces, and outbound policy path.
 
 2. Execution Plane (`agents`)
 - tmux-backed agent runtimes with isolated state/log/workspaces.
@@ -175,7 +175,7 @@ The stack intentionally favors early, visible failure over silent drift.
 Suggested order:
 1. this introduction (`introduction.md`),
 2. `implementation-strategy-refactoring.md` (technical implementation strategy and refactoring priorities),
-3. `onboarding-ultra-simple.fr.md` / `.en.md` / `.de.md` / `.it.md` (non-technical quickstart),
+3. `onboarding-ultra-simple.fr.md` / `.en.md` / `.de.md` / `.it.md` / `.cn.md` / `.hi.md` (non-technical quickstart),
 4. `profiles.md` (execution semantics),
 5. `configuration-expliquee-debutants.md` (beginner-friendly FR configuration reference),
 6. `configuration-explained-beginners.en.md` (beginner-friendly EN configuration reference),
