@@ -38,6 +38,7 @@ export COMPOSE_PROFILES=trt
 
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `qwen3-coder:30b`) and reused by Ollama preload.
+`qwen3.5:35b` is explicitly blocked as a stack default agentic model: local Codex/OpenHands runs can emit pseudo tool tags instead of real tool calls. Use `qwen3-coder:30b` (or another validated tool-calling model) instead.
 Context window size is controlled by `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (default `262144`) and propagated to `OLLAMA_CONTEXT_LENGTH`.
 For Goose (`optional-goose`), the client-side context limit is controlled separately by `AGENTIC_GOOSE_CONTEXT_LIMIT` (default: `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}`) and propagated to `GOOSE_CONTEXT_LIMIT`.
 

@@ -8,6 +8,8 @@ preseed_goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT-}"
 source "${REPO_ROOT}/scripts/lib/runtime.sh"
 # shellcheck source=scripts/lib/ollama_context.sh
 source "${REPO_ROOT}/scripts/lib/ollama_context.sh"
+# shellcheck source=scripts/lib/model_compat.sh
+source "${REPO_ROOT}/scripts/lib/model_compat.sh"
 OPTIONAL_TEMPLATE_DIR="${REPO_ROOT}/examples/optional"
 
 profile_override=""
@@ -424,6 +426,27 @@ validate_model_id_value() {
     echo "${key} must not contain spaces" >&2
     return 1
   }
+  return 0
+}
+
+validate_agentic_tool_call_model_value() {
+  local key="$1"
+  local value="$2"
+  local reason=""
+  local recommendation=""
+
+  validate_model_id_value "${key}" "${value}" || return 1
+
+  if reason="$(agentic_tool_call_model_incompatibility_reason "${value}")"; then
+    recommendation="$(agentic_tool_call_model_recommendation "${value}" 2>/dev/null || true)"
+    if [[ -n "${recommendation}" ]]; then
+      echo "${key}='${value}' is blocked for the stack default agentic path: ${reason}; use '${recommendation}' instead" >&2
+    else
+      echo "${key}='${value}' is blocked for the stack default agentic path: ${reason}" >&2
+    fi
+    return 1
+  fi
+
   return 0
 }
 
@@ -1734,7 +1757,7 @@ collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_ove
 collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_network}" "${egress_network_override}" validate_compose_or_network_name "AGENTIC_EGRESS_NETWORK is dedicated to controlled outbound traffic."
 
 collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_ollama_models_for_profile "${profile}" "${root_path}")" "${ollama_models_override}" "OLLAMA_MODELS_DIR points to the shared Ollama model storage path on host."
-collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
+collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}" "${default_model_override}" validate_agentic_tool_call_model_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model. Onboarding may recommend a lower value later once AGENTIC_LIMIT_OLLAMA_MEM is known."
 goose_context_limit="${preseed_goose_context_limit:-${default_model_context_window}}"
 validate_context_window_value "AGENTIC_GOOSE_CONTEXT_LIMIT" "${goose_context_limit}" || die "invalid AGENTIC_GOOSE_CONTEXT_LIMIT"
@@ -1905,7 +1928,13 @@ if [[ "${ui_section_enabled}" -eq 1 ]]; then
       fi
     fi
 
-    openhands_llm_model="$(prompt_with_default "LLM_MODEL" "${openhands_llm_model}")"
+    while true; do
+      candidate="$(prompt_with_default "LLM_MODEL" "${openhands_llm_model}")"
+      if validate_agentic_tool_call_model_value "LLM_MODEL" "${candidate}"; then
+        openhands_llm_model="${candidate}"
+        break
+      fi
+    done
     if [[ -z "${openhands_llm_api_key_override}" ]]; then
       info "OpenHands local mode accepts any non-empty LLM_API_KEY placeholder (example: local-ollama)."
       openhands_llm_api_key="$(prompt_secret_with_default "LLM_API_KEY" "${openhands_llm_api_key}")"
@@ -1923,7 +1952,7 @@ if [[ "${ui_section_enabled}" -eq 1 ]]; then
   else
     openwebui_ollama_base_url="http://ollama-gate:11435"
   fi
-  [[ -n "${openhands_llm_model}" ]] || die "LLM_MODEL cannot be empty"
+  validate_agentic_tool_call_model_value "LLM_MODEL" "${openhands_llm_model}" || die "invalid LLM_MODEL"
   [[ -n "${openhands_llm_api_key}" ]] || die "LLM_API_KEY cannot be empty"
   [[ -n "${openhands_llm_base_url}" ]] || die "LLM_BASE_URL cannot be empty"
 

@@ -38,6 +38,7 @@ export COMPOSE_PROFILES=trt
 
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `qwen3-coder:30b`) et réutilisé pour le preload Ollama.
+`qwen3.5:35b` est explicitement bloqué comme modèle par défaut agentique: en local, Codex/OpenHands peuvent y émettre des pseudo balises d'outils au lieu de vrais tool calls. Utiliser `qwen3-coder:30b` (ou un autre modèle validé pour le tool-calling) à la place.
 La fenêtre de contexte est pilotée par `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` et propagée vers `OLLAMA_CONTEXT_LENGTH`.
 Quand `./agent onboard` peut lire les métadonnées Ollama du modèle choisi, il propose automatiquement la fenêtre maximale estimée qui tient dans `AGENTIC_LIMIT_OLLAMA_MEM`; sinon il retombe sur le fallback historique `262144`.
 `./agent doctor` remonte aussi cette fenêtre maximale estimée pour aider à corriger un contexte trop grand.

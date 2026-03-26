@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/runtime.sh"
 # shellcheck source=scripts/lib/ollama_context.sh
 source "${SCRIPT_DIR}/lib/ollama_context.sh"
+# shellcheck source=scripts/lib/model_compat.sh
+source "${SCRIPT_DIR}/lib/model_compat.sh"
 # shellcheck source=tests/lib/common.sh
 source "${AGENTIC_REPO_ROOT}/tests/lib/common.sh"
 
@@ -284,6 +286,25 @@ check_default_model_context_resources() {
 
   ok "default model '${default_model}' context=${requested_context} (max=${model_max_context}, fit=${estimated_max_fitting_context}, kv_bytes/token=${kv_bytes_per_token}, est_mem=${estimated_required_gib}GiB)"
   cleanup_context_check_files
+}
+
+check_default_model_tool_call_compatibility() {
+  local default_model="${AGENTIC_DEFAULT_MODEL:-}"
+  local reason=""
+  local recommendation=""
+
+  [[ -n "${default_model}" ]] || return 0
+
+  if reason="$(agentic_tool_call_model_incompatibility_reason "${default_model}")"; then
+    recommendation="$(agentic_tool_call_model_recommendation "${default_model}" 2>/dev/null || true)"
+    if [[ -n "${recommendation}" ]]; then
+      doctor_fail "default model '${default_model}' is incompatible with the stack agentic tool-calling path: ${reason}; set AGENTIC_DEFAULT_MODEL='${recommendation}'"
+    else
+      doctor_fail "default model '${default_model}' is incompatible with the stack agentic tool-calling path: ${reason}"
+    fi
+  else
+    ok "default model '${default_model}' passes tool-calling compatibility policy"
+  fi
 }
 
 doctor_stream_payload() {
@@ -937,6 +958,24 @@ PY
       doctor_fail "optional-goose logs directory must be writable (/state/home/.local/state/goose/logs)"
     fi
   fi
+
+  if [[ "${service}" == "openhands" ]]; then
+    env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    openhands_runtime_model="$(printf '%s\n' "${env_dump}" | sed -n 's/^LLM_MODEL=//p' | head -n 1)"
+    if [[ -z "${openhands_runtime_model}" ]]; then
+      doctor_fail "openhands missing LLM_MODEL"
+    else
+      openhands_reason="$(agentic_tool_call_model_incompatibility_reason "${openhands_runtime_model}" 2>/dev/null || true)"
+      if [[ -n "${openhands_reason}" ]]; then
+        openhands_recommendation="$(agentic_tool_call_model_recommendation "${openhands_runtime_model}" 2>/dev/null || true)"
+        if [[ -n "${openhands_recommendation}" ]]; then
+          doctor_fail "openhands LLM_MODEL='${openhands_runtime_model}' is incompatible with the stack agentic tool-calling path: ${openhands_reason}; use '${openhands_recommendation}'"
+        else
+          doctor_fail "openhands LLM_MODEL='${openhands_runtime_model}' is incompatible with the stack agentic tool-calling path: ${openhands_reason}"
+        fi
+      fi
+    fi
+  fi
 done
 
 rag_retriever_cid="$(service_container_id rag-retriever)"
@@ -1029,6 +1068,7 @@ if [[ ! -d "${AGENTIC_ROOT}/gate/mcp/logs" ]]; then
   doctor_fail "gate MCP audit log directory is missing: ${AGENTIC_ROOT}/gate/mcp/logs"
 fi
 
+check_default_model_tool_call_compatibility
 check_default_model_context_resources
 
 comfyui_cid="$(service_container_id comfyui)"
