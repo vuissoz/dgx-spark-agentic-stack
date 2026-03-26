@@ -16,6 +16,8 @@ import yaml
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
+from tool_call_parser import pseudo_tool_calls_from_content
+
 
 def env_int(name: str, default: int) -> int:
     raw = os.getenv(name, str(default))
@@ -1924,58 +1926,11 @@ def chat_tool_calls_from_upstream(payload: Dict[str, Any]) -> list[Dict[str, Any
     return normalized if normalized else None
 
 
-PSEUDO_FUNCTION_BLOCK_RE = re.compile(
-    r"<function=([A-Za-z0-9_.:-]+)>(.*?)</function>", re.IGNORECASE | re.DOTALL
-)
-PSEUDO_PARAMETER_RE = re.compile(
-    r"<parameter=([A-Za-z0-9_.:-]+)>\s*(.*?)\s*</parameter>", re.IGNORECASE | re.DOTALL
-)
 PROMISED_ACTION_RE = re.compile(r"\b(i(?:'|’)ll|i will|let me)\b", re.IGNORECASE)
 LIST_FILES_INTENT_RE = re.compile(
     r"\b(list|show|display|what(?:'s| is))\b.*\b(file|files|folder|folders|directory|workspace)\b",
     re.IGNORECASE,
 )
-
-
-def pseudo_tool_calls_from_content(content: str) -> tuple[str, list[Dict[str, Any]] | None]:
-    if not isinstance(content, str) or not content:
-        return "", None
-    if "<function=" not in content or "<parameter=" not in content:
-        return content, None
-
-    normalized: list[Dict[str, Any]] = []
-    for idx, match in enumerate(PSEUDO_FUNCTION_BLOCK_RE.finditer(content)):
-        name = match.group(1).strip()
-        body = match.group(2)
-        if not name:
-            continue
-
-        arguments_obj: Dict[str, str] = {}
-        for param in PSEUDO_PARAMETER_RE.finditer(body):
-            param_name = param.group(1).strip()
-            param_value = param.group(2).strip()
-            if not param_name:
-                continue
-            arguments_obj[param_name] = param_value
-
-        normalized.append(
-            {
-                "id": f"call_{uuid.uuid4().hex[:24]}",
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "arguments": json.dumps(arguments_obj, ensure_ascii=True),
-                },
-            }
-        )
-
-    if not normalized:
-        return content, None
-
-    cleaned = PSEUDO_FUNCTION_BLOCK_RE.sub("", content)
-    cleaned = re.sub(r"</?tool_call>", "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.strip()
-    return cleaned, normalized
 
 
 def should_retry_with_required_tool_choice(
@@ -2303,7 +2258,7 @@ async def handle_chat_completion_endpoint(
             content = chat_content_from_upstream(protocol, upstream_json)
             response_tool_calls = chat_tool_calls_from_upstream(upstream_json)
             if response_tool_calls is None:
-                content, response_tool_calls = pseudo_tool_calls_from_content(content)
+                content, response_tool_calls = pseudo_tool_calls_from_content(content, tools)
 
             if response_tool_calls is None and should_retry_with_required_tool_choice(
                 content=content,
@@ -2322,7 +2277,7 @@ async def handle_chat_completion_endpoint(
                     retry_content = chat_content_from_upstream(protocol, retry_json)
                     retry_tool_calls = chat_tool_calls_from_upstream(retry_json)
                     if retry_tool_calls is None:
-                        retry_content, retry_tool_calls = pseudo_tool_calls_from_content(retry_content)
+                        retry_content, retry_tool_calls = pseudo_tool_calls_from_content(retry_content, tools)
                     if retry_tool_calls is not None:
                         effective_upstream_json = retry_json
                         content = retry_content

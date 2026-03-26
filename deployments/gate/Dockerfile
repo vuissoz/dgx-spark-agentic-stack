@@ -8,7 +8,7 @@ WORKDIR /app
 COPY deployments/gate/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY deployments/gate/app.py /app/app.py
+COPY deployments/gate/*.py /app/
 
 EXPOSE 11435
 
