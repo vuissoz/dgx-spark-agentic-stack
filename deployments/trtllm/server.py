@@ -2,6 +2,9 @@
 import hashlib
 import json
 import os
+import re
+import time
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -39,6 +42,122 @@ def configured_models() -> list[str]:
     if not models:
         models.append("nvfp4-demo")
     return models
+
+
+WORKSPACE_PATH_RE = re.compile(r"(/workspace/[^\s\"'<>]+)")
+
+
+def first_workspace_path(messages: object) -> str:
+    if not isinstance(messages, list):
+        return "/workspace/README.md"
+    for message in reversed(messages):
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            match = WORKSPACE_PATH_RE.search(content)
+            if match:
+                return match.group(1)
+    return "/workspace/README.md"
+
+
+def normalize_function_tool(value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    function = value.get("function")
+    if not isinstance(function, dict):
+        return None
+    name = function.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    parameters = function.get("parameters")
+    if not isinstance(parameters, dict):
+        parameters = {}
+    return {
+        "name": name.strip(),
+        "parameters": parameters,
+    }
+
+
+def choose_tool(payload: dict) -> dict | None:
+    tools_raw = payload.get("tools")
+    tools: list[dict] = []
+    if isinstance(tools_raw, list):
+        for item in tools_raw:
+            normalized = normalize_function_tool(item)
+            if normalized is not None:
+                tools.append(normalized)
+    if not tools:
+        return None
+
+    tool_choice = payload.get("tool_choice")
+    selected_name = None
+    if isinstance(tool_choice, dict):
+        function = tool_choice.get("function")
+        if isinstance(function, dict):
+            name = function.get("name")
+            if isinstance(name, str) and name.strip():
+                selected_name = name.strip()
+
+    if selected_name:
+        for tool in tools:
+            if tool["name"] == selected_name:
+                return tool
+
+    return tools[0]
+
+
+def synthetic_tool_arguments(tool_name: str, parameters: dict, messages: object) -> dict:
+    properties = parameters.get("properties")
+    if not isinstance(properties, dict):
+        properties = {}
+
+    arguments: dict[str, object] = {}
+    for key in properties:
+        if key == "path":
+            arguments[key] = first_workspace_path(messages)
+        elif key == "command":
+            arguments[key] = "pwd"
+        elif key == "description":
+            arguments[key] = f"trtllm synthetic tool call for {tool_name}"
+        elif key == "tool":
+            arguments[key] = tool_name
+        elif key == "check":
+            arguments[key] = "tool_call"
+        else:
+            arguments[key] = key
+
+    required = parameters.get("required")
+    if isinstance(required, list):
+        for key in required:
+            if not isinstance(key, str) or key in arguments:
+                continue
+            if key == "path":
+                arguments[key] = first_workspace_path(messages)
+            else:
+                arguments[key] = key
+
+    return arguments
+
+
+def synthetic_tool_call_payload(payload: dict) -> dict | None:
+    tool = choose_tool(payload)
+    if tool is None:
+        return None
+
+    arguments = synthetic_tool_arguments(
+        tool_name=tool["name"],
+        parameters=tool["parameters"],
+        messages=payload.get("messages"),
+    )
+    return {
+        "id": f"call_{uuid.uuid4().hex[:12]}",
+        "type": "function",
+        "function": {
+            "name": tool["name"],
+            "arguments": json.dumps(arguments, ensure_ascii=True, separators=(",", ":")),
+        },
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -79,6 +198,18 @@ class Handler(BaseHTTPRequestHandler):
                 {"models": [{"name": model} for model in configured_models()]},
             )
             return
+        if self.path == "/v1/models":
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "object": "list",
+                    "data": [
+                        {"id": model, "object": "model", "owned_by": "trtllm"}
+                        for model in configured_models()
+                    ],
+                },
+            )
+            return
         self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
     def do_POST(self) -> None:
@@ -97,6 +228,22 @@ class Handler(BaseHTTPRequestHandler):
                 model = "nvfp4-demo"
             messages = payload.get("messages")
             message_count = len(messages) if isinstance(messages, list) else 0
+            tool_call = synthetic_tool_call_payload(payload)
+            if tool_call is not None:
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "model": model,
+                        "message": {
+                            "role": "assistant",
+                            "content": "",
+                            "tool_calls": [tool_call],
+                        },
+                        "done": True,
+                        "done_reason": "tool_calls",
+                    },
+                )
+                return
             content = f"trtllm synthetic response model={model} messages={message_count}"
             self._send_json(
                 HTTPStatus.OK,
@@ -104,6 +251,41 @@ class Handler(BaseHTTPRequestHandler):
                     "model": model,
                     "message": {"role": "assistant", "content": content},
                     "done": True,
+                },
+            )
+            return
+
+        if self.path == "/v1/chat/completions":
+            model = payload.get("model")
+            if not isinstance(model, str) or not model:
+                model = "nvfp4-demo"
+            messages = payload.get("messages")
+            message_count = len(messages) if isinstance(messages, list) else 0
+            tool_call = synthetic_tool_call_payload(payload)
+            message = {"role": "assistant", "content": f"trtllm synthetic response model={model} messages={message_count}"}
+            finish_reason = "stop"
+            if tool_call is not None:
+                message = {"role": "assistant", "content": "", "tool_calls": [tool_call]}
+                finish_reason = "tool_calls"
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": message,
+                            "finish_reason": finish_reason,
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                    },
                 },
             )
             return
