@@ -553,6 +553,11 @@ Runtime prerequisites for core OpenClaw:
   - `docs/runbooks/first-time-setup.md`
 - Dedicated `strict-prod` VM (prod-like validation):
   - `docs/runbooks/strict-prod-vm.md`
+- Dedicated beginner guide for `strict-prod`:
+  - `docs/runbooks/strict-prod-pour-debutant.md`
+- Ultra-simple onboarding dedicated to `strict-prod`:
+  - `docs/runbooks/onboarding-ultra-simple.strict-prod.fr.md`
+  - `docs/runbooks/onboarding-ultra-simple.strict-prod.en.md`
 - Feature and implemented agent catalog:
   - `docs/runbooks/features-and-agents.md`
 - Versioned Ollama agent integration matrix (launch-supported vs internal adapters):

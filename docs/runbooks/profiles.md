@@ -24,6 +24,9 @@ For local iteration, testing, or CI where root privileges are limited, `rootless
   - release validation,
   - production-like smoke tests,
   - final compliance checks before declaring a deployment healthy.
+- Current baseline expectation:
+  - `core` includes `ollama`, `ollama-gate`, `gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `unbound`, `egress-proxy`, and `toolbox`.
+  - most operational commands should be run as `sudo ./agent ...` or `sudo -E ./agent ...` once `AGENTIC_PROFILE=strict-prod` is selected.
 
 ### `rootless-dev`
 - Purpose: development mode without requiring root access for normal workflows.
@@ -79,6 +82,25 @@ For a full variable/secrets catalog (values, storage, and beginner guidance), se
 3. Re-run the same scenario in `strict-prod`.
 4. Only consider the result acceptance-grade after strict profile checks pass.
 
+### How To Run A `strict-prod` Validation Cycle
+Use one shell session with explicit profile export, then run privileged commands consistently:
+
+```bash
+export AGENTIC_PROFILE=strict-prod
+sudo ./deployments/bootstrap/init_fs.sh
+sudo ./agent profile
+sudo ./agent up core
+sudo ./agent up agents,ui,obs,rag
+sudo ./agent update
+sudo ./agent doctor
+sudo ./agent test all
+```
+
+Notes:
+- `core` in this profile also brings up the internal control services `gate-mcp` and the OpenClaw set (`openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`).
+- `./agent test all` stops on first failure. For staged diagnosis, run `sudo ./agent test A` ... `sudo ./agent test V`.
+- if you need one-command restart after initial bootstrap, use `sudo -E ./agent first-up`.
+
 ### How To Run A `rootless-dev` Test Cycle
 Use one shell session with explicit profile exports so both `agent` and test scripts resolve the same runtime/project context:
 
@@ -125,6 +147,7 @@ If `COMPOSE_PROFILES=trt` is not set, `trtllm` is not started and C3/D4 tests sk
 - Running `strict-prod` commands without sufficient privileges can create partial host state.
 - Assuming a successful `rootless-dev` doctor run implies full CDC conformance is incorrect; host-level controls still need strict validation.
 - Mixing profile roots (`/srv/agentic` and `${HOME}/.local/share/agentic`) during troubleshooting can hide state differences. Always confirm active profile first.
+- Reusing `rootless-dev` onboarding notes verbatim in `strict-prod` can be misleading; any path mutation under `/srv/agentic` should be done with the required privileges.
 
 ## Notes
 - `rootless-dev` is intentionally not an acceptance profile.

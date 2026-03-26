@@ -79,7 +79,7 @@ Expected:
 
 What this campaign does inside the VM:
 - `strict-prod` bootstrap (`init_fs.sh`)
-- `agent up core`
+- `agent up core` (including `gate-mcp` and the core OpenClaw services)
 - `agent up agents,ui,obs,rag` (or degraded no-UI path if GPU is missing and allowed)
 - `agent doctor`
 - `agent update`
@@ -143,9 +143,19 @@ If you want to run commands manually instead of `agent vm test`:
 export AGENTIC_PROFILE=strict-prod
 cd /home/ubuntu/dgx-spark-agentic-stack
 sudo ./deployments/bootstrap/init_fs.sh
+sudo ./agent profile
 sudo ./agent up core
 sudo ./agent up agents,ui,obs,rag
+sudo ./agent update
 sudo ./agent doctor
+```
+
+For a one-command restart after the VM has already been initialized:
+
+```bash
+export AGENTIC_PROFILE=strict-prod
+cd /home/ubuntu/dgx-spark-agentic-stack
+sudo -E ./agent first-up
 ```
 
 ## 7. Cleanup the dedicated VM

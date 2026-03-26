@@ -182,11 +182,13 @@ Suggested order:
 7. `images-developpement.md` (local image build/update/override/rollback behavior),
 8. `first-time-setup.md` (day-0 bootstrap),
 9. `strict-prod-vm.md` (dedicated VM path for prod-like validation),
-10. `features-and-agents.md` (component capabilities),
-11. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
-12. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
-13. `codex-debutant.md` (beginner step-by-step usage of `agentic-codex`),
-14. specialized runbooks (`optional-modules.md`, `openclaw-onboarding-rootless-dev.md`, `observability-triage.md`, etc.).
+10. `strict-prod-pour-debutant.md` (strict-prod beginner path, in French),
+11. `onboarding-ultra-simple.strict-prod.fr.md` / `.en.md` (non-technical strict-prod quickstart),
+12. `features-and-agents.md` (component capabilities),
+13. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
+14. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
+15. `codex-debutant.md` (beginner step-by-step usage of `agentic-codex`),
+16. specialized runbooks (`optional-modules.md`, `openclaw-onboarding-rootless-dev.md`, `observability-triage.md`, etc.).
 
 When troubleshooting:
 - always capture active profile and effective runtime values first (`./agent profile`),

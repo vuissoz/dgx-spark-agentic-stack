@@ -20,6 +20,7 @@ Optional modules are covered at the end.
 After a system reboot, a new terminal session usually does not keep your previous `export` values.
 In this repo, `./agent` defaults to `strict-prod` when `AGENTIC_PROFILE` is not set.
 If your last deployment was `rootless-dev`, commands may appear to show an "empty" stack until you restore the same context.
+If your last deployment was `strict-prod`, the most common mistake is the opposite: forgetting to re-run the same commands with `sudo`, then diagnosing a partial or empty runtime by accident.
 
 ### 0.1 Restore the last generated runtime env (recommended)
 
@@ -78,6 +79,14 @@ If you prefer no shell exports, prefix each call with profile directly:
 ./agent rootless-dev up core
 ./agent rootless-dev up agents,ui,obs,rag
 ./agent rootless-dev doctor
+```
+
+`strict-prod` equivalent:
+
+```bash
+sudo ./agent strict-prod up core
+sudo ./agent strict-prod up agents,ui,obs,rag
+sudo ./agent strict-prod doctor
 ```
 
 ## 1. Decide Your Profile
@@ -359,7 +368,7 @@ This creates the runtime directory contract and base permissions.
 
 ## 4. Start Core First
 
-`core` must start first because it provides Ollama, gate, DNS, proxy, and network policy wiring.
+`core` must start first because it provides Ollama, gate, DNS, proxy, network policy wiring, and the baseline internal control services (`gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`).
 
 ### `strict-prod`
 
@@ -560,12 +569,20 @@ OpenClaw now ships in `core`. Keep the remaining optional modules disabled until
 Start OpenClaw with the core stack:
 
 ```bash
+# strict-prod
+sudo ./agent up core
+
+# rootless-dev
 ./agent up core
 ```
 
 Remaining optional-module activation pattern:
 
 ```bash
+# strict-prod
+sudo AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
+
+# rootless-dev
 AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
 ```
 
@@ -575,7 +592,7 @@ Before activation:
 - review OpenClaw allowlists:
   - `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
   - `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
-- run `./agent doctor` and confirm baseline readiness.
+- run `./agent doctor` with the right privilege level for your profile and confirm baseline readiness.
 
 See:
 - `docs/runbooks/optional-modules.md`
@@ -591,4 +608,10 @@ Once configuration is settled, normal startup is:
 ./agent first-up
 # strict-prod:
 # sudo -E ./agent first-up
+```
+
+For `strict-prod`, prefer the explicit privileged form in real operations:
+
+```bash
+sudo -E ./agent first-up
 ```
