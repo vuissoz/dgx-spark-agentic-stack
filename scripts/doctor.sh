@@ -40,6 +40,8 @@ Usage:
 
 Environment:
   AGENTIC_PROFILE=strict-prod|rootless-dev
+  AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC=<seconds> (default: 90)
+  AGENTIC_DOCTOR_DEFAULT_MODEL_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 20)
   AGENTIC_DOCTOR_STREAM_MODEL=<model> (default: AGENTIC_DEFAULT_MODEL)
   AGENTIC_DOCTOR_STREAM_TIMEOUT_SEC=<seconds> (default: 90)
   AGENTIC_DOCTOR_STREAM_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 20)
@@ -305,6 +307,176 @@ check_default_model_tool_call_regression_notice() {
   else
     ok "default model '${default_model}' has no known stack tool-calling regression notice"
   fi
+}
+
+doctor_default_model_payload() {
+  local model="$1"
+  python3 - "${model}" <<'PY'
+import json
+import sys
+
+model = sys.argv[1]
+payload = {
+    "model": model,
+    "messages": [
+        {
+            "role": "user",
+            "content": "Call doctor_probe exactly once for /workspace/README.md and return no prose.",
+        }
+    ],
+    "tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "doctor_probe",
+                "description": "Internal doctor default-model probe tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                    },
+                    "required": ["path"],
+                    "additionalProperties": False,
+                },
+            },
+        }
+    ],
+    "tool_choice": {"type": "function", "function": {"name": "doctor_probe"}},
+    "temperature": 0,
+    "max_tokens": 64,
+}
+print(json.dumps(payload, separators=(",", ":")))
+PY
+}
+
+doctor_validate_default_model_response() {
+  local response_file="$1"
+  python3 - "${response_file}" <<'PY'
+import json
+import sys
+
+response = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+choices = response.get("choices")
+if not isinstance(choices, list) or not choices:
+    raise SystemExit("response missing choices")
+first = choices[0]
+if not isinstance(first, dict):
+    raise SystemExit("response choice must be an object")
+message = first.get("message")
+if not isinstance(message, dict):
+    raise SystemExit("response choice missing message")
+tool_calls = message.get("tool_calls")
+if not isinstance(tool_calls, list) or not tool_calls:
+    raise SystemExit("response missing tool_calls")
+tool_call = tool_calls[0]
+if not isinstance(tool_call, dict):
+    raise SystemExit("tool_call must be an object")
+function = tool_call.get("function")
+if not isinstance(function, dict):
+    raise SystemExit("tool_call missing function payload")
+if function.get("name") != "doctor_probe":
+    raise SystemExit("tool_call function name is not doctor_probe")
+arguments = function.get("arguments")
+if not isinstance(arguments, str) or not arguments.strip():
+    raise SystemExit("tool_call arguments are empty")
+decoded = json.loads(arguments)
+if not isinstance(decoded, dict):
+    raise SystemExit("tool_call arguments must decode to object")
+path = decoded.get("path")
+if not isinstance(path, str) or not path.strip():
+    raise SystemExit("tool_call path argument is missing")
+PY
+}
+
+check_default_model_tool_call_health() {
+  local probe_model="${AGENTIC_DEFAULT_MODEL:-}"
+  local timeout_sec="${AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC:-90}"
+  local queue_timeout_sec="${AGENTIC_DOCTOR_DEFAULT_MODEL_GATE_QUEUE_TIMEOUT_SEC:-20}"
+  local gate_cid payload response_file response_err_file err_hint validation_err
+
+  [[ -n "${probe_model}" ]] || {
+    doctor_fail_or_warn "default model tool-call probe requires AGENTIC_DEFAULT_MODEL"
+    return 0
+  }
+
+  if ! [[ "${timeout_sec}" =~ ^[0-9]+$ ]] || (( timeout_sec < 10 )); then
+    doctor_fail_or_warn "AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC must be an integer >= 10 (got: ${timeout_sec})"
+    return 0
+  fi
+  if ! [[ "${queue_timeout_sec}" =~ ^[0-9]+$ ]] || (( queue_timeout_sec < 1 )); then
+    doctor_fail_or_warn "AGENTIC_DOCTOR_DEFAULT_MODEL_GATE_QUEUE_TIMEOUT_SEC must be an integer >= 1 (got: ${queue_timeout_sec})"
+    return 0
+  fi
+
+  gate_cid="$(service_container_id "ollama-gate")"
+  if [[ -z "${gate_cid}" ]]; then
+    doctor_fail_or_warn "default model tool-call probe requires running service 'ollama-gate'"
+    return 0
+  fi
+
+  if ! payload="$(doctor_default_model_payload "${probe_model}")"; then
+    doctor_fail_or_warn "unable to build default model tool-call probe payload for '${probe_model}'"
+    return 0
+  fi
+
+  response_file="$(mktemp)"
+  response_err_file="$(mktemp)"
+  if ! printf '%s' "${payload}" | timeout "${timeout_sec}" docker exec -i \
+    -e AGENT_DOCTOR_SESSION="doctor-default-model-$$" \
+    -e AGENT_DOCTOR_QUEUE_TIMEOUT_SEC="${queue_timeout_sec}" \
+    -e AGENT_DOCTOR_HTTP_TIMEOUT_SEC="${timeout_sec}" \
+    "${gate_cid}" sh -lc '
+      set -eu
+      request_file="$(mktemp)"
+      trap "rm -f \"${request_file}\"" EXIT
+      cat >"${request_file}"
+
+      python3 - "${request_file}" <<'"'"'PY'"'"'
+import json
+import os
+import pathlib
+import sys
+import urllib.request
+
+request_file = pathlib.Path(sys.argv[1])
+payload = request_file.read_bytes()
+request = urllib.request.Request(
+    "http://127.0.0.1:11435/v1/chat/completions",
+    data=payload,
+    headers={
+        "Content-Type": "application/json",
+        "X-Agent-Project": "doctor",
+        "X-Agent-Session": os.environ.get("AGENT_DOCTOR_SESSION", "doctor-default-model"),
+        "X-Gate-Queue-Timeout-Seconds": os.environ.get("AGENT_DOCTOR_QUEUE_TIMEOUT_SEC", "20"),
+    },
+    method="POST",
+)
+with urllib.request.urlopen(request, timeout=int(os.environ.get("AGENT_DOCTOR_HTTP_TIMEOUT_SEC", "90"))) as response:
+    sys.stdout.buffer.write(response.read())
+PY
+    ' >"${response_file}" 2>"${response_err_file}"; then
+    err_hint="$(tr '\n' ' ' <"${response_err_file}" | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+    if [[ -n "${err_hint}" ]]; then
+      doctor_fail_or_warn "default model '${probe_model}' tool-call probe failed: ${err_hint}"
+    else
+      doctor_fail_or_warn "default model '${probe_model}' tool-call probe failed"
+    fi
+    rm -f "${response_file}" "${response_err_file}"
+    return 0
+  fi
+
+  if ! validation_err="$(doctor_validate_default_model_response "${response_file}" 2>&1)"; then
+    if [[ -n "${validation_err}" ]]; then
+      doctor_fail_or_warn "default model '${probe_model}' tool-call probe returned invalid response: ${validation_err}"
+    else
+      doctor_fail_or_warn "default model '${probe_model}' tool-call probe returned invalid response"
+    fi
+    rm -f "${response_file}" "${response_err_file}"
+    return 0
+  fi
+
+  ok "default model '${probe_model}' executes a direct tool-call probe through ollama-gate"
+  rm -f "${response_file}" "${response_err_file}"
 }
 
 doctor_stream_payload() {
@@ -1070,6 +1242,7 @@ fi
 
 check_default_model_tool_call_regression_notice
 check_default_model_context_resources
+check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"
 if [[ -n "${comfyui_cid}" ]]; then
