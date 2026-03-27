@@ -628,3 +628,8 @@ Préconditions (runtime) pour OpenClaw core:
 - `PLAN.md`
 - `docs/runbooks/*.md`
 - `docs/decisions/*.md`
+
+## Licence
+
+Ce projet est distribué sous licence Apache 2.0. Voir `LICENSE`.
+Copyright 2026 Pierre-André Vuissoz.

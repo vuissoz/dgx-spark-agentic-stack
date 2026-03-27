@@ -600,3 +600,8 @@ Runtime prerequisites for core OpenClaw:
 - `PLAN.md`
 - `docs/runbooks/*.md`
 - `docs/decisions/*.md`
+
+## License
+
+This project is distributed under the Apache License 2.0. See `LICENSE`.
+Copyright 2026 Pierre-André Vuissoz.
