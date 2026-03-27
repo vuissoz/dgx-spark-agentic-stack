@@ -2631,7 +2631,7 @@ def main() -> int:
             "sandbox_execute_url": f"{sandbox_base_url}/v1/tools/execute",
             "sandbox_status_url": os.environ.get("OPENCLAW_SANDBOX_STATUS_URL", f"{sandbox_base_url}/v1/sandboxes/status"),
             "audit_log": audit_log,
-            "default_model": os.environ.get("OPENCLAW_DEFAULT_MODEL", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "default_model": os.environ.get("OPENCLAW_DEFAULT_MODEL", os.environ.get("AGENTIC_DEFAULT_MODEL", "nemotron-cascade-2:30b")),
             "operator_runtime_file": os.environ.get("OPENCLAW_OPERATOR_RUNTIME_FILE", "/config/operator-runtime.v1.json"),
             "profile_id": profile_cfg["profile_id"],
             "profile_version": profile_cfg["profile_version"],
@@ -2698,7 +2698,7 @@ def main() -> int:
             "token": read_token(token_file),
             "allowlist_file": allowlist_file,
             "audit_log": audit_log,
-            "default_model": os.environ.get("OPENCLAW_SANDBOX_DEFAULT_MODEL", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "default_model": os.environ.get("OPENCLAW_SANDBOX_DEFAULT_MODEL", os.environ.get("AGENTIC_DEFAULT_MODEL", "nemotron-cascade-2:30b")),
             "operator_runtime_file": os.environ.get(
                 "OPENCLAW_SANDBOX_OPERATOR_RUNTIME_FILE",
                 "/config/operator-runtime.v1.json",

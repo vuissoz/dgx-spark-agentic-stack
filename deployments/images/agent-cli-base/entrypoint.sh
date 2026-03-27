@@ -8,8 +8,8 @@ state_dir="${AGENT_STATE_DIR:-/state}"
 logs_dir="${AGENT_LOGS_DIR:-/logs}"
 agent_home="${AGENT_HOME:-${HOME:-${state_dir}/home}}"
 agent_defaults_file="${AGENT_DEFAULTS_FILE:-${state_dir}/bootstrap/ollama-gate-defaults.env}"
-default_model_fallback="qwen3-coder:30b"
-default_context_window_fallback="262144"
+default_model_fallback="nemotron-cascade-2:30b"
+default_context_window_fallback="50909"
 
 export HOME="${agent_home}"
 mkdir -p "${workspace}" "${state_dir}" "${logs_dir}" "${agent_home}" \
@@ -70,8 +70,8 @@ bootstrap_ollama_gate_defaults() {
 # Generated on first run by agent-entrypoint to keep agent defaults persistent.
 export AGENTIC_OLLAMA_GATE_BASE_URL="${AGENTIC_OLLAMA_GATE_BASE_URL:-http://ollama-gate:11435}"
 export AGENTIC_OLLAMA_GATE_V1_URL="${AGENTIC_OLLAMA_GATE_V1_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL%/}/v1}"
-export AGENTIC_DEFAULT_MODEL="${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}"
-export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}"
+export AGENTIC_DEFAULT_MODEL="${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}"
+export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}"
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL}}"
 export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}"
 export OPENAI_API_BASE_URL="${OPENAI_API_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}"
@@ -97,8 +97,8 @@ EOF
 
   ensure_default_export "AGENTIC_OLLAMA_GATE_BASE_URL" '${AGENTIC_OLLAMA_GATE_BASE_URL:-http://ollama-gate:11435}'
   ensure_default_export "AGENTIC_OLLAMA_GATE_V1_URL" '${AGENTIC_OLLAMA_GATE_V1_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL%/}/v1}'
-  ensure_default_export "AGENTIC_DEFAULT_MODEL" '${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}'
-  ensure_default_export "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" '${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}'
+  ensure_default_export "AGENTIC_DEFAULT_MODEL" '${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}'
+  ensure_default_export "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" '${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}'
   ensure_default_export "OLLAMA_BASE_URL" '${OLLAMA_BASE_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL}}'
   ensure_default_export "OPENAI_BASE_URL" '${OPENAI_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}'
   ensure_default_export "OPENAI_API_BASE_URL" '${OPENAI_API_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}'

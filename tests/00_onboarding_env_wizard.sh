@@ -30,7 +30,10 @@ mkdir -p "${work_dir}"
 
 run_default_answers() {
   if ! printf '\n%.0s' {1..80} \
-    | AGENTIC_PROFILE=strict-prod "${wizard_script}" --output "${default_env_file}" >"${default_log}" 2>&1; then
+    | AGENTIC_PROFILE=strict-prod \
+      AGENTIC_OLLAMA_ESTIMATOR_TAGS_FILE="${ollama_fixtures_dir}/tags.context-estimator.json" \
+      AGENTIC_OLLAMA_ESTIMATOR_SHOW_FILE="${ollama_fixtures_dir}/show.nemotron-cascade-2-30b.json" \
+      "${wizard_script}" --output "${default_env_file}" >"${default_log}" 2>&1; then
     cat "${default_log}" >&2 || true
     fail "wizard failed with default Enter answers"
   fi
@@ -213,16 +216,16 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-egress'$" "${default_env_file}"
   || fail "default AGENTIC_EGRESS_NETWORK is not agentic-egress"
 grep -q "^export OLLAMA_MODELS_DIR='/srv/agentic/ollama/models'$" "${default_env_file}" \
   || fail "default OLLAMA_MODELS_DIR is not /srv/agentic/ollama/models"
-grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3-coder:30b'$" "${default_env_file}" \
-  || fail "default AGENTIC_DEFAULT_MODEL is not qwen3-coder:30b"
-grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${default_env_file}" \
-  || fail "default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 262144"
-grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${default_env_file}" \
-  || fail "default OLLAMA_CONTEXT_LENGTH is not 262144"
-grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='262144'$" "${default_env_file}" \
+grep -q "^export AGENTIC_DEFAULT_MODEL='nemotron-cascade-2:30b'$" "${default_env_file}" \
+  || fail "default AGENTIC_DEFAULT_MODEL is not nemotron-cascade-2:30b"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='91239'$" "${default_env_file}" \
+  || fail "default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 91239"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='91239'$" "${default_env_file}" \
+  || fail "default OLLAMA_CONTEXT_LENGTH is not 91239"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='91239'$" "${default_env_file}" \
   || fail "default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
-grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='qwen3-coder:30b'$" "${default_env_file}" \
-  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not qwen3-coder:30b"
+grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='nemotron-cascade-2:30b'$" "${default_env_file}" \
+  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not nemotron-cascade-2:30b"
 grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${default_env_file}" \
   || fail "default GRAFANA_ADMIN_USER is not admin"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'$" "${default_env_file}" \
@@ -282,11 +285,11 @@ grep -q "^export OLLAMA_MODELS_DIR='${work_dir}/custom-ollama-models'$" "${overr
   || fail "override OLLAMA_MODELS_DIR is not applied"
 grep -q "^export AGENTIC_DEFAULT_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override AGENTIC_DEFAULT_MODEL is not applied"
-grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${override_env_file}" \
-  || fail "override default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW should remain 262144 when not overridden"
-grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${override_env_file}" \
-  || fail "override default OLLAMA_CONTEXT_LENGTH should remain 262144 when not overridden"
-grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='262144'$" "${override_env_file}" \
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='50909'$" "${override_env_file}" \
+  || fail "override default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW should remain 50909 when not overridden"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${override_env_file}" \
+  || fail "override default OLLAMA_CONTEXT_LENGTH should remain 50909 when not overridden"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${override_env_file}" \
   || fail "override default AGENTIC_GOOSE_CONTEXT_LIMIT should remain aligned with default context window"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.2:1b'$" "${override_env_file}" \
   || fail "override OLLAMA_PRELOAD_GENERATE_MODEL is not applied"
@@ -345,13 +348,13 @@ grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${work_dir}/rootless-default-ro
   || fail "rootless default AGENTIC_PI_MONO_WORKSPACES_DIR is not <root>/optional/pi-mono/workspaces"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/goose/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_GOOSE_WORKSPACES_DIR is not <root>/optional/goose/workspaces"
-grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3-coder:30b'$" "${rootless_default_env_file}" \
-  || fail "rootless default AGENTIC_DEFAULT_MODEL is not qwen3-coder:30b"
-grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${rootless_default_env_file}" \
-  || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 262144"
-grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${rootless_default_env_file}" \
-  || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 262144"
-grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='262144'$" "${rootless_default_env_file}" \
+grep -q "^export AGENTIC_DEFAULT_MODEL='nemotron-cascade-2:30b'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_DEFAULT_MODEL is not nemotron-cascade-2:30b"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='50909'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 50909"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${rootless_default_env_file}" \
+  || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 50909"
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${rootless_default_env_file}" \
   || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be False"

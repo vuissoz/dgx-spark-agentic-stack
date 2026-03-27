@@ -319,7 +319,7 @@ If you run interactive/manual onboarding (`openclaw onboard` prompts, or Web UI 
 | "IP of ollama-gate" | Do not set fixed IP | Container IPs are ephemeral. Always use `ollama-gate` hostname on the `agentic` network. |
 | API key field for custom provider | Non-empty placeholder (example: `local-gate`) | Empty keys can be rejected by onboarding forms; local `ollama-gate` path does not require a real upstream key. |
 | Entrypoint compatibility | OpenAI-compatible / enabled | `ollama-gate` OpenAI endpoint is `/v1/*`. |
-| Model ID | `${AGENTIC_DEFAULT_MODEL}` (default: `qwen3-coder:30b`) | Keeps onboarding aligned with stack defaults and `agent doctor` checks. |
+| Model ID | `${AGENTIC_DEFAULT_MODEL}` (default: `nemotron-cascade-2:30b`) | Keeps onboarding aligned with stack defaults and `agent doctor` checks. |
 | Gateway auth mode | `Token` | Stack gateway service is configured with `OPENCLAW_GATEWAY_AUTH_MODE=token`. |
 | Tailscale exposure (inside container) | `Off` | Exposure is handled at host level via SSH/Tailscale tunnel to loopback ports. |
 | "How should I provide the gateway token?" | `Use SecretRef` -> Environment variable | Matches secret storage contract used by this stack. |
