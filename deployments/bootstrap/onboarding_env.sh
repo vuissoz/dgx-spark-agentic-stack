@@ -69,8 +69,14 @@ openai_api_key_override=""
 openrouter_api_key_override=""
 huggingface_token_override=""
 optional_modules_override=""
+openclaw_init_project_override=""
 openclaw_token_override=""
 openclaw_webhook_secret_override=""
+telegram_bot_token_override=""
+discord_bot_token_override=""
+slack_bot_token_override=""
+slack_app_token_override=""
+slack_signing_secret_override=""
 mcp_token_override=""
 
 skip_ui_bootstrap=0
@@ -148,8 +154,14 @@ First-run bootstrap options:
   --huggingface-token <token>
   --optional-modules <csv>
   --git-forge-admin-password <password>
+  --openclaw-init-project <name>
   --openclaw-token <token>
   --openclaw-webhook-secret <secret>
+  --telegram-bot-token <token>
+  --discord-bot-token <token>
+  --slack-bot-token <token>
+  --slack-app-token <token>
+  --slack-signing-secret <secret>
   --mcp-token <token>
   --skip-ui-bootstrap
   --skip-network-bootstrap
@@ -640,6 +652,17 @@ validate_non_empty_single_line_value() {
   }
   [[ "${value}" != *$'\n'* ]] || {
     echo "${key} must be a single-line value" >&2
+    return 1
+  }
+}
+
+validate_openclaw_project_value() {
+  local key="$1"
+  local value="$2"
+
+  validate_non_empty_single_line_value "${key}" "${value}" || return 1
+  [[ "${value}" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    echo "${key} must match [A-Za-z0-9._-]+" >&2
     return 1
   }
 }
@@ -1456,7 +1479,8 @@ write_env_file() {
   local git_forge_admin_user="${48}"
   local git_forge_shared_namespace="${49}"
   local git_forge_enable_push_create="${50}"
-  local out_file="${51}"
+  local openclaw_init_project="${51}"
+  local out_file="${52}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1475,6 +1499,7 @@ export AGENTIC_OPENCODE_WORKSPACES_DIR=$(shell_quote "${opencode_workspaces_dir}
 export AGENTIC_VIBESTRAL_WORKSPACES_DIR=$(shell_quote "${vibestral_workspaces_dir}")
 export AGENTIC_OPENHANDS_WORKSPACES_DIR=$(shell_quote "${openhands_workspaces_dir}")
 export AGENTIC_OPENCLAW_WORKSPACES_DIR=$(shell_quote "${openclaw_workspaces_dir}")
+export AGENTIC_OPENCLAW_INIT_PROJECT=$(shell_quote "${openclaw_init_project}")
 export AGENTIC_PI_MONO_WORKSPACES_DIR=$(shell_quote "${pi_mono_workspaces_dir}")
 export AGENTIC_GOOSE_WORKSPACES_DIR=$(shell_quote "${goose_workspaces_dir}")
 export AGENTIC_COMPOSE_PROJECT=$(shell_quote "${compose_project}")
@@ -1990,6 +2015,11 @@ while [[ $# -gt 0 ]]; do
       git_forge_admin_password_override="$2"
       shift 2
       ;;
+    --openclaw-init-project)
+      [[ $# -ge 2 ]] || die "missing value for --openclaw-init-project"
+      openclaw_init_project_override="$2"
+      shift 2
+      ;;
     --openclaw-token)
       [[ $# -ge 2 ]] || die "missing value for --openclaw-token"
       openclaw_token_override="$2"
@@ -1998,6 +2028,31 @@ while [[ $# -gt 0 ]]; do
     --openclaw-webhook-secret)
       [[ $# -ge 2 ]] || die "missing value for --openclaw-webhook-secret"
       openclaw_webhook_secret_override="$2"
+      shift 2
+      ;;
+    --telegram-bot-token)
+      [[ $# -ge 2 ]] || die "missing value for --telegram-bot-token"
+      telegram_bot_token_override="$2"
+      shift 2
+      ;;
+    --discord-bot-token)
+      [[ $# -ge 2 ]] || die "missing value for --discord-bot-token"
+      discord_bot_token_override="$2"
+      shift 2
+      ;;
+    --slack-bot-token)
+      [[ $# -ge 2 ]] || die "missing value for --slack-bot-token"
+      slack_bot_token_override="$2"
+      shift 2
+      ;;
+    --slack-app-token)
+      [[ $# -ge 2 ]] || die "missing value for --slack-app-token"
+      slack_app_token_override="$2"
+      shift 2
+      ;;
+    --slack-signing-secret)
+      [[ $# -ge 2 ]] || die "missing value for --slack-signing-secret"
+      slack_signing_secret_override="$2"
       shift 2
       ;;
     --mcp-token)
@@ -2084,6 +2139,7 @@ collect_path_value opencode_workspaces_dir "AGENTIC_OPENCODE_WORKSPACES_DIR" "${
 collect_path_value vibestral_workspaces_dir "AGENTIC_VIBESTRAL_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "vibestral")" "${vibestral_workspaces_dir_override}" "AGENTIC_VIBESTRAL_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-vibestral."
 collect_path_value openhands_workspaces_dir "AGENTIC_OPENHANDS_WORKSPACES_DIR" "${profile}" "$(default_openhands_workspaces_dir "${root_path}")" "${openhands_workspaces_dir_override}" "AGENTIC_OPENHANDS_WORKSPACES_DIR controls the host path mounted as /workspace in openhands."
 collect_path_value openclaw_workspaces_dir "AGENTIC_OPENCLAW_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "openclaw")" "${openclaw_workspaces_dir_override}" "AGENTIC_OPENCLAW_WORKSPACES_DIR controls the host path mounted as /workspace in openclaw."
+collect_text_value openclaw_init_project "AGENTIC_OPENCLAW_INIT_PROJECT" "${AGENTIC_OPENCLAW_INIT_PROJECT:-openclaw-default}" "${openclaw_init_project_override}" validate_openclaw_project_value "AGENTIC_OPENCLAW_INIT_PROJECT is the default project name used by 'agent openclaw init' when you do not pass an explicit project."
 collect_path_value pi_mono_workspaces_dir "AGENTIC_PI_MONO_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "pi-mono")" "${pi_mono_workspaces_dir_override}" "AGENTIC_PI_MONO_WORKSPACES_DIR controls the host path mounted as /workspace in optional-pi-mono."
 collect_path_value goose_workspaces_dir "AGENTIC_GOOSE_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "goose")" "${goose_workspaces_dir_override}" "AGENTIC_GOOSE_WORKSPACES_DIR controls the host path mounted as /workspace in optional-goose."
 
@@ -2246,6 +2302,7 @@ write_env_file \
   "${git_forge_admin_user}" \
   "${git_forge_shared_namespace}" \
   "${git_forge_enable_push_create}" \
+  "${openclaw_init_project}" \
   "${output_file}"
 summary_add_generated "${output_file}"
 
@@ -2503,6 +2560,11 @@ openai_api_key="${openai_api_key_override:-}"
 openrouter_api_key="${openrouter_api_key_override:-}"
 huggingface_token="${huggingface_token_override:-}"
 optional_modules_list=()
+telegram_bot_token="${telegram_bot_token_override:-}"
+discord_bot_token="${discord_bot_token_override:-}"
+slack_bot_token="${slack_bot_token_override:-}"
+slack_app_token="${slack_app_token_override:-}"
+slack_signing_secret="${slack_signing_secret_override:-}"
 openclaw_token="${openclaw_token_override:-}"
 openclaw_webhook_secret="${openclaw_webhook_secret_override:-}"
 mcp_token="${mcp_token_override:-}"
@@ -2529,6 +2591,21 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     fi
     if [[ -z "${huggingface_token_override}" ]]; then
       huggingface_token="$(prompt_secret_with_default "huggingface.token (optional, for ComfyUI gated HF models)" "${huggingface_token}")"
+    fi
+    if [[ -z "${telegram_bot_token_override}" ]]; then
+      telegram_bot_token="$(prompt_secret_with_default "telegram.bot_token (optional, enables stack-managed Telegram provider bridge)" "${telegram_bot_token}")"
+    fi
+    if [[ -z "${discord_bot_token_override}" ]]; then
+      discord_bot_token="$(prompt_secret_with_default "discord.bot_token (optional, enables stack-managed Discord provider bridge)" "${discord_bot_token}")"
+    fi
+    if [[ -z "${slack_bot_token_override}" ]]; then
+      slack_bot_token="$(prompt_secret_with_default "slack.bot_token (optional, required for Slack bridge)" "${slack_bot_token}")"
+    fi
+    if [[ -z "${slack_app_token_override}" ]]; then
+      slack_app_token="$(prompt_secret_with_default "slack.app_token (optional, Slack Socket Mode)" "${slack_app_token}")"
+    fi
+    if [[ -z "${slack_signing_secret_override}" ]]; then
+      slack_signing_secret="$(prompt_secret_with_default "slack.signing_secret (optional, Slack HTTP mode)" "${slack_signing_secret}")"
     fi
   fi
 
@@ -2622,6 +2699,11 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     write_secret_file "${root_path}" "openai.api_key" "${openai_api_key}" || true
     write_secret_file "${root_path}" "openrouter.api_key" "${openrouter_api_key}" || true
     write_secret_file "${root_path}" "huggingface.token" "${huggingface_token}" || true
+    write_secret_file "${root_path}" "telegram.bot_token" "${telegram_bot_token}" || true
+    write_secret_file "${root_path}" "discord.bot_token" "${discord_bot_token}" || true
+    write_secret_file "${root_path}" "slack.bot_token" "${slack_bot_token}" || true
+    write_secret_file "${root_path}" "slack.app_token" "${slack_app_token}" || true
+    write_secret_file "${root_path}" "slack.signing_secret" "${slack_signing_secret}" || true
     write_secret_file "${root_path}" "openclaw.token" "${openclaw_token}" || true
     write_secret_file "${root_path}" "openclaw.webhook_secret" "${openclaw_webhook_secret}" || true
     write_secret_file "${root_path}" "mcp.token" "${mcp_token}" || true

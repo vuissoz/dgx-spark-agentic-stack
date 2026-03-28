@@ -82,7 +82,7 @@ Usage:
   agent rollback host-net <backup_id>
   agent rollback ollama-link <backup_id|latest>
   agent prereqs
-  agent onboard [runtime flags...] [--compose-profiles ... --default-model ... --default-model-context-window ... --trtllm-models ... --grafana-admin-user ... --grafana-admin-password ... --obs-retention-time ... --obs-max-disk ... --openwebui-admin-email ... --openwebui-admin-password ... --openhands-llm-model ... --allowlist-domains ... --huggingface-token ... --optional-modules ... --output ... --non-interactive --require-complete]
+  agent onboard [runtime flags...] [--compose-profiles ... --default-model ... --default-model-context-window ... --trtllm-models ... --grafana-admin-user ... --grafana-admin-password ... --obs-retention-time ... --obs-max-disk ... --openwebui-admin-email ... --openwebui-admin-password ... --openhands-llm-model ... --allowlist-domains ... --huggingface-token ... --openclaw-init-project ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --optional-modules ... --output ... --non-interactive --require-complete]
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
   agent vm cleanup [--name ... --yes --dry-run]
@@ -1119,6 +1119,7 @@ ensure_runtime_env() {
     "AGENTIC_VIBESTRAL_WORKSPACES_DIR=${AGENTIC_VIBESTRAL_WORKSPACES_DIR}"
     "AGENTIC_OPENHANDS_WORKSPACES_DIR=${AGENTIC_OPENHANDS_WORKSPACES_DIR}"
     "AGENTIC_OPENCLAW_WORKSPACES_DIR=${AGENTIC_OPENCLAW_WORKSPACES_DIR}"
+    "AGENTIC_OPENCLAW_INIT_PROJECT=${AGENTIC_OPENCLAW_INIT_PROJECT}"
     "AGENTIC_PI_MONO_WORKSPACES_DIR=${AGENTIC_PI_MONO_WORKSPACES_DIR}"
     "AGENTIC_GOOSE_WORKSPACES_DIR=${AGENTIC_GOOSE_WORKSPACES_DIR}"
     "AGENTIC_COMPOSE_PROJECT=${AGENTIC_COMPOSE_PROJECT}"
@@ -3080,7 +3081,7 @@ Description:
   - prints the next file-backed provider/channel steps.
 
 Notes:
-  - default project is 'openclaw-default'
+  - default project comes from AGENTIC_OPENCLAW_INIT_PROJECT (fallback: 'openclaw-default')
   - this command is safe to rerun as a repair path
   - upstream 'openclaw onboard' and 'openclaw configure --section channels' remain expert fallbacks only
 USAGE
@@ -3091,7 +3092,7 @@ USAGE
     shift
     raw_project="${project}"
   else
-    raw_project="openclaw-default"
+    raw_project="${AGENTIC_OPENCLAW_INIT_PROJECT:-openclaw-default}"
   fi
 
   while [[ $# -gt 0 ]]; do
@@ -3297,7 +3298,7 @@ PY
   printf 'workspace=%s\n' "${workspace}"
   printf 'workspace_host_dir=%s\n' "${workspace_host_dir}"
   printf 'default_model=%s\n' "${AGENTIC_DEFAULT_MODEL}"
-  if [[ -n "${telegram_secret_value}" ]]; then
+  if [[ -s "${telegram_secret_file}" ]]; then
     printf 'telegram_secret_file=%s\n' "${telegram_secret_file}"
   fi
   printf 'providers=%s\n' "$(printf '%s\n' "${bridge_summary}" | sed -n 's/^providers=//p')"

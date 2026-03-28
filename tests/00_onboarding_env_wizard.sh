@@ -48,6 +48,7 @@ run_override_answers() {
   local custom_vibestral_workspace="${work_dir}/custom-workspaces/vibestral"
   local custom_openhands_workspace="${work_dir}/custom-workspaces/openhands"
   local custom_openclaw_workspace="${work_dir}/custom-workspaces/openclaw"
+  local custom_openclaw_init_project="wizard-openclaw"
   local custom_pi_mono_workspace="${work_dir}/custom-workspaces/pi-mono"
   local custom_goose_workspace="${work_dir}/custom-workspaces/goose"
   local custom_models="${work_dir}/custom-ollama-models"
@@ -67,6 +68,7 @@ ${custom_opencode_workspace}
 ${custom_vibestral_workspace}
 ${custom_openhands_workspace}
 ${custom_openclaw_workspace}
+${custom_openclaw_init_project}
 ${custom_pi_mono_workspace}
 ${custom_goose_workspace}
 ${custom_compose}
@@ -130,7 +132,7 @@ EOF
 run_openclaw_secret_answers() {
   local openclaw_root="${work_dir}/openclaw-root"
 
-  if ! printf '\n%.0s' {1..20} \
+  if ! printf '\n%.0s' {1..32} \
     | AGENTIC_PROFILE=strict-prod "${wizard_script}" \
       --profile rootless-dev \
       --root "${openclaw_root}" \
@@ -207,6 +209,8 @@ grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='/srv/agentic/openhands/worksp
   || fail "default AGENTIC_OPENHANDS_WORKSPACES_DIR is not /srv/agentic/openhands/workspaces"
 grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='/srv/agentic/openclaw/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_OPENCLAW_WORKSPACES_DIR is not /srv/agentic/openclaw/workspaces"
+grep -q "^export AGENTIC_OPENCLAW_INIT_PROJECT='openclaw-default'$" "${default_env_file}" \
+  || fail "default AGENTIC_OPENCLAW_INIT_PROJECT is not openclaw-default"
 grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='/srv/agentic/optional/pi-mono/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_PI_MONO_WORKSPACES_DIR is not /srv/agentic/optional/pi-mono/workspaces"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='/srv/agentic/optional/goose/workspaces'$" "${default_env_file}" \
@@ -296,6 +300,8 @@ grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/custom-workspaces
   || fail "override AGENTIC_OPENHANDS_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/custom-workspaces/openclaw'$" "${override_env_file}" \
   || fail "override AGENTIC_OPENCLAW_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_OPENCLAW_INIT_PROJECT='wizard-openclaw'$" "${override_env_file}" \
+  || fail "override AGENTIC_OPENCLAW_INIT_PROJECT is not applied"
 grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${work_dir}/custom-workspaces/pi-mono'$" "${override_env_file}" \
   || fail "override AGENTIC_PI_MONO_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/custom-workspaces/goose'$" "${override_env_file}" \
@@ -391,6 +397,8 @@ grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/rootless-default-
   || fail "rootless default AGENTIC_OPENHANDS_WORKSPACES_DIR is not <root>/openhands/workspaces"
 grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/rootless-default-root/openclaw/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_OPENCLAW_WORKSPACES_DIR is not <root>/openclaw/workspaces"
+grep -q "^export AGENTIC_OPENCLAW_INIT_PROJECT='openclaw-default'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_OPENCLAW_INIT_PROJECT is not openclaw-default"
 grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/pi-mono/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_PI_MONO_WORKSPACES_DIR is not <root>/optional/pi-mono/workspaces"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/goose/workspaces'$" "${rootless_default_env_file}" \

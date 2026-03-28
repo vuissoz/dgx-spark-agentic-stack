@@ -25,7 +25,8 @@ Chemin recommande pour les debutants:
 - `./agent openclaw init [project]`
   - bootstrap/reparation OpenClaw stack-managed,
   - corrige le workspace par defaut vers `/workspace/...`,
-  - peut aussi ecrire le token Telegram dans `${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token`,
+  - sans argument, utilise `AGENTIC_OPENCLAW_INIT_PROJECT` (defaut: `openclaw-default`),
+  - peut aussi reutiliser les secrets Telegram/Discord/Slack deja collectes par `./agent onboard`,
   - evite le wizard upstream comme chemin primaire.
 
 Cette commande sert uniquement a lire un resume d'etat sans quitter le chat.

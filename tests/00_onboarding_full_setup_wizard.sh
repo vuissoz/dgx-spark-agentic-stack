@@ -29,6 +29,12 @@ openhands_api_key="openhands-api-key"
 openai_key="openai-api-key"
 openrouter_key="openrouter-api-key"
 huggingface_token="hf_token_read_abc123"
+telegram_bot_token="123456:telegram-onboard"
+discord_bot_token="discord-bot-token"
+slack_bot_token="xoxb-slack-bot-token"
+slack_app_token="xapp-slack-app-token"
+slack_signing_secret="slack-signing-secret"
+openclaw_init_project="onboard-openclaw"
 openclaw_token="openclaw-token"
 openclaw_webhook="openclaw-webhook"
 mcp_token="mcp-token"
@@ -65,12 +71,18 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --openai-api-key "${openai_key}" \
   --openrouter-api-key "${openrouter_key}" \
   --huggingface-token "${huggingface_token}" \
+  --openclaw-init-project "${openclaw_init_project}" \
   --optional-modules 'mcp,git-forge' \
   --git-forge-host-port "${git_forge_host_port}" \
   --git-forge-admin-user "${git_forge_admin_user}" \
   --git-forge-shared-namespace "${git_forge_shared_namespace}" \
   --git-forge-enable-push-create "${git_forge_enable_push_create}" \
   --git-forge-admin-password "${git_forge_admin_password}" \
+  --telegram-bot-token "${telegram_bot_token}" \
+  --discord-bot-token "${discord_bot_token}" \
+  --slack-bot-token "${slack_bot_token}" \
+  --slack-app-token "${slack_app_token}" \
+  --slack-signing-secret "${slack_signing_secret}" \
   --openclaw-token "${openclaw_token}" \
   --openclaw-webhook-secret "${openclaw_webhook}" \
   --mcp-token "${mcp_token}" \
@@ -111,6 +123,8 @@ grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${root_dir}/openhands/workspa
   || fail "full setup onboarding env must export AGENTIC_OPENHANDS_WORKSPACES_DIR"
 grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${root_dir}/openclaw/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_OPENCLAW_WORKSPACES_DIR"
+grep -q "^export AGENTIC_OPENCLAW_INIT_PROJECT='${openclaw_init_project}'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_OPENCLAW_INIT_PROJECT"
 grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${root_dir}/optional/pi-mono/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_PI_MONO_WORKSPACES_DIR"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${root_dir}/optional/goose/workspaces'$" "${env_file}" \
@@ -153,6 +167,11 @@ allowlist_file="${root_dir}/proxy/allowlist.txt"
 openai_secret_file="${root_dir}/secrets/runtime/openai.api_key"
 openrouter_secret_file="${root_dir}/secrets/runtime/openrouter.api_key"
 huggingface_secret_file="${root_dir}/secrets/runtime/huggingface.token"
+telegram_bot_token_file="${root_dir}/secrets/runtime/telegram.bot_token"
+discord_bot_token_file="${root_dir}/secrets/runtime/discord.bot_token"
+slack_bot_token_file="${root_dir}/secrets/runtime/slack.bot_token"
+slack_app_token_file="${root_dir}/secrets/runtime/slack.app_token"
+slack_signing_secret_file="${root_dir}/secrets/runtime/slack.signing_secret"
 openclaw_token_file="${root_dir}/secrets/runtime/openclaw.token"
 openclaw_webhook_file="${root_dir}/secrets/runtime/openclaw.webhook_secret"
 mcp_token_file="${root_dir}/secrets/runtime/mcp.token"
@@ -173,6 +192,11 @@ for secret_file in \
   "${openai_secret_file}" \
   "${openrouter_secret_file}" \
   "${huggingface_secret_file}" \
+  "${telegram_bot_token_file}" \
+  "${discord_bot_token_file}" \
+  "${slack_bot_token_file}" \
+  "${slack_app_token_file}" \
+  "${slack_signing_secret_file}" \
   "${openclaw_token_file}" \
   "${openclaw_webhook_file}" \
   "${mcp_token_file}" \
@@ -181,6 +205,17 @@ for secret_file in \
   perm="$(stat -c '%a' "${secret_file}")"
   [[ "${perm}" == "600" || "${perm}" == "640" ]] || fail "secret file permissions must be 600/640: ${secret_file} (got ${perm})"
 done
+
+[[ "$(tr -d '\n' <"${telegram_bot_token_file}")" == "${telegram_bot_token}" ]] \
+  || fail "telegram bot token secret content was not written"
+[[ "$(tr -d '\n' <"${discord_bot_token_file}")" == "${discord_bot_token}" ]] \
+  || fail "discord bot token secret content was not written"
+[[ "$(tr -d '\n' <"${slack_bot_token_file}")" == "${slack_bot_token}" ]] \
+  || fail "slack bot token secret content was not written"
+[[ "$(tr -d '\n' <"${slack_app_token_file}")" == "${slack_app_token}" ]] \
+  || fail "slack app token secret content was not written"
+[[ "$(tr -d '\n' <"${slack_signing_secret_file}")" == "${slack_signing_secret}" ]] \
+  || fail "slack signing secret content was not written"
 
 for git_forge_account in openclaw openhands comfyui claude codex opencode vibestral pi-mono goose; do
   account_secret="${root_dir}/secrets/runtime/git-forge/${git_forge_account}.password"
