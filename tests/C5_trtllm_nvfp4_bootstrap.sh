@@ -49,21 +49,21 @@ runtime_dump="$(
   AGENTIC_PROFILE=rootless-dev \
   AGENTIC_ROOT="${runtime_root}" \
   COMPOSE_PROFILES=trt \
-  TRTLLM_MODELS="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4" \
+  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
   bash -lc "source '${runtime_lib}'; printf 'active_key=%s\npolicy=%s\nlocal_dir=%s\nrepo=%s\nrevision=%s\n' \"\${TRTLLM_ACTIVE_MODEL_KEY}\" \"\${TRTLLM_NATIVE_MODEL_POLICY}\" \"\${TRTLLM_NVFP4_LOCAL_MODEL_DIR}\" \"\${TRTLLM_NVFP4_HF_REPO}\" \"\${TRTLLM_NVFP4_HF_REVISION}\""
 )"
 
 printf '%s\n' "${runtime_dump}" | grep -q '^active_key=nemotron-cascade-30b$' \
-  || fail "runtime defaults must expose the default TRTLLM_ACTIVE_MODEL_KEY"
-printf '%s\n' "${runtime_dump}" | grep -q '^policy=strict-nvfp4-local-only$' \
-  || fail "runtime defaults must auto-enable strict NVFP4 local-only when TRT + token are present"
+  || fail "runtime defaults must keep the local Cascade catalog entry as TRTLLM_ACTIVE_MODEL_KEY"
+printf '%s\n' "${runtime_dump}" | grep -q '^policy=auto$' \
+  || fail "runtime defaults must keep auto policy when the exposed default TRT model is Nano FP8"
 printf '%s\n' "${runtime_dump}" | grep -q '^local_dir=/models/cascade_30b_nvfp4$' \
   || fail "runtime defaults must keep /models/cascade_30b_nvfp4 as local NVFP4 target"
 printf '%s\n' "${runtime_dump}" | grep -q '^repo=chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4$' \
   || fail "runtime defaults must expose the pinned NVFP4 repo"
 printf '%s\n' "${runtime_dump}" | grep -q '^revision=80ee3ccfe8cb5eb019a0cde78449e8b197a0155f$' \
   || fail "runtime defaults must expose the pinned NVFP4 revision"
-ok "runtime defaults auto-select strict NVFP4 local-only for the default Cascade TRT model"
+ok "runtime defaults keep Nano FP8 exposed while preserving the local Cascade NVFP4 catalog defaults"
 
 AGENTIC_PROFILE=rootless-dev \
 AGENTIC_ROOT="${runtime_root}" \
@@ -124,10 +124,12 @@ bash "${bootstrap_script}" \
 ok "NVFP4 bootstrap is idempotent after the model payload is complete"
 
 compose_dump="$(docker compose --profile trt -f "${compose_file}" config 2>/dev/null)"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_MODELS: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' \
+  || fail "compose config must expose Nano FP8 as the default TRTLLM_MODELS alias"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REPO: chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4' \
   || fail "compose config must pass TRTLLM_NVFP4_HF_REPO into the trtllm container"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REVISION: 80ee3ccfe8cb5eb019a0cde78449e8b197a0155f' \
   || fail "compose config must pass TRTLLM_NVFP4_HF_REVISION into the trtllm container"
-ok "compose config passes strict NVFP4 repo metadata into the trtllm container"
+ok "compose config exposes Nano FP8 by default while keeping strict NVFP4 repo metadata for local operators"
 
 ok "C5_trtllm_nvfp4_bootstrap passed"

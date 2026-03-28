@@ -32,7 +32,7 @@ Check with:
 Optional TRT-LLM backend activation (internal-only):
 
 ```bash
-./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4
+./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
 source .runtime/env.generated.sh
 ./agent up core
 ```
@@ -41,10 +41,10 @@ In interactive mode, `./agent onboard` now also asks explicitly whether to enabl
 The `trtllm` service now attempts to launch a real NVIDIA TRT-LLM backend whenever `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty; otherwise it intentionally falls back to `mock` mode to preserve deterministic tests.
 By default (`TRTLLM_NATIVE_MODEL_POLICY=auto`), the native runtime keeps the generic behavior and can still canonicalize the Nemotron NVFP4 slug to the Spark-documented handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
 A hardened DGX Spark mode now exists: `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` accepts exactly one exposed alias at a time (`TRTLLM_MODELS`) and forces the actual load target to `TRTLLM_NVFP4_LOCAL_MODEL_DIR`, with no silent fallback to HF/FP8.
-The stack now knows two local NVFP4 payloads:
-- `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` (default)
+The stack now exposes `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` as the default TRT alias, while still knowing two local NVFP4 payloads for strict mode:
+- `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` (default local catalog entry)
 - `nemotron-super-120b` -> `${AGENTIC_ROOT}/trtllm/models/super_fp4`
-The active TRT model is controlled by `TRTLLM_ACTIVE_MODEL_KEY`. When `COMPOSE_PROFILES` includes `trt`, `TRTLLM_MODELS` exposes the active model alias, and `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty, `./agent up core` now prepares the matching local NVFP4 snapshot automatically before `trtllm` starts.
+The active local-catalog TRT model is controlled by `TRTLLM_ACTIVE_MODEL_KEY`. When `COMPOSE_PROFILES` includes `trt`, `TRTLLM_MODELS` exposes the active model alias, and `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty, `./agent up core` now prepares the matching local NVFP4 snapshot automatically before `trtllm` starts.
 Example activation:
 
 ```bash

@@ -9,7 +9,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 wizard_script="${REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
 [[ -x "${wizard_script}" ]] || fail "onboarding wizard is missing or not executable: ${wizard_script}"
 
-default_trt_model="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4"
+default_trt_model="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
 
 work_dir="${REPO_ROOT}/.runtime/test-onboarding-env-$$"
 default_env_file="${work_dir}/default.env.generated.sh"

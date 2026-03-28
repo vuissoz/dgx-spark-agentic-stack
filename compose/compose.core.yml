@@ -591,7 +591,7 @@ services:
       TRTLLM_NVFP4_HF_REVISION: ${TRTLLM_NVFP4_HF_REVISION:-80ee3ccfe8cb5eb019a0cde78449e8b197a0155f}
       TRTLLM_STATE_DIR: /state
       TRTLLM_LOGS_DIR: /logs
-      TRTLLM_MODELS: ${TRTLLM_MODELS:-https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4}
+      TRTLLM_MODELS: ${TRTLLM_MODELS:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/models:/models
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/state:/state

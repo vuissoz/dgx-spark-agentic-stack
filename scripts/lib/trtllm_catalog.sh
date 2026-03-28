@@ -13,6 +13,14 @@ trtllm_model_default_key() {
   printf '%s\n' "nemotron-cascade-30b"
 }
 
+trtllm_exposed_default_url() {
+  printf '%s\n' "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+}
+
+trtllm_exposed_default_handle() {
+  printf '%s\n' "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+}
+
 trtllm_catalog_rows() {
   cat <<'EOF'
 nemotron-super-120b|https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4|nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4|b1ffe4992d7db6d768453a551a656b8d12c638fb|/models/super_fp4|Nemotron 3 Super 120B A12B NVFP4
