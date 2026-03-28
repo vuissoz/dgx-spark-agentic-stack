@@ -338,6 +338,14 @@ prepare_trtllm_nvfp4_model() {
   fi
 }
 
+prefetch_trtllm_default_model() {
+  local helper="${REPO_ROOT}/deployments/trtllm/prefetch_default_model.sh"
+  [[ -x "${helper}" ]] || chmod +x "${helper}" || true
+  if ! "${helper}"; then
+    die "TRT HF default-model prefetch failed"
+  fi
+}
+
 ensure_gate_mode_file() {
   local mode_file="${AGENTIC_ROOT}/gate/state/llm_mode.json"
   local default_mode="${AGENTIC_LLM_MODE:-hybrid}"
@@ -474,6 +482,7 @@ main() {
   ensure_gate_quotas_file
   ensure_gate_mcp_token
   ensure_optional_secret_file "${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
+  prefetch_trtllm_default_model
   prepare_trtllm_nvfp4_model
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
