@@ -274,9 +274,14 @@ class RuntimeController:
         self.native_port = env_int("TRTLLM_NATIVE_PORT", 8355)
         self.native_backend = os.environ.get("TRTLLM_NATIVE_BACKEND", "pytorch").strip() or "pytorch"
         self.native_log_level = os.environ.get("TRTLLM_NATIVE_LOG_LEVEL", "info").strip() or "info"
-        self.native_max_batch_size = max(1, env_int("TRTLLM_NATIVE_MAX_BATCH_SIZE", 64))
-        self.native_free_gpu_memory_fraction = env_float("TRTLLM_NATIVE_FREE_GPU_MEMORY_FRACTION", 0.9)
-        self.native_start_timeout_seconds = max(5, env_int("TRTLLM_NATIVE_START_TIMEOUT_SECONDS", 1800))
+        self.native_max_batch_size = max(1, env_int("TRTLLM_NATIVE_MAX_BATCH_SIZE", 1))
+        self.native_cuda_graph_max_batch_size = max(
+            self.native_max_batch_size, env_int("TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE", 32)
+        )
+        self.native_moe_backend = os.environ.get("TRTLLM_NATIVE_MOE_BACKEND", "CUTLASS").strip() or "CUTLASS"
+        self.native_enable_block_reuse = env_bool("TRTLLM_NATIVE_ENABLE_BLOCK_REUSE", False)
+        self.native_free_gpu_memory_fraction = env_float("TRTLLM_NATIVE_FREE_GPU_MEMORY_FRACTION", 0.8)
+        self.native_start_timeout_seconds = max(5, env_int("TRTLLM_NATIVE_START_TIMEOUT_SECONDS", 7200))
         self.hf_token_file = Path(os.environ.get("TRTLLM_HF_TOKEN_FILE", "/run/secrets/huggingface.token"))
         self.models_dir = Path(os.environ.get("TRTLLM_MODELS_DIR", "/models"))
         self.state_dir = Path(os.environ.get("TRTLLM_STATE_DIR", "/state"))
@@ -386,10 +391,14 @@ class RuntimeController:
         extra_config = (
             "print_iter_log: false\n"
             "kv_cache_config:\n"
+            f"  enable_block_reuse: {'true' if self.native_enable_block_reuse else 'false'}\n"
             '  dtype: "auto"\n'
             f"  free_gpu_memory_fraction: {self.native_free_gpu_memory_fraction}\n"
             "cuda_graph_config:\n"
+            f"  max_batch_size: {self.native_cuda_graph_max_batch_size}\n"
             "  enable_padding: true\n"
+            "moe_config:\n"
+            f"  backend: {self.native_moe_backend}\n"
             "disable_overlap_scheduler: true\n"
         )
         self.extra_config_file.write_text(extra_config, encoding="utf-8")
