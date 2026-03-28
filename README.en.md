@@ -41,6 +41,7 @@ In interactive mode, `./agent onboard` now also asks explicitly whether to enabl
 The `trtllm` service now attempts to launch a real NVIDIA TRT-LLM backend whenever `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty; otherwise it intentionally falls back to `mock` mode to preserve deterministic tests.
 By default (`TRTLLM_NATIVE_MODEL_POLICY=auto`), the native runtime keeps the generic behavior and can still canonicalize the Nemotron NVFP4 slug to the Spark-documented handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
 A hardened DGX Spark mode now exists: `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` accepts exactly one exposed alias (`TRTLLM_MODELS`, defaulting to the NVFP4 Hugging Face slug) and forces the actual load target to `TRTLLM_NVFP4_LOCAL_MODEL_DIR` (default `/models/super_fp4`), with no silent fallback to HF/FP8.
+When `COMPOSE_PROFILES` includes `trt`, `TRTLLM_MODELS` stays on that default NVFP4 slug, and `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty, `./agent up core` now prepares the local NVFP4 snapshot under `${AGENTIC_ROOT}/trtllm/models/super_fp4` automatically before `trtllm` starts.
 Example activation:
 
 ```bash
@@ -50,6 +51,7 @@ export TRTLLM_NVFP4_LOCAL_MODEL_DIR=/srv/agentic/trtllm/models/super_fp4
 ```
 
 If the local NVFP4 directory is missing, `/healthz` returns an explicit error instead of silently falling back to `mock`.
+Local bootstrap progress is logged to `${AGENTIC_ROOT}/trtllm/logs/nvfp4-model-prepare.log`.
 On the first native startup, the backend can remain in `status=starting` for several minutes while it downloads and warms the Hugging Face artifacts; until `native_ready=true`, gate requests receive an explicit `503` instead of silently falling back to a mock.
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) and reused by Ollama preload.

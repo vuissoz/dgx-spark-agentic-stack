@@ -136,6 +136,9 @@ Secrets runtime pour `git-forge` :
 | `TRTLLM_MODELS` | liste CSV de modeles exposes par TRT-LLM | `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
 | `TRTLLM_NATIVE_MODEL_POLICY` | `auto` ou `strict-nvfp4-local-only` | `auto` | shell |
 | `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | chemin absolu du runtime NVFP4 prepare pour DGX Spark | `/models/super_fp4` | shell |
+| `TRTLLM_NVFP4_HF_REPO` | depot Hugging Face utilise pour le bootstrap automatique NVFP4 strict | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
+| `TRTLLM_NVFP4_HF_REVISION` | revision Hugging Face epinglee pour le bootstrap automatique NVFP4 strict | `b1ffe4992d7db6d768453a551a656b8d12c638fb` | shell |
+| `TRTLLM_NVFP4_PREPARE_ENABLED` | `auto`, `true` ou `false` | `auto` | shell |
 | `COMFYUI_REF` | ref git pour build image ComfyUI | `master` | shell |
 | `COMFYUI_MANAGER_REPO` | repo git extension manager ComfyUI (vide = desactive) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |
 | `COMFYUI_MANAGER_REF` | ref git extension manager ComfyUI | `main` | shell |

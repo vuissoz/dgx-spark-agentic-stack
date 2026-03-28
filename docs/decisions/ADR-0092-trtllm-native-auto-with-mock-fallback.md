@@ -41,6 +41,7 @@ The repository still needs deterministic regression coverage on machines where:
    - the exposed alias must be the Nemotron NVFP4 slug (or the same local directory path),
    - the actual serve target becomes `TRTLLM_NVFP4_LOCAL_MODEL_DIR`,
    - and `auto` mode no longer silently falls back to `mock`.
+9. When the default TRT Nemotron NVFP4 alias is selected and a Hugging Face token is present, prepare the pinned NVFP4 snapshot automatically under `${AGENTIC_ROOT}/trtllm/models/super_fp4` before the service starts.
 
 ## Consequences
 
@@ -50,3 +51,4 @@ The repository still needs deterministic regression coverage on machines where:
 - Operators get an actionable health signal when native startup fails instead of a silently fake backend.
 - In `auto`, the exact native model actually served can still differ from the requested onboarding alias for the Nemotron-3-Super NVFP4 case.
 - In `strict-nvfp4-local-only`, the stack serves only a prepared local NVFP4 runtime and fails closed if that runtime is missing or the exposed alias drifts.
+- Default TRT onboarding now bootstraps that local NVFP4 runtime automatically when the token is present, while preserving deterministic no-token flows.

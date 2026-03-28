@@ -312,9 +312,11 @@ set_gate_runtime_permissions() {
     [[ -f "${gate_model_routes_file}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${gate_model_routes_file}" || true
     # Normalize historical root-owned runtime files to avoid non-root startup failures.
     chown -R "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" \
-      "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" || true
+      "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" \
+      "${trtllm_models_dir}" "${trtllm_state_dir}" "${trtllm_logs_dir}" || true
     chmod -R u+rwX,g+rwX,o-rwx \
-      "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" || true
+      "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}" \
+      "${trtllm_models_dir}" "${trtllm_state_dir}" "${trtllm_logs_dir}" || true
     [[ -f "${gate_mcp_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${gate_mcp_token}" || true
     [[ -f "${openai_key}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openai_key}" || true
     [[ -f "${openrouter_key}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openrouter_key}" || true
@@ -326,6 +328,14 @@ set_gate_runtime_permissions() {
   chmod 0755 "${gate_mcp_dir}"
   chmod 0770 "${gate_state_dir}" "${gate_logs_dir}" "${gate_mcp_state_dir}" "${gate_mcp_logs_dir}"
   log "non-root runtime init: relaxed gate dir permissions for userns compatibility"
+}
+
+prepare_trtllm_nvfp4_model() {
+  local helper="${REPO_ROOT}/deployments/trtllm/prepare_nvfp4_model.sh"
+  [[ -x "${helper}" ]] || chmod +x "${helper}" || true
+  if ! "${helper}"; then
+    die "TRT NVFP4 auto-bootstrap failed"
+  fi
 }
 
 ensure_gate_mode_file() {
@@ -464,6 +474,7 @@ main() {
   ensure_gate_quotas_file
   ensure_gate_mcp_token
   ensure_optional_secret_file "${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
+  prepare_trtllm_nvfp4_model
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"

@@ -140,6 +140,9 @@ Notes:
 | `TRTLLM_MODELS` | CSV list of model ids exposed by TRT-LLM | `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
 | `TRTLLM_NATIVE_MODEL_POLICY` | `auto` or `strict-nvfp4-local-only` | `auto` | shell |
 | `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | absolute path for the prepared DGX Spark NVFP4 runtime | `/models/super_fp4` | shell |
+| `TRTLLM_NVFP4_HF_REPO` | Hugging Face repo used for automatic strict NVFP4 bootstrap | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
+| `TRTLLM_NVFP4_HF_REVISION` | pinned Hugging Face revision used for automatic strict NVFP4 bootstrap | `b1ffe4992d7db6d768453a551a656b8d12c638fb` | shell |
+| `TRTLLM_NVFP4_PREPARE_ENABLED` | `auto`, `true`, or `false` | `auto` | shell |
 | `COMFYUI_REF` | git ref for ComfyUI image build | `master` | shell |
 | `COMFYUI_MANAGER_REPO` | ComfyUI manager extension git repo (empty = disabled) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |
 | `COMFYUI_MANAGER_REF` | ComfyUI manager extension git ref | `main` | shell |

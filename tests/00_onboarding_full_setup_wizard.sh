@@ -105,6 +105,10 @@ grep -q "^export COMPOSE_PROFILES='trt'$" "${env_file}" \
   || fail "full setup onboarding env must export COMPOSE_PROFILES"
 grep -q "^export TRTLLM_MODELS='${trt_models}'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_MODELS"
+grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/super_fp4'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_NVFP4_LOCAL_MODEL_DIR"
+grep -q "^export TRTLLM_NVFP4_HF_REVISION='b1ffe4992d7db6d768453a551a656b8d12c638fb'$" "${env_file}" \
+  || fail "full setup onboarding env must export pinned TRTLLM_NVFP4_HF_REVISION"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='${default_context_window}'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_GOOSE_CONTEXT_LIMIT aligned with default model context window"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \

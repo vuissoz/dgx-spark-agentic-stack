@@ -222,6 +222,65 @@ else
   OLLAMA_CONTAINER_MODELS_PATH="${OLLAMA_CONTAINER_MODELS_PATH:-/root/.ollama/models}"
 fi
 OLLAMA_MODELS_MOUNT_MODE="${OLLAMA_MODELS_MOUNT_MODE:-rw}"
+agentic_csv_contains() {
+  local needle="$1"
+  local raw="$2"
+  local item
+
+  IFS=',' read -r -a _agentic_csv_items <<<"${raw}"
+  for item in "${_agentic_csv_items[@]}"; do
+    item="${item#"${item%%[![:space:]]*}"}"
+    item="${item%"${item##*[![:space:]]}"}"
+    [[ -n "${item}" ]] || continue
+    [[ "${item}" == "${needle}" ]] && return 0
+  done
+  return 1
+}
+
+agentic_trtllm_nvfp4_host_dir() {
+  local container_dir="$1"
+
+  if [[ "${container_dir}" == "/models" ]]; then
+    printf '%s\n' "${AGENTIC_ROOT}/trtllm/models"
+    return 0
+  fi
+  if [[ "${container_dir}" == /models/* ]]; then
+    printf '%s\n' "${AGENTIC_ROOT}/trtllm/models${container_dir#/models}"
+    return 0
+  fi
+  return 1
+}
+
+AGENTIC_DEFAULT_TRTLLM_MODEL_URL="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+AGENTIC_DEFAULT_TRTLLM_NVFP4_REPO="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+AGENTIC_DEFAULT_TRTLLM_NVFP4_REVISION="b1ffe4992d7db6d768453a551a656b8d12c638fb"
+
+_agentic_trtllm_native_model_policy_raw="${TRTLLM_NATIVE_MODEL_POLICY-}"
+TRTLLM_MODELS="${TRTLLM_MODELS:-${AGENTIC_DEFAULT_TRTLLM_MODEL_URL}}"
+TRTLLM_NATIVE_MODEL_POLICY="${TRTLLM_NATIVE_MODEL_POLICY:-auto}"
+TRTLLM_NVFP4_LOCAL_MODEL_DIR="${TRTLLM_NVFP4_LOCAL_MODEL_DIR:-/models/super_fp4}"
+TRTLLM_NVFP4_HF_REPO="${TRTLLM_NVFP4_HF_REPO:-${AGENTIC_DEFAULT_TRTLLM_NVFP4_REPO}}"
+TRTLLM_NVFP4_HF_REVISION="${TRTLLM_NVFP4_HF_REVISION:-${AGENTIC_DEFAULT_TRTLLM_NVFP4_REVISION}}"
+TRTLLM_NVFP4_PREPARE_ENABLED="${TRTLLM_NVFP4_PREPARE_ENABLED:-auto}"
+
+if [[ -z "${_agentic_trtllm_native_model_policy_raw}" ]] \
+  && agentic_csv_contains "trt" "${COMPOSE_PROFILES:-}" \
+  && [[ "${TRTLLM_MODELS}" == "${AGENTIC_DEFAULT_TRTLLM_MODEL_URL}" || "${TRTLLM_MODELS}" == "${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE}" ]]; then
+  _agentic_trtllm_token_file="${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
+  _agentic_trtllm_local_ready=0
+  if _agentic_trtllm_host_dir="$(agentic_trtllm_nvfp4_host_dir "${TRTLLM_NVFP4_LOCAL_MODEL_DIR}" 2>/dev/null)"; then
+    if [[ -f "${_agentic_trtllm_host_dir}/model.safetensors.index.json" ]]; then
+      _agentic_trtllm_local_ready=1
+    fi
+  fi
+  if [[ -s "${_agentic_trtllm_token_file}" || "${_agentic_trtllm_local_ready}" == "1" ]]; then
+    TRTLLM_NATIVE_MODEL_POLICY="strict-nvfp4-local-only"
+  fi
+  unset _agentic_trtllm_host_dir _agentic_trtllm_local_ready _agentic_trtllm_token_file
+fi
+unset _agentic_trtllm_native_model_policy_raw
+
 AGENTIC_DEFAULT_MODEL="${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}"
 AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}"
 AGENTIC_GOOSE_CONTEXT_LIMIT="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}}"
@@ -355,6 +414,8 @@ export AGENT_RUNTIME_UID AGENT_RUNTIME_GID
 export QDRANT_CONTAINER_USER GATE_CONTAINER_USER OLLAMA_CONTAINER_USER TRTLLM_CONTAINER_USER
 export PROMETHEUS_CONTAINER_USER GRAFANA_CONTAINER_USER LOKI_CONTAINER_USER PROMTAIL_CONTAINER_USER
 export AGENTIC_OLLAMA_MODELS_LINK OLLAMA_MODELS_DIR OLLAMA_CONTAINER_MODELS_PATH OLLAMA_MODELS_MOUNT_MODE
+export AGENTIC_DEFAULT_TRTLLM_MODEL_URL AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE AGENTIC_DEFAULT_TRTLLM_NVFP4_REPO AGENTIC_DEFAULT_TRTLLM_NVFP4_REVISION
+export TRTLLM_MODELS TRTLLM_NATIVE_MODEL_POLICY TRTLLM_NVFP4_LOCAL_MODEL_DIR TRTLLM_NVFP4_HF_REPO TRTLLM_NVFP4_HF_REVISION TRTLLM_NVFP4_PREPARE_ENABLED
 export AGENTIC_DEFAULT_MODEL AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW AGENTIC_GOOSE_CONTEXT_LIMIT OLLAMA_PRELOAD_GENERATE_MODEL OLLAMA_PRELOAD_EMBED_MODEL OLLAMA_MODEL_STORE_BUDGET_GB RAG_EMBED_MODEL OLLAMA_CONTEXT_LENGTH
 export AGENTIC_OBS_RETENTION_TIME AGENTIC_OBS_MAX_DISK AGENTIC_PROMETHEUS_DISK_BUDGET AGENTIC_LOKI_DISK_BUDGET
 export PROMETHEUS_RETENTION_TIME PROMETHEUS_RETENTION_SIZE LOKI_RETENTION_PERIOD LOKI_MAX_QUERY_LOOKBACK
