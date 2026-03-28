@@ -18,6 +18,12 @@ In this repository, OpenClaw is deployed as part of the `core` stack with four s
 - `openclaw-sandbox`: restricted tool execution backend,
 - `openclaw-relay`: provider webhook relay with durable queue + local injection.
 
+Recommended beginner command:
+- `./agent openclaw init [project]`
+  - stack-managed OpenClaw bootstrap/repair,
+  - repairs the default workspace back under `/workspace/...`,
+  - keeps the upstream wizard as expert fallback instead of the primary path.
+
 Simple mental model:
 1. a request reaches OpenClaw,
 2. OpenClaw authenticates and validates it,
@@ -191,7 +197,7 @@ This stack is inspired by upstream OpenClaw onboarding and gateway workflows,
 but it uses the repository's `./agent` orchestration model.
 
 Quick mapping:
-- upstream `openclaw onboard` -> stack `./agent onboard --profile rootless-dev`
+- upstream `openclaw onboard` -> stack `./agent openclaw init [project]`
 - upstream `openclaw gateway run` -> stack `./agent up core`
 
 ## 10. Useful References

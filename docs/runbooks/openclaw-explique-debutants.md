@@ -21,6 +21,12 @@ Dans ce depot, OpenClaw fait partie du `core` avec quatre services:
 En plus des surfaces operateur shell (`./agent openclaw ...`), la stack fournit aussi une petite commande de chat:
 - `/openclaw status`
 
+Chemin recommande pour les debutants:
+- `./agent openclaw init [project]`
+  - bootstrap/reparation OpenClaw stack-managed,
+  - corrige le workspace par defaut vers `/workspace/...`,
+  - evite le wizard upstream comme chemin primaire.
+
 Cette commande sert uniquement a lire un resume d'etat sans quitter le chat.
 Elle n'ajoute aucun droit d'administration.
 
@@ -294,8 +300,7 @@ rm -rf "${AGENTIC_ROOT}/openclaw/workspaces"
 Ensuite, refaire l'onboarding dans le conteneur:
 
 ```bash
-./agent openclaw
-openclaw onboard --workspace /workspace/wizard-default --non-interactive --accept-risk --skip-health --skip-daemon --skip-skills --skip-ui --skip-channels --skip-search
+./agent openclaw init wizard-default
 ```
 
 ### 8.2 Reset complet module OpenClaw
@@ -315,7 +320,7 @@ rm -f "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
 
 Apres reset complet:
 - verifier/adapter de nouveau les fichiers `dm_allowlist.txt`, `tool_allowlist.txt`, `relay_targets.json`,
-- relancer le setup CLI `openclaw onboard ...` dans `./agent openclaw`.
+- relancer `./agent openclaw init <projet>`.
 
 ## 9. Erreurs frequentes (et correctifs)
 
@@ -356,7 +361,7 @@ Cette stack s'inspire des workflows upstream OpenClaw,
 mais utilise le modele d'orchestration `./agent` du depot.
 
 Mapping rapide:
-- upstream `openclaw onboard` -> stack `./agent onboard --profile rootless-dev`
+- upstream `openclaw onboard` -> stack `./agent openclaw init [project]`
 - upstream `openclaw gateway run` -> stack `./agent up core`
 
 ## 11. References utiles

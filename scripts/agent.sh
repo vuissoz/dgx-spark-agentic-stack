@@ -23,6 +23,7 @@ AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup
 AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py"
 AGENT_OPENCLAW_OPERATOR_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_operator.py"
 AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_module_manifest.py"
+AGENT_OPENCLAW_MANAGED_INIT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_managed_init.py"
 AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/git_forge_bootstrap.py"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
@@ -45,6 +46,7 @@ Usage:
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
   agent <claude|codex|opencode|vibestral|openclaw|pi-mono|goose> [project]
+  agent openclaw init [project]
   agent openclaw status [--json]
   agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
   agent openclaw model set <id> [--json]
@@ -932,6 +934,39 @@ service_container_any_id() {
     --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
     --filter "label=com.docker.compose.service=${service}" \
     --format '{{.ID}}' | head -n 1
+}
+
+wait_for_service_ready() {
+  local service="$1"
+  local timeout_seconds="${2:-90}"
+  local elapsed=0
+  local container_id=""
+  local state="missing"
+  local health=""
+
+  require_cmd docker
+
+  while (( elapsed < timeout_seconds )); do
+    container_id="$(service_container_any_id "${service}")"
+    if [[ -n "${container_id}" ]]; then
+      state="$(docker inspect --format '{{.State.Status}}' "${container_id}" 2>/dev/null || echo unknown)"
+      health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${container_id}" 2>/dev/null || true)"
+      if [[ "${state}" == "running" ]]; then
+        if [[ -z "${health}" || "${health}" == "healthy" ]]; then
+          return 0
+        fi
+      fi
+    else
+      state="missing"
+      health=""
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  warn "service '${service}' did not become ready within ${timeout_seconds}s (state=${state}, health=${health:-n/a})"
+  return 1
 }
 
 target_status_from_services() {
@@ -2976,6 +3011,255 @@ cmd_comfyui() {
   esac
 }
 
+cmd_openclaw_init() {
+  local project="${1:-}"
+  local raw_project=""
+  local workspace=""
+  local workspace_host_dir=""
+  local overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
+  local overlay_template_file="${AGENTIC_REPO_ROOT}/examples/optional/openclaw.operator-overlay.v1.json"
+  local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+  local token_file="${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
+  local bridge_status_file="${AGENTIC_ROOT}/openclaw/state/provider-bridge-status.json"
+  local init_repair_json=""
+  local configured_workspace=""
+  local agents_json=""
+  local agent_count=""
+  local bridge_summary=""
+  local bridge_warnings=""
+  local openclaw_cid=""
+  local service=""
+  local need_up=0
+
+  if [[ "${project}" == "help" || "${project}" == "-h" || "${project}" == "--help" ]]; then
+    cat <<USAGE
+Usage:
+  agent openclaw init [project]
+
+Description:
+  Apply the stack-managed OpenClaw onboarding/repair flow.
+  - repairs the layered OpenClaw host config if the default workspace drifted,
+  - starts the core OpenClaw services if needed,
+  - seeds the stack-safe local provider/gateway defaults,
+  - prints the next file-backed provider/channel steps.
+
+Notes:
+  - default project is 'openclaw-default'
+  - this command is safe to rerun as a repair path
+  - upstream 'openclaw onboard' and 'openclaw configure --section channels' remain expert fallbacks only
+USAGE
+    return 0
+  fi
+
+  if [[ -n "${project}" && "${project}" != --* ]]; then
+    shift
+    raw_project="${project}"
+  else
+    raw_project="openclaw-default"
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent openclaw init [project]
+USAGE
+        return 0
+        ;;
+      *)
+        die "Usage: agent openclaw init [project]"
+        ;;
+    esac
+  done
+
+  raw_project="${raw_project// /-}"
+  project="$(printf '%s' "${raw_project}" | sed -e 's#[^A-Za-z0-9._-]#-#g' -e 's#^-*##' -e 's#-*$##')"
+  [[ -n "${project}" ]] || die "OpenClaw init project name resolved to empty value from '${raw_project}'"
+
+  workspace="/workspace/${project}"
+  workspace_host_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR}/${project}"
+
+  ensure_runtime_env
+
+  if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
+    [[ -x "${AGENT_OLLAMA_LINK_SCRIPT}" ]] || die "missing script: ${AGENT_OLLAMA_LINK_SCRIPT}"
+    if ! "${AGENT_OLLAMA_LINK_SCRIPT}" --quiet >/tmp/agent-openclaw-init-ollama-link.out 2>&1; then
+      cat /tmp/agent-openclaw-init-ollama-link.out >&2
+      die "failed to initialize rootless ollama models symlink before openclaw init"
+    fi
+  fi
+
+  [[ -f "${AGENT_OPENCLAW_MANAGED_INIT_SCRIPT}" ]] \
+    || die "openclaw managed init helper is missing: ${AGENT_OPENCLAW_MANAGED_INIT_SCRIPT}"
+  [[ -f "${overlay_template_file}" ]] || die "openclaw overlay template is missing: ${overlay_template_file}"
+
+  if ! init_repair_json="$(
+    python3 "${AGENT_OPENCLAW_MANAGED_INIT_SCRIPT}" \
+      --overlay-file "${overlay_file}" \
+      --overlay-template-file "${overlay_template_file}" \
+      --state-file "${state_file}" \
+      --workspace "${workspace}" \
+      --workspace-host-dir "${workspace_host_dir}"
+  )"; then
+    die "failed to prepare stack-managed openclaw init inputs"
+  fi
+
+  if ! ensure_core_runtime >/tmp/agent-openclaw-init-runtime.out 2>&1; then
+    cat /tmp/agent-openclaw-init-runtime.out >&2
+    die "failed to initialize core runtime for openclaw init"
+  fi
+
+  for service in openclaw openclaw-gateway openclaw-provider-bridge openclaw-sandbox openclaw-relay; do
+    if [[ -z "$(service_container_id "${service}")" ]]; then
+      need_up=1
+      break
+    fi
+  done
+
+  if [[ "${need_up}" == "1" ]]; then
+    if ! "${AGENTIC_REPO_ROOT}/agent" up core >/tmp/agent-openclaw-init-up.out 2>&1; then
+      cat /tmp/agent-openclaw-init-up.out >&2
+      die "failed to start core services for openclaw init"
+    fi
+  fi
+
+  for service in openclaw openclaw-gateway openclaw-provider-bridge openclaw-sandbox openclaw-relay; do
+    wait_for_service_ready "${service}" 120 || die "service '${service}' is not ready for openclaw init"
+  done
+
+  openclaw_cid="$(service_container_id openclaw)"
+  [[ -n "${openclaw_cid}" ]] || die "Service 'openclaw' is not running after core startup"
+  [[ -s "${token_file}" ]] || die "managed OpenClaw token file is missing or empty: ${token_file}"
+
+  if ! docker exec \
+    -e "OPENCLAW_GATEWAY_TOKEN=$(tr -d '\r\n' <"${token_file}")" \
+    "${openclaw_cid}" \
+    sh -lc "mkdir -p '${workspace}' && cd '${workspace}' && openclaw onboard \
+      --workspace '${workspace}' \
+      --mode local \
+      --non-interactive \
+      --accept-risk \
+      --auth-choice custom-api-key \
+      --custom-provider-id custom-ollama-gate-11435 \
+      --custom-base-url http://ollama-gate:11435/v1 \
+      --custom-compatibility openai \
+      --custom-model-id '${AGENTIC_DEFAULT_MODEL}' \
+      --custom-api-key local-gate \
+      --gateway-auth token \
+      --gateway-bind loopback \
+      --gateway-port '${OPENCLAW_GATEWAY_HOST_PORT:-18789}' \
+      --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN \
+      --secret-input-mode plaintext \
+      --tailscale off \
+      --skip-health \
+      --skip-daemon \
+      --skip-skills \
+      --skip-ui \
+      --skip-channels \
+      --skip-search" >/tmp/agent-openclaw-init-onboard.out 2>&1; then
+    cat /tmp/agent-openclaw-init-onboard.out >&2
+    die "managed OpenClaw bootstrap failed; use './agent openclaw' only for expert/manual fallback after fixing the error above"
+  fi
+
+  if ! docker exec "${openclaw_cid}" sh -lc "openclaw config set agents.defaults.workspace '${workspace}'" \
+    >/tmp/agent-openclaw-init-config-set.out 2>&1; then
+    cat /tmp/agent-openclaw-init-config-set.out >&2
+    die "failed to persist the stack-managed OpenClaw workspace"
+  fi
+
+  if ! docker exec "${openclaw_cid}" sh -lc "openclaw config validate" \
+    >/tmp/agent-openclaw-init-config-validate.out 2>&1; then
+    cat /tmp/agent-openclaw-init-config-validate.out >&2
+    die "OpenClaw config validation failed after managed init"
+  fi
+
+  cmd_openclaw_operator model set "${AGENTIC_DEFAULT_MODEL}" --json >/tmp/agent-openclaw-init-model-set.out 2>&1 \
+    || die "failed to reconcile OpenClaw operator default model"
+
+  agents_json="$(docker exec "${openclaw_cid}" sh -lc "openclaw agents list --json" 2>/tmp/agent-openclaw-init-agents.err)" \
+    || die "failed to read OpenClaw agents after managed init"
+  agent_count="$(python3 - "${agents_json}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if not isinstance(payload, list):
+    raise SystemExit(1)
+print(len(payload))
+PY
+)" || die "failed to parse OpenClaw agent list after managed init"
+
+  if [[ "${agent_count}" == "0" ]]; then
+    if ! docker exec "${openclaw_cid}" sh -lc "openclaw agents add operator --workspace '${workspace}' --model '${AGENTIC_DEFAULT_MODEL}' --non-interactive --json" \
+      >/tmp/agent-openclaw-init-agent-add.out 2>&1; then
+      cat /tmp/agent-openclaw-init-agent-add.out >&2
+      die "managed OpenClaw init could not seed a default operator agent"
+    fi
+    agents_json="$(docker exec "${openclaw_cid}" sh -lc "openclaw agents list --json" 2>/tmp/agent-openclaw-init-agents.err)" \
+      || die "failed to read OpenClaw agents after managed agent seeding"
+  fi
+
+  configured_workspace="$(docker exec "${openclaw_cid}" sh -lc "openclaw config get agents.defaults.workspace" 2>/tmp/agent-openclaw-init-workspace.err || true)"
+  [[ "${configured_workspace}" == "${workspace}" ]] \
+    || die "OpenClaw default workspace drift persists after init (expected=${workspace}, actual=${configured_workspace:-unset})"
+
+  python3 - "${agents_json}" "${workspace}" <<'PY' >/dev/null
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+expected = sys.argv[2]
+if not isinstance(payload, list) or not payload:
+    raise SystemExit(1)
+if not any(isinstance(item, dict) and item.get("workspace") == expected for item in payload):
+    raise SystemExit(1)
+PY
+  [[ $? -eq 0 ]] || die "OpenClaw agents were not reconciled onto the stack-managed workspace ${workspace}"
+
+  bridge_summary="$(python3 - "${bridge_status_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+if not path.exists():
+    print("providers=none")
+    print("warnings=")
+    raise SystemExit(0)
+
+payload = json.loads(path.read_text(encoding="utf-8"))
+providers = payload.get("providers") or {}
+configured = []
+for name in ("telegram", "discord", "slack", "whatsapp"):
+    item = providers.get(name) or {}
+    if item.get("configured") is True or item.get("enabled") is True:
+        configured.append(name)
+print("providers=" + (",".join(configured) if configured else "none"))
+warnings = payload.get("warnings") or []
+print("warnings=" + " | ".join(str(item) for item in warnings if str(item).strip()))
+PY
+)"
+  bridge_warnings="$(printf '%s\n' "${bridge_summary}" | sed -n 's/^warnings=//p')"
+
+  printf 'OpenClaw managed init complete.\n'
+  printf 'workspace=%s\n' "${workspace}"
+  printf 'workspace_host_dir=%s\n' "${workspace_host_dir}"
+  printf 'default_model=%s\n' "${AGENTIC_DEFAULT_MODEL}"
+  printf 'providers=%s\n' "$(printf '%s\n' "${bridge_summary}" | sed -n 's/^providers=//p')"
+  printf 'repair=%s\n' "${init_repair_json}"
+  if [[ -n "${bridge_warnings}" ]]; then
+    printf 'provider_warnings=%s\n' "${bridge_warnings}"
+  fi
+  printf 'Next steps:\n'
+  printf '1. File-backed provider bridge status lives in %s.\n' "${bridge_status_file}"
+  printf '2. Telegram/Discord/Slack are stack-managed from secret files under %s; populate those files instead of using the upstream channel wizard when possible.\n' "${AGENTIC_ROOT}/secrets/runtime"
+  printf '3. Map provider webhook targets in %s.\n' "${AGENTIC_ROOT}/openclaw/config/relay_targets.json"
+  printf '4. Extend policy allowlists with ./agent openclaw policy add dm-target <target> and ./agent openclaw policy add tool <tool>.\n'
+  printf '5. Use ./agent openclaw then openclaw channels login --channel whatsapp only for QR/manual providers that cannot be expressed through the file-backed bridge.\n'
+  printf '6. Advanced fallback only: ./agent openclaw then openclaw configure --section channels. Do not use openclaw gateway run for normal stack operation.\n'
+}
+
 openclaw_operator_args() {
   printf '%s\n' \
     --operator-registry-file "${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json" \
@@ -3613,6 +3897,10 @@ case "$cmd" in
     ;;
   openclaw)
     case "${2:-}" in
+      init)
+        shift 2
+        cmd_openclaw_init "$@"
+        ;;
       status|policy|model|sandbox)
         openclaw_action="${2:-}"
         shift 2

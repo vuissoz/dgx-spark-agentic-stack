@@ -18,8 +18,8 @@ Upstream references used as baseline:
 
 | Upstream OpenClaw docs | This stack (`dgx-spark-agentic-stack`) |
 |---|---|
-| `openclaw onboard` | `./agent onboard --profile rootless-dev` |
-| `openclaw onboard` (operator in runtime container) | `./agent openclaw` then `openclaw onboard ...` |
+| `openclaw onboard` | `./agent openclaw init [project]` |
+| `openclaw onboard` (operator in runtime container) | expert fallback only: `./agent openclaw` then `openclaw onboard ...` |
 | `openclaw configure` | `./agent openclaw` then `openclaw configure --section ...` |
 | `openclaw agents add <name>` | `./agent openclaw` then `openclaw agents add <name> --workspace ... --non-interactive` |
 | `openclaw gateway run --dashboard` | `./agent up core` |
@@ -311,13 +311,27 @@ If you need a "brand-new install" reset (CLI-only or full module reset), follow:
 
 For a beginner, the safest path is:
 1. let the stack own gateway/runtime wiring,
-2. use `openclaw onboard` only to seed a valid workspace/provider choice,
-3. configure chat channels afterwards with `openclaw configure --section channels`,
+2. use `./agent openclaw init` to seed or repair the valid workspace/provider choice,
+3. configure chat channels afterwards only when the file-backed provider bridge cannot express the provider,
 4. do not start a second gateway manually.
 
-Recommended baseline inside `./agent openclaw`:
+Recommended baseline from the host:
 
 ```bash
+./agent openclaw init openclaw-default
+```
+
+Why this is the recommended beginner flow:
+- it forces the default workspace back under `/workspace/...`,
+- it applies the stack-safe non-interactive OpenClaw bootstrap against `ollama-gate`,
+- it exports the managed gateway token from the file-backed secret for the bootstrap path,
+- it keeps Telegram/Discord/Slack on the provider-bridge path instead of pushing beginners into the upstream channel wizard,
+- it prints the exact next steps and explicitly warns against `openclaw gateway run`.
+
+Advanced/manual fallback only:
+
+```bash
+./agent openclaw
 export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' </run/secrets/openclaw.token)"
 openclaw onboard \
   --workspace /workspace/openclaw-default \
@@ -332,12 +346,6 @@ openclaw onboard \
 openclaw configure --section channels
 openclaw agents list
 ```
-
-Why this is the recommended beginner flow:
-- `--workspace /workspace/...` avoids the most common stack-specific breakage.
-- `--skip-health` avoids a misleading upstream wizard health probe that expects a gateway on `127.0.0.1:8111`, while this stack exposes the managed upstream gateway on `127.0.0.1:18789`.
-- `--skip-daemon` and `--skip-ui` avoid creating the impression that you must run `openclaw gateway run` yourself. In this stack, `./agent up core` already owns the gateway lifecycle.
-- `openclaw configure --section channels` is the safe place to add Telegram/Discord/Slack after the base config is valid.
 
 Do not use this for normal stack operation:
 
@@ -413,27 +421,7 @@ Effect of each issue:
 If you hit the exact symptoms above, recover with this sequence:
 
 ```bash
-./agent stop openclaw
-./agent up core
-./agent openclaw
-```
-
-Inside the `./agent openclaw` shell:
-
-```bash
-export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' </run/secrets/openclaw.token)"
-openclaw onboard \
-  --workspace /workspace/openclaw-default \
-  --non-interactive \
-  --accept-risk \
-  --skip-health \
-  --skip-daemon \
-  --skip-skills \
-  --skip-ui \
-  --skip-channels \
-  --skip-search
-openclaw configure --section channels
-openclaw agents list
+./agent openclaw init openclaw-default
 ```
 
 Then verify from the host:
