@@ -279,6 +279,13 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
     - demander/valider `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`,
     - générer ou recueillir hors git le secret admin initial et les credentials des comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`,
     - préparer la configuration Git initiale par agent (au minimum remote base URL, helper de credentials ou fichier équivalent hors git, `user.name`, `user.email`) pour qu’un premier `git clone`/checkout fonctionne dès la première connexion shell,
+    - créer de manière idempotente, dès la première initialisation complète de la stack, un dépôt/projet partagé de référence pour le test E2E (ex: `eight-queens-agent-e2e`) dans la forge interne, contenant :
+      - la formulation du problème des 8 reines dans le dépôt lui-même ;
+      - la consigne de sortie attendue et les contraintes de vérification ;
+      - la commande de test à exécuter et les critères binaires de succès/échec ;
+      - un état initial volontairement non conforme ou incomplet que l’agent doit corriger en Python ;
+    - protéger la branche par défaut (`main`) contre les pushes directs agents et créer/préparer une branche dédiée par agent (ex: `agent/<tool>` pour `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`) ;
+    - documenter et injecter dans la consigne standard des agents l’interdiction de pousser sur `main` : chaque agent ne doit pousser que sur sa propre branche dédiée,
     - récapituler les chemins secrets et la commande d’activation `./agent up optional`.
 - sortie des secrets :
   - fichiers séparés sous `${AGENTIC_ROOT}/secrets/runtime/` uniquement ;
@@ -1225,6 +1232,12 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 - chaque conteneur agent concerné doit aussi recevoir une préconfiguration Git stack-managed (identity + auth) pointant vers la forge interne, de façon à permettre un premier `git clone`/checkout direct dès la première session sans setup manuel dans le shell utilisateur.
 - transport par défaut : HTTP interne sur le réseau Docker privé + fichiers mot de passe dédiés ; SSH côté forge désactivé par défaut sauf besoin explicite documenté.
 - prévoir un bootstrap minimal d’organisation/projet partagé pour permettre à plusieurs agents de collaborer sur les mêmes dépôts sans dépendre d’un fournisseur externe.
+- à la première initialisation complète de la stack avec `git-forge` actif, créer de façon idempotente un projet/dépôt partagé de référence pour le test d’intégration agentique (problème des 8 reines) :
+  - le dépôt doit porter l’énoncé du problème, la structure Python cible, la commande de test et le contrat de vérification de sortie ;
+  - les tests du dépôt doivent vérifier au minimum la correction fonctionnelle attendue et produire un résultat exploitable automatiquement par l’orchestrateur/doctor ;
+  - la branche par défaut `main` doit être protégée contre les pushes directs des comptes agents ;
+  - une branche dédiée par agent doit être créée ou réservée (`agent/codex`, `agent/openclaw`, `agent/claude`, `agent/opencode`, `agent/openhands`, `agent/pi-mono`, `agent/goose`, `agent/vibestral`) ;
+  - le scénario E2E doit imposer à chaque agent de ne pousser que sur sa branche dédiée et le doctor doit signaler explicitement tout push agent sur `main` comme échec de conformité.
 - onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, créer/recueillir séparément les secrets runtime nécessaires, et annoncer que la configuration Git des agents sera préchargée pour un premier checkout direct.
 - `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur et la cohérence de la liste des comptes agents attendus.
 - documentation opérateur obligatoire : bootstrap initial, création/rotation/révocation des comptes, création de dépôt, partage inter-agents, sauvegarde/restauration, conformité.
@@ -1235,7 +1248,10 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 - volumes DB et dépôts pointent vers `${AGENTIC_ROOT}/optional/git/...`.
 - compte `system-manager` existe avec rôle admin/manager.
 - comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose` existent.
+- le dépôt/projet partagé `eight-queens-agent-e2e` existe après première initialisation et contient bien l’énoncé, la commande de test et le contrat de vérification de sortie.
+- `main` est protégée contre les pushes directs des comptes agents ; les branches `agent/<tool>` attendues existent ou sont réservées.
 - depuis au moins deux conteneurs agents distincts : première session shell -> `git clone`/checkout d’un dépôt de la forge sans saisie de credential manuelle fonctionne ; puis `git commit`, `git push`, `git fetch`, `git pull` sur un même dépôt partagé fonctionnent.
+- le test E2E de référence échoue explicitement si un agent pousse sur `main` au lieu de sa branche dédiée.
 - backup/restore ou rollback restaure un dépôt test et la métadonnée DB correspondante.
 
 ---
