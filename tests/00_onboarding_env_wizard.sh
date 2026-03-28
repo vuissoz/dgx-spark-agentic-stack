@@ -52,6 +52,7 @@ run_override_answers() {
   local custom_goose_workspace="${work_dir}/custom-workspaces/goose"
   local custom_models="${work_dir}/custom-ollama-models"
   local custom_default_model="llama3.2:1b"
+  local custom_trt_models="qwen3-nvfp4-demo,nemotron-cascade-2:30b"
   local custom_compose="agentic-ci"
   local custom_network="agentic-ci-net"
   local custom_egress_network="agentic-ci-egress"
@@ -69,11 +70,13 @@ ${custom_openclaw_workspace}
 ${custom_pi_mono_workspace}
 ${custom_goose_workspace}
 ${custom_compose}
+yes
 ${custom_network}
 ${custom_egress_network}
 ${custom_models}
 ${custom_default_model}
 
+${custom_trt_models}
 
 0.55
 640m
@@ -210,6 +213,8 @@ grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='/srv/agentic/optional/goose/works
   || fail "default AGENTIC_GOOSE_WORKSPACES_DIR is not /srv/agentic/optional/goose/workspaces"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic'$" "${default_env_file}" \
   || fail "default AGENTIC_COMPOSE_PROJECT is not agentic"
+grep -q "^export COMPOSE_PROFILES=''$" "${default_env_file}" \
+  || fail "default COMPOSE_PROFILES must be empty"
 grep -q "^export AGENTIC_NETWORK='agentic'$" "${default_env_file}" \
   || fail "default AGENTIC_NETWORK is not agentic"
 grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-egress'$" "${default_env_file}" \
@@ -222,6 +227,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='91239'$" "${default_env_f
   || fail "default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 91239"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='91239'$" "${default_env_file}" \
   || fail "default OLLAMA_CONTEXT_LENGTH is not 91239"
+grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo'$" "${default_env_file}" \
+  || fail "default TRTLLM_MODELS must be qwen3-nvfp4-demo"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='91239'$" "${default_env_file}" \
   || fail "default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='nemotron-cascade-2:30b'$" "${default_env_file}" \
@@ -277,6 +284,8 @@ grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/custom-workspaces/goo
   || fail "override AGENTIC_GOOSE_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic-ci'$" "${override_env_file}" \
   || fail "override AGENTIC_COMPOSE_PROJECT is not applied"
+grep -q "^export COMPOSE_PROFILES='trt'$" "${override_env_file}" \
+  || fail "override COMPOSE_PROFILES must enable trt when the wizard prompt is accepted"
 grep -q "^export AGENTIC_NETWORK='agentic-ci-net'$" "${override_env_file}" \
   || fail "override AGENTIC_NETWORK is not applied"
 grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-ci-egress'$" "${override_env_file}" \
@@ -289,6 +298,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='50909'$" "${override_env_
   || fail "override default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW should remain 50909 when not overridden"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${override_env_file}" \
   || fail "override default OLLAMA_CONTEXT_LENGTH should remain 50909 when not overridden"
+grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo,nemotron-cascade-2:30b'$" "${override_env_file}" \
+  || fail "override TRTLLM_MODELS is not applied after enabling trt"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${override_env_file}" \
   || fail "override default AGENTIC_GOOSE_CONTEXT_LIMIT should remain aligned with default context window"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='llama3.2:1b'$" "${override_env_file}" \
@@ -330,6 +341,8 @@ fi
 assert_generated_file_baseline "${rootless_default_env_file}"
 grep -q "^export OLLAMA_MODELS_DIR='${HOME}/wkdir/open-webui/ollama_data/models'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_MODELS_DIR is not ${HOME}/wkdir/open-webui/ollama_data/models"
+grep -q "^export COMPOSE_PROFILES=''$" "${rootless_default_env_file}" \
+  || fail "rootless default COMPOSE_PROFILES must stay empty"
 grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${work_dir}/rootless-default-root/agent-workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_AGENT_WORKSPACES_ROOT is not <root>/agent-workspaces"
 grep -q "^export AGENTIC_CLAUDE_WORKSPACES_DIR='${work_dir}/rootless-default-root/agent-workspaces/claude/workspaces'$" "${rootless_default_env_file}" \
@@ -354,6 +367,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='50909'$" "${rootless_defa
   || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 50909"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 50909"
+grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo'$" "${rootless_default_env_file}" \
+  || fail "rootless default TRTLLM_MODELS must stay qwen3-nvfp4-demo"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${rootless_default_env_file}" \
@@ -434,11 +449,13 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --pi-mono-workspaces-dir "${work_dir}/ni-workspaces/pi-mono" \
   --goose-workspaces-dir "${work_dir}/ni-workspaces/goose" \
   --compose-project agentic-ni \
+  --compose-profiles trt \
   --network agentic-ni-net \
   --egress-network agentic-ni-egress \
   --ollama-models-dir "${work_dir}/ni-models" \
   --default-model tinyllama:latest \
   --default-model-context-window 32768 \
+  --trtllm-models qwen3-nvfp4-demo,tinyllama:latest \
   --grafana-admin-user grafana-admin \
   --grafana-admin-password grafana-strong-password \
   --limits-default-cpus 0.60 \
@@ -468,6 +485,10 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='32768'$" "${non_interacti
   || fail "non-interactive AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not applied"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='32768'$" "${non_interactive_env_file}" \
   || fail "non-interactive OLLAMA_CONTEXT_LENGTH is not applied"
+grep -q "^export COMPOSE_PROFILES='trt'$" "${non_interactive_env_file}" \
+  || fail "non-interactive COMPOSE_PROFILES must be applied"
+grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo,tinyllama:latest'$" "${non_interactive_env_file}" \
+  || fail "non-interactive TRTLLM_MODELS must be applied"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='32768'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export AGENTIC_AGENT_WORKSPACES_ROOT='${work_dir}/ni-agent-workspaces'$" "${non_interactive_env_file}" \

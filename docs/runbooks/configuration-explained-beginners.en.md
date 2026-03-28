@@ -85,6 +85,7 @@ Practical note:
 Notes:
 - `trt` enables `trtllm` in `core`.
 - `rag-lexical` enables `opensearch` in `rag`.
+- If `COMPOSE_PROFILES` does not already include `trt`, `./agent onboard` now asks explicitly whether to enable TRT, then persists the resulting value in the generated env file.
 
 ## 3.3 LLM Routing, Quotas, and MCP Limits
 
@@ -122,7 +123,7 @@ Notes:
 | `OLLAMA_PRELOAD_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
-| `TRTLLM_MODELS` | model route selector string | `qwen3-nvfp4-demo` | shell |
+| `TRTLLM_MODELS` | CSV list of model ids exposed by TRT-LLM | `qwen3-nvfp4-demo` | shell |
 | `COMFYUI_REF` | git ref for ComfyUI image build | `master` | shell |
 | `COMFYUI_MANAGER_REPO` | ComfyUI manager extension git repo (empty = disabled) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |
 | `COMFYUI_MANAGER_REF` | ComfyUI manager extension git ref | `main` | shell |

@@ -24,11 +24,13 @@ openclaw_workspaces_dir_override=""
 pi_mono_workspaces_dir_override=""
 goose_workspaces_dir_override=""
 compose_project_override=""
+compose_profiles_override=""
 network_override=""
 egress_network_override=""
 ollama_models_override=""
 default_model_override=""
 default_model_context_window_override=""
+trtllm_models_override=""
 grafana_admin_user_override=""
 grafana_admin_password_override=""
 limits_default_cpus_override=""
@@ -93,11 +95,13 @@ Runtime options:
   --pi-mono-workspaces-dir <path>
   --goose-workspaces-dir <path>
   --compose-project <name>
+  --compose-profiles <csv>
   --network <name>
   --egress-network <name>
   --ollama-models-dir <path>
   --default-model <name>
   --default-model-context-window <tokens>
+  --trtllm-models <csv>
   --grafana-admin-user <name>
   --grafana-admin-password <password>
   --limits-default-cpus <cores>
@@ -411,6 +415,88 @@ validate_compose_or_network_name() {
   }
 }
 
+normalize_csv_value() {
+  local raw="$1"
+  local normalized=""
+
+  normalized="$(normalize_allowlist_csv "${raw}")"
+  if [[ -z "${normalized}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  printf '%s\n' "${normalized}" | paste -sd, -
+}
+
+normalize_compose_profiles_csv() {
+  local raw="$1"
+  local normalized=""
+
+  normalized="$(normalize_allowlist_csv "${raw}" | tr '[:upper:]' '[:lower:]')"
+  if [[ -z "${normalized}" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  printf '%s\n' "${normalized}" | paste -sd, -
+}
+
+validate_compose_profiles_csv() {
+  local raw="$1"
+  local normalized=""
+  local entry
+
+  normalized="$(normalize_compose_profiles_csv "${raw}")"
+  if [[ -z "${normalized}" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    case "${entry}" in
+      trt|rag-lexical)
+        ;;
+      *)
+        echo "unknown compose profile '${entry}' (allowed: trt,rag-lexical)" >&2
+        return 1
+        ;;
+    esac
+  done < <(printf '%s\n' "${normalized}" | tr ',' '\n')
+}
+
+compose_profile_enabled() {
+  local target="$1"
+  local raw="$2"
+  local entry
+
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    if [[ "${entry}" == "${target}" ]]; then
+      return 0
+    fi
+  done < <(printf '%s\n' "$(normalize_compose_profiles_csv "${raw}")" | tr ',' '\n')
+
+  return 1
+}
+
+append_compose_profile_csv() {
+  local raw="$1"
+  local target="$2"
+  local normalized=""
+
+  normalized="$(normalize_compose_profiles_csv "${raw}")"
+  if compose_profile_enabled "${target}" "${normalized}"; then
+    printf '%s\n' "${normalized}"
+    return 0
+  fi
+
+  if [[ -z "${normalized}" ]]; then
+    printf '%s\n' "${target}"
+  else
+    printf '%s,%s\n' "${normalized}" "${target}"
+  fi
+}
+
 validate_model_id_value() {
   local key="$1"
   local value="$2"
@@ -427,6 +513,26 @@ validate_model_id_value() {
     return 1
   }
   return 0
+}
+
+validate_model_list_value() {
+  local key="$1"
+  local value="$2"
+  local normalized=""
+  local entry
+  local saw_value=0
+
+  normalized="$(normalize_csv_value "${value}")"
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    saw_value=1
+    validate_model_id_value "${key}" "${entry}" || return 1
+  done < <(printf '%s\n' "${normalized}" | tr ',' '\n')
+
+  if [[ "${saw_value}" -ne 1 ]]; then
+    echo "${key} must contain at least one model id" >&2
+    return 1
+  fi
 }
 
 warn_agentic_tool_call_model_regression() {
@@ -1162,30 +1268,32 @@ write_env_file() {
   local pi_mono_workspaces_dir="${10}"
   local goose_workspaces_dir="${11}"
   local compose_project="${12}"
-  local network="${13}"
-  local egress_network="${14}"
-  local ollama_models="${15}"
-  local default_model="${16}"
-  local default_model_context_window="${17}"
-  local goose_context_limit="${18}"
-  local grafana_admin_user="${19}"
-  local grafana_admin_password="${20}"
-  local limits_default_cpus="${21}"
-  local limits_default_mem="${22}"
-  local limits_core_cpus="${23}"
-  local limits_core_mem="${24}"
-  local limits_ollama_mem="${25}"
-  local limits_agents_cpus="${26}"
-  local limits_agents_mem="${27}"
-  local limits_ui_cpus="${28}"
-  local limits_ui_mem="${29}"
-  local limits_obs_cpus="${30}"
-  local limits_obs_mem="${31}"
-  local limits_rag_cpus="${32}"
-  local limits_rag_mem="${33}"
-  local limits_optional_cpus="${34}"
-  local limits_optional_mem="${35}"
-  local out_file="${36}"
+  local compose_profiles="${13}"
+  local network="${14}"
+  local egress_network="${15}"
+  local ollama_models="${16}"
+  local default_model="${17}"
+  local default_model_context_window="${18}"
+  local trtllm_models="${19}"
+  local goose_context_limit="${20}"
+  local grafana_admin_user="${21}"
+  local grafana_admin_password="${22}"
+  local limits_default_cpus="${23}"
+  local limits_default_mem="${24}"
+  local limits_core_cpus="${25}"
+  local limits_core_mem="${26}"
+  local limits_ollama_mem="${27}"
+  local limits_agents_cpus="${28}"
+  local limits_agents_mem="${29}"
+  local limits_ui_cpus="${30}"
+  local limits_ui_mem="${31}"
+  local limits_obs_cpus="${32}"
+  local limits_obs_mem="${33}"
+  local limits_rag_cpus="${34}"
+  local limits_rag_mem="${35}"
+  local limits_optional_cpus="${36}"
+  local limits_optional_mem="${37}"
+  local out_file="${38}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1207,6 +1315,7 @@ export AGENTIC_OPENCLAW_WORKSPACES_DIR=$(shell_quote "${openclaw_workspaces_dir}
 export AGENTIC_PI_MONO_WORKSPACES_DIR=$(shell_quote "${pi_mono_workspaces_dir}")
 export AGENTIC_GOOSE_WORKSPACES_DIR=$(shell_quote "${goose_workspaces_dir}")
 export AGENTIC_COMPOSE_PROJECT=$(shell_quote "${compose_project}")
+export COMPOSE_PROFILES=$(shell_quote "${compose_profiles}")
 export AGENTIC_NETWORK=$(shell_quote "${network}")
 export AGENTIC_EGRESS_NETWORK=$(shell_quote "${egress_network}")
 export AGENTIC_DOCKER_USER_SOURCE_NETWORKS=$(shell_quote "${network},${egress_network}")
@@ -1214,6 +1323,7 @@ export OLLAMA_MODELS_DIR=$(shell_quote "${ollama_models}")
 export AGENTIC_DEFAULT_MODEL=$(shell_quote "${default_model}")
 export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=$(shell_quote "${default_model_context_window}")
 export OLLAMA_CONTEXT_LENGTH=$(shell_quote "${default_model_context_window}")
+export TRTLLM_MODELS=$(shell_quote "${trtllm_models}")
 export AGENTIC_GOOSE_CONTEXT_LIMIT=$(shell_quote "${goose_context_limit}")
 export OLLAMA_PRELOAD_GENERATE_MODEL=$(shell_quote "${default_model}")
 export GRAFANA_ADMIN_USER=$(shell_quote "${grafana_admin_user}")
@@ -1489,6 +1599,11 @@ while [[ $# -gt 0 ]]; do
       compose_project_override="$2"
       shift 2
       ;;
+    --compose-profiles)
+      [[ $# -ge 2 ]] || die "missing value for --compose-profiles"
+      compose_profiles_override="$2"
+      shift 2
+      ;;
     --network)
       [[ $# -ge 2 ]] || die "missing value for --network"
       network_override="$2"
@@ -1512,6 +1627,11 @@ while [[ $# -gt 0 ]]; do
     --default-model-context-window)
       [[ $# -ge 2 ]] || die "missing value for --default-model-context-window"
       default_model_context_window_override="$2"
+      shift 2
+      ;;
+    --trtllm-models)
+      [[ $# -ge 2 ]] || die "missing value for --trtllm-models"
+      trtllm_models_override="$2"
       shift 2
       ;;
     --grafana-admin-user)
@@ -1752,6 +1872,19 @@ collect_path_value pi_mono_workspaces_dir "AGENTIC_PI_MONO_WORKSPACES_DIR" "${pr
 collect_path_value goose_workspaces_dir "AGENTIC_GOOSE_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "goose")" "${goose_workspaces_dir_override}" "AGENTIC_GOOSE_WORKSPACES_DIR controls the host path mounted as /workspace in optional-goose."
 
 collect_text_value compose_project "AGENTIC_COMPOSE_PROJECT" "${default_compose_project}" "${compose_project_override}" validate_compose_or_network_name "AGENTIC_COMPOSE_PROJECT is the docker compose project name used to namespace resources."
+compose_profiles="${compose_profiles_override:-${COMPOSE_PROFILES:-}}"
+validate_compose_profiles_csv "${compose_profiles}" || die "invalid COMPOSE_PROFILES"
+compose_profiles="$(normalize_compose_profiles_csv "${compose_profiles}")"
+if [[ "${non_interactive}" -eq 0 && -z "${compose_profiles_override}" ]]; then
+  info "COMPOSE_PROFILES enables optional Compose services. 'trt' starts the internal TRT-LLM runtime in core; 'rag-lexical' starts the lexical RAG backend."
+  if compose_profile_enabled "trt" "${compose_profiles}"; then
+    info "TRT-LLM is already active through COMPOSE_PROFILES='${compose_profiles}'."
+  elif prompt_yes_no "Enable TRT-LLM now (adds 'trt' to COMPOSE_PROFILES)?" "no"; then
+    compose_profiles="$(append_compose_profile_csv "${compose_profiles}" "trt")"
+  fi
+fi
+validate_compose_profiles_csv "${compose_profiles}" || die "invalid COMPOSE_PROFILES"
+compose_profiles="$(normalize_compose_profiles_csv "${compose_profiles}")"
 collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_override}" validate_compose_or_network_name "AGENTIC_NETWORK is the private docker network for internal traffic."
 collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_network}" "${egress_network_override}" validate_compose_or_network_name "AGENTIC_EGRESS_NETWORK is dedicated to controlled outbound traffic."
 
@@ -1759,6 +1892,24 @@ collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_oll
 collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 warn_agentic_tool_call_model_regression "AGENTIC_DEFAULT_MODEL" "${default_model}" || die "invalid AGENTIC_DEFAULT_MODEL"
 collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model. Onboarding may recommend a different value later once AGENTIC_LIMIT_OLLAMA_MEM is known."
+trtllm_models="${trtllm_models_override:-${TRTLLM_MODELS:-qwen3-nvfp4-demo}}"
+trt_profile_enabled=0
+if compose_profile_enabled "trt" "${compose_profiles}"; then
+  trt_profile_enabled=1
+fi
+if [[ "${non_interactive}" -eq 0 && -z "${trtllm_models_override}" && "${trt_profile_enabled}" -eq 1 ]]; then
+  info "TRTLLM_MODELS lists the model ids exposed by the internal TRT-LLM runtime. Use a comma-separated list if you want multiple routed aliases."
+  while true; do
+    candidate="$(prompt_with_default "TRTLLM_MODELS" "${trtllm_models}")"
+    if validate_model_list_value "TRTLLM_MODELS" "${candidate}"; then
+      trtllm_models="$(normalize_csv_value "${candidate}")"
+      break
+    fi
+  done
+else
+  validate_model_list_value "TRTLLM_MODELS" "${trtllm_models}" || die "invalid TRTLLM_MODELS"
+  trtllm_models="$(normalize_csv_value "${trtllm_models}")"
+fi
 goose_context_limit="${preseed_goose_context_limit:-${default_model_context_window}}"
 validate_context_window_value "AGENTIC_GOOSE_CONTEXT_LIMIT" "${goose_context_limit}" || die "invalid AGENTIC_GOOSE_CONTEXT_LIMIT"
 grafana_admin_user="${grafana_admin_user_override:-${GRAFANA_ADMIN_USER:-admin}}"
@@ -1808,11 +1959,13 @@ write_env_file \
   "${pi_mono_workspaces_dir}" \
   "${goose_workspaces_dir}" \
   "${compose_project}" \
+  "${compose_profiles}" \
   "${network}" \
   "${egress_network}" \
   "${ollama_models}" \
   "${default_model}" \
   "${default_model_context_window}" \
+  "${trtllm_models}" \
   "${goose_context_limit}" \
   "${grafana_admin_user}" \
   "${grafana_admin_password}" \

@@ -21,6 +21,7 @@ openwebui_password="S3cure-Pass-123"
 openwebui_secret="webui-secret-xyz"
 default_model="nemotron-cascade-2:30b"
 default_context_window="50909"
+trt_models="qwen3-nvfp4-demo,nemotron-cascade-2:30b"
 openhands_model="${default_model}"
 grafana_admin_user="grafana-admin"
 grafana_admin_password="grafana-strong-password"
@@ -40,11 +41,13 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --profile rootless-dev \
   --root "${root_dir}" \
   --compose-project agentic-onboard-full \
+  --compose-profiles trt \
   --network agentic-onboard-full-net \
   --egress-network agentic-onboard-full-egress \
   --ollama-models-dir "${work_dir}/models" \
   --default-model "${default_model}" \
   --default-model-context-window "${default_context_window}" \
+  --trtllm-models "${trt_models}" \
   --grafana-admin-user "${grafana_admin_user}" \
   --grafana-admin-password "${grafana_admin_password}" \
   --openwebui-admin-email "${openwebui_email}" \
@@ -76,6 +79,10 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='${default_context_window}
   || fail "full setup onboarding env must export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='${default_context_window}'$" "${env_file}" \
   || fail "full setup onboarding env must export OLLAMA_CONTEXT_LENGTH"
+grep -q "^export COMPOSE_PROFILES='trt'$" "${env_file}" \
+  || fail "full setup onboarding env must export COMPOSE_PROFILES"
+grep -q "^export TRTLLM_MODELS='${trt_models}'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_MODELS"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='${default_context_window}'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_GOOSE_CONTEXT_LIMIT aligned with default model context window"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \

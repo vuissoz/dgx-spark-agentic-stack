@@ -32,10 +32,12 @@ Check with:
 Optional TRT-LLM backend activation (internal-only):
 
 ```bash
-export COMPOSE_PROFILES=trt
+./agent onboard --compose-profiles trt --trtllm-models qwen3-nvfp4-demo
+source .runtime/env.generated.sh
 ./agent up core
 ```
 
+In interactive mode, `./agent onboard` now also asks explicitly whether to enable TRT when `COMPOSE_PROFILES` does not already contain `trt`, then records `TRTLLM_MODELS`.
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) and reused by Ollama preload.
 The stack now emits an explicit warning if you choose `qwen3.5:35b`: as of March 26, 2026, local Codex/OpenHands runs in this repo have already shown pseudo tool tags instead of real tool calls, even though Ollama upstream advertises the model with `tools` support. The model is no longer blocked, because this is treated as a stack integration bug to fix rather than a model capability contract.

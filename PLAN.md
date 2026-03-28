@@ -115,6 +115,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 - Observabilité / policy:
   - `dgx-spark-agentic-stack-im5` reste ouvert : politique de rétention et d’occupation disque à intégrer à l’onboarding/runtime.
   - `dgx-spark-agentic-stack-wlx` est `in_progress` : métriques Prometheus natives pour forwarders TCP OpenClaw.
+  - `dgx-spark-agentic-stack-cx9` est resolu : l'onboarding exporte maintenant `COMPOSE_PROFILES` et `TRTLLM_MODELS`, avec prompt explicite d'activation TRT.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
@@ -125,7 +126,6 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 | `dgx-spark-agentic-stack-im5` | open | demander rétention max + budget disque max en onboarding et les appliquer au runtime |
 | `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |
 | `dgx-spark-agentic-stack-1r0` | open | ajouter une commande opérateur de déchargement explicite d’un modèle local |
-| `dgx-spark-agentic-stack-cx9` | open | rendre l’activation TRT et la liste de modèles TRT explicites dans l’onboarding |
 
 ## Profils d’exécution (obligatoires)
 
