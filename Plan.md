@@ -30,6 +30,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-lhm` (separer config immuable, overlay valide et etat writable pour OpenClaw) [OPEN]
 - Beads (OpenClaw onboarding stack-managed / repair):
   - `dgx-spark-agentic-stack-u326` (ajouter `agent openclaw init` comme trajectoire d'onboarding/reparation stack-managed, deplacer l'onboarding channels vers la config fichier quand possible, garder le wizard upstream en fallback expert) [OPEN]
+- Beads (README landing refresh / references EN-FR):
+  - `dgx-spark-agentic-stack-mvzt` (remplacer `README.md` par une landing page anglaise concise, conserver `README.en.md` detaille, et preserver le README francais dans `README.fr.md`) [CLOSED]
 - Beads (OpenClaw approvals egress interactives):
   - `dgx-spark-agentic-stack-e0q` (ajouter une queue d'approbation operateur par destination egress + workflow `agent openclaw approvals`) [OPEN]
 - Beads (Resolution deterministe des `latest`):
@@ -168,6 +170,16 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
     - `COMPOSE_PROFILES=trt bash tests/J2_rag_smoke.sh` => PASS
     - `COMPOSE_PROFILES=trt bash tests/K1_openclaw.sh` => PASS
     - `COMPOSE_PROFILES=trt bash tests/K3_portainer.sh` => PASS
+
+## Addendum (2026-03-28, repositionnement README du depot)
+- Beads `dgx-spark-agentic-stack-mvzt`: documentation d'entree de depot simplifiee et reoriente vers une landing page plus vendeuse. [CLOSED]
+  - `README.md` devient une page d'accueil anglaise courte:
+    - objectif du projet,
+    - proposition de valeur,
+    - commandes de demarrage essentielles,
+    - liens vers les docs de detail.
+  - `README.en.md` est conserve comme reference anglaise detaillee.
+  - l'ancien `README.md` francais est preserve dans `README.fr.md`.
 
 ## Remaining Work (open)
 - Follow-up `dgx-spark-agentic-stack-qcy`: basculer OpenClaw du module optional vers le core `agent` (activation via `agent up core`, doctor/release/rollback/tests/docs alignés).
