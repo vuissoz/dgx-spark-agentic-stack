@@ -27,6 +27,7 @@ AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_v
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_TOOLS=(claude codex opencode vibestral openclaw pi-mono goose)
+STOP_START_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
 OPTIONAL_MODULES=(mcp pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
@@ -54,9 +55,10 @@ Usage:
   agent llm test-mode [on|off]
   agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
   agent logs <service>
-  agent stop <tool>
+  agent stop <target>
   agent stop service <service...>
   agent stop container <container...>
+  agent start <target>
   agent start service <service...>
   agent start container <container...>
   agent backup <run|list|restore <snapshot_id> [--yes]>
@@ -167,6 +169,43 @@ service_start_hint() {
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
     *) echo "agent up agents" ;;
+  esac
+}
+
+target_to_compose_file() {
+  case "$1" in
+    claude|codex|opencode|vibestral) stack_to_compose_file agents ;;
+    openclaw) stack_to_compose_file core ;;
+    openwebui|openhands|comfyui) stack_to_compose_file ui ;;
+    pi-mono|goose) stack_to_compose_file optional ;;
+    *) return 1 ;;
+  esac
+}
+
+target_to_services() {
+  case "$1" in
+    claude) printf '%s\n' "agentic-claude" ;;
+    codex) printf '%s\n' "agentic-codex" ;;
+    opencode) printf '%s\n' "agentic-opencode" ;;
+    vibestral) printf '%s\n' "agentic-vibestral" ;;
+    openclaw)
+      printf '%s\n' \
+        "openclaw" \
+        "openclaw-gateway" \
+        "openclaw-provider-bridge" \
+        "openclaw-sandbox" \
+        "openclaw-relay"
+      ;;
+    pi-mono) printf '%s\n' "optional-pi-mono" ;;
+    goose) printf '%s\n' "optional-goose" ;;
+    openwebui) printf '%s\n' "openwebui" ;;
+    openhands) printf '%s\n' "openhands" ;;
+    comfyui)
+      printf '%s\n' \
+        "comfyui" \
+        "comfyui-loopback"
+      ;;
+    *) return 1 ;;
   esac
 }
 
@@ -1538,28 +1577,36 @@ cmd_ls() {
   done
 }
 
-cmd_stop_tool() {
-  local tool="${1:-}"
-  local service compose_file
+cmd_stop_target() {
+  local target="${1:-}"
+  local compose_file
   local -a services_to_stop=()
-  [[ -n "${tool}" ]] || die "Usage: agent stop <tool>"
+  [[ -n "${target}" ]] || die "Usage: agent stop <target>"
 
-  service="$(tool_to_service "${tool}")" || die "Unknown tool '${tool}'. Expected one of: ${AGENT_TOOLS[*]}"
-  services_to_stop=("${service}")
-  case "${service}" in
-    openclaw)
-      compose_file="$(stack_to_compose_file core)"
-      services_to_stop+=(openclaw-gateway openclaw-provider-bridge openclaw-sandbox openclaw-relay)
-      ;;
-    optional-pi-mono|optional-goose)
-      compose_file="$(stack_to_compose_file optional)"
-      ;;
-    *) compose_file="$(stack_to_compose_file agents)" ;;
-  esac
+  mapfile -t services_to_stop < <(target_to_services "${target}") \
+    || die "Unknown stop/start target '${target}'. Expected one of: ${STOP_START_TARGETS[*]}"
+  compose_file="$(target_to_compose_file "${target}")" \
+    || die "Unknown stop/start target '${target}'. Expected one of: ${STOP_START_TARGETS[*]}"
   [[ -f "${compose_file}" ]] || die "Compose file not found for tool stack: ${compose_file}"
 
   require_cmd docker
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" stop "${services_to_stop[@]}"
+}
+
+cmd_start_target() {
+  local target="${1:-}"
+  local compose_file
+  local -a services_to_start=()
+  [[ -n "${target}" ]] || die "Usage: agent start <target>"
+
+  mapfile -t services_to_start < <(target_to_services "${target}") \
+    || die "Unknown stop/start target '${target}'. Expected one of: ${STOP_START_TARGETS[*]}"
+  compose_file="$(target_to_compose_file "${target}")" \
+    || die "Unknown stop/start target '${target}'. Expected one of: ${STOP_START_TARGETS[*]}"
+  [[ -f "${compose_file}" ]] || die "Compose file not found for tool stack: ${compose_file}"
+
+  require_cmd docker
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" up -d --no-deps "${services_to_start[@]}"
 }
 
 cmd_service_action() {
@@ -3403,7 +3450,7 @@ case "$cmd" in
     docker logs --tail "${AGENT_LOG_TAIL:-200}" -f "$(resolve_logs_container "${normalized_logs_target}")"
     ;;
   stop)
-    [[ $# -ge 2 ]] || die "Usage: agent stop <tool> | agent stop service <service...> | agent stop container <container...>"
+    [[ $# -ge 2 ]] || die "Usage: agent stop <target> | agent stop service <service...> | agent stop container <container...>"
     case "${2}" in
       service)
         shift 2
@@ -3416,12 +3463,12 @@ case "$cmd" in
         cmd_container_action stop "$@"
         ;;
       *)
-        cmd_stop_tool "$2"
+        cmd_stop_target "$2"
         ;;
     esac
     ;;
   start)
-    [[ $# -ge 3 ]] || die "Usage: agent start service <service...> | agent start container <container...>"
+    [[ $# -ge 2 ]] || die "Usage: agent start <target> | agent start service <service...> | agent start container <container...>"
     case "${2}" in
       service)
         shift 2
@@ -3434,7 +3481,7 @@ case "$cmd" in
         cmd_container_action start "$@"
         ;;
       *)
-        die "Usage: agent start service <service...> | agent start container <container...>"
+        cmd_start_target "$2"
         ;;
     esac
     ;;

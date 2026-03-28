@@ -353,7 +353,8 @@ Examples:
 ```
 
 Notes:
-- `agent stop` handles `claude|codex|opencode|vibestral|openclaw|pi-mono|goose` tools.
+- `agent stop` and `agent start` handle `claude|codex|opencode|vibestral|openclaw|pi-mono|goose|openwebui|openhands|comfyui` targets.
+- `agent stop/start openclaw` manages the whole OpenClaw control/execution bundle; `agent stop/start comfyui` manages both `comfyui` and `comfyui-loopback`.
 - `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|vibestral|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in the core `openclaw` service with loopback API, Web UI (`18789`), and Gateway WS reminders.
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.
 - `agent rollback all` requires a `release_id`.

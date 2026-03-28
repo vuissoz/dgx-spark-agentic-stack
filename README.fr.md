@@ -356,7 +356,8 @@ Exemples:
 ```
 
 Notes:
-- `agent stop` gère les tools `claude|codex|opencode|vibestral|openclaw|pi-mono|goose`.
+- `agent stop` et `agent start` gèrent les cibles `claude|codex|opencode|vibestral|openclaw|pi-mono|goose|openwebui|openhands|comfyui`.
+- `agent stop/start openclaw` pilote tout le bundle OpenClaw control/execution-plane; `agent stop/start comfyui` pilote `comfyui` et `comfyui-loopback` ensemble.
 - `agent <tool> [project]` attache une session persistante: `claude|codex|opencode|vibestral|pi-mono` utilisent tmux (`Ctrl-b d` pour détacher), `goose` lance directement la CLI Goose dans `/workspace/<project>` (pas de tmux dans l'image upstream), et `openclaw` ouvre un shell opérateur dans le service core `openclaw` avec rappel des endpoints API loopback, Web UI (`18789`) et Gateway WS (`ws://127.0.0.1:18789`).
 - `agent ls` expose aussi un résumé runtime pour OpenClaw (`sandboxes=<n>;sessions=<n>;current=<id>;...`), dérivé du registre persistant opérateur de l'execution-plane.
 - `agent sudo-mode on` active `sudo` dans les conteneurs agents (en relachant uniquement `no-new-privileges` pour ces services); `agent sudo-mode off` revient au mode durci.
