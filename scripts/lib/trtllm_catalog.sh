@@ -10,7 +10,7 @@ trtllm_strip_hf_url() {
 }
 
 trtllm_model_default_key() {
-  printf '%s\n' "nemotron-super-120b"
+  printf '%s\n' "nemotron-cascade-30b"
 }
 
 trtllm_catalog_rows() {

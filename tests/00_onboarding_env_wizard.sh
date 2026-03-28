@@ -9,7 +9,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 wizard_script="${REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
 [[ -x "${wizard_script}" ]] || fail "onboarding wizard is missing or not executable: ${wizard_script}"
 
-default_trt_model="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+default_trt_model="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4"
 
 work_dir="${REPO_ROOT}/.runtime/test-onboarding-env-$$"
 default_env_file="${work_dir}/default.env.generated.sh"
@@ -237,13 +237,13 @@ grep -q "^export OLLAMA_CONTEXT_LENGTH='91239'$" "${default_env_file}" \
   || fail "default OLLAMA_CONTEXT_LENGTH is not 91239"
 grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${default_env_file}" \
   || fail "default TRTLLM_MODELS must be ${default_trt_model}"
-grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${default_env_file}" \
-  || fail "default TRTLLM_ACTIVE_MODEL_KEY must be nemotron-super-120b"
-grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/super_fp4'$" "${default_env_file}" \
-  || fail "default TRTLLM_NVFP4_LOCAL_MODEL_DIR must be /models/super_fp4"
-grep -q "^export TRTLLM_NVFP4_HF_REPO='nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4'$" "${default_env_file}" \
-  || fail "default TRTLLM_NVFP4_HF_REPO must target the Nemotron NVFP4 repo"
-grep -q "^export TRTLLM_NVFP4_HF_REVISION='b1ffe4992d7db6d768453a551a656b8d12c638fb'$" "${default_env_file}" \
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-cascade-30b'$" "${default_env_file}" \
+  || fail "default TRTLLM_ACTIVE_MODEL_KEY must be nemotron-cascade-30b"
+grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/cascade_30b_nvfp4'$" "${default_env_file}" \
+  || fail "default TRTLLM_NVFP4_LOCAL_MODEL_DIR must be /models/cascade_30b_nvfp4"
+grep -q "^export TRTLLM_NVFP4_HF_REPO='chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4'$" "${default_env_file}" \
+  || fail "default TRTLLM_NVFP4_HF_REPO must target the Cascade NVFP4 repo"
+grep -q "^export TRTLLM_NVFP4_HF_REVISION='80ee3ccfe8cb5eb019a0cde78449e8b197a0155f'$" "${default_env_file}" \
   || fail "default TRTLLM_NVFP4_HF_REVISION must stay pinned for deterministic bootstrap"
 grep -q "^export TRTLLM_NVFP4_PREPARE_ENABLED='auto'$" "${default_env_file}" \
   || fail "default TRTLLM_NVFP4_PREPARE_ENABLED must be auto"
@@ -336,9 +336,9 @@ grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${override_env_file}" \
   || fail "override default OLLAMA_CONTEXT_LENGTH should remain 50909 when not overridden"
 grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo,nemotron-cascade-2:30b'$" "${override_env_file}" \
   || fail "override TRTLLM_MODELS is not applied after enabling trt"
-grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${override_env_file}" \
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-cascade-30b'$" "${override_env_file}" \
   || fail "override flow must still export TRTLLM_ACTIVE_MODEL_KEY"
-grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/super_fp4'$" "${override_env_file}" \
+grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/cascade_30b_nvfp4'$" "${override_env_file}" \
   || fail "override flow must still export TRTLLM_NVFP4_LOCAL_MODEL_DIR"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${override_env_file}" \
   || fail "override default AGENTIC_GOOSE_CONTEXT_LIMIT should remain aligned with default context window"
@@ -427,10 +427,10 @@ grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${rootless_default_env_file}" 
   || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 50909"
 grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${rootless_default_env_file}" \
   || fail "rootless default TRTLLM_MODELS must stay ${default_trt_model}"
-grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${rootless_default_env_file}" \
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-cascade-30b'$" "${rootless_default_env_file}" \
   || fail "rootless default TRTLLM_ACTIVE_MODEL_KEY must be exported"
-grep -q "^export TRTLLM_NVFP4_HF_REPO='nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4'$" "${rootless_default_env_file}" \
-  || fail "rootless default TRTLLM_NVFP4_HF_REPO must target the Nemotron NVFP4 repo"
+grep -q "^export TRTLLM_NVFP4_HF_REPO='chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4'$" "${rootless_default_env_file}" \
+  || fail "rootless default TRTLLM_NVFP4_HF_REPO must target the Cascade NVFP4 repo"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${rootless_default_env_file}" \
@@ -557,7 +557,7 @@ grep -q "^export COMPOSE_PROFILES='trt'$" "${non_interactive_env_file}" \
   || fail "non-interactive COMPOSE_PROFILES must be applied"
 grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo,tinyllama:latest'$" "${non_interactive_env_file}" \
   || fail "non-interactive TRTLLM_MODELS must be applied"
-grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${non_interactive_env_file}" \
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-cascade-30b'$" "${non_interactive_env_file}" \
   || fail "non-interactive flow must still export TRTLLM_ACTIVE_MODEL_KEY"
 grep -q "^export TRTLLM_NVFP4_PREPARE_ENABLED='auto'$" "${non_interactive_env_file}" \
   || fail "non-interactive flow must still export TRTLLM_NVFP4_PREPARE_ENABLED"

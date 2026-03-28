@@ -1512,10 +1512,10 @@ export AGENTIC_DEFAULT_MODEL=$(shell_quote "${default_model}")
 export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=$(shell_quote "${default_model_context_window}")
 export OLLAMA_CONTEXT_LENGTH=$(shell_quote "${default_model_context_window}")
 export TRTLLM_MODELS=$(shell_quote "${trtllm_models}")
-export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'
-export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/super_fp4'
-export TRTLLM_NVFP4_HF_REPO='nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4'
-export TRTLLM_NVFP4_HF_REVISION='b1ffe4992d7db6d768453a551a656b8d12c638fb'
+export TRTLLM_ACTIVE_MODEL_KEY='nemotron-cascade-30b'
+export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/cascade_30b_nvfp4'
+export TRTLLM_NVFP4_HF_REPO='chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4'
+export TRTLLM_NVFP4_HF_REVISION='80ee3ccfe8cb5eb019a0cde78449e8b197a0155f'
 export TRTLLM_NVFP4_PREPARE_ENABLED='auto'
 export AGENTIC_GOOSE_CONTEXT_LIMIT=$(shell_quote "${goose_context_limit}")
 export OLLAMA_PRELOAD_GENERATE_MODEL=$(shell_quote "${default_model}")
@@ -2169,7 +2169,7 @@ collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_oll
 collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 warn_agentic_tool_call_model_regression "AGENTIC_DEFAULT_MODEL" "${default_model}" || die "invalid AGENTIC_DEFAULT_MODEL"
 collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model. Onboarding may recommend a different value later once AGENTIC_LIMIT_OLLAMA_MEM is known."
-trtllm_models="${trtllm_models_override:-${TRTLLM_MODELS:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}}"
+trtllm_models="${trtllm_models_override:-${TRTLLM_MODELS:-https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4}}"
 trt_profile_enabled=0
 if compose_profile_enabled "trt" "${compose_profiles}"; then
   trt_profile_enabled=1

@@ -575,7 +575,7 @@ services:
       TRTLLM_NATIVE_BACKEND: ${TRTLLM_NATIVE_BACKEND:-}
       TRTLLM_NATIVE_LOG_LEVEL: ${TRTLLM_NATIVE_LOG_LEVEL:-info}
       TRTLLM_NATIVE_MODEL_POLICY: ${TRTLLM_NATIVE_MODEL_POLICY:-auto}
-      TRTLLM_ACTIVE_MODEL_KEY: ${TRTLLM_ACTIVE_MODEL_KEY:-nemotron-super-120b}
+      TRTLLM_ACTIVE_MODEL_KEY: ${TRTLLM_ACTIVE_MODEL_KEY:-nemotron-cascade-30b}
       TRTLLM_NATIVE_MAX_BATCH_SIZE: ${TRTLLM_NATIVE_MAX_BATCH_SIZE:-1}
       TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE: ${TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE:-32}
       TRTLLM_NATIVE_MOE_BACKEND: ${TRTLLM_NATIVE_MOE_BACKEND:-CUTLASS}
@@ -586,10 +586,10 @@ services:
       TRTLLM_REASONING_PARSER: ${TRTLLM_REASONING_PARSER:-nano-v3}
       TRTLLM_HF_TOKEN_FILE: /run/secrets/huggingface.token
       TRTLLM_MODELS_DIR: /models
-      TRTLLM_NVFP4_LOCAL_MODEL_DIR: ${TRTLLM_NVFP4_LOCAL_MODEL_DIR:-/models/super_fp4}
+      TRTLLM_NVFP4_LOCAL_MODEL_DIR: ${TRTLLM_NVFP4_LOCAL_MODEL_DIR:-/models/cascade_30b_nvfp4}
       TRTLLM_STATE_DIR: /state
       TRTLLM_LOGS_DIR: /logs
-      TRTLLM_MODELS: ${TRTLLM_MODELS:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}
+      TRTLLM_MODELS: ${TRTLLM_MODELS:-https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4}
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/models:/models
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/state:/state

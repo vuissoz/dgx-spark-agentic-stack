@@ -335,7 +335,7 @@ Example with explicit default local model:
 Example with explicit TRT enablement captured by onboarding:
 
 ```bash
-./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
+./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4
 ```
 
 In `rootless-dev`, onboarding now proposes the Ollama host model path:
@@ -343,7 +343,7 @@ In `rootless-dev`, onboarding now proposes the Ollama host model path:
 - and creates sibling `${HOME}/wkdir/open-webui/ollama_data/tmp` when writable.
 
 When `COMPOSE_PROFILES` does not already include `trt`, the interactive wizard now asks whether to enable TRT-LLM. If you accept, it then asks for `TRTLLM_MODELS` and writes both `COMPOSE_PROFILES` and `TRTLLM_MODELS` into `.runtime/env.generated.sh`.
-With the default Nemotron NVFP4 TRT selection and a non-empty `${AGENTIC_ROOT}/secrets/runtime/huggingface.token`, `./agent up core` now also prepares `${AGENTIC_ROOT}/trtllm/models/super_fp4` automatically before starting `trtllm`. Progress is logged to `${AGENTIC_ROOT}/trtllm/logs/nvfp4-model-prepare.log`.
+With the default Nemotron Cascade NVFP4 TRT selection and a non-empty `${AGENTIC_ROOT}/secrets/runtime/huggingface.token`, `./agent up core` now also prepares `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` automatically before starting `trtllm`. Progress is logged to `${AGENTIC_ROOT}/trtllm/logs/nvfp4-model-prepare.log`.
 
 By default, `./agent onboard` writes `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false` in `.runtime/env.generated.sh` (agent in-container sudo-mode enabled). If you want hardened mode, run `./agent sudo-mode off` (or export `AGENTIC_AGENT_NO_NEW_PRIVILEGES=true`) before starting `agents`.
 It now also writes `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` in `.runtime/env.generated.sh` (overridable via `--grafana-admin-user` and `--grafana-admin-password`).

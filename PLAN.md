@@ -124,6 +124,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-z6r` : bootstrap automatique du snapshot NVFP4 vers `${AGENTIC_ROOT}/trtllm/models/super_fp4` pendant `agent up core` quand TRT + token HF + modèle Nemotron par défaut sont présents.
   - `dgx-spark-agentic-stack-eut5` : catalogue local TRT NVFP4 (`nemotron-super-120b`, `nemotron-cascade-30b`) + commandes `agent trtllm prepare|load|unload` pour ne garder qu'un seul modèle actif en mémoire.
   - `dgx-spark-agentic-stack-06ol` : `agent cleanup` preserve maintenant par défaut les répertoires de modèles locaux (Ollama/TRT/ComfyUI) et exige `--purge-models` pour les effacer explicitement.
+  - `dgx-spark-agentic-stack-qxh7` : `nemotron-cascade-30b` devient le modèle TRT par défaut dans le catalogue, l'onboarding, Compose, le backend TRT et les tests associés.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
@@ -514,11 +515,11 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - bind réseau interne uniquement (pas de `ports:`), accès exclusivement depuis `ollama-gate`.
 - stockage dédié (ex: `${AGENTIC_ROOT}/trtllm/{models,state,logs}`) pour moteurs/modèles NVFP4.
 - healthcheck interne du runtime TRT-LLM.
-- `agent onboard` propose par défaut `TRTLLM_MODELS=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, et le fallback Compose/runtime reste aligné sur cette valeur.
+- `agent onboard` propose par défaut `TRTLLM_MODELS=https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4`, et le fallback Compose/runtime reste aligné sur cette valeur.
 - le conteneur `trtllm` embarque maintenant l'image NVIDIA `nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc5`, lance `trtllm-serve serve` en backend natif quand `huggingface.token` est present, et garde un mode `mock` deterministe sans token.
 - le mode standard `TRTLLM_NATIVE_MODEL_POLICY=auto` conserve le comportement générique, y compris la canonicalisation FP8 du slug Nemotron NVFP4 quand le backend natif sert directement un handle HF.
-- le mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` impose au contraire un runtime NVFP4 préparé localement (`TRTLLM_NVFP4_LOCAL_MODEL_DIR`, défaut `/models/super_fp4`), sans fallback silencieux vers HF/FP8.
-- avec le modèle TRT par défaut et un `huggingface.token` non vide, `agent up core` prépare automatiquement le snapshot NVFP4 épinglé dans `${AGENTIC_ROOT}/trtllm/models/super_fp4` avant le démarrage du service.
+- le mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` impose au contraire un runtime NVFP4 préparé localement (`TRTLLM_NVFP4_LOCAL_MODEL_DIR`, défaut `/models/cascade_30b_nvfp4`), sans fallback silencieux vers HF/FP8.
+- avec le modèle TRT par défaut et un `huggingface.token` non vide, `agent up core` prépare automatiquement le snapshot NVFP4 épinglé dans `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` avant le démarrage du service.
 - le catalogue TRT local connait maintenant deux payloads NVFP4 (`nemotron-super-120b`, `nemotron-cascade-30b`) et le modèle actif est piloté par `TRTLLM_ACTIVE_MODEL_KEY`.
 - les commandes opérateur `agent trtllm list`, `agent trtllm prepare <model|all>`, `agent trtllm load <model>` et `agent trtllm unload` permettent de préparer plusieurs payloads locaux, puis de basculer le service TRT sur un seul modèle actif à la fois.
 - documenter les prérequis GPU/moteurs NVFP4 et la procédure de chargement des modèles.

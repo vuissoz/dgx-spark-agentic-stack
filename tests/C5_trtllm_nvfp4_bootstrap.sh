@@ -47,35 +47,35 @@ runtime_dump="$(
   AGENTIC_PROFILE=rootless-dev \
   AGENTIC_ROOT="${runtime_root}" \
   COMPOSE_PROFILES=trt \
-  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
+  TRTLLM_MODELS="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4" \
   bash -lc "source '${runtime_lib}'; printf 'active_key=%s\npolicy=%s\nlocal_dir=%s\nrepo=%s\nrevision=%s\n' \"\${TRTLLM_ACTIVE_MODEL_KEY}\" \"\${TRTLLM_NATIVE_MODEL_POLICY}\" \"\${TRTLLM_NVFP4_LOCAL_MODEL_DIR}\" \"\${TRTLLM_NVFP4_HF_REPO}\" \"\${TRTLLM_NVFP4_HF_REVISION}\""
 )"
 
-printf '%s\n' "${runtime_dump}" | grep -q '^active_key=nemotron-super-120b$' \
+printf '%s\n' "${runtime_dump}" | grep -q '^active_key=nemotron-cascade-30b$' \
   || fail "runtime defaults must expose the default TRTLLM_ACTIVE_MODEL_KEY"
 printf '%s\n' "${runtime_dump}" | grep -q '^policy=strict-nvfp4-local-only$' \
   || fail "runtime defaults must auto-enable strict NVFP4 local-only when TRT + token are present"
-printf '%s\n' "${runtime_dump}" | grep -q '^local_dir=/models/super_fp4$' \
-  || fail "runtime defaults must keep /models/super_fp4 as local NVFP4 target"
-printf '%s\n' "${runtime_dump}" | grep -q '^repo=nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4$' \
+printf '%s\n' "${runtime_dump}" | grep -q '^local_dir=/models/cascade_30b_nvfp4$' \
+  || fail "runtime defaults must keep /models/cascade_30b_nvfp4 as local NVFP4 target"
+printf '%s\n' "${runtime_dump}" | grep -q '^repo=chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4$' \
   || fail "runtime defaults must expose the pinned NVFP4 repo"
-printf '%s\n' "${runtime_dump}" | grep -q '^revision=b1ffe4992d7db6d768453a551a656b8d12c638fb$' \
+printf '%s\n' "${runtime_dump}" | grep -q '^revision=80ee3ccfe8cb5eb019a0cde78449e8b197a0155f$' \
   || fail "runtime defaults must expose the pinned NVFP4 revision"
-ok "runtime defaults auto-select strict NVFP4 local-only for the default TRT model"
+ok "runtime defaults auto-select strict NVFP4 local-only for the default Cascade TRT model"
 
 AGENTIC_PROFILE=rootless-dev \
 AGENTIC_ROOT="${runtime_root}" \
 COMPOSE_PROFILES=trt \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
+TRTLLM_MODELS="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4" \
 TRTLLM_NVFP4_PREPARE_SOURCE_DIR="${fixture_source}" \
 bash "${bootstrap_script}" \
   || fail "NVFP4 bootstrap script failed on local fixture source"
 
-target_dir="${runtime_root}/trtllm/models/super_fp4"
+target_dir="${runtime_root}/trtllm/models/cascade_30b_nvfp4"
 [[ -f "${target_dir}/config.json" ]] || fail "NVFP4 bootstrap did not populate config.json"
 [[ -f "${target_dir}/model.safetensors.index.json" ]] || fail "NVFP4 bootstrap did not populate model.safetensors.index.json"
 [[ -f "${target_dir}/model-00001-of-00001.safetensors" ]] || fail "NVFP4 bootstrap did not populate referenced safetensor shard"
-ok "NVFP4 bootstrap populates the local super_fp4 directory"
+ok "NVFP4 bootstrap populates the default local Cascade directory"
 
 cascade_runtime_dump="$(
   AGENTIC_PROFILE=rootless-dev \
@@ -116,7 +116,7 @@ rm -rf "${fixture_cascade_source}"
 AGENTIC_PROFILE=rootless-dev \
 AGENTIC_ROOT="${runtime_root}" \
 COMPOSE_PROFILES=trt \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
+TRTLLM_MODELS="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4" \
 bash "${bootstrap_script}" \
   || fail "NVFP4 bootstrap must be idempotent once the payload is already complete"
 ok "NVFP4 bootstrap is idempotent after the model payload is complete"

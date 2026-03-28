@@ -32,7 +32,7 @@ Vérification:
 Activation optionnelle du backend TRT-LLM (interne uniquement):
 
 ```bash
-./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
+./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4
 source .runtime/env.generated.sh
 ./agent up core
 ```
@@ -42,15 +42,15 @@ Le service `trtllm` essaie désormais de lancer un vrai backend NVIDIA TRT-LLM q
 Par défaut (`TRTLLM_NATIVE_MODEL_POLICY=auto`), le runtime natif garde le comportement générique et peut encore canoniser le slug Nemotron NVFP4 vers le handle Spark documenté `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
 Un mode durci `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` existe maintenant pour DGX Spark: il n'accepte qu'un seul alias exposé a la fois (`TRTLLM_MODELS`) et force le chargement depuis `TRTLLM_NVFP4_LOCAL_MODEL_DIR`, sans fallback silencieux vers HF/FP8.
 Le stack connait maintenant deux payloads NVFP4 locaux:
+- `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` (defaut)
 - `nemotron-super-120b` -> `${AGENTIC_ROOT}/trtllm/models/super_fp4`
-- `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4`
 Le modele TRT actif est pilote par `TRTLLM_ACTIVE_MODEL_KEY`. Quand `COMPOSE_PROFILES` contient `trt`, que `TRTLLM_MODELS` expose l'alias du modele actif, et que `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide, `./agent up core` prepare automatiquement le snapshot NVFP4 local correspondant avant de demarrer `trtllm`.
 Exemple d'activation:
 
 ```bash
 export TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only
-export TRTLLM_ACTIVE_MODEL_KEY=nemotron-super-120b
-export TRTLLM_NVFP4_LOCAL_MODEL_DIR=/srv/agentic/trtllm/models/super_fp4
+export TRTLLM_ACTIVE_MODEL_KEY=nemotron-cascade-30b
+export TRTLLM_NVFP4_LOCAL_MODEL_DIR=/srv/agentic/trtllm/models/cascade_30b_nvfp4
 ./agent up core
 ```
 

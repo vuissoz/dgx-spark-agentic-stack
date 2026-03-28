@@ -18,10 +18,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
-DEFAULT_TRTLLM_MODEL = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
-DEFAULT_TRTLLM_MODEL_HANDLE = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+DEFAULT_TRTLLM_MODEL = "https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4"
+DEFAULT_TRTLLM_MODEL_HANDLE = "chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4"
 DEFAULT_NEMOTRON_NATIVE_HANDLE = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8"
-DEFAULT_NVFP4_LOCAL_MODEL_DIR = "/models/super_fp4"
+DEFAULT_NVFP4_LOCAL_MODEL_DIR = "/models/cascade_30b_nvfp4"
 MODEL_POLICY_AUTO = "auto"
 MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY = "strict-nvfp4-local-only"
 HF_URL_PREFIX = "https://huggingface.co/"

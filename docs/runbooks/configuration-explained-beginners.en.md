@@ -137,12 +137,12 @@ Notes:
 | `OLLAMA_PRELOAD_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
-| `TRTLLM_ACTIVE_MODEL_KEY` | active TRT model catalog key (`nemotron-super-120b` or `nemotron-cascade-30b`) | `nemotron-super-120b` | shell, `runtime.env` |
-| `TRTLLM_MODELS` | CSV list of model ids exposed by TRT-LLM | `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
+| `TRTLLM_ACTIVE_MODEL_KEY` | active TRT model catalog key (`nemotron-super-120b` or `nemotron-cascade-30b`) | `nemotron-cascade-30b` | shell, `runtime.env` |
+| `TRTLLM_MODELS` | CSV list of model ids exposed by TRT-LLM | `https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4` | shell |
 | `TRTLLM_NATIVE_MODEL_POLICY` | `auto` or `strict-nvfp4-local-only` | `auto` | shell |
-| `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | absolute path for the prepared DGX Spark NVFP4 runtime | `/models/super_fp4` | shell |
-| `TRTLLM_NVFP4_HF_REPO` | Hugging Face repo used for automatic strict NVFP4 bootstrap | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
-| `TRTLLM_NVFP4_HF_REVISION` | pinned Hugging Face revision used for automatic strict NVFP4 bootstrap | `b1ffe4992d7db6d768453a551a656b8d12c638fb` | shell |
+| `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | absolute path for the prepared DGX Spark NVFP4 runtime | `/models/cascade_30b_nvfp4` | shell |
+| `TRTLLM_NVFP4_HF_REPO` | Hugging Face repo used for automatic strict NVFP4 bootstrap | `chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4` | shell |
+| `TRTLLM_NVFP4_HF_REVISION` | pinned Hugging Face revision used for automatic strict NVFP4 bootstrap | `80ee3ccfe8cb5eb019a0cde78449e8b197a0155f` | shell |
 | `TRTLLM_NVFP4_PREPARE_ENABLED` | `auto`, `true`, or `false` | `auto` | shell |
 | `COMFYUI_REF` | git ref for ComfyUI image build | `master` | shell |
 | `COMFYUI_MANAGER_REPO` | ComfyUI manager extension git repo (empty = disabled) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |

@@ -133,12 +133,12 @@ Secrets runtime pour `git-forge` :
 | `OLLAMA_PRELOAD_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | entier positif | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
-| `TRTLLM_ACTIVE_MODEL_KEY` | cle de catalogue du modele TRT actif (`nemotron-super-120b` ou `nemotron-cascade-30b`) | `nemotron-super-120b` | shell, `runtime.env` |
-| `TRTLLM_MODELS` | liste CSV de modeles exposes par TRT-LLM | `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
+| `TRTLLM_ACTIVE_MODEL_KEY` | cle de catalogue du modele TRT actif (`nemotron-super-120b` ou `nemotron-cascade-30b`) | `nemotron-cascade-30b` | shell, `runtime.env` |
+| `TRTLLM_MODELS` | liste CSV de modeles exposes par TRT-LLM | `https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4` | shell |
 | `TRTLLM_NATIVE_MODEL_POLICY` | `auto` ou `strict-nvfp4-local-only` | `auto` | shell |
-| `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | chemin absolu du runtime NVFP4 prepare pour DGX Spark | `/models/super_fp4` | shell |
-| `TRTLLM_NVFP4_HF_REPO` | depot Hugging Face utilise pour le bootstrap automatique NVFP4 strict | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
-| `TRTLLM_NVFP4_HF_REVISION` | revision Hugging Face epinglee pour le bootstrap automatique NVFP4 strict | `b1ffe4992d7db6d768453a551a656b8d12c638fb` | shell |
+| `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | chemin absolu du runtime NVFP4 prepare pour DGX Spark | `/models/cascade_30b_nvfp4` | shell |
+| `TRTLLM_NVFP4_HF_REPO` | depot Hugging Face utilise pour le bootstrap automatique NVFP4 strict | `chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4` | shell |
+| `TRTLLM_NVFP4_HF_REVISION` | revision Hugging Face epinglee pour le bootstrap automatique NVFP4 strict | `80ee3ccfe8cb5eb019a0cde78449e8b197a0155f` | shell |
 | `TRTLLM_NVFP4_PREPARE_ENABLED` | `auto`, `true` ou `false` | `auto` | shell |
 | `COMFYUI_REF` | ref git pour build image ComfyUI | `master` | shell |
 | `COMFYUI_MANAGER_REPO` | repo git extension manager ComfyUI (vide = desactive) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |

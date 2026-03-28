@@ -34,14 +34,14 @@ The repository still needs deterministic regression coverage on machines where:
    - `mock` otherwise.
 4. In native mode, the adapter starts `trtllm-serve serve ...` on loopback inside the container and proxies requests to it.
 5. Preserve mock mode for deterministic repository tests that do not ship a real HF token.
-6. Keep the user-facing default TRT model slug unchanged in onboarding.
+6. Keep a single user-facing default TRT model slug in onboarding and align runtime/Compose fallbacks with it.
 7. Keep `TRTLLM_NATIVE_MODEL_POLICY=auto` as the generic default, including the existing FP8 canonicalization path for the Nemotron NVFP4 alias.
 8. Add `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` for DGX Spark:
    - exactly one TRT model alias is exposed,
    - the exposed alias must match the currently selected NVFP4 catalog entry (or the same local directory path),
    - the actual serve target becomes `TRTLLM_NVFP4_LOCAL_MODEL_DIR`,
    - and `auto` mode no longer silently falls back to `mock`.
-9. When the default TRT Nemotron NVFP4 alias is selected and a Hugging Face token is present, prepare the pinned NVFP4 snapshot automatically under `${AGENTIC_ROOT}/trtllm/models/super_fp4` before the service starts.
+9. When the default TRT Nemotron Cascade NVFP4 alias is selected and a Hugging Face token is present, prepare the pinned NVFP4 snapshot automatically under `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` before the service starts.
 10. Maintain a small built-in catalog of known local NVFP4 payloads and expose operator commands to prepare them on disk and switch the active TRT model without attempting to keep multiple huge models resident in memory at once.
 
 ## Consequences
