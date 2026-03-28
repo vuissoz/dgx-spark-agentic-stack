@@ -129,4 +129,79 @@ assert "strict NVFP4 local-only mode requires TRTLLM_MODELS" in payload["error"]
 PY
 ok "strict NVFP4 local-only rejects FP8 exposure configuration"
 
+TRTLLM_RUNTIME_MODE=mock \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS_DIR="${models_dir}" \
+TRTLLM_STATE_DIR="${state_dir}" \
+TRTLLM_LOGS_DIR="${logs_dir}" \
+TRTLLM_NATIVE_MAX_BATCH_SIZE=1 \
+TRTLLM_NATIVE_MAX_NUM_TOKENS=4096 \
+TRTLLM_NATIVE_MAX_SEQ_LEN=32768 \
+TRTLLM_NATIVE_ENABLE_CUDA_GRAPH=false \
+TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE=1 \
+TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING=false \
+TRTLLM_NATIVE_START_TIMEOUT_SECONDS=5 \
+python3 - "${server_path}" <<'PY' || fail "Nano runtime defaults must bound warmup and disable CUDA graph by default"
+import importlib.util
+import pathlib
+import sys
+
+server_path = pathlib.Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("trtllm_server_nano_defaults", server_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+controller = module.CONTROLLER
+
+cfg = controller.render_extra_config()
+cmd = controller.build_native_command()
+env = controller.build_native_env("hf_test_token")
+
+assert controller.native_max_num_tokens == 4096
+assert controller.native_max_seq_len == 32768
+assert controller.native_enable_cuda_graph is False
+assert "cuda_graph_config:" not in cfg
+assert "max_num_tokens: 4096" in cfg
+assert "--max_num_tokens" in cmd and "4096" in cmd
+assert "--max_seq_len" in cmd and "32768" in cmd
+assert env["TMPDIR"].endswith("/state/cache/tmp")
+assert env["TRITON_CACHE_DIR"].endswith("/state/cache/triton")
+assert env["TORCHINDUCTOR_CACHE_DIR"].endswith("/state/cache/torchinductor")
+assert env["TORCH_EXTENSIONS_DIR"].endswith("/state/cache/torch_extensions")
+assert env["HF_TOKEN"] == "hf_test_token"
+PY
+ok "Nano runtime defaults bound seq len, avoid CUDA graph warmup, and redirect JIT caches under /state/cache"
+
+TRTLLM_RUNTIME_MODE=mock \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS_DIR="${models_dir}" \
+TRTLLM_STATE_DIR="${state_dir}" \
+TRTLLM_LOGS_DIR="${logs_dir}" \
+TRTLLM_NATIVE_MAX_BATCH_SIZE=1 \
+TRTLLM_NATIVE_MAX_NUM_TOKENS=2048 \
+TRTLLM_NATIVE_MAX_SEQ_LEN=8192 \
+TRTLLM_NATIVE_ENABLE_CUDA_GRAPH=true \
+TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE=4 \
+TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING=true \
+TRTLLM_NATIVE_START_TIMEOUT_SECONDS=5 \
+python3 - "${server_path}" <<'PY' || fail "CUDA graph config must remain available when explicitly enabled"
+import importlib.util
+import pathlib
+import sys
+
+server_path = pathlib.Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("trtllm_server_nano_cuda_graph", server_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+controller = module.CONTROLLER
+
+cfg = controller.render_extra_config()
+
+assert controller.native_enable_cuda_graph is True
+assert "cuda_graph_config:" in cfg
+assert "max_batch_size: 4" in cfg
+assert "enable_padding: true" in cfg
+assert "max_num_tokens: 2048" in cfg
+PY
+ok "CUDA graph config can still be enabled explicitly for TRT native runtime"
+
 ok "C4_trtllm_strict_nvfp4_local_only passed"

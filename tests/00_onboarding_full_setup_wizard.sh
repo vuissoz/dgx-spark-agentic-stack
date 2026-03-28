@@ -107,6 +107,14 @@ grep -q "^export TRTLLM_MODELS='${trt_models}'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_MODELS"
 grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-cascade-30b'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_ACTIVE_MODEL_KEY"
+grep -q "^export TRTLLM_NATIVE_MAX_BATCH_SIZE='1'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_BATCH_SIZE"
+grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='4096'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_NUM_TOKENS"
+grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='32768'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_SEQ_LEN"
+grep -q "^export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH='false'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH"
 grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/cascade_30b_nvfp4'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_NVFP4_LOCAL_MODEL_DIR"
 grep -q "^export TRTLLM_NVFP4_HF_REVISION='80ee3ccfe8cb5eb019a0cde78449e8b197a0155f'$" "${env_file}" \

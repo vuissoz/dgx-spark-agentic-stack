@@ -44,6 +44,7 @@ Un mode durci `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` existe mainte
 Le stack expose maintenant `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` comme alias TRT par defaut, tout en connaissant deux payloads NVFP4 locaux pour le mode strict:
 - `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` (defaut du catalogue local)
 - `nemotron-super-120b` -> `${AGENTIC_ROOT}/trtllm/models/super_fp4`
+Sur ce chemin Nano par defaut, le runtime borne aussi `TRTLLM_NATIVE_MAX_NUM_TOKENS=4096`, `TRTLLM_NATIVE_MAX_SEQ_LEN=32768` et laisse `TRTLLM_NATIVE_ENABLE_CUDA_GRAPH=false` pour eviter les warm-ups DGX Spark qui restent bloques sur `max_seq_len=262144`.
 Le modele TRT actif du catalogue local est pilote par `TRTLLM_ACTIVE_MODEL_KEY`. Quand `COMPOSE_PROFILES` contient `trt` et que `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide, `./agent up core` precharge uniquement le cache Hugging Face du modele TRT expose par defaut `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`. Aucun payload NVFP4 local (`nemotron-cascade-30b`, `nemotron-super-120b`) n'est plus telecharge automatiquement sur ce chemin; ils restent strictement opt-in via `./agent trtllm prepare ...` ou `./agent trtllm load ...`.
 Exemple d'activation:
 

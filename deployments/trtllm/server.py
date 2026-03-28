@@ -340,9 +340,13 @@ class RuntimeController:
         self.native_backend = os.environ.get("TRTLLM_NATIVE_BACKEND", "").strip()
         self.native_log_level = os.environ.get("TRTLLM_NATIVE_LOG_LEVEL", "info").strip() or "info"
         self.native_max_batch_size = max(1, env_int("TRTLLM_NATIVE_MAX_BATCH_SIZE", 1))
+        self.native_max_num_tokens = max(1, env_int("TRTLLM_NATIVE_MAX_NUM_TOKENS", 4096))
+        self.native_max_seq_len = max(self.native_max_num_tokens, env_int("TRTLLM_NATIVE_MAX_SEQ_LEN", 32768))
+        self.native_enable_cuda_graph = env_bool("TRTLLM_NATIVE_ENABLE_CUDA_GRAPH", False)
         self.native_cuda_graph_max_batch_size = max(
-            self.native_max_batch_size, env_int("TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE", 32)
+            self.native_max_batch_size, env_int("TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE", self.native_max_batch_size)
         )
+        self.native_cuda_graph_enable_padding = env_bool("TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING", False)
         self.native_moe_backend = os.environ.get("TRTLLM_NATIVE_MOE_BACKEND", "CUTLASS").strip() or "CUTLASS"
         self.native_enable_block_reuse = env_bool("TRTLLM_NATIVE_ENABLE_BLOCK_REUSE", False)
         self.native_free_gpu_memory_fraction = env_float("TRTLLM_NATIVE_FREE_GPU_MEMORY_FRACTION", 0.8)
@@ -418,7 +422,12 @@ class RuntimeController:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         (self.models_dir / "huggingface").mkdir(parents=True, exist_ok=True)
         (self.state_dir / "home").mkdir(parents=True, exist_ok=True)
-        (self.state_dir / "cache").mkdir(parents=True, exist_ok=True)
+        cache_root = self.state_dir / "cache"
+        cache_root.mkdir(parents=True, exist_ok=True)
+        (cache_root / "tmp").mkdir(parents=True, exist_ok=True)
+        (cache_root / "triton").mkdir(parents=True, exist_ok=True)
+        (cache_root / "torchinductor").mkdir(parents=True, exist_ok=True)
+        (cache_root / "torch_extensions").mkdir(parents=True, exist_ok=True)
 
     def write_runtime_state(self) -> None:
         payload = {
@@ -505,72 +514,11 @@ class RuntimeController:
         else:
             self.native_notice = ""
 
-        extra_config = (
-            "print_iter_log: false\n"
-            "kv_cache_config:\n"
-            f"  enable_block_reuse: {'true' if self.native_enable_block_reuse else 'false'}\n"
-            '  dtype: "auto"\n'
-            f"  free_gpu_memory_fraction: {self.native_free_gpu_memory_fraction}\n"
-            "cuda_graph_config:\n"
-            f"  max_batch_size: {self.native_cuda_graph_max_batch_size}\n"
-            "  enable_padding: true\n"
-            "moe_config:\n"
-            f"  backend: {self.native_moe_backend}\n"
-            "disable_overlap_scheduler: true\n"
-        )
-        self.extra_config_file.write_text(extra_config, encoding="utf-8")
+        self.extra_config_file.write_text(self.render_extra_config(), encoding="utf-8")
 
-        env = os.environ.copy()
-        env["HOME"] = str(self.state_dir / "home")
-        env["HF_HOME"] = str(self.models_dir / "huggingface")
-        env["HF_HUB_CACHE"] = str(self.models_dir / "huggingface" / "hub")
-        env["TRANSFORMERS_CACHE"] = str(self.models_dir / "huggingface")
-        env["XDG_CACHE_HOME"] = str(self.state_dir / "cache")
-        env["NO_PROXY"] = "127.0.0.1,localhost"
-        env["no_proxy"] = env["NO_PROXY"]
-        prepend_env_path(
-            env,
-            "LD_LIBRARY_PATH",
-            [
-                "/opt/nvidia/nvda_nixl/lib/aarch64-linux-gnu",
-                "/opt/nvidia/nvda_nixl/lib64",
-                "/usr/local/ucx/lib",
-                "/usr/local/tensorrt/lib",
-                "/usr/local/cuda/lib64",
-                "/usr/local/lib/python3.12/dist-packages/torch/lib",
-                "/usr/local/lib/python3.12/dist-packages/torch_tensorrt/lib",
-                "/usr/local/cuda/compat/lib",
-                "/usr/local/nvidia/lib",
-                "/usr/local/nvidia/lib64",
-            ],
-        )
-        if token:
-            env["HF_TOKEN"] = token
+        env = self.build_native_env(token)
 
-        cmd = [
-            "trtllm-serve",
-            "serve",
-            primary.serve_handle,
-            "--host",
-            self.native_host,
-            "--port",
-            str(self.native_port),
-            "--log_level",
-            self.native_log_level,
-            "--max_batch_size",
-            str(self.native_max_batch_size),
-            "--config",
-            str(self.extra_config_file),
-        ]
-        effective_backend = self.native_backend or ("" if self.strict_nvfp4_local_only else "pytorch")
-        if effective_backend:
-            cmd.extend(["--backend", effective_backend])
-        if self.trust_remote_code:
-            cmd.append("--trust_remote_code")
-        if self.tool_parser:
-            cmd.extend(["--tool_parser", self.tool_parser])
-        if self.reasoning_parser:
-            cmd.extend(["--reasoning_parser", self.reasoning_parser])
+        cmd = self.build_native_command()
 
         with self.native_log_file.open("a", encoding="utf-8") as fh:
             fh.write(
@@ -592,6 +540,93 @@ class RuntimeController:
 
         threading.Thread(target=self._monitor_native_startup, daemon=True).start()
         threading.Thread(target=self._monitor_native_exit, daemon=True).start()
+
+    def render_extra_config(self) -> str:
+        extra_config = (
+            "print_iter_log: false\n"
+            "kv_cache_config:\n"
+            f"  enable_block_reuse: {'true' if self.native_enable_block_reuse else 'false'}\n"
+            '  dtype: "auto"\n'
+            f"  free_gpu_memory_fraction: {self.native_free_gpu_memory_fraction}\n"
+            "moe_config:\n"
+            f"  backend: {self.native_moe_backend}\n"
+            f"  max_num_tokens: {self.native_max_num_tokens}\n"
+            "disable_overlap_scheduler: true\n"
+        )
+        if self.native_enable_cuda_graph:
+            extra_config += (
+                "cuda_graph_config:\n"
+                f"  max_batch_size: {self.native_cuda_graph_max_batch_size}\n"
+                f"  enable_padding: {'true' if self.native_cuda_graph_enable_padding else 'false'}\n"
+            )
+        return extra_config
+
+    def build_native_command(self) -> list[str]:
+        primary = self.primary_entry
+
+        cmd = [
+            "trtllm-serve",
+            "serve",
+            primary.serve_handle,
+            "--host",
+            self.native_host,
+            "--port",
+            str(self.native_port),
+            "--log_level",
+            self.native_log_level,
+            "--max_batch_size",
+            str(self.native_max_batch_size),
+            "--max_num_tokens",
+            str(self.native_max_num_tokens),
+            "--max_seq_len",
+            str(self.native_max_seq_len),
+            "--config",
+            str(self.extra_config_file),
+        ]
+        effective_backend = self.native_backend or ("" if self.strict_nvfp4_local_only else "pytorch")
+        if effective_backend:
+            cmd.extend(["--backend", effective_backend])
+        if self.trust_remote_code:
+            cmd.append("--trust_remote_code")
+        if self.tool_parser:
+            cmd.extend(["--tool_parser", self.tool_parser])
+        if self.reasoning_parser:
+            cmd.extend(["--reasoning_parser", self.reasoning_parser])
+        return cmd
+
+    def build_native_env(self, token: str = "") -> dict[str, str]:
+        env = os.environ.copy()
+        cache_root = self.state_dir / "cache"
+        env["HOME"] = str(self.state_dir / "home")
+        env["HF_HOME"] = str(self.models_dir / "huggingface")
+        env["HF_HUB_CACHE"] = str(self.models_dir / "huggingface" / "hub")
+        env["TRANSFORMERS_CACHE"] = str(self.models_dir / "huggingface")
+        env["XDG_CACHE_HOME"] = str(cache_root)
+        env["TMPDIR"] = str(cache_root / "tmp")
+        env["TRITON_CACHE_DIR"] = str(cache_root / "triton")
+        env["TORCHINDUCTOR_CACHE_DIR"] = str(cache_root / "torchinductor")
+        env["TORCH_EXTENSIONS_DIR"] = str(cache_root / "torch_extensions")
+        env["NO_PROXY"] = "127.0.0.1,localhost"
+        env["no_proxy"] = env["NO_PROXY"]
+        prepend_env_path(
+            env,
+            "LD_LIBRARY_PATH",
+            [
+                "/opt/nvidia/nvda_nixl/lib/aarch64-linux-gnu",
+                "/opt/nvidia/nvda_nixl/lib64",
+                "/usr/local/ucx/lib",
+                "/usr/local/tensorrt/lib",
+                "/usr/local/cuda/lib64",
+                "/usr/local/lib/python3.12/dist-packages/torch/lib",
+                "/usr/local/lib/python3.12/dist-packages/torch_tensorrt/lib",
+                "/usr/local/cuda/compat/lib",
+                "/usr/local/nvidia/lib",
+                "/usr/local/nvidia/lib64",
+            ],
+        )
+        if token:
+            env["HF_TOKEN"] = token
+        return env
 
     def _monitor_native_exit(self) -> None:
         proc = self.native_proc

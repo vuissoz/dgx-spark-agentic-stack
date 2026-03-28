@@ -239,6 +239,18 @@ grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${default_env_file}" \
   || fail "default TRTLLM_MODELS must be ${default_trt_model}"
 grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-cascade-30b'$" "${default_env_file}" \
   || fail "default TRTLLM_ACTIVE_MODEL_KEY must be nemotron-cascade-30b"
+grep -q "^export TRTLLM_NATIVE_MAX_BATCH_SIZE='1'$" "${default_env_file}" \
+  || fail "default TRTLLM_NATIVE_MAX_BATCH_SIZE must be 1"
+grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='4096'$" "${default_env_file}" \
+  || fail "default TRTLLM_NATIVE_MAX_NUM_TOKENS must be 4096"
+grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='32768'$" "${default_env_file}" \
+  || fail "default TRTLLM_NATIVE_MAX_SEQ_LEN must be 32768"
+grep -q "^export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH='false'$" "${default_env_file}" \
+  || fail "default TRTLLM_NATIVE_ENABLE_CUDA_GRAPH must be false"
+grep -q "^export TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE='1'$" "${default_env_file}" \
+  || fail "default TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE must be 1"
+grep -q "^export TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING='false'$" "${default_env_file}" \
+  || fail "default TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING must be false"
 grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/cascade_30b_nvfp4'$" "${default_env_file}" \
   || fail "default TRTLLM_NVFP4_LOCAL_MODEL_DIR must be /models/cascade_30b_nvfp4"
 grep -q "^export TRTLLM_NVFP4_HF_REPO='chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4'$" "${default_env_file}" \

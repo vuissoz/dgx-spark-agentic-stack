@@ -126,10 +126,16 @@ ok "NVFP4 bootstrap is idempotent after the model payload is complete"
 compose_dump="$(docker compose --profile trt -f "${compose_file}" config 2>/dev/null)"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_MODELS: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' \
   || fail "compose config must expose Nano FP8 as the default TRTLLM_MODELS alias"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_NUM_TOKENS: "4096"' \
+  || fail "compose config must bound TRTLLM_NATIVE_MAX_NUM_TOKENS for Nano startup safety"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_SEQ_LEN: "32768"' \
+  || fail "compose config must bound TRTLLM_NATIVE_MAX_SEQ_LEN for Nano startup safety"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_ENABLE_CUDA_GRAPH: "false"' \
+  || fail "compose config must disable CUDA graph by default for Nano startup safety"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REPO: chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4' \
   || fail "compose config must pass TRTLLM_NVFP4_HF_REPO into the trtllm container"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REVISION: 80ee3ccfe8cb5eb019a0cde78449e8b197a0155f' \
   || fail "compose config must pass TRTLLM_NVFP4_HF_REVISION into the trtllm container"
-ok "compose config exposes Nano FP8 by default while keeping strict NVFP4 repo metadata for local operators"
+ok "compose config exposes Nano FP8 by default with bounded startup settings and strict NVFP4 repo metadata"
 
 ok "C5_trtllm_nvfp4_bootstrap passed"
