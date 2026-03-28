@@ -28,6 +28,8 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - `dgx-spark-agentic-stack-4xu` (inspiration NemoClaw/OpenShell: gateway toujours actif + sous-agents OpenClaw isoles dans un sandbox dedie par session) [CLOSED]
 - Beads (OpenClaw config split):
   - `dgx-spark-agentic-stack-lhm` (separer config immuable, overlay valide et etat writable pour OpenClaw) [OPEN]
+- Beads (OpenClaw onboarding stack-managed / repair):
+  - `dgx-spark-agentic-stack-u326` (ajouter `agent openclaw init` comme trajectoire d'onboarding/reparation stack-managed, deplacer l'onboarding channels vers la config fichier quand possible, garder le wizard upstream en fallback expert) [OPEN]
 - Beads (OpenClaw approvals egress interactives):
   - `dgx-spark-agentic-stack-e0q` (ajouter une queue d'approbation operateur par destination egress + workflow `agent openclaw approvals`) [OPEN]
 - Beads (Resolution deterministe des `latest`):
@@ -207,6 +209,26 @@ Basculer le modèle local par défaut vers une cible plus fiable pour le tool-ca
   - lecture d'un etat deja expose par le registre/runtime/API interne OpenClaw,
   - sortie utile pour l'operateur: statut module, sandbox/session courant, modele/provider, sante recente,
   - sans contourner la separation entre confinement, API interne machine et CLI operateur.
+- Follow-up `dgx-spark-agentic-stack-u326`: ajouter une trajectoire d'onboarding/reparation OpenClaw pleinement geree par la stack:
+  - ajouter `agent openclaw init` comme commande canonique pour le bootstrap OpenClaw "safe-by-default",
+  - la commande doit encapsuler le chemin connu comme stable:
+    - export du token gateway depuis le secret fichier gere par la stack,
+    - bootstrap OpenClaw avec workspace sous `/workspace/...`,
+    - skips connus pour eviter les probes upstream trompeurs et le lifecycle gateway unmanaged,
+    - seed/reconciliation d'un workspace operateur par defaut et, si utile, d'un agent operateur minimal,
+    - sortie finale indiquant les prochaines etapes exactes pour les providers/channels.
+  - `agent openclaw init` doit etre idempotente et rerunnable comme commande de repair:
+    - corriger sans reset destructif les drifts frequents (ex: workspace par defaut hors `/workspace/...`),
+    - rester sure apres onboarding interrompu ou partiellement invalide,
+    - eviter de demander a l'operateur de relancer manuellement `openclaw gateway run`.
+  - deplacer l'onboarding des channels vers des artefacts stack-managed fichiers quand c'est supporte:
+    - secrets sous `${AGENTIC_ROOT}/secrets/runtime/...`,
+    - provider bridge pour Telegram/Discord/Slack quand disponible,
+    - garder les providers QR/manual comme etapes assistees explicites seulement si necessaire.
+  - reclasser le wizard upstream en fallback expert uniquement:
+    - docs debutant et runbooks doivent pointer d'abord vers `agent openclaw init`,
+    - `openclaw onboard` / `openclaw configure --section channels` deviennent des chemins manuels/experts,
+    - `openclaw gateway run` ne doit plus apparaitre comme action normale d'exploitation.
 - Follow-up `dgx-spark-agentic-stack-1r0`: ajouter une commande operateur pour decharger explicitement un modele local a la demande:
   - constat: en rootless-dev, OpenWebUI expose une action explicite de dechargement de modele, mais la stack ne fournit pas d'equivalent via `./agent`,
   - cible: proposer une commande du type `agent ollama unload <model>` (ou equivalent plus canonique) pour liberer GPU/RAM sans passer par l'UI,
