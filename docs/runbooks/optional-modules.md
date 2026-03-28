@@ -106,6 +106,8 @@ Each request file must include non-empty:
   - `GIT_FORGE_ADMIN_USER`
   - `GIT_FORGE_SHARED_NAMESPACE`
   - `GIT_FORGE_ENABLE_PUSH_CREATE`
+- Planned agent bootstrap behavior:
+  - preconfigure each agent container with its own forge identity and auth helper so first `git clone`/checkout works without manual credential entry
 - Planned documentation: `docs/runbooks/git-forge-management.md`
 
 ## Activation

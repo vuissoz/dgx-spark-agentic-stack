@@ -69,6 +69,13 @@ Expected secret onboarding outputs:
 
 These secrets must be materialized as separate root-only files under `${AGENTIC_ROOT}/secrets/runtime/git-forge/`, not written into the generated shell env file.
 
+In addition, onboarding/runtime bootstrap should prepare each agent container so the first interactive shell can use the forge immediately:
+
+- preconfigure `git config --global user.name` and `user.email` for the matching agent account
+- preconfigure the internal forge base URL
+- install or render a credential helper / credentials file backed by the agent secret file
+- avoid any first-use prompt for the initial `git clone` or checkout of a forge-hosted project
+
 ## Accounts and Roles
 
 Required bootstrap identities:
@@ -111,9 +118,10 @@ The target operator flow for a shared project is:
 
 1. `system-manager` creates the repository through the web UI or API.
 2. The operator grants the required agent accounts push/pull access.
-3. Each agent container receives only its own credential material.
-4. Agents use standard Git commands against the internal forge URL:
+3. Each agent container receives only its own credential material plus its pre-rendered Git identity/auth configuration.
+4. On first shell attach, agents can already use standard Git commands against the internal forge URL:
    - `git clone`
+   - repository checkout immediately after clone without credential prompt
    - `git fetch`
    - `git pull`
    - `git push`

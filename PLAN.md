@@ -248,7 +248,8 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `GIT_FORGE_ADMIN_USER` (défaut : `system-manager`),
   - `GIT_FORGE_SHARED_NAMESPACE` (organisation/groupe commun pour projets partagés),
   - `GIT_FORGE_ENABLE_PUSH_CREATE` (`0/1`, désactivé par défaut),
-  - chemins de secrets attendus pour le mot de passe admin initial et les credentials/tokens des comptes agents.
+  - chemins de secrets attendus pour le mot de passe admin initial et les credentials/tokens des comptes agents,
+  - option de préconfiguration Git agents pour que le premier shell `agent <tool>` puisse faire immédiatement `git clone`/checkout sans saisie manuelle de credential.
 - contraintes UX :
   - aucune question “bloquante” sans valeur par défaut ;
   - mode non interactif disponible via flags (`--profile`, `--root`, etc.) pour CI ;
@@ -275,6 +276,7 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
     - activer le module dans `AGENTIC_OPTIONAL_MODULES`,
     - demander/valider `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`,
     - générer ou recueillir hors git le secret admin initial et les credentials des comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`,
+    - préparer la configuration Git initiale par agent (au minimum remote base URL, helper de credentials ou fichier équivalent hors git, `user.name`, `user.email`) pour qu’un premier `git clone`/checkout fonctionne dès la première connexion shell,
     - récapituler les chemins secrets et la commande d’activation `./agent up optional`.
 - sortie des secrets :
   - fichiers séparés sous `${AGENTIC_ROOT}/secrets/runtime/` uniquement ;
@@ -1221,9 +1223,10 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 - bootstrap initial idempotent d’un compte opérateur `system-manager` avec rôle System Manager / admin, accessible depuis l’hôte via l’UI loopback-only.
 - bootstrap initial idempotent de comptes dédiés pour `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`.
 - chaque compte agent reçoit des credentials stockés hors git (fichiers root-only ou secrets injectés) permettant `git clone`, `fetch`, `pull`, `push` contre la forge interne ; les chemins et la rotation de ces credentials doivent être documentés.
+- chaque conteneur agent concerné doit aussi recevoir une préconfiguration Git stack-managed (identity + auth) pointant vers la forge interne, de façon à permettre un premier `git clone`/checkout direct dès la première session sans setup manuel dans le shell utilisateur.
 - transport par défaut : HTTPS interne + tokens/PAT ; SSH côté forge désactivé par défaut sauf besoin explicite documenté.
 - prévoir un bootstrap minimal d’organisation/projet partagé pour permettre à plusieurs agents de collaborer sur les mêmes dépôts sans dépendre d’un fournisseur externe.
-- onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, et créer/recueillir séparément les secrets runtime nécessaires.
+- onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, créer/recueillir séparément les secrets runtime nécessaires, et annoncer que la configuration Git des agents sera préchargée pour un premier checkout direct.
 - `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur et la cohérence de la liste des comptes agents attendus.
 - documentation opérateur obligatoire : bootstrap initial, création/rotation/révocation des comptes, création de dépôt, partage inter-agents, sauvegarde/restauration, conformité.
 
@@ -1233,7 +1236,7 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 - volumes DB et dépôts pointent vers `${AGENTIC_ROOT}/optional/git/...`.
 - compte `system-manager` existe avec rôle admin/manager.
 - comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose` existent.
-- depuis au moins deux conteneurs agents distincts : `git clone`, `git commit`, `git push`, `git fetch`, `git pull` sur un même dépôt partagé fonctionnent.
+- depuis au moins deux conteneurs agents distincts : première session shell -> `git clone`/checkout d’un dépôt de la forge sans saisie de credential manuelle fonctionne ; puis `git commit`, `git push`, `git fetch`, `git pull` sur un même dépôt partagé fonctionnent.
 - backup/restore ou rollback restaure un dépôt test et la métadonnée DB correspondante.
 
 ---
