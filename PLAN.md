@@ -36,6 +36,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 - `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` ajouté et propagé vers `OLLAMA_CONTEXT_LENGTH`.
 - `agent doctor` vérifie la cohérence contexte/capacité modèle/mémoire.
 - `tests/L7_default_model_tool_call_fs_ops.sh` couvre les opérations fichier sur `claude`, `codex`, `opencode`, `vibestral`, `openhands`.
+- Suivi ouvert `dgx-spark-agentic-stack-yzk0` : ajouter un test d’intégration end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, collecte d’artefacts et doctor final.
 - La compatibilité agents inspirée des contrats Ollama inclut :
   - profils de configuration par agent versionnés ;
   - chemins explicites `/v1/chat/completions`, `/v1/responses`, `/v1/messages` ;
@@ -127,6 +128,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 | `dgx-spark-agentic-stack-im5` | open | demander rétention max + budget disque max en onboarding et les appliquer au runtime |
 | `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |
 | `dgx-spark-agentic-stack-zu7n` | open | ajouter une forge Git interne loopback-only avec comptes dédiés pour chaque agent et gestion opérateur documentée |
+| `dgx-spark-agentic-stack-yzk0` | open | livrer un test de stack end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, artefacts unifiés et doctor final |
 
 ## Profils d’exécution (obligatoires)
 
