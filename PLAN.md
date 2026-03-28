@@ -1,8 +1,131 @@
-# PLAN.md — Implémentation du CDC DGX Spark (A→L) par Codex + GPT-5.2
+# DGX Spark Canonical Plan
 
-Ce plan est conçu pour être exécuté par un agent de coding (Codex) : chaque sous-tâche produit des artefacts concrets (fichiers, scripts, compose) et **chaque sous-tâche a un test automatique** (script) avec critères d’acceptation binaires. On n’enchaîne pas une étape tant que ses tests ne sont pas verts.
+Ce fichier est la **source de vérité unique** du dépôt pour le plan DGX Spark. Il fusionne l’ancien `PLAN.md` (roadmap d’implémentation A→L) et l’ancien `Plan.md` (tracking d’exécution, umbrella Beads, addenda et follow-ups). Il ne doit plus exister qu’un seul fichier de plan dans le repo.
+
+Ce plan reste conçu pour être exécuté par un agent de coding : chaque sous-tâche doit produire des artefacts concrets (fichiers, scripts, compose) et **chaque sous-tâche a un test automatique** avec critères d’acceptation binaires. On n’enchaîne pas une étape tant que ses tests ne sont pas verts.
 
 Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Compose v2, NVIDIA Container Toolkit, accès distant via Tailscale/SSH. Invariant : **aucun service web n’écoute sur `0.0.0.0`** (bind hôte sur `127.0.0.1` uniquement). Les conteneurs communiquent via un réseau Docker privé.
+
+## Comment lire ce plan
+
+- `Current State` : où en est réellement le dépôt aujourd’hui, avec statuts Beads normalisés.
+- `Profils d’exécution` puis sections `0` à `L` : roadmap détaillée et exigences d’implémentation/test.
+- `Définition “terminé”` et `Ordre d’exécution imposé` : critères finaux et chemin critique.
+
+## Current State
+
+### Canonical tracking merge
+
+- L’ancien fichier `Plan.md` est absorbé ici.
+- Les statuts Beads ci-dessous sont normalisés d’après le tracker local au `2026-03-28`.
+- Quand un ancien addendum de `Plan.md` indiquait `[OPEN]` mais que Beads est désormais `closed`, le statut canonique est celui de Beads.
+
+### Active umbrella merged from former `Plan.md`
+
+- Umbrella : `dgx-spark-agentic-stack-5bz` (`closed`)
+- Objectif exécuté :
+  - basculer le modèle local par défaut vers une cible plus fiable pour le tool-calling multi-agents ;
+  - pousser la fenêtre de contexte au maximum utile du modèle avec contrôle ressources ;
+  - ajouter le test fonctionnel 5 agents sur opérations fichiers ;
+  - renforcer la compatibilité des intégrations agents avec les contrats Ollama ;
+  - livrer la trajectoire OpenClaw inspirée de `ollama launch openclaw`.
+
+### Scope recap merged from former `Plan.md`
+
+- `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
+- `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` ajouté et propagé vers `OLLAMA_CONTEXT_LENGTH`.
+- `agent doctor` vérifie la cohérence contexte/capacité modèle/mémoire.
+- `tests/L7_default_model_tool_call_fs_ops.sh` couvre les opérations fichier sur `claude`, `codex`, `opencode`, `vibestral`, `openhands`.
+- La compatibilité agents inspirée des contrats Ollama inclut :
+  - profils de configuration par agent versionnés ;
+  - chemins explicites `/v1/chat/completions`, `/v1/responses`, `/v1/messages` ;
+  - variables/env générées de manière déterministe.
+- Les écarts majeurs de compat couverts incluent :
+  - `tools` / `tool_choice` / `tool_calls` ;
+  - `usage` / tokens réels ;
+  - `ANTHROPIC_AUTH_TOKEN` pour Claude ;
+  - suppression du bypass direct OpenWebUI -> Ollama par défaut.
+- La trajectoire OpenClaw couvre :
+  - profil d’intégration versionné ;
+  - bootstrap config/env ;
+  - endpoints/auth/audit/sandbox alignés ;
+  - tests E2 et non-régression ;
+  - relay webhook provider “production-safe”.
+
+### Umbrella step status
+
+| Step | Status | Beads / note |
+| --- | --- | --- |
+| 1 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
+| 2 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
+| 3 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
+| 4 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
+| 5 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
+| 6 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
+| 7 | complete | `dgx-spark-agentic-stack-7gw` |
+| 8 | complete | `dgx-spark-agentic-stack-3xx` |
+| 9 | complete | `dgx-spark-agentic-stack-eta` |
+| 10 | complete | `dgx-spark-agentic-stack-p1i` |
+| 11 | complete | `dgx-spark-agentic-stack-m3z` |
+| 12 | complete | `dgx-spark-agentic-stack-a5m` |
+| 13 | complete | `dgx-spark-agentic-stack-ik6` |
+| 14 | complete | `dgx-spark-agentic-stack-ygu` |
+| 15 | complete for umbrella scope | validations `dgx-spark-agentic-stack-b32`, `dgx-spark-agentic-stack-de9`, doc refresh `dgx-spark-agentic-stack-mvzt` |
+
+### Delivered tracking from former `Plan.md`
+
+- Core Ollama / compat agents:
+  - `dgx-spark-agentic-stack-5bz` : modèle local par défaut, onboarding contexte, test 5 agents FS ops.
+  - `dgx-spark-agentic-stack-3xx` : `tools` / `tool_choice` / `tool_calls` sur endpoints compatibles.
+  - `dgx-spark-agentic-stack-eta` : usages/tokens réels sur `/v1/chat/completions`, `/v1/responses`, `/v1/messages`.
+  - `dgx-spark-agentic-stack-p1i` : bootstrap Claude aligné sur `ANTHROPIC_AUTH_TOKEN`.
+  - `dgx-spark-agentic-stack-m3z` : OpenWebUI gate-only par défaut.
+  - `dgx-spark-agentic-stack-ygu` : veille automatisée de drift upstream Ollama.
+  - `dgx-spark-agentic-stack-7gw` : matrice d’intégration `opencode/openclaw/openhands/vibestral`.
+  - `dgx-spark-agentic-stack-a5m` : enforcement opencode/vibestral via `ollama-gate`.
+  - `dgx-spark-agentic-stack-b32` : validation D8/E2 sur stack compose démarrée.
+  - `dgx-spark-agentic-stack-goh` : estimation du contexte maximal qui tient dans le budget mémoire.
+  - `dgx-spark-agentic-stack-ahl` : arbitrage dynamique `ollama|trtllm|both|remote`.
+  - `dgx-spark-agentic-stack-de9` : clôture des gaps résiduels du plan umbrella.
+- OpenClaw livré :
+  - `dgx-spark-agentic-stack-0hk` : relay webhook provider -> queue/file -> injection locale.
+  - `dgx-spark-agentic-stack-j01` : dashboard opérateur via tunnel SSH/Tailscale, loopback-only.
+  - `dgx-spark-agentic-stack-69e` : parité wizard CLI en conteneur.
+  - `dgx-spark-agentic-stack-x00` : couverture tests setup/config OpenClaw CLI.
+  - `dgx-spark-agentic-stack-4xu` : sandboxes dédiés par session.
+  - `dgx-spark-agentic-stack-qcy` : OpenClaw basculé du module optional vers le core `agent`.
+  - `dgx-spark-agentic-stack-lhm` : séparation config immuable / overlay valide / état writable.
+  - `dgx-spark-agentic-stack-e0q` : approvals interactives d’egress par destination.
+  - `dgx-spark-agentic-stack-fcb` : résolution déterministe des valeurs `latest`.
+  - `dgx-spark-agentic-stack-oop` : registre d’état persistant sessions/sandboxes.
+  - `dgx-spark-agentic-stack-0n8` : dualité API interne / CLI opérateur.
+  - `dgx-spark-agentic-stack-zj4` : blueprint/manifest de module OpenClaw.
+  - `dgx-spark-agentic-stack-irt` : commande in-chat de statut OpenClaw.
+  - `dgx-spark-agentic-stack-433` : vrai Control UI OpenClaw sur `127.0.0.1:18789`.
+  - `dgx-spark-agentic-stack-qik` : provider bridges stack-managed pour Telegram/Slack/Discord + bootstrap WhatsApp.
+  - `dgx-spark-agentic-stack-u326` reste ouvert : `agent openclaw init` stack-managed et réparation idempotente ne sont pas encore clos.
+- UI / ComfyUI / docs / onboarding :
+  - `dgx-spark-agentic-stack-3yi` : garde-fou OpenHands contre restart/OOM au démarrage de nouvelles conversations.
+  - `dgx-spark-agentic-stack-8cx` : proxy WebSocket ComfyUI et bootstrap Flux.1-dev clarifiés.
+  - `dgx-spark-agentic-stack-p94` : secret `huggingface.token` dans l’onboarding.
+  - `dgx-spark-agentic-stack-s0m` : runbook `rootless-dev` OpenClaw.
+  - `dgx-spark-agentic-stack-0ik` : persistance ComfyUI sur mount hôte unique.
+  - `dgx-spark-agentic-stack-6nn` : contrat CUDA arm64/rootless-dev explicité.
+  - `dgx-spark-agentic-stack-mvzt` : `README.md` devenu landing page anglaise concise, références EN/FR préservées.
+- Observabilité / policy:
+  - `dgx-spark-agentic-stack-im5` reste ouvert : politique de rétention et d’occupation disque à intégrer à l’onboarding/runtime.
+  - `dgx-spark-agentic-stack-wlx` est `in_progress` : métriques Prometheus natives pour forwarders TCP OpenClaw.
+
+### Remaining active follow-ups merged from former `Plan.md`
+
+| Issue | Status | Remaining work |
+| --- | --- | --- |
+| `dgx-spark-agentic-stack-wj3` | open | publier des seuils de compaction “soft” / “danger” dérivés du budget de contexte et les exposer aux agents |
+| `dgx-spark-agentic-stack-u326` | open | livrer `agent openclaw init` comme chemin stack-managed d’onboarding/réparation |
+| `dgx-spark-agentic-stack-im5` | open | demander rétention max + budget disque max en onboarding et les appliquer au runtime |
+| `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |
+| `dgx-spark-agentic-stack-1r0` | open | ajouter une commande opérateur de déchargement explicite d’un modèle local |
+| `dgx-spark-agentic-stack-cx9` | open | rendre l’activation TRT et la liste de modèles TRT explicites dans l’onboarding |
 
 ## Profils d’exécution (obligatoires)
 
