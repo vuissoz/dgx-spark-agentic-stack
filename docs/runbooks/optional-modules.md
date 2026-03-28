@@ -100,6 +100,12 @@ Each request file must include non-empty:
   - `${AGENTIC_ROOT}/optional/git/logs`
   - `${AGENTIC_ROOT}/optional/git/db`
   - `${AGENTIC_ROOT}/optional/git/repositories`
+- Planned onboarding inputs:
+  - `AGENTIC_OPTIONAL_MODULES+=git-forge`
+  - `GIT_FORGE_HOST_PORT`
+  - `GIT_FORGE_ADMIN_USER`
+  - `GIT_FORGE_SHARED_NAMESPACE`
+  - `GIT_FORGE_ENABLE_PUSH_CREATE`
 - Planned documentation: `docs/runbooks/git-forge-management.md`
 
 ## Activation

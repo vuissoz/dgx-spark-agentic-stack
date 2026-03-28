@@ -232,6 +232,7 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
 - variables minimales couvertes par le wizard :
   - `AGENTIC_PROFILE` (`strict-prod` par défaut, `rootless-dev` proposé pour dev local),
   - `AGENTIC_ROOT`,
+  - `AGENTIC_OPTIONAL_MODULES`,
   - `AGENTIC_AGENT_WORKSPACES_ROOT`,
   - `AGENTIC_CLAUDE_WORKSPACES_DIR`,
   - `AGENTIC_CODEX_WORKSPACES_DIR`,
@@ -242,6 +243,12 @@ Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
   - `AGENTIC_NETWORK`,
   - `AGENTIC_EGRESS_NETWORK`,
   - `OLLAMA_MODELS_DIR`.
+- si le module `git-forge` est sélectionné dans `AGENTIC_OPTIONAL_MODULES`, le wizard couvre aussi au minimum :
+  - `GIT_FORGE_HOST_PORT` (bind loopback-only côté hôte),
+  - `GIT_FORGE_ADMIN_USER` (défaut : `system-manager`),
+  - `GIT_FORGE_SHARED_NAMESPACE` (organisation/groupe commun pour projets partagés),
+  - `GIT_FORGE_ENABLE_PUSH_CREATE` (`0/1`, désactivé par défaut),
+  - chemins de secrets attendus pour le mot de passe admin initial et les credentials/tokens des comptes agents.
 - contraintes UX :
   - aucune question “bloquante” sans valeur par défaut ;
   - mode non interactif disponible via flags (`--profile`, `--root`, etc.) pour CI ;
@@ -263,7 +270,12 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
   - profil/runtime (`AGENTIC_PROFILE`, `AGENTIC_ROOT`, réseaux, project name) ;
   - bootstrap admin pour services UI activés (utilisateur admin + mot de passe via prompt masqué) ;
   - configuration réseau/egress (allowlist initiale domaines/CIDR autorisés selon politique), avec une baseline incluant les endpoints GitHub nécessaires aux agents (`github.com`, `api.github.com`, `codeload.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`) ;
-  - secrets requis par modules activés (création/génération guidée ou saisie manuelle).
+  - secrets requis par modules activés (création/génération guidée ou saisie manuelle) ;
+  - si `git-forge` est activé :
+    - activer le module dans `AGENTIC_OPTIONAL_MODULES`,
+    - demander/valider `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`,
+    - générer ou recueillir hors git le secret admin initial et les credentials des comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`,
+    - récapituler les chemins secrets et la commande d’activation `./agent up optional`.
 - sortie des secrets :
   - fichiers séparés sous `${AGENTIC_ROOT}/secrets/runtime/` uniquement ;
   - permissions strictes (`chmod 600`) ;
@@ -1211,6 +1223,7 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 - chaque compte agent reçoit des credentials stockés hors git (fichiers root-only ou secrets injectés) permettant `git clone`, `fetch`, `pull`, `push` contre la forge interne ; les chemins et la rotation de ces credentials doivent être documentés.
 - transport par défaut : HTTPS interne + tokens/PAT ; SSH côté forge désactivé par défaut sauf besoin explicite documenté.
 - prévoir un bootstrap minimal d’organisation/projet partagé pour permettre à plusieurs agents de collaborer sur les mêmes dépôts sans dépendre d’un fournisseur externe.
+- onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, et créer/recueillir séparément les secrets runtime nécessaires.
 - `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur et la cohérence de la liste des comptes agents attendus.
 - documentation opérateur obligatoire : bootstrap initial, création/rotation/révocation des comptes, création de dépôt, partage inter-agents, sauvegarde/restauration, conformité.
 

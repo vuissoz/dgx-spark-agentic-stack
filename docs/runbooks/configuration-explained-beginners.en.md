@@ -79,13 +79,27 @@ Practical note:
 | Variable | Allowed values | Default | Stored in |
 |---|---|---|---|
 | `AGENTIC_STACK_ALL_TARGETS` | comma list of `core,agents,ui,obs,rag,optional` (subset allowed) | `core,agents,ui,obs,rag,optional` | shell |
-| `AGENTIC_OPTIONAL_MODULES` | comma list of `mcp,pi-mono,goose,portainer` | empty (none enabled) | shell |
+| `AGENTIC_OPTIONAL_MODULES` | comma list of `mcp,git-forge,pi-mono,goose,portainer` | empty (none enabled) | shell |
 | `COMPOSE_PROFILES` | comma list. Supported in repo: `trt`, `rag-lexical` | empty | shell |
 
 Notes:
 - `trt` enables `trtllm` in `core`.
 - `rag-lexical` enables `opensearch` in `rag`.
 - If `COMPOSE_PROFILES` does not already include `trt`, `./agent onboard` now asks explicitly whether to enable TRT, then persists the resulting value in the generated env file.
+- If `AGENTIC_OPTIONAL_MODULES` includes `git-forge`, onboarding should also ask for the loopback UI port, the forge admin account, the shared namespace, and whether push-to-create should be enabled.
+
+Planned `git-forge` variables:
+
+| Variable | Allowed values | Default | Stored in |
+|---|---|---|---|
+| `GIT_FORGE_HOST_PORT` | free TCP port on the host | `13000` | shell |
+| `GIT_FORGE_ADMIN_USER` | non-empty login | `system-manager` | shell |
+| `GIT_FORGE_SHARED_NAMESPACE` | organization/group slug | `agentic` | shell |
+| `GIT_FORGE_ENABLE_PUSH_CREATE` | `0` or `1` | `0` | shell |
+
+Planned `git-forge` secrets:
+- `${AGENTIC_ROOT}/secrets/runtime/git-forge/system-manager.password`
+- `${AGENTIC_ROOT}/secrets/runtime/git-forge/<agent>.token`
 
 ## 3.3 LLM Routing, Quotas, and MCP Limits
 

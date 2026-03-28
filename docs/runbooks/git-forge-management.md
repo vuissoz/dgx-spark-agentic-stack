@@ -50,6 +50,25 @@ Recommended secret files:
 
 All such files must remain `chmod 600` and out of version control.
 
+## Onboarding Inputs
+
+When the module is implemented, `./agent onboard` should make the forge configuration explicit instead of relying on hidden defaults.
+
+Expected non-secret onboarding outputs:
+
+- `AGENTIC_OPTIONAL_MODULES` includes `git-forge` when the operator enables it
+- `GIT_FORGE_HOST_PORT` for the loopback UI/API bind
+- `GIT_FORGE_ADMIN_USER` with default `system-manager`
+- `GIT_FORGE_SHARED_NAMESPACE` for the shared organization/group used by stack-managed repositories
+- `GIT_FORGE_ENABLE_PUSH_CREATE` (`0` by default, `1` only when the operator explicitly wants agents to create repos by push)
+
+Expected secret onboarding outputs:
+
+- the initial admin password or bootstrap token for `system-manager`
+- one credential or token per agent account
+
+These secrets must be materialized as separate root-only files under `${AGENTIC_ROOT}/secrets/runtime/git-forge/`, not written into the generated shell env file.
+
 ## Accounts and Roles
 
 Required bootstrap identities:
