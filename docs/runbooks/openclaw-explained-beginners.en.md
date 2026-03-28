@@ -154,6 +154,21 @@ ${EDITOR:-vi} "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt"
 
 ## 8. Common Mistakes (and Fixes)
 
+- Mistake: leaving the wizard workspace at `/state/cli/openclaw-home/.openclaw/workspace`.
+  - Check: onboarding ends with `/overlay/openclaw.operator-overlay.json: agents.defaults.workspace must stay under /workspace/`.
+  - Fix: rerun onboarding with `--workspace /workspace/<project>` or choose a `/workspace/...` path in the wizard. In this stack, `/state/...` is for runtime state, not the persisted default user workspace.
+
+- Mistake: assuming OpenClaw "gateway port" and OpenClaw API port are the same thing.
+  - Check: onboarding reports a gateway health failure on `ws://127.0.0.1:8111`.
+  - Fix: remember the split:
+    - `18111 -> 8111` is the stack OpenClaw API/dashboard ingress,
+    - `18789` is the managed upstream OpenClaw Web UI/WS gateway.
+    - For onboarding in this stack, prefer the documented `--skip-health` path to avoid the misleading upstream probe.
+
+- Mistake: running `openclaw gateway run` manually from `./agent openclaw`.
+  - Check: logs mention `anthropic/claude-opus-4-6` and missing Anthropic API keys.
+  - Fix: do not start a second manual gateway. Use `./agent up core` to run the stack-managed `openclaw-gateway` service.
+
 - Mistake: OpenClaw not starting.
   - Check: `./agent doctor` output and whether `./agent up core` succeeded.
   - Fix: ensure `${AGENTIC_ROOT}/secrets/runtime/openclaw.token`, `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret`, and `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json` exist and are valid.

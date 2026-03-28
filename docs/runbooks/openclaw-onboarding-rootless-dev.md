@@ -307,20 +307,63 @@ Provider secret file contract used by the bridge:
 If you need a "brand-new install" reset (CLI-only or full module reset), follow:
 - `docs/runbooks/openclaw-explique-debutants.md` section `8. Reset "installation neuve" (clean reset)`
 
-## Step 4b: Manual Onboard Wizard Choices (This Stack)
+## Step 4b: Beginner-Safe Setup Path
+
+For a beginner, the safest path is:
+1. let the stack own gateway/runtime wiring,
+2. use `openclaw onboard` only to seed a valid workspace/provider choice,
+3. configure chat channels afterwards with `openclaw configure --section channels`,
+4. do not start a second gateway manually.
+
+Recommended baseline inside `./agent openclaw`:
+
+```bash
+export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' </run/secrets/openclaw.token)"
+openclaw onboard \
+  --workspace /workspace/openclaw-default \
+  --non-interactive \
+  --accept-risk \
+  --skip-health \
+  --skip-daemon \
+  --skip-skills \
+  --skip-ui \
+  --skip-channels \
+  --skip-search
+openclaw configure --section channels
+openclaw agents list
+```
+
+Why this is the recommended beginner flow:
+- `--workspace /workspace/...` avoids the most common stack-specific breakage.
+- `--skip-health` avoids a misleading upstream wizard health probe that expects a gateway on `127.0.0.1:8111`, while this stack exposes the managed upstream gateway on `127.0.0.1:18789`.
+- `--skip-daemon` and `--skip-ui` avoid creating the impression that you must run `openclaw gateway run` yourself. In this stack, `./agent up core` already owns the gateway lifecycle.
+- `openclaw configure --section channels` is the safe place to add Telegram/Discord/Slack after the base config is valid.
+
+Do not use this for normal stack operation:
+
+```bash
+openclaw gateway run
+```
+
+That command starts a second unmanaged upstream gateway inside the operator shell. It does not represent the stack-managed `openclaw-gateway` service and can fall back to upstream defaults such as `anthropic/claude-opus-4-6`, which is why you can see misleading "No API key found for provider anthropic" errors there.
+
+## Step 4c: Manual Onboard Wizard Choices (This Stack)
 
 If you run interactive/manual onboarding (`openclaw onboard` prompts, or Web UI onboarding forms), use the following choices.
 
 | Wizard item | Choose in this stack | Why / notes |
 |---|---|---|
-| Workspace path | `/workspace/<project>` (example: `/workspace/wizard-default`) | This is the stack-standard persistent workspace mount (`${AGENTIC_OPENCLAW_WORKSPACES_DIR}`). |
-| Is `/state/cli/openclaw-home/.openclaw/workspace` persistent? | Yes | `/state` is also a persistent host mount. Still prefer `/workspace/<project>` for explicit operator projects. |
+| Workspace path | `/workspace/<project>` (example: `/workspace/wizard-default`) | Mandatory stack-safe choice. Do not leave the upstream default `/state/cli/openclaw-home/.openclaw/workspace`. |
+| Why `/state/...` is wrong here | Never keep it as the selected agent workspace | The validated operator overlay only allows `agents.defaults.workspace` under `/workspace/`. If you keep `/state/...`, capture fails closed with `agents.defaults.workspace must stay under /workspace/` and your onboarding changes may not persist. |
+| Is `/state/cli/openclaw-home/.openclaw/workspace` persistent? | Technically yes, but do not select it as the default workspace | `/state` is persistent, but this stack reserves it for CLI/runtime state. User workspaces must stay under `/workspace/...`. |
 | Custom provider base URL | `http://ollama-gate:11435/v1` | From containers, use Docker DNS service name `ollama-gate` (not host loopback). |
 | "IP of ollama-gate" | Do not set fixed IP | Container IPs are ephemeral. Always use `ollama-gate` hostname on the `agentic` network. |
 | API key field for custom provider | Non-empty placeholder (example: `local-gate`) | Empty keys can be rejected by onboarding forms; local `ollama-gate` path does not require a real upstream key. |
 | Entrypoint compatibility | OpenAI-compatible / enabled | `ollama-gate` OpenAI endpoint is `/v1/*`. |
 | Model ID | `${AGENTIC_DEFAULT_MODEL}` (default: `nemotron-cascade-2:30b`) | Keeps onboarding aligned with stack defaults and `agent doctor` checks. |
+| Gateway port | Leave the stack-managed value unchanged if already proposed; do not try to "fix" it manually | The stack-managed upstream gateway service listens on host loopback port `18789`. The core API service is a different service on port `8111`. Mixing them in the wizard causes confusing health output. |
 | Gateway auth mode | `Token` | Stack gateway service is configured with `OPENCLAW_GATEWAY_AUTH_MODE=token`. |
+| Gateway bind | `Loopback (127.0.0.1)` | Required by stack security policy. |
 | Tailscale exposure (inside container) | `Off` | Exposure is handled at host level via SSH/Tailscale tunnel to loopback ports. |
 | "How should I provide the gateway token?" | `Use SecretRef` -> Environment variable | Matches secret storage contract used by this stack. |
 | Secret provider type | `Environment variable` | Recommended for this stack (no external secret manager required). |
@@ -340,6 +383,79 @@ Quick probe from inside the `openclaw` container context:
 curl -fsS http://ollama-gate:11435/healthz
 curl -fsS http://ollama-gate:11435/v1/models | sed -n '1,40p'
 ```
+
+## Step 4d: What Went Wrong in the Broken Example
+
+The failure report mixed three separate concepts:
+
+1. The wizard kept the default workspace under `/state/cli/openclaw-home/.openclaw/workspace`.
+2. The stack only accepts persisted operator workspaces under `/workspace/...`.
+3. A manual `openclaw gateway run` was started afterwards, which is not the managed gateway service used by this stack.
+
+Effect of each issue:
+- `agents.defaults.workspace must stay under /workspace/`
+  - This is the real configuration error.
+  - It means onboarding tried to persist a default workspace outside the allowed stack mount.
+  - Result: the wrapper refused to save the overlay, so some onboarding choices were not captured cleanly.
+
+- `Health check failed: gateway closed (1006...)` against `ws://127.0.0.1:8111`
+  - This is a wizard/runtime mismatch, not the primary failure.
+  - In this stack, the OpenClaw API lives on `8111`, but the managed upstream gateway UI/WS lives on `18789`.
+  - The upstream onboarding health probe assumes a local gateway on `8111`, which is not how this stack is split.
+
+- `No API key found for provider "anthropic"` after `openclaw gateway run`
+  - This came from launching an extra upstream gateway by hand.
+  - That process used upstream defaults because it was not the managed service path and no Anthropic credentials were configured.
+  - This does not mean the stack requires Anthropic. The intended local provider remains `ollama-gate`.
+
+## Step 4e: Clean Recovery After This Specific Failure
+
+If you hit the exact symptoms above, recover with this sequence:
+
+```bash
+./agent stop openclaw
+./agent up core
+./agent openclaw
+```
+
+Inside the `./agent openclaw` shell:
+
+```bash
+export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' </run/secrets/openclaw.token)"
+openclaw onboard \
+  --workspace /workspace/openclaw-default \
+  --non-interactive \
+  --accept-risk \
+  --skip-health \
+  --skip-daemon \
+  --skip-skills \
+  --skip-ui \
+  --skip-channels \
+  --skip-search
+openclaw configure --section channels
+openclaw agents list
+```
+
+Then verify from the host:
+
+```bash
+./agent doctor
+./agent ls
+./agent logs openclaw
+```
+
+Optional sanity checks for persisted stack-safe values:
+
+```bash
+cat "${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
+cat "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+```
+
+Expected outcome:
+- overlay file contains `agents.defaults.workspace` only under `/workspace/...`,
+- no need to run `openclaw gateway run`,
+- host dashboard/UI remains on `http://127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}/dashboard`,
+- upstream Web UI/WS remains on `http://127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}` and `ws://127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`.
 
 ## Step 5: Access Dashboard via SSH/Tailscale Tunnel
 
@@ -517,6 +633,18 @@ chmod 600 "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret" \
   - restore from template:
     - `examples/optional/openclaw.integration-profile.v1.json`
     - `${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json`
+
+- `/overlay/openclaw.operator-overlay.json: agents.defaults.workspace must stay under /workspace/`
+  - onboarding tried to persist a default workspace outside the allowed stack mount.
+  - rerun onboarding with `--workspace /workspace/<project>` or choose `/workspace/<project>` in the wizard.
+
+- `Health check failed: gateway closed (1006 abnormal closure (no close frame))`
+  - when this appears at the end of `openclaw onboard`, it usually means the upstream wizard probed `127.0.0.1:8111` instead of the stack-managed upstream gateway on `127.0.0.1:18789`.
+  - use the recommended onboarding command with `--skip-health`; validate the real stack health with `./agent doctor`, `./agent ls`, and `./agent logs openclaw`.
+
+- `No API key found for provider "anthropic"` after `openclaw gateway run`
+  - you started an extra unmanaged gateway process from inside the operator shell.
+  - stop it, return to the stack-managed lifecycle (`./agent up core`), and do not use `openclaw gateway run` for normal operation in this repository.
 
 - DM call returns `403`
   - target is not present in `dm_allowlist.txt` (or file changes were not reloaded yet).
