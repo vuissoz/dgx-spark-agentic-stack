@@ -126,6 +126,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 | `dgx-spark-agentic-stack-im5` | open | demander rétention max + budget disque max en onboarding et les appliquer au runtime |
 | `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |
 | `dgx-spark-agentic-stack-1r0` | open | ajouter une commande opérateur de déchargement explicite d’un modèle local |
+| `dgx-spark-agentic-stack-zu7n` | open | ajouter une forge Git interne loopback-only avec comptes dédiés pour chaque agent et gestion opérateur documentée |
 
 ## Profils d’exécution (obligatoires)
 
@@ -181,6 +182,7 @@ Le contenu attendu reste identique :
 - `/srv/agentic/secrets/` : secrets runtime + logs rotation
 - `/srv/agentic/{ollama,gate,proxy,dns,openwebui,openhands,comfyui,rag,monitoring}/`
 - `/srv/agentic/{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
+- `/srv/agentic/optional/git/{config,state,logs,db,repositories,bootstrap}/`
 - `AGENTIC_AGENT_WORKSPACES_ROOT` peut séparer les workspaces agents du reste :
   - `strict-prod` par défaut : `${AGENTIC_ROOT}` (donc `${AGENTIC_ROOT}/<tool>/workspaces`)
   - `rootless-dev` par défaut : `${AGENTIC_ROOT}/agent-workspaces` (donc `${AGENTIC_AGENT_WORKSPACES_ROOT}/<tool>/workspaces`)
@@ -1113,7 +1115,7 @@ Suivi Beads : `dgx-spark-agentic-stack-eus`
 
 ---
 
-## K — Modules optionnels à risque : OpenClaw / MCP Catalog / pi-mono / goose / Portainer (activation conditionnelle)
+## K — Modules optionnels à risque : OpenClaw / MCP Catalog / pi-mono / goose / Portainer / Git forge (activation conditionnelle)
 
 Principe : **désactivé par défaut**. Un module n’est activé que si :
 - besoin explicite + définition de succès
@@ -1189,6 +1191,37 @@ Principe : **désactivé par défaut**. Un module n’est activé que si :
 
 **Test** : `tests/F6_hardening_matrix.sh`
 - vérifie la baseline hardening de `optional-goose` dans la config Compose rendue.
+
+### K6 Git forge partagé (si activé)
+Suivi Beads : `dgx-spark-agentic-stack-zu7n`
+
+**Implémentation**
+- profile Compose : `optional-git-forge`.
+- service recommandé : `optional-forgejo` (ou autre forge Gitea-compatible) avec UI/API HTTP bindées uniquement sur `127.0.0.1:${GIT_FORGE_HOST_PORT:-13000}` et reachability interne via le réseau Docker privé.
+- persistance dédiée :
+  - `${AGENTIC_ROOT}/optional/git/config`
+  - `${AGENTIC_ROOT}/optional/git/state`
+  - `${AGENTIC_ROOT}/optional/git/logs`
+  - `${AGENTIC_ROOT}/optional/git/db`
+  - `${AGENTIC_ROOT}/optional/git/repositories`
+  - `${AGENTIC_ROOT}/optional/git/bootstrap`
+- base de données et dépôts doivent survivre aux redémarrages ; `agent update` enregistre le digest image réellement déployé, la version de la forge et les artefacts utiles au rollback ; `agent rollback` doit pouvoir restaurer une release cohérente avec la base et les dépôts persistants.
+- bootstrap initial idempotent d’un compte opérateur `system-manager` avec rôle System Manager / admin, accessible depuis l’hôte via l’UI loopback-only.
+- bootstrap initial idempotent de comptes dédiés pour `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`.
+- chaque compte agent reçoit des credentials stockés hors git (fichiers root-only ou secrets injectés) permettant `git clone`, `fetch`, `pull`, `push` contre la forge interne ; les chemins et la rotation de ces credentials doivent être documentés.
+- transport par défaut : HTTPS interne + tokens/PAT ; SSH côté forge désactivé par défaut sauf besoin explicite documenté.
+- prévoir un bootstrap minimal d’organisation/projet partagé pour permettre à plusieurs agents de collaborer sur les mêmes dépôts sans dépendre d’un fournisseur externe.
+- `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur et la cohérence de la liste des comptes agents attendus.
+- documentation opérateur obligatoire : bootstrap initial, création/rotation/révocation des comptes, création de dépôt, partage inter-agents, sauvegarde/restauration, conformité.
+
+**Test** : `tests/K6_git_forge.sh`
+- service `optional-forgejo` healthy ; UI répond sur `127.0.0.1` uniquement.
+- aucun bind `0.0.0.0`, aucun mount `docker.sock`, baseline hardening conforme.
+- volumes DB et dépôts pointent vers `${AGENTIC_ROOT}/optional/git/...`.
+- compte `system-manager` existe avec rôle admin/manager.
+- comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose` existent.
+- depuis au moins deux conteneurs agents distincts : `git clone`, `git commit`, `git push`, `git fetch`, `git pull` sur un même dépôt partagé fonctionnent.
+- backup/restore ou rollback restaure un dépôt test et la métadonnée DB correspondante.
 
 ---
 

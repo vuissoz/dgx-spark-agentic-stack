@@ -25,7 +25,7 @@ The canonical runtime root depends on profile:
 - `/srv/agentic/rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `/srv/agentic/monitoring/`
 - `/srv/agentic/{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
-- `/srv/agentic/optional/{mcp,pi-mono,goose,portainer}/`
+- `/srv/agentic/optional/{mcp,git,pi-mono,goose,portainer}/`
 - `/srv/agentic/shared-ro/`
 - `/srv/agentic/shared-rw/`
 - `/srv/agentic/deployments/{releases,current}/`

@@ -87,6 +87,21 @@ Each request file must include non-empty:
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 - `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (required by `pi-mono`)
 
+## Planned Optional Module
+
+### `git-forge`
+- Tracking issue: `dgx-spark-agentic-stack-zu7n`
+- Planned profile: `optional-git-forge`
+- Planned service class: `optional-forgejo`
+- Purpose: stack-managed internal Git hosting so the operator and all agent surfaces can share repositories through normal Git workflows.
+- Planned runtime data:
+  - `${AGENTIC_ROOT}/optional/git/config`
+  - `${AGENTIC_ROOT}/optional/git/state`
+  - `${AGENTIC_ROOT}/optional/git/logs`
+  - `${AGENTIC_ROOT}/optional/git/db`
+  - `${AGENTIC_ROOT}/optional/git/repositories`
+- Planned documentation: `docs/runbooks/git-forge-management.md`
+
 ## Activation
 
 Single module:
