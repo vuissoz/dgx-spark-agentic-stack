@@ -2164,7 +2164,7 @@ collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_oll
 collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 warn_agentic_tool_call_model_regression "AGENTIC_DEFAULT_MODEL" "${default_model}" || die "invalid AGENTIC_DEFAULT_MODEL"
 collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model. Onboarding may recommend a different value later once AGENTIC_LIMIT_OLLAMA_MEM is known."
-trtllm_models="${trtllm_models_override:-${TRTLLM_MODELS:-qwen3-nvfp4-demo}}"
+trtllm_models="${trtllm_models_override:-${TRTLLM_MODELS:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}}"
 trt_profile_enabled=0
 if compose_profile_enabled "trt" "${compose_profiles}"; then
   trt_profile_enabled=1

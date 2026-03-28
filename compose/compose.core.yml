@@ -555,7 +555,7 @@ services:
     environment:
       TRTLLM_LISTEN_HOST: 0.0.0.0
       TRTLLM_PORT: 11436
-      TRTLLM_MODELS: ${TRTLLM_MODELS:-qwen3-nvfp4-demo}
+      TRTLLM_MODELS: ${TRTLLM_MODELS:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/models:/models
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/state:/state

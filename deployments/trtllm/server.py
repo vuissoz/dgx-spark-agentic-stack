@@ -32,15 +32,18 @@ def deterministic_embedding_vector(text: str, size: int = 32) -> list[float]:
     return values
 
 
+DEFAULT_TRTLLM_MODEL = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+
+
 def configured_models() -> list[str]:
-    raw = os.environ.get("TRTLLM_MODELS", "nvfp4-demo")
+    raw = os.environ.get("TRTLLM_MODELS", DEFAULT_TRTLLM_MODEL)
     models: list[str] = []
     for item in raw.split(","):
         name = item.strip()
         if name:
             models.append(name)
     if not models:
-        models.append("nvfp4-demo")
+        models.append(DEFAULT_TRTLLM_MODEL)
     return models
 
 

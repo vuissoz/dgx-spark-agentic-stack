@@ -9,6 +9,8 @@ source "${SCRIPT_DIR}/lib/common.sh"
 wizard_script="${REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
 [[ -x "${wizard_script}" ]] || fail "onboarding wizard is missing or not executable: ${wizard_script}"
 
+default_trt_model="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+
 work_dir="${REPO_ROOT}/.runtime/test-onboarding-env-$$"
 default_env_file="${work_dir}/default.env.generated.sh"
 override_env_file="${work_dir}/override.env.generated.sh"
@@ -233,8 +235,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='91239'$" "${default_env_f
   || fail "default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 91239"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='91239'$" "${default_env_file}" \
   || fail "default OLLAMA_CONTEXT_LENGTH is not 91239"
-grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo'$" "${default_env_file}" \
-  || fail "default TRTLLM_MODELS must be qwen3-nvfp4-demo"
+grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${default_env_file}" \
+  || fail "default TRTLLM_MODELS must be ${default_trt_model}"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='91239'$" "${default_env_file}" \
   || fail "default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='nemotron-cascade-2:30b'$" "${default_env_file}" \
@@ -409,8 +411,8 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='50909'$" "${rootless_defa
   || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 50909"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 50909"
-grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo'$" "${rootless_default_env_file}" \
-  || fail "rootless default TRTLLM_MODELS must stay qwen3-nvfp4-demo"
+grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${rootless_default_env_file}" \
+  || fail "rootless default TRTLLM_MODELS must stay ${default_trt_model}"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${rootless_default_env_file}" \

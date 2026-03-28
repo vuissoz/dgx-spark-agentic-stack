@@ -32,7 +32,7 @@ Check with:
 Optional TRT-LLM backend activation (internal-only):
 
 ```bash
-./agent onboard --compose-profiles trt --trtllm-models qwen3-nvfp4-demo
+./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
 source .runtime/env.generated.sh
 ./agent up core
 ```

@@ -118,6 +118,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-im5` reste ouvert : politique de rétention et d’occupation disque à intégrer à l’onboarding/runtime.
   - `dgx-spark-agentic-stack-wlx` est `in_progress` : métriques Prometheus natives pour forwarders TCP OpenClaw.
   - `dgx-spark-agentic-stack-cx9` est resolu : l'onboarding exporte maintenant `COMPOSE_PROFILES` et `TRTLLM_MODELS`, avec prompt explicite d'activation TRT.
+  - `dgx-spark-agentic-stack-wav3` : le défaut `agent onboard` pour `TRTLLM_MODELS` pointe maintenant vers le slug Hugging Face `NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, avec fallback runtime cohérent et vérification `agent doctor` exécutée sur le profil actif.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
@@ -508,6 +509,7 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - bind réseau interne uniquement (pas de `ports:`), accès exclusivement depuis `ollama-gate`.
 - stockage dédié (ex: `${AGENTIC_ROOT}/trtllm/{models,state,logs}`) pour moteurs/modèles NVFP4.
 - healthcheck interne du runtime TRT-LLM.
+- `agent onboard` propose par défaut `TRTLLM_MODELS=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, et le fallback Compose/runtime reste aligné sur cette valeur.
 - documenter les prérequis GPU/moteurs NVFP4 et la procédure de chargement des modèles.
 
 **Test** : `tests/C3_trtllm_basic.sh`
