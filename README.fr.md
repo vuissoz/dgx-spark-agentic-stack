@@ -345,7 +345,7 @@ agent start service <service...>
 agent start container <container...>
 agent backup <run|list|restore <snapshot_id> [--yes]>
 agent forget <target> [--yes] [--no-backup]
-agent cleanup [--yes] [--backup|--no-backup]
+agent cleanup [--yes] [--backup|--no-backup] [--purge-models]
 agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
@@ -397,7 +397,7 @@ Notes:
 - `agent sudo-mode on` active `sudo` dans les conteneurs agents (en relachant uniquement `no-new-privileges` pour ces services); `agent sudo-mode off` revient au mode durci.
 - `agent rollback all` exige un `release_id`.
 - Utiliser `--skip-d5-tests` (ou `AGENTIC_SKIP_D5_TESTS=1`) pour ignorer uniquement `D5_gate_external_providers.sh` avec un warning si l'accès API externe n'est pas disponible.
-- `agent cleanup` supprime aussi les images Docker locales de la stack et purge l'état sans suivre les symlinks.
+- `agent cleanup` supprime aussi les images Docker locales de la stack et purge l'état sans suivre les symlinks, mais conserve par défaut les répertoires de modèles locaux; utiliser `--purge-models` pour les effacer explicitement.
 
 OpenClaw fonctionne désormais avec un modèle à deux plans:
 - control-plane toujours actif: `openclaw` + `openclaw-gateway` + `openclaw-relay`,

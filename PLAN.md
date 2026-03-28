@@ -123,6 +123,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-c8n` : ajout d'un mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` pour DGX Spark, avec répertoire local NVFP4 imposé et absence de fallback silencieux vers HF/FP8.
   - `dgx-spark-agentic-stack-z6r` : bootstrap automatique du snapshot NVFP4 vers `${AGENTIC_ROOT}/trtllm/models/super_fp4` pendant `agent up core` quand TRT + token HF + modèle Nemotron par défaut sont présents.
   - `dgx-spark-agentic-stack-eut5` : catalogue local TRT NVFP4 (`nemotron-super-120b`, `nemotron-cascade-30b`) + commandes `agent trtllm prepare|load|unload` pour ne garder qu'un seul modèle actif en mémoire.
+  - `dgx-spark-agentic-stack-06ol` : `agent cleanup` preserve maintenant par défaut les répertoires de modèles locaux (Ollama/TRT/ComfyUI) et exige `--purge-models` pour les effacer explicitement.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 

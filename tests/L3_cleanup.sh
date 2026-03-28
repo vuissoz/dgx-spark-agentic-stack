@@ -85,21 +85,30 @@ printf 'keep-me\n' >"${outside_marker}"
 ln -s "${outside_root}" "${symlink_path}"
 mkdir -p "${ollama_models_target}"
 ln -s "${ollama_models_target}" "${AGENTIC_OLLAMA_MODELS_LINK}"
+mkdir -p "${AGENTIC_ROOT}/trtllm/models/super_fp4" "${AGENTIC_ROOT}/comfyui/models/checkpoints"
+printf 'keep-trt-model\n' > "${AGENTIC_ROOT}/trtllm/models/super_fp4/model.bin"
+printf 'keep-comfy-model\n' > "${AGENTIC_ROOT}/comfyui/models/checkpoints/model.safetensors"
+mkdir -p "${AGENTIC_ROOT}/ollama/models"
+printf 'keep-ollama-model\n' > "${AGENTIC_ROOT}/ollama/models/model.gguf"
 
 printf 'y\nCLEAN\nremove-every-thing\n' | "${agent_bin}" rootless-dev cleanup >/tmp/agent-l3-cleanup.out \
   || fail "agent rootless-dev cleanup interactive flow failed"
 
 grep -q 'cleanup completed root=' /tmp/agent-l3-cleanup.out \
   || fail "cleanup output must include completion marker"
+grep -q 'models=preserved' /tmp/agent-l3-cleanup.out \
+  || fail "cleanup output must report default model preservation"
 
 [[ -d "${AGENTIC_ROOT}" ]] || fail "cleanup must preserve runtime root directory"
-if find "${AGENTIC_ROOT}" -mindepth 1 -print -quit | grep -q .; then
-  fail "cleanup must remove all files under runtime root"
-fi
 [[ -f "${outside_marker}" ]] || fail "cleanup must not follow symlink target outside runtime root"
 [[ ! -e "${symlink_path}" ]] || fail "cleanup must remove symlink entry under runtime root"
 [[ ! -e "${AGENTIC_OLLAMA_MODELS_LINK}" ]] || fail "cleanup must unlink AGENTIC_OLLAMA_MODELS_LINK in rootless-dev"
 [[ -d "${ollama_models_target}" ]] || fail "cleanup must not delete ollama models target directory outside AGENTIC_ROOT"
+[[ -f "${AGENTIC_ROOT}/trtllm/models/super_fp4/model.bin" ]] || fail "cleanup must preserve TRT models by default"
+[[ -f "${AGENTIC_ROOT}/comfyui/models/checkpoints/model.safetensors" ]] || fail "cleanup must preserve ComfyUI models by default"
+[[ -f "${AGENTIC_ROOT}/ollama/models/model.gguf" ]] || fail "cleanup must preserve Ollama models under AGENTIC_ROOT by default"
+[[ ! -e "${AGENTIC_ROOT}/cleanup-marker.txt" ]] || fail "cleanup must still purge non-model runtime files"
+[[ ! -e "${AGENTIC_ROOT}/nested/state/value.txt" ]] || fail "cleanup must still purge non-model nested runtime files"
 
 backup_count="$(find "${AGENTIC_CLEANUP_EXPORT_DIR}" -maxdepth 1 -type f -name '*.tar.gz' | wc -l | tr -d ' ')"
 [[ "${backup_count}" -ge 1 ]] || fail "cleanup must export a backup archive when backup is requested"
@@ -107,6 +116,14 @@ backup_count="$(find "${AGENTIC_CLEANUP_EXPORT_DIR}" -maxdepth 1 -type f -name '
 [[ -z "$(service_container_id optional-sentinel)" ]] || fail "optional-sentinel must be stopped by cleanup"
 if docker image inspect "${AGENTIC_AGENT_BASE_IMAGE}" >/dev/null 2>&1; then
   fail "cleanup must remove local docker images linked to the stack"
+fi
+
+"${agent_bin}" rootless-dev cleanup --yes --no-backup --purge-models >/tmp/agent-l3-cleanup-purge-models.out \
+  || fail "agent rootless-dev cleanup --yes --no-backup --purge-models failed"
+grep -q 'models=purged' /tmp/agent-l3-cleanup-purge-models.out \
+  || fail "cleanup --purge-models output must report model purge"
+if find "${AGENTIC_ROOT}" -mindepth 1 -print -quit | grep -q .; then
+  fail "cleanup --purge-models must remove remaining model files under runtime root"
 fi
 
 ok "L3_cleanup passed"

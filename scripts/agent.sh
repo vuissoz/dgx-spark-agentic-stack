@@ -167,6 +167,27 @@ path_allowed_for_purge() {
   return 1
 }
 
+cleanup_model_paths() {
+  local -a candidates=()
+  local configured_source=""
+  local path
+
+  candidates+=("${AGENTIC_ROOT}/trtllm/models")
+  candidates+=("${AGENTIC_ROOT}/comfyui/models")
+  candidates+=("${AGENTIC_ROOT}/ollama/models")
+
+  configured_source="$(canonicalize_path "${OLLAMA_MODELS_DIR}")"
+  if [[ -n "${configured_source}" ]] && path_within "${configured_source}" "${AGENTIC_ROOT}"; then
+    candidates+=("${configured_source}")
+  fi
+
+  for path in "${candidates[@]}"; do
+    [[ -n "${path}" ]] || continue
+    path_within "${path}" "${AGENTIC_ROOT}" || continue
+    printf '%s\n' "${path}"
+  done | awk 'NF && !seen[$0]++'
+}
+
 agent_workspace_dir() {
   local tool="$1"
   case "${tool}" in
@@ -2076,6 +2097,142 @@ purge_directory_contents() {
   fi
 }
 
+purge_directory_contents_preserving() {
+  local path="$1"
+  shift || true
+  local -a preserved_paths=("$@")
+  local child
+  local preserve
+  local matched=0
+  local -a child_preserves=()
+
+  [[ -d "${path}" ]] || {
+    install -d -m 0750 "${path}"
+    return 0
+  }
+  path_allowed_for_purge "${path}" \
+    || die "refusing to purge path outside allowed runtime workspace roots: ${path}"
+
+  for preserve in "${preserved_paths[@]}"; do
+    if [[ "${preserve}" == "${path}" ]]; then
+      return 0
+    fi
+  done
+
+  while IFS= read -r -d '' child; do
+    matched=0
+    child_preserves=()
+    for preserve in "${preserved_paths[@]}"; do
+      if [[ "${preserve}" == "${child}" || "${preserve}" == "${child}"/* ]]; then
+        matched=1
+        child_preserves+=("${preserve}")
+      fi
+    done
+
+    if [[ "${matched}" -eq 0 ]]; then
+      rm -rf --one-file-system -- "${child}"
+      continue
+    fi
+
+    if [[ -d "${child}" && ! -L "${child}" ]]; then
+      purge_directory_contents_preserving "${child}" "${child_preserves[@]}"
+    fi
+  done < <(find -P "${path}" -mindepth 1 -maxdepth 1 -print0)
+}
+
+purge_runtime_root_with_preserved_paths() {
+  local root="$1"
+  shift || true
+  local -a preserved_paths=("$@")
+
+  if [[ "${#preserved_paths[@]}" -eq 0 ]]; then
+    purge_runtime_root_symlink_safe "${root}"
+    return 0
+  fi
+
+  [[ -n "${root}" && "${root}" != "/" ]] || die "Refusing cleanup: invalid runtime root '${root}'"
+  [[ -e "${root}" ]] || return 0
+  [[ -L "${root}" ]] && die "Refusing cleanup: AGENTIC_ROOT is a symlink: ${root}"
+  [[ -d "${root}" ]] || die "Refusing cleanup: AGENTIC_ROOT is not a directory: ${root}"
+
+  if purge_directory_contents_preserving "${root}" "${preserved_paths[@]}"; then
+    return 0
+  fi
+
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then
+    die "cleanup failed to purge ${root}; rerun with sufficient privileges or repair ownership first"
+  fi
+
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    die "cleanup failed to purge ${root}; docker helper fallback is unavailable and permission repair is required"
+  fi
+
+  warn "cleanup: direct purge failed under rootless-dev, attempting docker helper fallback (ownership/permission drift)"
+  local preserve_rel_csv=""
+  local preserve
+  local rel
+  for preserve in "${preserved_paths[@]}"; do
+    rel="${preserve#${root}/}"
+    if [[ "${rel}" == "${preserve}" ]]; then
+      continue
+    fi
+    if [[ -n "${preserve_rel_csv}" ]]; then
+      preserve_rel_csv="${preserve_rel_csv},${rel}"
+    else
+      preserve_rel_csv="${rel}"
+    fi
+  done
+
+  if ! docker run --rm --network none \
+    -e AGENTIC_CLEANUP_PRESERVE_REL="${preserve_rel_csv}" \
+    -v "${root}:/cleanup" \
+    "${AGENTIC_CLEANUP_HELPER_IMAGE:-busybox:1.36.1}" \
+    sh -lc '
+      set -eu
+      preserve_csv="${AGENTIC_CLEANUP_PRESERVE_REL:-}"
+      preserve_match() {
+        target="$1"
+        [ -n "${preserve_csv}" ] || return 1
+        old_ifs="${IFS}"
+        IFS=","
+        set -- ${preserve_csv}
+        IFS="${old_ifs}"
+        for rel in "$@"; do
+          [ -n "${rel}" ] || continue
+          if [ "${rel}" = "${target}" ] || [ "${rel#${target}/}" != "${rel}" ]; then
+            return 0
+          fi
+        done
+        return 1
+      }
+      purge_dir() {
+        dir="$1"
+        rel_dir="$2"
+        find -P "${dir}" -mindepth 1 -maxdepth 1 -print | while IFS= read -r child; do
+          [ -n "${child}" ] || continue
+          name="${child##*/}"
+          child_rel="${name}"
+          if [ -n "${rel_dir}" ]; then
+            child_rel="${rel_dir}/${name}"
+          fi
+          if preserve_match "${child_rel}"; then
+            if [ -d "${child}" ] && [ ! -L "${child}" ]; then
+              purge_dir "${child}" "${child_rel}"
+            fi
+          else
+            chmod -R u+rwx -- "${child}" >/dev/null 2>&1 || true
+            rm -rf -- "${child}"
+          fi
+        done
+      }
+      purge_dir /cleanup ""
+      chown "'"${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}"'" /cleanup >/dev/null 2>&1 || true
+      chmod 0750 /cleanup >/dev/null 2>&1 || true
+    '; then
+    die "cleanup failed to purge ${root} (helper fallback failed). Try: sudo chown -R $(id -u):$(id -g) '${root}'"
+  fi
+}
+
 purge_runtime_root_symlink_safe() {
   local root="$1"
   [[ -n "${root}" && "${root}" != "/" ]] || die "Refusing cleanup: invalid runtime root '${root}'"
@@ -2308,12 +2465,14 @@ cmd_cleanup() {
   local force="${AGENTIC_CLEANUP_FORCE:-0}"
   local backup_mode="ask"
   local backup_enabled=0
+  local purge_models=0
   local answer confirmation confirmation_remove
   local export_dir="${AGENTIC_CLEANUP_EXPORT_DIR:-${AGENTIC_REPO_ROOT}/.runtime/cleanup-exports}"
   local backup_path=""
   local ts target
   local -a selected_targets=()
   local -a cleanup_images=()
+  local -a preserved_model_paths=()
   local tmp_log
 
   while [[ $# -gt 0 ]]; do
@@ -2330,17 +2489,22 @@ cmd_cleanup() {
         backup_mode="no"
         shift
         ;;
+      --purge-models)
+        purge_models=1
+        shift
+        ;;
       -h|--help|help)
         cat <<USAGE
 Usage:
-  agent cleanup [--yes] [--backup|--no-backup]
-  agent strict-prod cleanup [--yes] [--backup|--no-backup]
-  agent rootless-dev cleanup [--yes] [--backup|--no-backup]
+  agent cleanup [--yes] [--backup|--no-backup] [--purge-models]
+  agent strict-prod cleanup [--yes] [--backup|--no-backup] [--purge-models]
+  agent rootless-dev cleanup [--yes] [--backup|--no-backup] [--purge-models]
 
 Description:
   Stop the stack stepwise, optionally export a backup archive, then purge AGENTIC_ROOT
-  to bring runtime state back to a fresh/brand-new state. Cleanup also removes local
-  docker images associated with the stack.
+  to bring runtime state back to a fresh/brand-new state. By default cleanup preserves
+  local model directories; pass --purge-models to remove them explicitly. Cleanup also
+  removes local docker images associated with the stack.
 USAGE
         return 0
         ;;
@@ -2369,6 +2533,10 @@ USAGE
       N|n|no|NO) backup_enabled=0 ;;
       *) die "cleanup aborted: invalid backup choice '${answer}'" ;;
     esac
+  fi
+
+  if [[ "${purge_models}" != "1" ]]; then
+    mapfile -t preserved_model_paths < <(cleanup_model_paths)
   fi
 
   if [[ "${force}" != "1" ]]; then
@@ -2406,12 +2574,16 @@ USAGE
     fi
   fi
 
-  purge_runtime_root_symlink_safe "${AGENTIC_ROOT}"
+  purge_runtime_root_with_preserved_paths "${AGENTIC_ROOT}" "${preserved_model_paths[@]}"
   cleanup_rootless_ollama_models_link
   remove_cleanup_images_best_effort "${cleanup_images[@]}"
   install -d -m 0750 "${AGENTIC_ROOT}"
 
-  printf 'cleanup completed root=%s\n' "${AGENTIC_ROOT}"
+  if [[ "${purge_models}" == "1" ]]; then
+    printf 'cleanup completed root=%s models=purged\n' "${AGENTIC_ROOT}"
+  else
+    printf 'cleanup completed root=%s models=preserved\n' "${AGENTIC_ROOT}"
+  fi
 }
 
 cmd_ollama_models_status() {

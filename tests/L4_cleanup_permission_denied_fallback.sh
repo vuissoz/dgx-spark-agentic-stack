@@ -36,8 +36,8 @@ touch "${AGENTIC_ROOT}/permission-denied/subtree/payload.txt"
 chmod 000 "${AGENTIC_ROOT}/permission-denied/subtree"
 chmod 000 "${AGENTIC_ROOT}/permission-denied"
 
-"${agent_bin}" rootless-dev cleanup --yes --no-backup >/tmp/agent-l4-cleanup.out 2>&1 \
-  || fail "agent rootless-dev cleanup --yes --no-backup failed on permission-denied runtime tree"
+"${agent_bin}" rootless-dev cleanup --yes --no-backup --purge-models >/tmp/agent-l4-cleanup.out 2>&1 \
+  || fail "agent rootless-dev cleanup --yes --no-backup --purge-models failed on permission-denied runtime tree"
 
 grep -q 'cleanup: direct purge failed under rootless-dev, attempting docker helper fallback' /tmp/agent-l4-cleanup.out \
   || fail "cleanup did not report docker helper fallback after permission denial"

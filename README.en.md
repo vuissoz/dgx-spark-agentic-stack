@@ -343,7 +343,7 @@ agent start service <service...>
 agent start container <container...>
 agent backup <run|list|restore <snapshot_id> [--yes]>
 agent forget <target> [--yes] [--no-backup]
-agent cleanup [--yes] [--backup|--no-backup]
+agent cleanup [--yes] [--backup|--no-backup] [--purge-models]
 agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
@@ -394,7 +394,7 @@ Notes:
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.
 - `agent rollback all` requires a `release_id`.
 - Use `--skip-d5-tests` (or `AGENTIC_SKIP_D5_TESTS=1`) to skip only `D5_gate_external_providers.sh` with a warning when external API access is unavailable.
-- `agent cleanup` also removes local stack Docker images and purges state without following symlinks.
+- `agent cleanup` also removes local stack Docker images and purges state without following symlinks, but it preserves local model directories by default; use `--purge-models` to remove them explicitly.
 
 ## Ollama: preload and model link
 
