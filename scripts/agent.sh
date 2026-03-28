@@ -68,6 +68,7 @@ Usage:
   agent forget <target> [--yes] [--no-backup]
   agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
+  agent ollama unload <model>
   agent ollama-link
   agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
   agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
@@ -451,15 +452,21 @@ validate_optional_module_prereqs() {
 log_optional_activation() {
   local module="$1"
   local request_file="${AGENTIC_ROOT}/deployments/optional/${module}.request"
-  local changes_log="${AGENTIC_ROOT}/deployments/changes.log"
   local actor="${SUDO_USER:-${USER:-unknown}}"
+
+  append_changes_log "optional module enabled module=${module} actor=${actor} request=${request_file}"
+}
+
+append_changes_log() {
+  local message="$1"
+  local changes_log="${AGENTIC_ROOT}/deployments/changes.log"
 
   install -d -m 0750 "${AGENTIC_ROOT}/deployments"
   touch "${changes_log}"
   chmod 0640 "${changes_log}" || true
 
-  printf '%s optional module enabled module=%s actor=%s request=%s\n' \
-    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "${module}" "${actor}" "${request_file}" \
+  printf '%s %s\n' \
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "${message}" \
     >>"${changes_log}"
 }
 
@@ -2383,6 +2390,107 @@ cmd_ollama_models_status() {
   fi
 }
 
+ollama_loaded_models() {
+  local ollama_cid="$1"
+  local ps_output
+
+  ps_output="$(docker exec "${ollama_cid}" ollama ps 2>&1)" || {
+    printf '%s\n' "${ps_output}" >&2
+    return 1
+  }
+
+  printf '%s\n' "${ps_output}" | awk '
+    NR == 1 && $1 == "NAME" { next }
+    NF >= 1 { print $1 }
+  '
+}
+
+cmd_ollama_unload() {
+  local model="${1:-}"
+  local actor="${SUDO_USER:-${USER:-unknown}}"
+  local ollama_cid=""
+  local -a loaded_models=()
+  local loaded_models_output=""
+  local loaded=0
+  local loaded_model
+  local stop_output=""
+
+  [[ -n "${model}" ]] || die "Usage: agent ollama unload <model>"
+  shift || true
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent ollama unload <model>
+
+Description:
+  Explicitly unload a local model from the Ollama backend memory.
+  Initial backend scope is Ollama only. This command is idempotent:
+  if the model is not currently loaded, it returns success with
+  result=already-unloaded.
+USAGE
+        return 0
+        ;;
+      *)
+        die "Unknown ollama unload argument: $1"
+        ;;
+    esac
+  done
+
+  require_cmd docker
+  ollama_cid="$(service_container_id "ollama" || true)"
+  [[ -n "${ollama_cid}" ]] || die "Ollama backend is not running. Start it with: agent up core"
+
+  loaded_models_output="$(ollama_loaded_models "${ollama_cid}")" \
+    || die "Failed to query loaded Ollama models from backend container '${ollama_cid}'"
+  if [[ -n "${loaded_models_output}" ]]; then
+    mapfile -t loaded_models < <(printf '%s\n' "${loaded_models_output}")
+  fi
+
+  for loaded_model in "${loaded_models[@]}"; do
+    if [[ "${loaded_model}" == "${model}" ]]; then
+      loaded=1
+      break
+    fi
+  done
+
+  if [[ "${loaded}" != "1" ]]; then
+    append_changes_log "ollama unload actor=${actor} backend=ollama model=${model} container=${ollama_cid} result=already-unloaded"
+    printf 'ollama unload backend=ollama model=%s result=already-unloaded\n' "${model}"
+    return 0
+  fi
+
+  stop_output="$(docker exec "${ollama_cid}" ollama stop "${model}" 2>&1)" || {
+    printf '%s\n' "${stop_output}" >&2
+    die "Failed to unload Ollama model '${model}' from backend container '${ollama_cid}'"
+  }
+
+  append_changes_log "ollama unload actor=${actor} backend=ollama model=${model} container=${ollama_cid} result=unloaded"
+  printf 'ollama unload backend=ollama model=%s result=unloaded\n' "${model}"
+}
+
+cmd_ollama() {
+  local action="${1:-}"
+  shift || true
+
+  case "${action}" in
+    unload)
+      cmd_ollama_unload "$@"
+      ;;
+    help|-h|--help)
+      printf '%s\n' "Usage: agent ollama unload <model>"
+      ;;
+    "")
+      die "Usage: agent ollama unload <model>"
+      ;;
+    *)
+      die "Usage: agent ollama unload <model>"
+      ;;
+  esac
+}
+
 cmd_ollama_models() {
   local action="${1:-status}"
 
@@ -3597,6 +3705,10 @@ case "$cmd" in
   net)
     shift
     cmd_net "${1:-}"
+    ;;
+  ollama)
+    shift
+    cmd_ollama "$@"
     ;;
   sudo-mode)
     shift

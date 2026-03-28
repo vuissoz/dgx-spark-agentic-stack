@@ -315,6 +315,7 @@ agent cleanup [--yes] [--backup|--no-backup]
 agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
+agent ollama unload <model>
 agent ollama-link
 agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
 agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
@@ -375,9 +376,16 @@ Preload then switch to read-only for smoke tests:
 ```bash
 ./agent ollama-preload
 ./agent ollama-models status
+./agent ollama unload qwen3-coder:30b
 ./agent ollama-models ro
 ./agent ollama-models rw
 ```
+
+Explicit offload of a local model without going through OpenWebUI:
+
+- `./agent ollama unload <model>` targets the Ollama backend only for now.
+- if the model is already gone, the command succeeds with `result=already-unloaded`.
+- if the `ollama` backend is not running, the command fails explicitly and does not open any new bind.
 
 To override the stack default local model (also used by preload):
 
@@ -391,6 +399,8 @@ Model link rollback:
 ```bash
 ./agent rollback ollama-link <backup_id|latest>
 ```
+
+Each `agent ollama unload ...` call also appends an operator trace to `${AGENTIC_ROOT}/deployments/changes.log`.
 
 ## ComfyUI: Flux.1-dev bootstrap
 

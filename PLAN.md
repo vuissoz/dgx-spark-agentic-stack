@@ -81,6 +81,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-p1i` : bootstrap Claude aligné sur `ANTHROPIC_AUTH_TOKEN`.
   - `dgx-spark-agentic-stack-m3z` : OpenWebUI gate-only par défaut.
   - `dgx-spark-agentic-stack-ygu` : veille automatisée de drift upstream Ollama.
+  - `dgx-spark-agentic-stack-1r0` : commande opérateur `agent ollama unload <model>` pour décharger explicitement un modèle local avec traçabilité.
   - `dgx-spark-agentic-stack-7gw` : matrice d’intégration `opencode/openclaw/openhands/vibestral`.
   - `dgx-spark-agentic-stack-a5m` : enforcement opencode/vibestral via `ollama-gate`.
   - `dgx-spark-agentic-stack-b32` : validation D8/E2 sur stack compose démarrée.
@@ -125,7 +126,6 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 | `dgx-spark-agentic-stack-u326` | open | livrer `agent openclaw init` comme chemin stack-managed d’onboarding/réparation |
 | `dgx-spark-agentic-stack-im5` | open | demander rétention max + budget disque max en onboarding et les appliquer au runtime |
 | `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |
-| `dgx-spark-agentic-stack-1r0` | open | ajouter une commande opérateur de déchargement explicite d’un modèle local |
 | `dgx-spark-agentic-stack-zu7n` | open | ajouter une forge Git interne loopback-only avec comptes dédiés pour chaque agent et gestion opérateur documentée |
 
 ## Profils d’exécution (obligatoires)

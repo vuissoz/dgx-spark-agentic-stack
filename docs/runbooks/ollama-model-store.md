@@ -33,6 +33,7 @@ Switch mount mode manually:
 
 ```bash
 ./agent ollama-models status
+./agent ollama unload qwen3-coder:30b
 ./agent ollama-models rw
 ./agent ollama-models ro
 ```
@@ -49,4 +50,6 @@ Rollback of the rootless models symlink (after `agent ollama-link` output `backu
   - if initially `ro`, preload switches to `rw` temporarily, then restores `ro` by default.
 - `--no-lock-ro` keeps `rw` after preload when a temporary switch occurred.
 - final `OLLAMA_MODELS_MOUNT_MODE` is written to `${AGENTIC_ROOT}/deployments/runtime.env`.
+- `agent ollama unload <model>` unloads a currently loaded model from Ollama memory, returns success with `result=already-unloaded` when the model is not loaded, and logs the action to `${AGENTIC_ROOT}/deployments/changes.log`.
+- initial unload scope is Ollama only; no TRT-LLM unload contract is introduced yet.
 - In `strict-prod`, run with privileges that can write `${AGENTIC_ROOT}`.

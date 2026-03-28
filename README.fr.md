@@ -318,6 +318,7 @@ agent cleanup [--yes] [--backup|--no-backup]
 agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
+agent ollama unload <model>
 agent ollama-link
 agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
 agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
@@ -386,9 +387,16 @@ Préchargement avec préservation du mode de mount courant (`rw`/`ro`):
 ```bash
 ./agent ollama-preload
 ./agent ollama-models status
+./agent ollama unload qwen3-coder:30b
 ./agent ollama-models ro
 ./agent ollama-models rw
 ```
+
+Déchargement explicite d'un modèle local hors OpenWebUI:
+
+- `./agent ollama unload <model>` cible le backend Ollama uniquement pour l'instant.
+- si le modèle n'est déjà plus chargé, la commande retourne `result=already-unloaded`.
+- si le backend `ollama` n'est pas démarré, la commande échoue explicitement et n'ouvre aucun nouveau bind.
 
 Pour changer le modèle local par défaut de la stack (et du preload):
 
@@ -402,6 +410,8 @@ Rollback du lien:
 ```bash
 ./agent rollback ollama-link <backup_id|latest>
 ```
+
+Chaque `agent ollama unload ...` ajoute aussi une trace opérateur dans `${AGENTIC_ROOT}/deployments/changes.log`.
 
 ## ComfyUI: bootstrap Flux.1-dev
 
