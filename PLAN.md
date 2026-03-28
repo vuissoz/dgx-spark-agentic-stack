@@ -125,6 +125,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-eut5` : catalogue local TRT NVFP4 (`nemotron-super-120b`, `nemotron-cascade-30b`) + commandes `agent trtllm prepare|load|unload` pour ne garder qu'un seul modèle actif en mémoire.
   - `dgx-spark-agentic-stack-06ol` : `agent cleanup` preserve maintenant par défaut les répertoires de modèles locaux (Ollama/TRT/ComfyUI) et exige `--purge-models` pour les effacer explicitement.
   - `dgx-spark-agentic-stack-qxh7` : `nemotron-cascade-30b` devient le modèle TRT par défaut dans le catalogue, l'onboarding, Compose, le backend TRT et les tests associés.
+  - `dgx-spark-agentic-stack-cg57` : le service Compose `trtllm` propage maintenant `TRTLLM_NVFP4_HF_REPO` et `TRTLLM_NVFP4_HF_REVISION`, ce qui corrige le démarrage strict local-only de `nemotron-cascade-30b` sans retomber sur le slug `super-120b`.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 

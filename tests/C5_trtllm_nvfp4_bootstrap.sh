@@ -8,9 +8,11 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 runtime_lib="${REPO_ROOT}/scripts/lib/runtime.sh"
 bootstrap_script="${REPO_ROOT}/deployments/trtllm/prepare_nvfp4_model.sh"
+compose_file="${REPO_ROOT}/compose/compose.core.yml"
 
 [[ -f "${runtime_lib}" ]] || fail "runtime lib missing: ${runtime_lib}"
 [[ -f "${bootstrap_script}" ]] || fail "bootstrap script missing: ${bootstrap_script}"
+[[ -f "${compose_file}" ]] || fail "compose file missing: ${compose_file}"
 
 tmp_root="$(mktemp -d)"
 trap 'rm -rf "${tmp_root}"' EXIT
@@ -120,5 +122,12 @@ TRTLLM_MODELS="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4
 bash "${bootstrap_script}" \
   || fail "NVFP4 bootstrap must be idempotent once the payload is already complete"
 ok "NVFP4 bootstrap is idempotent after the model payload is complete"
+
+compose_dump="$(docker compose --profile trt -f "${compose_file}" config 2>/dev/null)"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REPO: chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4' \
+  || fail "compose config must pass TRTLLM_NVFP4_HF_REPO into the trtllm container"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REVISION: 80ee3ccfe8cb5eb019a0cde78449e8b197a0155f' \
+  || fail "compose config must pass TRTLLM_NVFP4_HF_REVISION into the trtllm container"
+ok "compose config passes strict NVFP4 repo metadata into the trtllm container"
 
 ok "C5_trtllm_nvfp4_bootstrap passed"
