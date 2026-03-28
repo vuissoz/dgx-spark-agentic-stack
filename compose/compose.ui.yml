@@ -45,7 +45,10 @@ services:
       - agentic-egress
 
   openhands:
-    image: docker.openhands.dev/openhands/openhands:1.3
+    image: agentic/openhands:local
+    build:
+      context: ..
+      dockerfile: deployments/images/openhands/Dockerfile
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_OPENHANDS_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_OPENHANDS_MEM:-2g}
@@ -87,18 +90,21 @@ services:
       OH_WEBHOOKS_0_FLUSH_DELAY: "${OH_WEBHOOKS_FLUSH_DELAY:-1.0}"
       LLM_BASE_URL: http://ollama-gate:11435/v1
       AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
+      AGENTIC_GIT_FORGE_BASE_URL: http://optional-forgejo:3000
+      AGENTIC_GIT_FORGE_SHARED_NAMESPACE: ${GIT_FORGE_SHARED_NAMESPACE:-agentic}
       AGENT_HOME: /.openhands/home
       HOME: /.openhands/home
       XDG_CONFIG_HOME: /.openhands/home/.config
       XDG_CACHE_HOME: /.openhands/home/.cache
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,unbound,egress-proxy,host.docker.internal,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,host.docker.internal,localhost,127.0.0.1
       OH_PERSISTENCE_DIR: /.openhands
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openhands/state:/.openhands
       - ${AGENTIC_ROOT:-/srv/agentic}/openhands/logs:/logs
       - ${AGENTIC_OPENHANDS_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openhands/workspaces}:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/openhands.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_REPO_ROOT:-.}/deployments/patches/openhands/process_sandbox_service.py:/app/openhands/app_server/sandbox/process_sandbox_service.py:ro
       - ${AGENTIC_REPO_ROOT:-.}/deployments/patches/openhands/live_status_app_conversation_service.py:/app/openhands/app_server/app_conversation/live_status_app_conversation_service.py:ro
       - ${AGENTIC_REPO_ROOT:-.}/deployments/patches/openhands/conversation.py:/app/openhands/server/routes/conversation.py:ro
@@ -140,15 +146,20 @@ services:
     environment:
       AGENTIC_PROFILE: ${AGENTIC_PROFILE:-strict-prod}
       AGENTIC_GPU_PROFILE: lowprio
+      AGENTIC_GIT_FORGE_BASE_URL: http://optional-forgejo:3000
+      AGENTIC_GIT_FORGE_SHARED_NAMESPACE: ${GIT_FORGE_SHARED_NAMESPACE:-agentic}
+      HOME: /comfyui/user
+      XDG_CONFIG_HOME: /comfyui/user/.config
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,localhost,127.0.0.1
       XDG_CACHE_HOME: /tmp/.cache
       HF_HOME: /tmp/.cache/huggingface
     labels:
       - agentic.gpu-profile=lowprio
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/comfyui:/comfyui
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/comfyui.password:/run/secrets/git-forge.password:ro
     healthcheck:
       test:
         - CMD-SHELL

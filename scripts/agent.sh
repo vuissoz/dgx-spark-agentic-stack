@@ -23,13 +23,14 @@ AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup
 AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py"
 AGENT_OPENCLAW_OPERATOR_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_operator.py"
 AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_module_manifest.py"
+AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/git_forge_bootstrap.py"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_TOOLS=(claude codex opencode vibestral openclaw pi-mono goose)
 AGENT_STATUS_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
 STOP_START_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
-OPTIONAL_MODULES=(mcp pi-mono goose portainer)
+OPTIONAL_MODULES=(mcp git-forge pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
 STACK_STOP_ORDER=(optional rag obs ui agents core)
@@ -86,7 +87,7 @@ Usage:
   agent doctor [--fix-net] [--check-tool-stream-e2e]
 
 Optional modules (disabled by default):
-  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer agent up optional
+  AGENTIC_OPTIONAL_MODULES=mcp,git-forge,pi-mono,goose,portainer agent up optional
 USAGE
 }
 
@@ -292,6 +293,7 @@ targets_include() {
 optional_module_profile() {
   case "$1" in
     mcp) echo "optional-mcp" ;;
+    git-forge) echo "optional-git-forge" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "optional-goose" ;;
     portainer) echo "optional-portainer" ;;
@@ -302,6 +304,19 @@ optional_module_profile() {
 optional_module_secret_files() {
   case "$1" in
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
+    git-forge)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/${GIT_FORGE_ADMIN_USER}.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/openclaw.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/openhands.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/comfyui.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/claude.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/codex.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/opencode.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/vibestral.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/pi-mono.password" \
+        "${AGENTIC_ROOT}/secrets/runtime/git-forge/goose.password"
+      ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
     goose|portainer) ;;
     *) return 1 ;;
@@ -310,7 +325,7 @@ optional_module_secret_files() {
 
 optional_module_config_files() {
   case "$1" in
-    mcp|pi-mono|goose|portainer) ;;
+    mcp|git-forge|pi-mono|goose|portainer) ;;
     *) return 1 ;;
   esac
 }
@@ -451,6 +466,7 @@ log_optional_activation() {
 optional_module_build_services() {
   case "$1" in
     mcp) echo "optional-mcp-catalog" ;;
+    git-forge) echo "" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "" ;;
     portainer) echo "" ;;
@@ -2039,6 +2055,7 @@ collect_cleanup_image_refs() {
       --profile rag-lexical \
       --profile optional \
       --profile optional-mcp \
+      --profile optional-git-forge \
       --profile optional-pi-mono \
       --profile optional-goose \
       --profile optional-portainer \
@@ -2055,7 +2072,8 @@ collect_cleanup_image_refs() {
     "agentic/gate-mcp:local" \
     "agentic/optional-modules:local" \
     "agentic/trtllm-runtime:local" \
-    "agentic/comfyui:local"
+    "agentic/comfyui:local" \
+    "agentic/openhands:local"
 }
 
 remove_cleanup_images_best_effort() {
@@ -3418,6 +3436,13 @@ case "$cmd" in
       docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
         "${optional_profiles[@]}" \
         -f "${optional_compose_file}" up -d
+
+      if targets_include "git-forge" "${optional_modules[@]}"; then
+        [[ -x "${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}" ]] || die "git-forge bootstrap script missing or not executable: ${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}"
+        if ! "${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}"; then
+          die "git-forge bootstrap failed; inspect optional-forgejo logs and runtime secrets under ${AGENTIC_ROOT}/secrets/runtime/git-forge"
+        fi
+      fi
     else
       run_compose_on_targets up "$target_arg" -d
     fi

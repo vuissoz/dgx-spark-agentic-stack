@@ -1211,26 +1211,23 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 
 **Implémentation**
 - profile Compose : `optional-git-forge`.
-- service recommandé : `optional-forgejo` (ou autre forge Gitea-compatible) avec UI/API HTTP bindées uniquement sur `127.0.0.1:${GIT_FORGE_HOST_PORT:-13000}` et reachability interne via le réseau Docker privé.
+- service recommandé : `optional-forgejo` (ou autre forge Gitea-compatible) avec UI/API HTTP bindées uniquement sur `127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}` et reachability interne via le réseau Docker privé.
 - persistance dédiée :
   - `${AGENTIC_ROOT}/optional/git/config`
   - `${AGENTIC_ROOT}/optional/git/state`
-  - `${AGENTIC_ROOT}/optional/git/logs`
-  - `${AGENTIC_ROOT}/optional/git/db`
-  - `${AGENTIC_ROOT}/optional/git/repositories`
   - `${AGENTIC_ROOT}/optional/git/bootstrap`
 - base de données et dépôts doivent survivre aux redémarrages ; `agent update` enregistre le digest image réellement déployé, la version de la forge et les artefacts utiles au rollback ; `agent rollback` doit pouvoir restaurer une release cohérente avec la base et les dépôts persistants.
 - bootstrap initial idempotent d’un compte opérateur `system-manager` avec rôle System Manager / admin, accessible depuis l’hôte via l’UI loopback-only.
 - bootstrap initial idempotent de comptes dédiés pour `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`.
 - chaque compte agent reçoit des credentials stockés hors git (fichiers root-only ou secrets injectés) permettant `git clone`, `fetch`, `pull`, `push` contre la forge interne ; les chemins et la rotation de ces credentials doivent être documentés.
 - chaque conteneur agent concerné doit aussi recevoir une préconfiguration Git stack-managed (identity + auth) pointant vers la forge interne, de façon à permettre un premier `git clone`/checkout direct dès la première session sans setup manuel dans le shell utilisateur.
-- transport par défaut : HTTPS interne + tokens/PAT ; SSH côté forge désactivé par défaut sauf besoin explicite documenté.
+- transport par défaut : HTTP interne sur le réseau Docker privé + fichiers mot de passe dédiés ; SSH côté forge désactivé par défaut sauf besoin explicite documenté.
 - prévoir un bootstrap minimal d’organisation/projet partagé pour permettre à plusieurs agents de collaborer sur les mêmes dépôts sans dépendre d’un fournisseur externe.
 - onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, créer/recueillir séparément les secrets runtime nécessaires, et annoncer que la configuration Git des agents sera préchargée pour un premier checkout direct.
 - `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur et la cohérence de la liste des comptes agents attendus.
 - documentation opérateur obligatoire : bootstrap initial, création/rotation/révocation des comptes, création de dépôt, partage inter-agents, sauvegarde/restauration, conformité.
 
-**Test** : `tests/K6_git_forge.sh`
+**Test** : `tests/K10_git_forge.sh`
 - service `optional-forgejo` healthy ; UI répond sur `127.0.0.1` uniquement.
 - aucun bind `0.0.0.0`, aucun mount `docker.sock`, baseline hardening conforme.
 - volumes DB et dépôts pointent vers `${AGENTIC_ROOT}/optional/git/...`.

@@ -1,8 +1,6 @@
 # Runbook: Git Forge Management
 
-Status: planned target for `dgx-spark-agentic-stack-zu7n`, not implemented yet.
-
-This runbook defines the intended operator workflow for the future internal Git forge module. It exists so the plan, runtime contract, and account model are explicit before implementation starts.
+Status: implemented optional module for `dgx-spark-agentic-stack-zu7n`.
 
 ## Goal
 
@@ -14,13 +12,11 @@ Provide one self-hosted Git forge inside the stack so:
 
 ## Service Model
 
-Target design:
-
 - compose profile: `optional-git-forge`
-- service: `optional-forgejo` or equivalent Forgejo/Gitea-compatible forge
-- host UI/API bind: `127.0.0.1:${GIT_FORGE_HOST_PORT:-13000}`
+- service: `optional-forgejo` using `codeberg.org/forgejo/forgejo:14-rootless`
+- host UI/API bind: `127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}`
 - agent access path: private Docker network service DNS, not public host networking
-- default transport: internal HTTPS with token or PAT authentication
+- default transport: internal HTTP on the private Docker network with per-account password helpers
 - forge SSH: disabled by default
 
 Reason for the default transport choice:
@@ -31,13 +27,10 @@ Reason for the default transport choice:
 
 ## Runtime Paths
 
-The forge should persist under `${AGENTIC_ROOT}/optional/git/`:
+The forge persists under `${AGENTIC_ROOT}/optional/git/`:
 
 - `config/` for rendered forge configuration
-- `state/` for runtime state that is not repository content
-- `logs/` for operator/audit-facing logs
-- `db/` for the persistent forge database
-- `repositories/` for bare repositories and attachments
+- `state/` for the Forgejo workdir, including the persistent SQLite DB and repositories
 - `bootstrap/` for idempotent provisioning markers or manifests
 
 Secrets stay outside git, under a runtime secret root such as `${AGENTIC_ROOT}/secrets/runtime/git-forge/`.
@@ -45,14 +38,14 @@ Secrets stay outside git, under a runtime secret root such as `${AGENTIC_ROOT}/s
 Recommended secret files:
 
 - `system-manager.password`
-- `<agent>.token` for each agent account
+- `<agent>.password` for each agent account
 - optional rotation metadata file if the implementation needs reconciliation timestamps
 
-All such files must remain `chmod 600` and out of version control.
+Application/API secrets stay `chmod 600`; forge account password files stay `chmod 640` so the matching runtime group can read `/run/secrets/git-forge.password`.
 
 ## Onboarding Inputs
 
-When the module is implemented, `./agent onboard` should make the forge configuration explicit instead of relying on hidden defaults.
+`./agent onboard` makes the forge configuration explicit instead of relying on hidden defaults.
 
 Expected non-secret onboarding outputs:
 
@@ -67,13 +60,13 @@ Expected secret onboarding outputs:
 - the initial admin password or bootstrap token for `system-manager`
 - one credential or token per agent account
 
-These secrets must be materialized as separate root-only files under `${AGENTIC_ROOT}/secrets/runtime/git-forge/`, not written into the generated shell env file.
+These secrets are materialized as separate files under `${AGENTIC_ROOT}/secrets/runtime/git-forge/`, not written into the generated shell env file.
 
 In addition, onboarding/runtime bootstrap should prepare each agent container so the first interactive shell can use the forge immediately:
 
 - preconfigure `git config --global user.name` and `user.email` for the matching agent account
 - preconfigure the internal forge base URL
-- install or render a credential helper / credentials file backed by the agent secret file
+- render a credential helper backed by `/run/secrets/git-forge.password`
 - avoid any first-use prompt for the initial `git clone` or checkout of a forge-hosted project
 
 ## Accounts and Roles
@@ -99,22 +92,22 @@ Expected role model:
 
 ## Bootstrap Workflow
 
-The intended bootstrap flow is:
+The implemented bootstrap flow is:
 
 1. Deploy the forge profile with loopback-only exposure.
 2. Wait for healthcheck success.
 3. Create or reconcile `system-manager`.
 4. Create or reconcile the agent accounts.
-5. Materialize per-account credentials outside git.
+5. Materialize per-account passwords outside git.
 6. Create one shared organization or namespace for stack-managed projects.
-7. Create an initial test repository and grant the expected agent access.
+7. Create an initial shared repository and team-scoped access.
 8. Record the resulting forge version and image digest in the release artifact.
 
 The bootstrap must be idempotent. Re-running `agent update` must converge the state instead of creating duplicate users or repositories.
 
 ## Repository Sharing Workflow
 
-The target operator flow for a shared project is:
+The operator flow for a shared project is:
 
 1. `system-manager` creates the repository through the web UI or API.
 2. The operator grants the required agent accounts push/pull access.

@@ -87,28 +87,24 @@ Each request file must include non-empty:
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
 - `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (required by `pi-mono`)
 
-## Planned Optional Module
-
 ### `git-forge`
 - Tracking issue: `dgx-spark-agentic-stack-zu7n`
-- Planned profile: `optional-git-forge`
-- Planned service class: `optional-forgejo`
+- Profile: `optional-git-forge`
+- Service class: `optional-forgejo`
 - Purpose: stack-managed internal Git hosting so the operator and all agent surfaces can share repositories through normal Git workflows.
-- Planned runtime data:
+- Runtime data:
   - `${AGENTIC_ROOT}/optional/git/config`
   - `${AGENTIC_ROOT}/optional/git/state`
-  - `${AGENTIC_ROOT}/optional/git/logs`
-  - `${AGENTIC_ROOT}/optional/git/db`
-  - `${AGENTIC_ROOT}/optional/git/repositories`
-- Planned onboarding inputs:
+  - `${AGENTIC_ROOT}/optional/git/bootstrap`
+- Onboarding inputs:
   - `AGENTIC_OPTIONAL_MODULES+=git-forge`
   - `GIT_FORGE_HOST_PORT`
   - `GIT_FORGE_ADMIN_USER`
   - `GIT_FORGE_SHARED_NAMESPACE`
   - `GIT_FORGE_ENABLE_PUSH_CREATE`
-- Planned agent bootstrap behavior:
+- Agent bootstrap behavior:
   - preconfigure each agent container with its own forge identity and auth helper so first `git clone`/checkout works without manual credential entry
-- Planned documentation: `docs/runbooks/git-forge-management.md`
+- Documentation: `docs/runbooks/git-forge-management.md`
 
 ## Activation
 

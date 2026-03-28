@@ -24,7 +24,7 @@ We plan the Git service as an optional module backed by a Forgejo-class forge:
 
 - compose profile: `optional-git-forge`;
 - service name target: `optional-forgejo`;
-- host exposure: `127.0.0.1:${GIT_FORGE_HOST_PORT:-13000}` only;
+- host exposure: `127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}` only;
 - internal access for agents: private Docker network DNS/service name, no public bind;
 - persistence root: `${AGENTIC_ROOT}/optional/git/`.
 

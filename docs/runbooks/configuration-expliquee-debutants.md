@@ -84,18 +84,18 @@ Notes:
 - Si `COMPOSE_PROFILES` ne contient pas encore `trt`, `./agent onboard` propose maintenant explicitement l'activation TRT, puis persiste la valeur retenue dans le fichier genere.
 - Si `AGENTIC_OPTIONAL_MODULES` inclut `git-forge`, l'onboarding doit aussi demander le port loopback de l'UI, le compte admin Forge, le namespace partage, et si `push-to-create` doit etre active.
 
-Variables planifiees pour `git-forge` :
+Variables pour `git-forge` :
 
 | Variable | Valeurs possibles | Defaut | Stockage |
 |---|---|---|---|
-| `GIT_FORGE_HOST_PORT` | port TCP libre sur l'hote | `13000` | shell |
+| `GIT_FORGE_HOST_PORT` | port TCP libre sur l'hote | `13010` | shell |
 | `GIT_FORGE_ADMIN_USER` | identifiant non vide | `system-manager` | shell |
 | `GIT_FORGE_SHARED_NAMESPACE` | slug d'organisation/groupe | `agentic` | shell |
 | `GIT_FORGE_ENABLE_PUSH_CREATE` | `0` ou `1` | `0` | shell |
 
-Secrets planifies pour `git-forge` :
+Secrets runtime pour `git-forge` :
 - `${AGENTIC_ROOT}/secrets/runtime/git-forge/system-manager.password`
-- `${AGENTIC_ROOT}/secrets/runtime/git-forge/<agent>.token`
+- `${AGENTIC_ROOT}/secrets/runtime/git-forge/<agent>.password`
 
 ## 3.3 Routage LLM, quotas, limites MCP
 

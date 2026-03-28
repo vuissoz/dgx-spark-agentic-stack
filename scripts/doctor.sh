@@ -54,6 +54,7 @@ if [[ -n "${AGENTIC_DOCTOR_CRITICAL_PORTS:-}" ]]; then
 fi
 host_machine="$(uname -m 2>/dev/null || printf 'unknown')"
 portainer_host_port="${PORTAINER_HOST_PORT:-9001}"
+git_forge_host_port="${GIT_FORGE_HOST_PORT:-13010}"
 openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 openclaw_gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 openclaw_relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
@@ -104,6 +105,22 @@ service_is_agent_cli() {
     *)
       return 1
       ;;
+  esac
+}
+
+service_git_forge_account() {
+  local service="$1"
+  case "${service}" in
+    agentic-claude) printf '%s\n' "claude" ;;
+    agentic-codex) printf '%s\n' "codex" ;;
+    agentic-opencode) printf '%s\n' "opencode" ;;
+    agentic-vibestral) printf '%s\n' "vibestral" ;;
+    openclaw) printf '%s\n' "openclaw" ;;
+    openhands) printf '%s\n' "openhands" ;;
+    comfyui) printf '%s\n' "comfyui" ;;
+    optional-pi-mono) printf '%s\n' "pi-mono" ;;
+    optional-goose) printf '%s\n' "goose" ;;
+    *) return 1 ;;
   esac
 }
 
@@ -1410,6 +1427,39 @@ PY
       fi
     fi
   fi
+
+  git_forge_account="$(service_git_forge_account "${service}" 2>/dev/null || true)"
+  if [[ -n "${git_forge_account}" ]]; then
+    env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    if ! printf '%s\n' "${env_dump}" | grep -q '^AGENTIC_GIT_FORGE_BASE_URL=http://optional-forgejo:3000$'; then
+      doctor_fail "${service} must set AGENTIC_GIT_FORGE_BASE_URL=http://optional-forgejo:3000"
+    fi
+    if ! printf '%s\n' "${env_dump}" | grep -q "^AGENTIC_GIT_FORGE_SHARED_NAMESPACE=${GIT_FORGE_SHARED_NAMESPACE}$"; then
+      doctor_fail "${service} must set AGENTIC_GIT_FORGE_SHARED_NAMESPACE=${GIT_FORGE_SHARED_NAMESPACE}"
+    fi
+    if ! mount_destination_present "${cid}" "/run/secrets/git-forge.password"; then
+      doctor_fail "${service} must mount /run/secrets/git-forge.password"
+    elif ! mount_destination_read_only "${cid}" "/run/secrets/git-forge.password"; then
+      doctor_fail "${service} must mount /run/secrets/git-forge.password read-only"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc 'command -v git >/dev/null'; then
+      doctor_fail "${service} must provide git for first-checkout bootstrap"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc 'test -r /run/secrets/git-forge.password'; then
+      doctor_fail "${service} git forge password secret is not readable"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc 'git config --global user.name >/dev/null && git config --global user.email >/dev/null'; then
+      doctor_fail "${service} git identity bootstrap is missing"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc 'git config --global credential.helper | grep -q git-forge-credential.sh'; then
+      doctor_fail "${service} git credential helper bootstrap is missing"
+    fi
+    if optional_forgejo_cid="$(service_container_id optional-forgejo)" && [[ -n "${optional_forgejo_cid}" ]]; then
+      if ! timeout 25 docker exec "${cid}" sh -lc "GIT_TERMINAL_PROMPT=0 git ls-remote http://optional-forgejo:3000/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
+        doctor_fail "${service} cannot access the shared git-forge repository without prompts"
+      fi
+    fi
+  fi
 done
 
 rag_retriever_cid="$(service_container_id rag-retriever)"
@@ -2131,6 +2181,26 @@ PY
 
   if ! timeout 15 docker exec "${optional_openclaw_relay_cid}" sh -lc "python3 -c 'import sys,urllib.request; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8113/v1/queue/status\", timeout=4).status == 200 else 1)'"; then
     doctor_fail "openclaw-relay queue status must be reachable from relay container (/v1/queue/status)"
+  fi
+fi
+
+optional_forgejo_cid="$(service_container_id optional-forgejo)"
+if [[ -n "${optional_forgejo_cid}" ]]; then
+  if ! assert_no_public_bind "${git_forge_host_port}"; then
+    doctor_fail "optional forgejo host bind must stay loopback-only on port ${git_forge_host_port}"
+  fi
+  if ! mount_destination_present "${optional_forgejo_cid}" "/var/lib/gitea"; then
+    doctor_fail "optional-forgejo must mount /var/lib/gitea for persistent state"
+  fi
+  if ! mount_destination_present "${optional_forgejo_cid}" "/var/lib/gitea/custom/conf"; then
+    doctor_fail "optional-forgejo must mount /var/lib/gitea/custom/conf for persistent config"
+  fi
+  if [[ ! -s "${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json" ]]; then
+    doctor_fail "git-forge bootstrap state file is missing: ${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json"
+  fi
+  forgejo_status="$(curl -sS -o /tmp/doctor-forgejo.out -w '%{http_code}' "http://127.0.0.1:${git_forge_host_port}/" 2>/dev/null || true)"
+  if [[ ! "${forgejo_status}" =~ ^(200|302|401|403)$ ]]; then
+    doctor_fail "optional-forgejo endpoint is unreachable on loopback (http_status=${forgejo_status:-none})"
   fi
 fi
 

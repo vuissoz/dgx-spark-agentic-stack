@@ -32,6 +32,11 @@ huggingface_token="hf_token_read_abc123"
 openclaw_token="openclaw-token"
 openclaw_webhook="openclaw-webhook"
 mcp_token="mcp-token"
+git_forge_host_port="13021"
+git_forge_admin_user="system-manager"
+git_forge_shared_namespace="agentic-shared"
+git_forge_enable_push_create="1"
+git_forge_admin_password="forge-admin-password"
 
 trap 'rm -rf "${work_dir}"' EXIT
 mkdir -p "${work_dir}"
@@ -60,7 +65,12 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --openai-api-key "${openai_key}" \
   --openrouter-api-key "${openrouter_key}" \
   --huggingface-token "${huggingface_token}" \
-  --optional-modules 'mcp' \
+  --optional-modules 'mcp,git-forge' \
+  --git-forge-host-port "${git_forge_host_port}" \
+  --git-forge-admin-user "${git_forge_admin_user}" \
+  --git-forge-shared-namespace "${git_forge_shared_namespace}" \
+  --git-forge-enable-push-create "${git_forge_enable_push_create}" \
+  --git-forge-admin-password "${git_forge_admin_password}" \
   --openclaw-token "${openclaw_token}" \
   --openclaw-webhook-secret "${openclaw_webhook}" \
   --mcp-token "${mcp_token}" \
@@ -105,6 +115,8 @@ grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${root_dir}/optional/pi-mono/wo
   || fail "full setup onboarding env must export AGENTIC_PI_MONO_WORKSPACES_DIR"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${root_dir}/optional/goose/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_GOOSE_WORKSPACES_DIR"
+grep -q "^export AGENTIC_OPTIONAL_MODULES='mcp,git-forge'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_OPTIONAL_MODULES"
 grep -q "^export GRAFANA_ADMIN_USER='${grafana_admin_user}'$" "${env_file}" \
   || fail "full setup onboarding env must export GRAFANA_ADMIN_USER"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='${grafana_admin_password}'$" "${env_file}" \
@@ -125,6 +137,14 @@ grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='True'$" "${env_file}" \
   || fail "full setup onboarding env must export OPENWEBUI_ENABLE_OLLAMA_API"
 grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama:11434'$" "${env_file}" \
   || fail "full setup onboarding env must export OPENWEBUI_OLLAMA_BASE_URL direct opt-in"
+grep -q "^export GIT_FORGE_HOST_PORT='${git_forge_host_port}'$" "${env_file}" \
+  || fail "full setup onboarding env must export GIT_FORGE_HOST_PORT"
+grep -q "^export GIT_FORGE_ADMIN_USER='${git_forge_admin_user}'$" "${env_file}" \
+  || fail "full setup onboarding env must export GIT_FORGE_ADMIN_USER"
+grep -q "^export GIT_FORGE_SHARED_NAMESPACE='${git_forge_shared_namespace}'$" "${env_file}" \
+  || fail "full setup onboarding env must export GIT_FORGE_SHARED_NAMESPACE"
+grep -q "^export GIT_FORGE_ENABLE_PUSH_CREATE='${git_forge_enable_push_create}'$" "${env_file}" \
+  || fail "full setup onboarding env must export GIT_FORGE_ENABLE_PUSH_CREATE"
 
 openwebui_env="${root_dir}/openwebui/config/openwebui.env"
 openhands_env="${root_dir}/openhands/config/openhands.env"
@@ -137,6 +157,8 @@ openclaw_token_file="${root_dir}/secrets/runtime/openclaw.token"
 openclaw_webhook_file="${root_dir}/secrets/runtime/openclaw.webhook_secret"
 mcp_token_file="${root_dir}/secrets/runtime/mcp.token"
 mcp_request_file="${root_dir}/deployments/optional/mcp.request"
+git_forge_admin_password_file="${root_dir}/secrets/runtime/git-forge/${git_forge_admin_user}.password"
+git_forge_request_file="${root_dir}/deployments/optional/git-forge.request"
 openclaw_profile_file="${root_dir}/openclaw/config/integration-profile.current.json"
 
 [[ -s "${openwebui_env}" ]] || fail "openwebui env file missing: ${openwebui_env}"
@@ -153,14 +175,23 @@ for secret_file in \
   "${huggingface_secret_file}" \
   "${openclaw_token_file}" \
   "${openclaw_webhook_file}" \
-  "${mcp_token_file}"; do
+  "${mcp_token_file}" \
+  "${git_forge_admin_password_file}"; do
   [[ -s "${secret_file}" ]] || fail "secret file missing: ${secret_file}"
   perm="$(stat -c '%a' "${secret_file}")"
-  [[ "${perm}" == "600" ]] || fail "secret file permissions must be 600: ${secret_file} (got ${perm})"
+  [[ "${perm}" == "600" || "${perm}" == "640" ]] || fail "secret file permissions must be 600/640: ${secret_file} (got ${perm})"
+done
+
+for git_forge_account in openclaw openhands comfyui claude codex opencode vibestral pi-mono goose; do
+  account_secret="${root_dir}/secrets/runtime/git-forge/${git_forge_account}.password"
+  [[ -s "${account_secret}" ]] || fail "git-forge account secret missing: ${account_secret}"
+  perm="$(stat -c '%a' "${account_secret}")"
+  [[ "${perm}" == "640" ]] || fail "git-forge account secret permissions must be 640: ${account_secret} (got ${perm})"
 done
 
 for request_file in \
-  "${mcp_request_file}"; do
+  "${mcp_request_file}" \
+  "${git_forge_request_file}"; do
   [[ -s "${request_file}" ]] || fail "optional request file missing: ${request_file}"
   request_perm="$(stat -c '%a' "${request_file}")"
   [[ "${request_perm}" == "640" ]] || fail "optional request file permissions must be 640: ${request_file} (got ${request_perm})"

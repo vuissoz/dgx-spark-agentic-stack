@@ -211,6 +211,8 @@ grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='/srv/agentic/optional/pi-mono/w
   || fail "default AGENTIC_PI_MONO_WORKSPACES_DIR is not /srv/agentic/optional/pi-mono/workspaces"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='/srv/agentic/optional/goose/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_GOOSE_WORKSPACES_DIR is not /srv/agentic/optional/goose/workspaces"
+grep -q "^export AGENTIC_OPTIONAL_MODULES=''$" "${default_env_file}" \
+  || fail "default AGENTIC_OPTIONAL_MODULES must be empty"
 grep -q "^export AGENTIC_COMPOSE_PROJECT='agentic'$" "${default_env_file}" \
   || fail "default AGENTIC_COMPOSE_PROJECT is not agentic"
 grep -q "^export COMPOSE_PROFILES=''$" "${default_env_file}" \

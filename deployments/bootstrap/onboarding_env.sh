@@ -52,6 +52,11 @@ limits_rag_cpus_override=""
 limits_rag_mem_override=""
 limits_optional_cpus_override=""
 limits_optional_mem_override=""
+git_forge_host_port_override=""
+git_forge_admin_user_override=""
+git_forge_shared_namespace_override=""
+git_forge_enable_push_create_override=""
+git_forge_admin_password_override=""
 
 openwebui_admin_email_override=""
 openwebui_admin_password_override=""
@@ -125,6 +130,10 @@ Runtime options:
   --limits-rag-mem <size>
   --limits-optional-cpus <cores>
   --limits-optional-mem <size>
+  --git-forge-host-port <port>
+  --git-forge-admin-user <name>
+  --git-forge-shared-namespace <slug>
+  --git-forge-enable-push-create <0|1>
 
 First-run bootstrap options:
   --openwebui-admin-email <email>
@@ -138,6 +147,7 @@ First-run bootstrap options:
   --openrouter-api-key <key>
   --huggingface-token <token>
   --optional-modules <csv>
+  --git-forge-admin-password <password>
   --openclaw-token <token>
   --openclaw-webhook-secret <secret>
   --mcp-token <token>
@@ -822,11 +832,11 @@ validate_optional_modules_csv() {
       none)
         saw_none=1
         ;;
-      mcp|pi-mono|goose|portainer)
+      mcp|git-forge|pi-mono|goose|portainer)
         saw_module=1
         ;;
       *)
-        echo "unknown optional module '${entry}' (allowed: mcp,pi-mono,goose,portainer,none)" >&2
+        echo "unknown optional module '${entry}' (allowed: mcp,git-forge,pi-mono,goose,portainer,none)" >&2
         return 1
         ;;
     esac
@@ -836,6 +846,74 @@ validate_optional_modules_csv() {
     echo "optional modules value 'none' cannot be combined with other modules" >&2
     return 1
   fi
+}
+
+normalize_optional_modules_csv() {
+  local raw="$1"
+  local normalized=""
+
+  normalized="$(normalize_allowlist_csv "${raw}" | tr '[:upper:]' '[:lower:]')"
+  if [[ -z "${normalized}" || "${normalized}" == "none" ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  printf '%s\n' "${normalized}" | paste -sd, -
+}
+
+optional_modules_include() {
+  local raw="$1"
+  local target="$2"
+  local entry
+
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    if [[ "${entry}" == "${target}" ]]; then
+      return 0
+    fi
+  done < <(normalize_allowlist_csv "${raw}" | tr '[:upper:]' '[:lower:]')
+
+  return 1
+}
+
+validate_port_value() {
+  local key="$1"
+  local value="$2"
+
+  [[ "${value}" =~ ^[0-9]+$ ]] || {
+    echo "${key} must be an integer TCP port" >&2
+    return 1
+  }
+  (( value >= 1 && value <= 65535 )) || {
+    echo "${key} must be between 1 and 65535" >&2
+    return 1
+  }
+}
+
+validate_git_namespace_value() {
+  local key="$1"
+  local value="$2"
+
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+  [[ "${value}" =~ ^[a-z0-9][a-z0-9_.-]*$ ]] || {
+    echo "${key} must match [a-z0-9][a-z0-9_.-]*" >&2
+    return 1
+  }
+}
+
+validate_zero_one_value() {
+  local key="$1"
+  local value="$2"
+  case "${value}" in
+    0|1) return 0 ;;
+    *)
+      echo "${key} must be 0 or 1" >&2
+      return 1
+      ;;
+  esac
 }
 
 prompt_with_default() {
@@ -1145,6 +1223,7 @@ optional_request_default_need() {
   case "${module}" in
     openclaw) printf '%s\n' "Enable scoped OpenClaw webhook and DM automation for approved workflows." ;;
     mcp) printf '%s\n' "Expose a restricted MCP catalog for local automation workflows." ;;
+    git-forge) printf '%s\n' "Provide a shared self-hosted Git forge so agents can clone, push, fetch, pull, and share projects." ;;
     pi-mono) printf '%s\n' "Provide an additional isolated CLI agent runtime for targeted tasks." ;;
     goose) printf '%s\n' "Provide an isolated Goose CLI runtime for approved workflows." ;;
     portainer) printf '%s\n' "Provide temporary loopback-only Portainer visibility for local diagnostics." ;;
@@ -1157,6 +1236,7 @@ optional_request_default_success() {
   case "${module}" in
     openclaw) printf '%s\n' "Webhook auth succeeds, deny paths stay blocked, and service healthcheck stays green." ;;
     mcp) printf '%s\n' "Only allowlisted tools are available and service healthcheck stays green." ;;
+    git-forge) printf '%s\n' "Forgejo stays healthy on loopback-only bind and stack-managed agent accounts can access the shared repository without credential prompts." ;;
     pi-mono) printf '%s\n' "Container starts with expected user/workspace mappings and no forbidden mounts." ;;
     goose) printf '%s\n' "Container starts successfully with isolated workspace and expected proxy controls." ;;
     portainer) printf '%s\n' "UI is reachable on loopback only and runs without docker.sock mount." ;;
@@ -1294,6 +1374,28 @@ write_secret_file() {
   return 0
 }
 
+ensure_generated_secret_file() {
+  local root_path="$1"
+  local file_name="$2"
+  local mode="${3:-0600}"
+  local destination="${root_path}/secrets/runtime/${file_name}"
+  local generated_value
+
+  if [[ -s "${destination}" ]]; then
+    chmod "${mode}" "${destination}" || true
+    return 0
+  fi
+
+  generated_value="$(generate_secret_value 24)"
+  if ! write_file_atomic "${destination}" "${mode}" "${generated_value}"$'\n'; then
+    summary_add_blocker "unable to write secret file ${destination}; re-run onboarding with writable permissions or sudo"
+    return 1
+  fi
+
+  summary_add_generated "${destination}"
+  return 0
+}
+
 generate_secret_value() {
   local bytes="${1:-24}"
   if command -v openssl >/dev/null 2>&1; then
@@ -1349,7 +1451,12 @@ write_env_file() {
   local limits_rag_mem="${43}"
   local limits_optional_cpus="${44}"
   local limits_optional_mem="${45}"
-  local out_file="${46}"
+  local optional_modules_csv="${46}"
+  local git_forge_host_port="${47}"
+  local git_forge_admin_user="${48}"
+  local git_forge_shared_namespace="${49}"
+  local git_forge_enable_push_create="${50}"
+  local out_file="${51}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1414,7 +1521,17 @@ export AGENTIC_LIMIT_RAG_CPUS=$(shell_quote "${limits_rag_cpus}")
 export AGENTIC_LIMIT_RAG_MEM=$(shell_quote "${limits_rag_mem}")
 export AGENTIC_LIMIT_OPTIONAL_CPUS=$(shell_quote "${limits_optional_cpus}")
 export AGENTIC_LIMIT_OPTIONAL_MEM=$(shell_quote "${limits_optional_mem}")
+export AGENTIC_OPTIONAL_MODULES=$(shell_quote "${optional_modules_csv}")
 EOF_ENV
+
+  if optional_modules_include "${optional_modules_csv}" "git-forge"; then
+    cat >>"${tmp_file}" <<EOF_ENV
+export GIT_FORGE_HOST_PORT=$(shell_quote "${git_forge_host_port}")
+export GIT_FORGE_ADMIN_USER=$(shell_quote "${git_forge_admin_user}")
+export GIT_FORGE_SHARED_NAMESPACE=$(shell_quote "${git_forge_shared_namespace}")
+export GIT_FORGE_ENABLE_PUSH_CREATE=$(shell_quote "${git_forge_enable_push_create}")
+EOF_ENV
+  fi
 
   mv "${tmp_file}" "${out_file}"
   chmod 0640 "${out_file}"
@@ -1793,6 +1910,26 @@ while [[ $# -gt 0 ]]; do
       limits_optional_mem_override="$2"
       shift 2
       ;;
+    --git-forge-host-port)
+      [[ $# -ge 2 ]] || die "missing value for --git-forge-host-port"
+      git_forge_host_port_override="$2"
+      shift 2
+      ;;
+    --git-forge-admin-user)
+      [[ $# -ge 2 ]] || die "missing value for --git-forge-admin-user"
+      git_forge_admin_user_override="$2"
+      shift 2
+      ;;
+    --git-forge-shared-namespace)
+      [[ $# -ge 2 ]] || die "missing value for --git-forge-shared-namespace"
+      git_forge_shared_namespace_override="$2"
+      shift 2
+      ;;
+    --git-forge-enable-push-create)
+      [[ $# -ge 2 ]] || die "missing value for --git-forge-enable-push-create"
+      git_forge_enable_push_create_override="$2"
+      shift 2
+      ;;
     --openwebui-admin-email)
       [[ $# -ge 2 ]] || die "missing value for --openwebui-admin-email"
       openwebui_admin_email_override="$2"
@@ -1846,6 +1983,11 @@ while [[ $# -gt 0 ]]; do
     --optional-modules)
       [[ $# -ge 2 ]] || die "missing value for --optional-modules"
       optional_modules_override="$2"
+      shift 2
+      ;;
+    --git-forge-admin-password)
+      [[ $# -ge 2 ]] || die "missing value for --git-forge-admin-password"
+      git_forge_admin_password_override="$2"
       shift 2
       ;;
     --openclaw-token)
@@ -2028,6 +2170,31 @@ collect_mem_limit limits_rag_mem "AGENTIC_LIMIT_RAG_MEM" "$(default_limits_stack
 collect_cpu_limit limits_optional_cpus "AGENTIC_LIMIT_OPTIONAL_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "optional")" "${limits_optional_cpus_override}" "AGENTIC_LIMIT_OPTIONAL_CPUS/AGENTIC_LIMIT_OPTIONAL_MEM set defaults for optional modules."
 collect_mem_limit limits_optional_mem "AGENTIC_LIMIT_OPTIONAL_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "optional")" "${limits_optional_mem_override}"
 
+optional_modules_raw="${optional_modules_override:-none}"
+if [[ "${non_interactive}" -eq 0 && -z "${optional_modules_override}" ]]; then
+  while true; do
+    candidate="$(prompt_with_default "AGENTIC_OPTIONAL_MODULES (csv: none,mcp,git-forge,pi-mono,goose,portainer)" "${optional_modules_raw}")"
+    if validate_optional_modules_csv "${candidate}"; then
+      optional_modules_raw="${candidate}"
+      break
+    fi
+  done
+else
+  validate_optional_modules_csv "${optional_modules_raw}" || die "invalid AGENTIC_OPTIONAL_MODULES"
+fi
+optional_modules_csv="$(normalize_optional_modules_csv "${optional_modules_raw}")"
+
+git_forge_host_port=""
+git_forge_admin_user=""
+git_forge_shared_namespace=""
+git_forge_enable_push_create=""
+if optional_modules_include "${optional_modules_raw}" "git-forge"; then
+  collect_text_value git_forge_host_port "GIT_FORGE_HOST_PORT" "${git_forge_host_port_override:-${GIT_FORGE_HOST_PORT:-13010}}" "${git_forge_host_port_override}" validate_port_value "GIT_FORGE_HOST_PORT is the loopback-only host port that exposes the forge web UI and API."
+  collect_text_value git_forge_admin_user "GIT_FORGE_ADMIN_USER" "${git_forge_admin_user_override:-${GIT_FORGE_ADMIN_USER:-system-manager}}" "${git_forge_admin_user_override}" validate_non_empty_single_line_value "GIT_FORGE_ADMIN_USER is the bootstrap admin login for the local forge."
+  collect_text_value git_forge_shared_namespace "GIT_FORGE_SHARED_NAMESPACE" "${git_forge_shared_namespace_override:-${GIT_FORGE_SHARED_NAMESPACE:-agentic}}" "${git_forge_shared_namespace_override}" validate_git_namespace_value "GIT_FORGE_SHARED_NAMESPACE is the shared org/group slug where stack-managed collaborative repositories live."
+  collect_text_value git_forge_enable_push_create "GIT_FORGE_ENABLE_PUSH_CREATE" "${git_forge_enable_push_create_override:-${GIT_FORGE_ENABLE_PUSH_CREATE:-0}}" "${git_forge_enable_push_create_override}" validate_zero_one_value "GIT_FORGE_ENABLE_PUSH_CREATE controls whether authenticated users may create repositories by pushing over Git."
+fi
+
 write_env_file \
   "${profile}" \
   "${root_path}" \
@@ -2074,6 +2241,11 @@ write_env_file \
   "${limits_rag_mem}" \
   "${limits_optional_cpus}" \
   "${limits_optional_mem}" \
+  "${optional_modules_csv}" \
+  "${git_forge_host_port}" \
+  "${git_forge_admin_user}" \
+  "${git_forge_shared_namespace}" \
+  "${git_forge_enable_push_create}" \
   "${output_file}"
 summary_add_generated "${output_file}"
 
@@ -2330,11 +2502,22 @@ fi
 openai_api_key="${openai_api_key_override:-}"
 openrouter_api_key="${openrouter_api_key_override:-}"
 huggingface_token="${huggingface_token_override:-}"
-optional_modules_raw="${optional_modules_override:-none}"
 optional_modules_list=()
 openclaw_token="${openclaw_token_override:-}"
 openclaw_webhook_secret="${openclaw_webhook_secret_override:-}"
 mcp_token="${mcp_token_override:-}"
+git_forge_admin_password="${git_forge_admin_password_override:-}"
+git_forge_accounts=(
+  openclaw
+  openhands
+  comfyui
+  claude
+  codex
+  opencode
+  vibestral
+  pi-mono
+  goose
+)
 
 if [[ "${secret_section_enabled}" -eq 1 ]]; then
   if [[ "${non_interactive}" -eq 0 ]]; then
@@ -2347,20 +2530,6 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     if [[ -z "${huggingface_token_override}" ]]; then
       huggingface_token="$(prompt_secret_with_default "huggingface.token (optional, for ComfyUI gated HF models)" "${huggingface_token}")"
     fi
-
-    if [[ -z "${optional_modules_override}" ]]; then
-      while true; do
-        candidate="$(prompt_with_default "Optional modules to prepare secrets for (csv: none,mcp,pi-mono,goose,portainer)" "${optional_modules_raw}")"
-        if validate_optional_modules_csv "${candidate}"; then
-          optional_modules_raw="${candidate}"
-          break
-        fi
-      done
-    else
-      validate_optional_modules_csv "${optional_modules_raw}" || die "invalid --optional-modules"
-    fi
-  else
-    validate_optional_modules_csv "${optional_modules_raw}" || die "invalid --optional-modules"
   fi
 
   if [[ -z "${openclaw_token}" ]]; then
@@ -2416,6 +2585,24 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
             fi
           fi
           ;;
+        git-forge)
+          existing_git_forge_admin_secret="${root_path}/secrets/runtime/git-forge/${git_forge_admin_user}.password"
+          if [[ -z "${git_forge_admin_password}" && -s "${existing_git_forge_admin_secret}" ]]; then
+            git_forge_admin_password="$(tr -d '\n' <"${existing_git_forge_admin_secret}")"
+          fi
+          if [[ -z "${git_forge_admin_password}" ]]; then
+            if [[ "${non_interactive}" -eq 0 ]]; then
+              candidate="$(prompt_password_or_generate "git-forge/${git_forge_admin_user}.password")"
+              if [[ -n "${candidate}" ]]; then
+                git_forge_admin_password="${candidate}"
+              else
+                git_forge_admin_password="$(generate_secret_value 24)"
+              fi
+            else
+              git_forge_admin_password="$(generate_secret_value 24)"
+            fi
+          fi
+          ;;
         pi-mono|goose|portainer)
           ;;
       esac
@@ -2438,10 +2625,19 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     write_secret_file "${root_path}" "openclaw.token" "${openclaw_token}" || true
     write_secret_file "${root_path}" "openclaw.webhook_secret" "${openclaw_webhook_secret}" || true
     write_secret_file "${root_path}" "mcp.token" "${mcp_token}" || true
+    write_secret_file "${root_path}" "git-forge/${git_forge_admin_user}.password" "${git_forge_admin_password}" || true
+    if optional_modules_include "${optional_modules_raw}" "git-forge"; then
+      for git_forge_account in "${git_forge_accounts[@]}"; do
+        ensure_generated_secret_file "${root_path}" "git-forge/${git_forge_account}.password" 0640 || true
+      done
+    fi
 
-    # Defensive hardening: ensure all runtime secret files are 0600, even if something wrote them looser.
+    # Defensive hardening: keep app secrets at 0600 while forge agent passwords stay readable for the matching runtime group.
     if [[ -d "${root_path}/secrets/runtime" ]]; then
-      find "${root_path}/secrets/runtime" -type f -exec chmod 0600 {} +
+      find "${root_path}/secrets/runtime" -type f ! -path "${root_path}/secrets/runtime/git-forge/*" -exec chmod 0600 {} +
+    fi
+    if [[ -d "${root_path}/secrets/runtime/git-forge" ]]; then
+      find "${root_path}/secrets/runtime/git-forge" -type f -exec chmod 0640 {} +
     fi
 
     ensure_openclaw_integration_profile_file "${root_path}" || true

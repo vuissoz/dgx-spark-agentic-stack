@@ -8,6 +8,7 @@ AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
 AGENTIC_PI_MONO_WORKSPACES_DIR="${AGENTIC_PI_MONO_WORKSPACES_DIR:-${AGENTIC_ROOT}/optional/pi-mono/workspaces}"
 AGENTIC_GOOSE_WORKSPACES_DIR="${AGENTIC_GOOSE_WORKSPACES_DIR:-${AGENTIC_ROOT}/optional/goose/workspaces}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/optional"
+GIT_FORGE_ADMIN_USER="${GIT_FORGE_ADMIN_USER:-system-manager}"
 
 log() {
   echo "INFO: $*"
@@ -102,6 +103,7 @@ optional_request_default_need() {
   local module="$1"
   case "${module}" in
     mcp) printf '%s\n' "Expose a restricted MCP catalog for local automation workflows." ;;
+    git-forge) printf '%s\n' "Provide a shared self-hosted Git forge so agents can clone, push, fetch, pull, and share projects." ;;
     pi-mono) printf '%s\n' "Provide an additional isolated CLI agent runtime for targeted tasks." ;;
     goose) printf '%s\n' "Provide an isolated Goose CLI runtime for approved workflows." ;;
     portainer) printf '%s\n' "Provide temporary loopback-only Portainer visibility for local diagnostics." ;;
@@ -113,6 +115,7 @@ optional_request_default_success() {
   local module="$1"
   case "${module}" in
     mcp) printf '%s\n' "Only allowlisted tools are available and service healthcheck stays green." ;;
+    git-forge) printf '%s\n' "Forgejo stays healthy on loopback-only bind and stack-managed agent accounts can access the shared repository without credential prompts." ;;
     pi-mono) printf '%s\n' "Container starts with expected user/workspace mappings and no forbidden mounts." ;;
     goose) printf '%s\n' "Container starts successfully with isolated workspace and expected proxy controls." ;;
     portainer) printf '%s\n' "UI is reachable on loopback only and runs without docker.sock mount." ;;
@@ -159,6 +162,19 @@ ensure_optional_request_file() {
 main() {
   local runtime_uid="${AGENT_RUNTIME_UID:-1000}"
   local runtime_gid="${AGENT_RUNTIME_GID:-1000}"
+  local git_forge_secret
+  local -a git_forge_accounts=(
+    "${GIT_FORGE_ADMIN_USER}"
+    openclaw
+    openhands
+    comfyui
+    claude
+    codex
+    opencode
+    vibestral
+    pi-mono
+    goose
+  )
 
   install -d -m 0750 "${AGENTIC_ROOT}/optional"
   install -d -m 0750 "${AGENTIC_ROOT}/optional/mcp"
@@ -176,6 +192,11 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/optional/goose/logs"
   install -d -m 0770 "${AGENTIC_GOOSE_WORKSPACES_DIR}"
 
+  install -d -m 0750 "${AGENTIC_ROOT}/optional/git"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/git/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/git/config"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/git/bootstrap"
+
   install -d -m 0750 "${AGENTIC_ROOT}/optional/portainer"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/portainer/data"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/portainer/logs"
@@ -184,9 +205,11 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/deployments/optional"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
+  install -d -m 0750 "${AGENTIC_ROOT}/secrets/runtime/git-forge"
 
   copy_if_missing "${TEMPLATE_DIR}/mcp.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt" 0640
   ensure_optional_request_file "mcp"
+  ensure_optional_request_file "git-forge"
   ensure_optional_request_file "pi-mono"
   ensure_optional_request_file "goose"
   ensure_optional_request_file "portainer"
@@ -194,11 +217,19 @@ main() {
   chmod 0644 "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
 
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
+  for git_forge_secret in "${git_forge_accounts[@]}"; do
+    ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password"
+    ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password"
+    chmod 0640 "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password" || true
+  done
 
   if [[ "${EUID}" -eq 0 ]]; then
     chown -R "${runtime_uid}:${runtime_gid}" \
       "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \
+      "${AGENTIC_ROOT}/optional/git/state" \
+      "${AGENTIC_ROOT}/optional/git/config" \
+      "${AGENTIC_ROOT}/optional/git/bootstrap" \
       "${AGENTIC_ROOT}/optional/pi-mono/state" \
       "${AGENTIC_ROOT}/optional/pi-mono/logs" \
       "${AGENTIC_PI_MONO_WORKSPACES_DIR}" \
@@ -210,11 +241,20 @@ main() {
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
     fi
+    for git_forge_secret in "${git_forge_accounts[@]}"; do
+      if [[ -f "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password" ]]; then
+        chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password"
+        chmod 0640 "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password" || true
+      fi
+    done
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then
     chmod 0770 "${AGENTIC_ROOT}/optional/mcp/state" \
       "${AGENTIC_ROOT}/optional/mcp/logs" \
+      "${AGENTIC_ROOT}/optional/git/state" \
+      "${AGENTIC_ROOT}/optional/git/config" \
+      "${AGENTIC_ROOT}/optional/git/bootstrap" \
       "${AGENTIC_ROOT}/optional/pi-mono/state" \
       "${AGENTIC_ROOT}/optional/pi-mono/logs" \
       "${AGENTIC_PI_MONO_WORKSPACES_DIR}" \

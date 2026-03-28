@@ -206,9 +206,11 @@ services:
       OPENCLAW_SLACK_BOT_TOKEN_FILE: /run/secrets/slack.bot_token
       OPENCLAW_SLACK_APP_TOKEN_FILE: /run/secrets/slack.app_token
       OPENCLAW_SLACK_SIGNING_SECRET_FILE: /run/secrets/slack.signing_secret
+      AGENTIC_GIT_FORGE_BASE_URL: http://optional-forgejo:3000
+      AGENTIC_GIT_FORGE_SHARED_NAMESPACE: ${GIT_FORGE_SHARED_NAMESPACE:-agentic}
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,openclaw,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
     depends_on:
       openclaw-provider-bridge:
         condition: service_healthy
@@ -230,6 +232,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.bot_token:/run/secrets/slack.bot_token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.app_token:/run/secrets/slack.app_token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.signing_secret:/run/secrets/slack.signing_secret:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/openclaw.password:/run/secrets/git-forge.password:ro
     healthcheck:
       test:
         - CMD-SHELL
