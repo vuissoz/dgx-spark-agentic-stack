@@ -129,6 +129,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-799i` : `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` devient l'alias TRT expose par defaut dans l'onboarding, Compose, le runtime et l'adapter TRT, tout en laissant `nemotron-cascade-30b` comme entree par defaut du catalogue local NVFP4.
   - `dgx-spark-agentic-stack-j4b0` reste ouvert : stabiliser le warm-up TRT de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` derriere le proxy HF pour obtenir un premier `Hello` sans `503 starting`.
   - `dgx-spark-agentic-stack-xe3w` : `agent up core` avec TRT prefetch maintenant explicitement le cache HF de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`, sans telecharger `cascade` ou `super` sur ce chemin par defaut.
+  - `dgx-spark-agentic-stack-u94j` : le bootstrap `agent up core` n'appelle plus aucun prechargement NVFP4 local automatique; `cascade` et `super` restent uniquement en manuel.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
@@ -523,7 +524,7 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - le conteneur `trtllm` embarque maintenant l'image NVIDIA `nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc5`, lance `trtllm-serve serve` en backend natif quand `huggingface.token` est present, et garde un mode `mock` deterministe sans token.
 - le mode standard `TRTLLM_NATIVE_MODEL_POLICY=auto` conserve le comportement générique, y compris la canonicalisation FP8 du slug Nemotron NVFP4 quand le backend natif sert directement un handle HF.
 - le mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` impose au contraire un runtime NVFP4 préparé localement (`TRTLLM_NVFP4_LOCAL_MODEL_DIR`, défaut `/models/cascade_30b_nvfp4`), sans fallback silencieux vers HF/FP8.
-- avec le modèle TRT par défaut et un `huggingface.token` non vide, `agent up core` prefetch maintenant le cache Hugging Face de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` sous `${AGENTIC_ROOT}/trtllm/models/huggingface`, sans télécharger `cascade` ni `super` tant qu'un mode strict local-only ou un `agent trtllm prepare ...` explicite n'est pas demandé.
+- avec le modèle TRT par défaut et un `huggingface.token` non vide, `agent up core` prefetch maintenant uniquement le cache Hugging Face de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` sous `${AGENTIC_ROOT}/trtllm/models/huggingface`. Aucun payload NVFP4 local n'est téléchargé automatiquement; `cascade` et `super` demandent désormais toujours une action opérateur explicite (`agent trtllm prepare ...` ou `agent trtllm load ...`).
 - le catalogue TRT local connait maintenant deux payloads NVFP4 (`nemotron-super-120b`, `nemotron-cascade-30b`) et le modèle actif est piloté par `TRTLLM_ACTIVE_MODEL_KEY`.
 - les commandes opérateur `agent trtllm list`, `agent trtllm prepare <model|all>`, `agent trtllm load <model>` et `agent trtllm unload` permettent de préparer plusieurs payloads locaux, puis de basculer le service TRT sur un seul modèle actif à la fois.
 - un essai live `Hello` sur `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` retourne encore `503 status=starting` tant que le backend TRT termine le téléchargement Hugging Face derrière le proxy.

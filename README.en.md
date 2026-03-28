@@ -44,7 +44,7 @@ A hardened DGX Spark mode now exists: `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-l
 The stack now exposes `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` as the default TRT alias, while still knowing two local NVFP4 payloads for strict mode:
 - `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` (default local catalog entry)
 - `nemotron-super-120b` -> `${AGENTIC_ROOT}/trtllm/models/super_fp4`
-The active local-catalog TRT model is controlled by `TRTLLM_ACTIVE_MODEL_KEY`. When `COMPOSE_PROFILES` includes `trt` and `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty, `./agent up core` now prefetches the Hugging Face cache for the default exposed TRT model `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`. The local `nemotron-cascade-30b` and `nemotron-super-120b` payloads are no longer downloaded on that default path; they remain opt-in through strict local-only mode or `./agent trtllm prepare ...`.
+The active local-catalog TRT model is controlled by `TRTLLM_ACTIVE_MODEL_KEY`. When `COMPOSE_PROFILES` includes `trt` and `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty, `./agent up core` now prefetches only the Hugging Face cache for the default exposed TRT model `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`. No local NVFP4 payload (`nemotron-cascade-30b`, `nemotron-super-120b`) is downloaded automatically on that path anymore; they are strictly opt-in through `./agent trtllm prepare ...` or `./agent trtllm load ...`.
 Example activation:
 
 ```bash

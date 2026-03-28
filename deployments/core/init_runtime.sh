@@ -330,14 +330,6 @@ set_gate_runtime_permissions() {
   log "non-root runtime init: relaxed gate dir permissions for userns compatibility"
 }
 
-prepare_trtllm_nvfp4_model() {
-  local helper="${REPO_ROOT}/deployments/trtllm/prepare_nvfp4_model.sh"
-  [[ -x "${helper}" ]] || chmod +x "${helper}" || true
-  if ! "${helper}"; then
-    die "TRT NVFP4 auto-bootstrap failed"
-  fi
-}
-
 prefetch_trtllm_default_model() {
   local helper="${REPO_ROOT}/deployments/trtllm/prefetch_default_model.sh"
   [[ -x "${helper}" ]] || chmod +x "${helper}" || true
@@ -483,7 +475,6 @@ main() {
   ensure_gate_mcp_token
   ensure_optional_secret_file "${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
   prefetch_trtllm_default_model
-  prepare_trtllm_nvfp4_model
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"

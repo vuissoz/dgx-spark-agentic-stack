@@ -70,6 +70,9 @@ ok "TRT HF prefetch skips non-default aliases such as Cascade NVFP4"
 
 grep -q 'prefetch_trtllm_default_model' "${init_script}" \
   || fail "core init runtime must call the TRT HF prefetch helper"
-ok "core init runtime wires the TRT HF prefetch helper"
+if grep -q 'prepare_trtllm_nvfp4_model' "${init_script}"; then
+  fail "core init runtime must not auto-bootstrap Cascade or Super NVFP4 payloads"
+fi
+ok "core init runtime wires only the Nano HF prefetch helper on the default TRT path"
 
 ok "C7_trtllm_default_hf_prefetch passed"

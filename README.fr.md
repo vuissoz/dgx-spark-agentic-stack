@@ -44,7 +44,7 @@ Un mode durci `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` existe mainte
 Le stack expose maintenant `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` comme alias TRT par defaut, tout en connaissant deux payloads NVFP4 locaux pour le mode strict:
 - `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` (defaut du catalogue local)
 - `nemotron-super-120b` -> `${AGENTIC_ROOT}/trtllm/models/super_fp4`
-Le modele TRT actif du catalogue local est pilote par `TRTLLM_ACTIVE_MODEL_KEY`. Quand `COMPOSE_PROFILES` contient `trt` et que `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide, `./agent up core` precharge automatiquement le cache Hugging Face du modele TRT expose par defaut `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`. Les payloads locaux `nemotron-cascade-30b` et `nemotron-super-120b` ne sont pas telecharges pendant ce chemin par defaut; ils restent opt-in via le mode strict local-only ou `./agent trtllm prepare ...`.
+Le modele TRT actif du catalogue local est pilote par `TRTLLM_ACTIVE_MODEL_KEY`. Quand `COMPOSE_PROFILES` contient `trt` et que `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide, `./agent up core` precharge uniquement le cache Hugging Face du modele TRT expose par defaut `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`. Aucun payload NVFP4 local (`nemotron-cascade-30b`, `nemotron-super-120b`) n'est plus telecharge automatiquement sur ce chemin; ils restent strictement opt-in via `./agent trtllm prepare ...` ou `./agent trtllm load ...`.
 Exemple d'activation:
 
 ```bash
