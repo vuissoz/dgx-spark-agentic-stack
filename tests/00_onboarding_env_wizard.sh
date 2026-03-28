@@ -237,6 +237,8 @@ grep -q "^export OLLAMA_CONTEXT_LENGTH='91239'$" "${default_env_file}" \
   || fail "default OLLAMA_CONTEXT_LENGTH is not 91239"
 grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${default_env_file}" \
   || fail "default TRTLLM_MODELS must be ${default_trt_model}"
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${default_env_file}" \
+  || fail "default TRTLLM_ACTIVE_MODEL_KEY must be nemotron-super-120b"
 grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/super_fp4'$" "${default_env_file}" \
   || fail "default TRTLLM_NVFP4_LOCAL_MODEL_DIR must be /models/super_fp4"
 grep -q "^export TRTLLM_NVFP4_HF_REPO='nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4'$" "${default_env_file}" \
@@ -334,6 +336,8 @@ grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${override_env_file}" \
   || fail "override default OLLAMA_CONTEXT_LENGTH should remain 50909 when not overridden"
 grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo,nemotron-cascade-2:30b'$" "${override_env_file}" \
   || fail "override TRTLLM_MODELS is not applied after enabling trt"
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${override_env_file}" \
+  || fail "override flow must still export TRTLLM_ACTIVE_MODEL_KEY"
 grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/super_fp4'$" "${override_env_file}" \
   || fail "override flow must still export TRTLLM_NVFP4_LOCAL_MODEL_DIR"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${override_env_file}" \
@@ -423,6 +427,8 @@ grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${rootless_default_env_file}" 
   || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 50909"
 grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${rootless_default_env_file}" \
   || fail "rootless default TRTLLM_MODELS must stay ${default_trt_model}"
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${rootless_default_env_file}" \
+  || fail "rootless default TRTLLM_ACTIVE_MODEL_KEY must be exported"
 grep -q "^export TRTLLM_NVFP4_HF_REPO='nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4'$" "${rootless_default_env_file}" \
   || fail "rootless default TRTLLM_NVFP4_HF_REPO must target the Nemotron NVFP4 repo"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${rootless_default_env_file}" \
@@ -551,6 +557,8 @@ grep -q "^export COMPOSE_PROFILES='trt'$" "${non_interactive_env_file}" \
   || fail "non-interactive COMPOSE_PROFILES must be applied"
 grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo,tinyllama:latest'$" "${non_interactive_env_file}" \
   || fail "non-interactive TRTLLM_MODELS must be applied"
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${non_interactive_env_file}" \
+  || fail "non-interactive flow must still export TRTLLM_ACTIVE_MODEL_KEY"
 grep -q "^export TRTLLM_NVFP4_PREPARE_ENABLED='auto'$" "${non_interactive_env_file}" \
   || fail "non-interactive flow must still export TRTLLM_NVFP4_PREPARE_ENABLED"
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='32768'$" "${non_interactive_env_file}" \

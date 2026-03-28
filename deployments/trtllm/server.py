@@ -87,6 +87,11 @@ def strip_hf_url(value: str) -> str:
     return candidate
 
 
+def hf_repo_to_url(value: str) -> str:
+    normalized = strip_hf_url(value)
+    return f"{HF_URL_PREFIX}{normalized}"
+
+
 def normalize_model_policy(value: str) -> str:
     normalized = value.strip().lower().replace("_", "-") if value else MODEL_POLICY_AUTO
     if normalized in {"", MODEL_POLICY_AUTO}:
@@ -109,9 +114,14 @@ def build_alias_values(display_name: str, requested_handle: str, serve_handle: s
     return tuple(sorted(alias for alias in alias_values if alias))
 
 
-def model_serve_handle(model: str, native_model_policy: str = MODEL_POLICY_AUTO, nvfp4_local_model_dir: str = DEFAULT_NVFP4_LOCAL_MODEL_DIR) -> str:
+def model_serve_handle(
+    model: str,
+    native_model_policy: str = MODEL_POLICY_AUTO,
+    nvfp4_local_model_dir: str = DEFAULT_NVFP4_LOCAL_MODEL_DIR,
+    strict_expected_handle: str = DEFAULT_TRTLLM_MODEL_HANDLE,
+) -> str:
     normalized = strip_hf_url(model)
-    if native_model_policy == MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY and normalized == DEFAULT_TRTLLM_MODEL_HANDLE:
+    if native_model_policy == MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY and normalized == strict_expected_handle:
         return nvfp4_local_model_dir.rstrip("/") or nvfp4_local_model_dir
     if normalized == "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4":
         # NVIDIA's DGX Spark TRT-LLM playbook observed on 2026-03-28 lists the FP8
@@ -132,6 +142,7 @@ def build_model_entries(
     raw_models: str,
     native_model_policy: str = MODEL_POLICY_AUTO,
     nvfp4_local_model_dir: str = DEFAULT_NVFP4_LOCAL_MODEL_DIR,
+    strict_expected_handle: str = DEFAULT_TRTLLM_MODEL_HANDLE,
 ) -> list[ModelEntry]:
     if native_model_policy == MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY:
         configured = [item.strip() for item in raw_models.split(",") if item.strip()]
@@ -145,10 +156,10 @@ def build_model_entries(
         display_name = configured[0]
         requested_handle = strip_hf_url(display_name)
         serve_handle = nvfp4_local_model_dir.rstrip("/") or nvfp4_local_model_dir
-        if requested_handle not in {DEFAULT_TRTLLM_MODEL_HANDLE, serve_handle}:
+        if requested_handle not in {strict_expected_handle, serve_handle}:
             raise ValueError(
                 "strict NVFP4 local-only mode requires TRTLLM_MODELS to expose "
-                f"{DEFAULT_TRTLLM_MODEL} or {serve_handle}"
+                f"{hf_repo_to_url(strict_expected_handle)} or {serve_handle}"
             )
         return [
             ModelEntry(
@@ -170,6 +181,7 @@ def build_model_entries(
             display_name,
             native_model_policy=native_model_policy,
             nvfp4_local_model_dir=nvfp4_local_model_dir,
+            strict_expected_handle=strict_expected_handle,
         )
         entries.append(
             ModelEntry(
@@ -188,6 +200,7 @@ def build_model_entries(
         DEFAULT_TRTLLM_MODEL,
         native_model_policy=native_model_policy,
         nvfp4_local_model_dir=nvfp4_local_model_dir,
+        strict_expected_handle=strict_expected_handle,
     )
     return [
         ModelEntry(
@@ -342,6 +355,9 @@ class RuntimeController:
             os.environ.get("TRTLLM_NVFP4_LOCAL_MODEL_DIR", DEFAULT_NVFP4_LOCAL_MODEL_DIR).strip().rstrip("/")
             or DEFAULT_NVFP4_LOCAL_MODEL_DIR
         )
+        self.strict_expected_handle = strip_hf_url(
+            os.environ.get("TRTLLM_NVFP4_HF_REPO", DEFAULT_TRTLLM_MODEL_HANDLE)
+        )
         self.state_dir = Path(os.environ.get("TRTLLM_STATE_DIR", "/state"))
         self.logs_dir = Path(os.environ.get("TRTLLM_LOGS_DIR", "/logs"))
         self.extra_config_file = self.state_dir / "trtllm-extra-llm-api-config.yml"
@@ -356,13 +372,15 @@ class RuntimeController:
                 os.environ.get("TRTLLM_MODELS", DEFAULT_TRTLLM_MODEL),
                 native_model_policy=self.native_model_policy,
                 nvfp4_local_model_dir=self.nvfp4_local_model_dir,
+                strict_expected_handle=self.strict_expected_handle,
             )
         except ValueError as exc:
             self.configuration_error = str(exc)
             self.entries = build_model_entries(
-                DEFAULT_TRTLLM_MODEL,
+                hf_repo_to_url(self.strict_expected_handle),
                 native_model_policy=self.native_model_policy,
                 nvfp4_local_model_dir=self.nvfp4_local_model_dir,
+                strict_expected_handle=self.strict_expected_handle,
             )
         self.primary_entry = self.entries[0]
         self.runtime_mode_effective = self._resolve_runtime_mode()

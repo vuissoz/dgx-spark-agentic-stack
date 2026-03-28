@@ -15,22 +15,53 @@ die() {
   exit 1
 }
 
+selected_model_container_dir() {
+  local model_key="$1"
+  if [[ "${model_key}" == "${TRTLLM_ACTIVE_MODEL_KEY}" && -n "${TRTLLM_NVFP4_LOCAL_MODEL_DIR:-}" ]]; then
+    printf '%s\n' "${TRTLLM_NVFP4_LOCAL_MODEL_DIR}"
+    return 0
+  fi
+  trtllm_model_field "${model_key}" local_dir
+}
+
+selected_model_repo() {
+  local model_key="$1"
+  if [[ "${model_key}" == "${TRTLLM_ACTIVE_MODEL_KEY}" && -n "${TRTLLM_NVFP4_HF_REPO:-}" ]]; then
+    printf '%s\n' "${TRTLLM_NVFP4_HF_REPO}"
+    return 0
+  fi
+  trtllm_model_field "${model_key}" repo
+}
+
+selected_model_revision() {
+  local model_key="$1"
+  if [[ "${model_key}" == "${TRTLLM_ACTIVE_MODEL_KEY}" && -n "${TRTLLM_NVFP4_HF_REVISION:-}" ]]; then
+    printf '%s\n' "${TRTLLM_NVFP4_HF_REVISION}"
+    return 0
+  fi
+  trtllm_model_field "${model_key}" revision
+}
+
 resolve_host_target_dir() {
-  if [[ -n "${TRTLLM_NVFP4_LOCAL_MODEL_HOST_DIR:-}" ]]; then
+  local model_key="$1"
+  local container_dir
+
+  if [[ "${model_key}" == "${TRTLLM_ACTIVE_MODEL_KEY}" && -n "${TRTLLM_NVFP4_LOCAL_MODEL_HOST_DIR:-}" ]]; then
     printf '%s\n' "${TRTLLM_NVFP4_LOCAL_MODEL_HOST_DIR}"
     return 0
   fi
 
-  if host_dir="$(agentic_trtllm_nvfp4_host_dir "${TRTLLM_NVFP4_LOCAL_MODEL_DIR}")"; then
+  container_dir="$(selected_model_container_dir "${model_key}")" || die "unknown TRT model key: ${model_key}"
+  if host_dir="$(agentic_trtllm_nvfp4_host_dir "${container_dir}")"; then
     printf '%s\n' "${host_dir}"
     return 0
   fi
 
-  die "TRTLLM_NVFP4_LOCAL_MODEL_DIR must stay under /models/... or set TRTLLM_NVFP4_LOCAL_MODEL_HOST_DIR explicitly"
+  die "TRT local model dir must stay under /models/... or set TRTLLM_NVFP4_LOCAL_MODEL_HOST_DIR explicitly"
 }
 
-model_is_default_nvfp4() {
-  [[ "${TRTLLM_MODELS}" == "${AGENTIC_DEFAULT_TRTLLM_MODEL_URL}" || "${TRTLLM_MODELS}" == "${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE}" ]]
+model_is_active_request() {
+  trtllm_model_matches_request "${TRTLLM_ACTIVE_MODEL_KEY}" "${TRTLLM_MODELS}"
 }
 
 download_enabled() {
@@ -38,7 +69,7 @@ download_enabled() {
     auto)
       [[ "${TRTLLM_NATIVE_MODEL_POLICY}" == "strict-nvfp4-local-only" ]] \
         && agentic_csv_contains "trt" "${COMPOSE_PROFILES:-}" \
-        && model_is_default_nvfp4
+        && model_is_active_request
       ;;
     1|true|TRUE|yes|YES|on|ON)
       return 0
@@ -97,6 +128,8 @@ copy_from_local_source() {
 
 download_snapshot() {
   local target_dir="$1"
+  local repo_id="$2"
+  local revision="$3"
   local token_file="${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
   local venv_dir="${AGENTIC_ROOT}/trtllm/state/hfhub-venv"
 
@@ -104,7 +137,7 @@ download_snapshot() {
 
   prepare_python_venv "${venv_dir}"
   export HF_HUB_DISABLE_XET=1
-  "${venv_dir}/bin/python" - <<'PY' "${target_dir}" "${token_file}" "${TRTLLM_NVFP4_HF_REPO}" "${TRTLLM_NVFP4_HF_REVISION}" "${TRTLLM_NVFP4_PREPARE_MAX_WORKERS:-4}"
+  "${venv_dir}/bin/python" - <<'PY' "${target_dir}" "${token_file}" "${repo_id}" "${revision}" "${TRTLLM_NVFP4_PREPARE_MAX_WORKERS:-4}"
 from huggingface_hub import snapshot_download
 import pathlib
 import sys
@@ -126,17 +159,25 @@ print(target_dir)
 PY
 }
 
-main() {
-  local target_dir
+prepare_model_key() {
+  local model_key="$1"
+  local target_dir repo_id revision container_dir
   local log_dir="${AGENTIC_ROOT}/trtllm/logs"
-  local lock_dir="${AGENTIC_ROOT}/trtllm/state/nvfp4-prepare.lock"
+  local lock_dir="${AGENTIC_ROOT}/trtllm/state/nvfp4-prepare-${model_key}.lock"
 
-  if ! download_enabled; then
+  if ! trtllm_model_exists "${model_key}"; then
+    die "unknown TRT model key: ${model_key}"
+  fi
+
+  if ! download_enabled && [[ "${model_key}" == "${TRTLLM_ACTIVE_MODEL_KEY}" ]]; then
     log "skip NVFP4 prepare: current TRT runtime selection does not require strict local NVFP4 bootstrap"
     return 0
   fi
 
-  target_dir="$(resolve_host_target_dir)"
+  target_dir="$(resolve_host_target_dir "${model_key}")"
+  repo_id="$(selected_model_repo "${model_key}")"
+  revision="$(selected_model_revision "${model_key}")"
+  container_dir="$(selected_model_container_dir "${model_key}")"
   install -d -m 0770 "${AGENTIC_ROOT}/trtllm" "${AGENTIC_ROOT}/trtllm/state" "${AGENTIC_ROOT}/trtllm/logs"
   install -d -m 0770 "${target_dir}"
 
@@ -154,15 +195,33 @@ main() {
   install -d -m 0750 "${log_dir}"
   exec > >(tee -a "${log_dir}/nvfp4-model-prepare.log") 2>&1
 
-  log "preparing NVFP4 model under ${target_dir}"
+  log "preparing NVFP4 model key=${model_key} repo=${repo_id} target=${target_dir} container_dir=${container_dir}"
   if [[ -n "${TRTLLM_NVFP4_PREPARE_SOURCE_DIR:-}" ]]; then
     copy_from_local_source "${TRTLLM_NVFP4_PREPARE_SOURCE_DIR}" "${target_dir}"
   else
-    download_snapshot "${target_dir}"
+    download_snapshot "${target_dir}" "${repo_id}" "${revision}"
   fi
 
   model_payload_complete "${target_dir}" || die "NVFP4 payload remains incomplete after bootstrap: ${target_dir}"
-  log "prepared NVFP4 model under ${target_dir}"
+  log "prepared NVFP4 model key=${model_key} under ${target_dir}"
+}
+
+main() {
+  local requested="${TRTLLM_PREPARE_MODEL_KEY:-${TRTLLM_ACTIVE_MODEL_KEY}}"
+  local resolved_key
+
+  if [[ "${requested}" == "all" ]]; then
+    local key
+    while IFS= read -r key; do
+      [[ -n "${key}" ]] || continue
+      prepare_model_key "${key}"
+    done < <(trtllm_model_keys)
+    return 0
+  fi
+
+  resolved_key="$(trtllm_model_resolve_key "${requested}" 2>/dev/null || true)"
+  [[ -n "${resolved_key}" ]] || die "unknown TRT model key or alias: ${requested}"
+  prepare_model_key "${resolved_key}"
 }
 
 main "$@"

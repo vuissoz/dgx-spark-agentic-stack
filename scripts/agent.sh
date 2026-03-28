@@ -15,6 +15,7 @@ AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_PREREQS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/check_prereqs.sh"
 AGENT_ONBOARD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
+AGENT_TRTLLM_PREPARE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/trtllm/prepare_nvfp4_model.sh"
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch.sh"
@@ -71,6 +72,7 @@ Usage:
   agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
   agent ollama unload <model>
+  agent trtllm [status|list|prepare <model|all>|load <model>|unload]
   agent ollama-link
   agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
   agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
@@ -1058,7 +1060,7 @@ load_runtime_env() {
           export "${key}=${value}"
         fi
         ;;
-      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_LLM_BACKEND|AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|AGENTIC_AGENT_WORKSPACES_ROOT|AGENTIC_CLAUDE_WORKSPACES_DIR|AGENTIC_CODEX_WORKSPACES_DIR|AGENTIC_OPENCODE_WORKSPACES_DIR|AGENTIC_VIBESTRAL_WORKSPACES_DIR|AGENTIC_OPENHANDS_WORKSPACES_DIR|AGENTIC_OPENCLAW_WORKSPACES_DIR|AGENTIC_PI_MONO_WORKSPACES_DIR|AGENTIC_GOOSE_WORKSPACES_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|AGENTIC_DEFAULT_MODEL|AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|AGENTIC_GOOSE_CONTEXT_LIMIT|OLLAMA_CONTEXT_LENGTH|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|AGENTIC_OBS_RETENTION_TIME|AGENTIC_OBS_MAX_DISK|AGENTIC_PROMETHEUS_DISK_BUDGET|AGENTIC_LOKI_DISK_BUDGET|PROMETHEUS_RETENTION_TIME|PROMETHEUS_RETENTION_SIZE|LOKI_RETENTION_PERIOD|LOKI_MAX_QUERY_LOOKBACK|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_AGENT_NO_NEW_PRIVILEGES|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_PI_CODING_AGENT_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
+      COMPOSE_PROFILES|AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_LLM_BACKEND|AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|AGENTIC_AGENT_WORKSPACES_ROOT|AGENTIC_CLAUDE_WORKSPACES_DIR|AGENTIC_CODEX_WORKSPACES_DIR|AGENTIC_OPENCODE_WORKSPACES_DIR|AGENTIC_VIBESTRAL_WORKSPACES_DIR|AGENTIC_OPENHANDS_WORKSPACES_DIR|AGENTIC_OPENCLAW_WORKSPACES_DIR|AGENTIC_PI_MONO_WORKSPACES_DIR|AGENTIC_GOOSE_WORKSPACES_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|AGENTIC_DEFAULT_MODEL|AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|AGENTIC_GOOSE_CONTEXT_LIMIT|OLLAMA_CONTEXT_LENGTH|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|TRTLLM_ACTIVE_MODEL_KEY|TRTLLM_MODELS|TRTLLM_NATIVE_MODEL_POLICY|TRTLLM_NVFP4_LOCAL_MODEL_DIR|TRTLLM_NVFP4_HF_REPO|TRTLLM_NVFP4_HF_REVISION|TRTLLM_NVFP4_PREPARE_ENABLED|AGENTIC_OBS_RETENTION_TIME|AGENTIC_OBS_MAX_DISK|AGENTIC_PROMETHEUS_DISK_BUDGET|AGENTIC_LOKI_DISK_BUDGET|PROMETHEUS_RETENTION_TIME|PROMETHEUS_RETENTION_SIZE|LOKI_RETENTION_PERIOD|LOKI_MAX_QUERY_LOOKBACK|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_AGENT_NO_NEW_PRIVILEGES|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_PI_CODING_AGENT_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
         export "${key}=${value}"
         ;;
       *)
@@ -1123,6 +1125,7 @@ ensure_runtime_env() {
     "AGENTIC_PI_MONO_WORKSPACES_DIR=${AGENTIC_PI_MONO_WORKSPACES_DIR}"
     "AGENTIC_GOOSE_WORKSPACES_DIR=${AGENTIC_GOOSE_WORKSPACES_DIR}"
     "AGENTIC_COMPOSE_PROJECT=${AGENTIC_COMPOSE_PROJECT}"
+    "COMPOSE_PROFILES=${COMPOSE_PROFILES:-}"
     "AGENTIC_NETWORK=${AGENTIC_NETWORK}"
     "AGENTIC_LLM_NETWORK=${AGENTIC_LLM_NETWORK}"
     "AGENTIC_AGENT_BASE_BUILD_CONTEXT=${AGENTIC_AGENT_BASE_BUILD_CONTEXT}"
@@ -1176,6 +1179,13 @@ ensure_runtime_env() {
     "OLLAMA_PRELOAD_EMBED_MODEL=${OLLAMA_PRELOAD_EMBED_MODEL}"
     "OLLAMA_MODEL_STORE_BUDGET_GB=${OLLAMA_MODEL_STORE_BUDGET_GB}"
     "RAG_EMBED_MODEL=${RAG_EMBED_MODEL}"
+    "TRTLLM_ACTIVE_MODEL_KEY=${TRTLLM_ACTIVE_MODEL_KEY}"
+    "TRTLLM_MODELS=${TRTLLM_MODELS}"
+    "TRTLLM_NATIVE_MODEL_POLICY=${TRTLLM_NATIVE_MODEL_POLICY}"
+    "TRTLLM_NVFP4_LOCAL_MODEL_DIR=${TRTLLM_NVFP4_LOCAL_MODEL_DIR}"
+    "TRTLLM_NVFP4_HF_REPO=${TRTLLM_NVFP4_HF_REPO}"
+    "TRTLLM_NVFP4_HF_REVISION=${TRTLLM_NVFP4_HF_REVISION}"
+    "TRTLLM_NVFP4_PREPARE_ENABLED=${TRTLLM_NVFP4_PREPARE_ENABLED}"
     "AGENTIC_OBS_RETENTION_TIME=${AGENTIC_OBS_RETENTION_TIME}"
     "AGENTIC_OBS_MAX_DISK=${AGENTIC_OBS_MAX_DISK}"
     "AGENTIC_PROMETHEUS_DISK_BUDGET=${AGENTIC_PROMETHEUS_DISK_BUDGET}"
@@ -2554,6 +2564,254 @@ cmd_ollama() {
       ;;
     *)
       die "Usage: agent ollama unload <model>"
+      ;;
+  esac
+}
+
+normalize_trtllm_model_key() {
+  local input="${1:-}"
+  local resolved
+  resolved="$(trtllm_model_resolve_key "${input}" 2>/dev/null || true)"
+  [[ -n "${resolved}" ]] || return 1
+  printf '%s\n' "${resolved}"
+}
+
+trtllm_model_prepared() {
+  local model_key="$1"
+  local host_dir
+
+  host_dir="$(trtllm_model_host_dir "${model_key}")" || return 1
+  [[ -f "${host_dir}/model.safetensors.index.json" ]]
+}
+
+ensure_compose_profiles_include_trt() {
+  local profiles="${COMPOSE_PROFILES:-}"
+
+  if agentic_csv_contains "trt" "${profiles}"; then
+    printf '%s\n' "${profiles}"
+    return 0
+  fi
+  if [[ -z "${profiles}" ]]; then
+    printf '%s\n' "trt"
+    return 0
+  fi
+  printf '%s\n' "${profiles},trt"
+}
+
+set_trtllm_active_model_env() {
+  local model_key="$1"
+  local model_url model_repo model_revision model_local_dir compose_profiles
+
+  model_url="$(trtllm_model_field "${model_key}" url)" || die "unknown TRT model key: ${model_key}"
+  model_repo="$(trtllm_model_field "${model_key}" repo)" || die "unknown TRT model key: ${model_key}"
+  model_revision="$(trtllm_model_field "${model_key}" revision)" || die "unknown TRT model key: ${model_key}"
+  model_local_dir="$(trtllm_model_field "${model_key}" local_dir)" || die "unknown TRT model key: ${model_key}"
+  compose_profiles="$(ensure_compose_profiles_include_trt)"
+
+  ensure_runtime_env
+  set_runtime_env_value "COMPOSE_PROFILES" "${compose_profiles}"
+  set_runtime_env_value "TRTLLM_ACTIVE_MODEL_KEY" "${model_key}"
+  set_runtime_env_value "TRTLLM_MODELS" "${model_url}"
+  set_runtime_env_value "TRTLLM_NATIVE_MODEL_POLICY" "strict-nvfp4-local-only"
+  set_runtime_env_value "TRTLLM_NVFP4_LOCAL_MODEL_DIR" "${model_local_dir}"
+  set_runtime_env_value "TRTLLM_NVFP4_HF_REPO" "${model_repo}"
+  set_runtime_env_value "TRTLLM_NVFP4_HF_REVISION" "${model_revision}"
+  set_runtime_env_value "TRTLLM_NVFP4_PREPARE_ENABLED" "auto"
+
+  COMPOSE_PROFILES="${compose_profiles}"
+  TRTLLM_ACTIVE_MODEL_KEY="${model_key}"
+  TRTLLM_MODELS="${model_url}"
+  TRTLLM_NATIVE_MODEL_POLICY="strict-nvfp4-local-only"
+  TRTLLM_NVFP4_LOCAL_MODEL_DIR="${model_local_dir}"
+  TRTLLM_NVFP4_HF_REPO="${model_repo}"
+  TRTLLM_NVFP4_HF_REVISION="${model_revision}"
+  TRTLLM_NVFP4_PREPARE_ENABLED="auto"
+  export COMPOSE_PROFILES TRTLLM_ACTIVE_MODEL_KEY TRTLLM_MODELS TRTLLM_NATIVE_MODEL_POLICY
+  export TRTLLM_NVFP4_LOCAL_MODEL_DIR TRTLLM_NVFP4_HF_REPO TRTLLM_NVFP4_HF_REVISION TRTLLM_NVFP4_PREPARE_ENABLED
+}
+
+run_trtllm_prepare_script() {
+  local prepare_key="$1"
+  [[ -x "${AGENT_TRTLLM_PREPARE_SCRIPT}" ]] || die "missing script: ${AGENT_TRTLLM_PREPARE_SCRIPT}"
+  TRTLLM_NVFP4_PREPARE_ENABLED=true TRTLLM_PREPARE_MODEL_KEY="${prepare_key}" \
+    "${AGENT_TRTLLM_PREPARE_SCRIPT}"
+}
+
+read_json_field_or_default() {
+  local file="$1"
+  local key="$2"
+  local fallback="$3"
+
+  [[ -f "${file}" ]] || {
+    printf '%s\n' "${fallback}"
+    return 0
+  }
+
+  python3 - "${file}" "${key}" "${fallback}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+key = sys.argv[2]
+fallback = sys.argv[3]
+
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    print(fallback)
+    raise SystemExit(0)
+
+value = payload.get(key, fallback)
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif value in (None, ""):
+    print(fallback)
+else:
+    print(value)
+PY
+}
+
+cmd_trtllm_status() {
+  local runtime_state_file="${AGENTIC_ROOT}/trtllm/state/runtime-state.json"
+  local active_key="${TRTLLM_ACTIVE_MODEL_KEY}"
+  local active_label active_url active_local_dir prepared status health runtime_mode native_ready
+  local trt_cid=""
+
+  active_label="$(trtllm_model_field "${active_key}" label 2>/dev/null || printf '%s\n' "${active_key}")"
+  active_url="$(trtllm_model_field "${active_key}" url 2>/dev/null || printf '%s\n' "${TRTLLM_MODELS}")"
+  active_local_dir="$(trtllm_model_field "${active_key}" local_dir 2>/dev/null || printf '%s\n' "${TRTLLM_NVFP4_LOCAL_MODEL_DIR}")"
+  if trtllm_model_prepared "${active_key}"; then
+    prepared="yes"
+  else
+    prepared="no"
+  fi
+
+  status="missing"
+  health="-"
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    trt_cid="$(service_container_any_id "trtllm" || true)"
+    if [[ -n "${trt_cid}" ]]; then
+      status="$(docker inspect --format '{{.State.Status}}' "${trt_cid}" 2>/dev/null || printf '%s\n' "unknown")"
+      health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}' "${trt_cid}" 2>/dev/null || printf '%s\n' "-")"
+    fi
+  fi
+
+  runtime_mode="$(read_json_field_or_default "${runtime_state_file}" "runtime_mode_effective" "-")"
+  native_ready="$(read_json_field_or_default "${runtime_state_file}" "native_ready" "-")"
+
+  printf 'trtllm active_key=%s label=%s prepared=%s service_state=%s health=%s runtime_mode=%s native_ready=%s\n' \
+    "${active_key}" "${active_label}" "${prepared}" "${status}" "${health}" "${runtime_mode}" "${native_ready}"
+  printf 'trtllm model=%s local_dir=%s state=%s\n' "${active_url}" "${active_local_dir}" "${runtime_state_file}"
+}
+
+cmd_trtllm_list() {
+  local key label prepared active_marker host_dir
+  printf 'key\tactive\tprepared\thost_dir\tlabel\n'
+  while IFS= read -r key; do
+    [[ -n "${key}" ]] || continue
+    label="$(trtllm_model_field "${key}" label)"
+    host_dir="$(trtllm_model_host_dir "${key}")"
+    if trtllm_model_prepared "${key}"; then
+      prepared="yes"
+    else
+      prepared="no"
+    fi
+    if [[ "${key}" == "${TRTLLM_ACTIVE_MODEL_KEY}" ]]; then
+      active_marker="*"
+    else
+      active_marker="-"
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\n' "${key}" "${active_marker}" "${prepared}" "${host_dir}" "${label}"
+  done < <(trtllm_model_keys)
+}
+
+cmd_trtllm_prepare() {
+  local model_input="${1:-${TRTLLM_ACTIVE_MODEL_KEY}}"
+
+  shift || true
+  [[ $# -eq 0 ]] || die "Usage: agent trtllm prepare <model|all>"
+
+  if [[ "${model_input}" != "all" ]]; then
+    model_input="$(normalize_trtllm_model_key "${model_input}")" \
+      || die "Unknown TRT model '${model_input}'. Use: agent trtllm list"
+  fi
+
+  run_trtllm_prepare_script "${model_input}"
+  printf 'trtllm prepared=%s log=%s\n' "${model_input}" "${AGENTIC_ROOT}/trtllm/logs/nvfp4-model-prepare.log"
+}
+
+cmd_trtllm_load() {
+  local model_input="${1:-}"
+  local model_key actor core_compose_file
+
+  [[ -n "${model_input}" ]] || die "Usage: agent trtllm load <model>"
+  shift || true
+  [[ $# -eq 0 ]] || die "Usage: agent trtllm load <model>"
+
+  model_key="$(normalize_trtllm_model_key "${model_input}")" \
+    || die "Unknown TRT model '${model_input}'. Use: agent trtllm list"
+  actor="${SUDO_USER:-${USER:-unknown}}"
+
+  set_trtllm_active_model_env "${model_key}"
+  ensure_core_runtime
+
+  core_compose_file="$(stack_to_compose_file core)"
+  require_cmd docker
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" --profile trt -f "${core_compose_file}" up -d --force-recreate trtllm
+
+  append_changes_log "trtllm load actor=${actor} model_key=${model_key} model=${TRTLLM_MODELS} local_dir=${TRTLLM_NVFP4_LOCAL_MODEL_DIR} result=started"
+  printf 'trtllm load model_key=%s model=%s local_dir=%s state=%s\n' \
+    "${model_key}" "${TRTLLM_MODELS}" "${TRTLLM_NVFP4_LOCAL_MODEL_DIR}" "${AGENTIC_ROOT}/trtllm/state/runtime-state.json"
+}
+
+cmd_trtllm_unload() {
+  local actor="${SUDO_USER:-${USER:-unknown}}"
+  local core_compose_file
+
+  [[ $# -eq 0 ]] || die "Usage: agent trtllm unload"
+
+  core_compose_file="$(stack_to_compose_file core)"
+  require_cmd docker
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" --profile trt -f "${core_compose_file}" stop trtllm >/dev/null
+
+  append_changes_log "trtllm unload actor=${actor} model_key=${TRTLLM_ACTIVE_MODEL_KEY} model=${TRTLLM_MODELS} result=stopped"
+  printf 'trtllm unload model_key=%s model=%s result=stopped\n' "${TRTLLM_ACTIVE_MODEL_KEY}" "${TRTLLM_MODELS}"
+}
+
+cmd_trtllm() {
+  local action="${1:-status}"
+  shift || true
+
+  case "${action}" in
+    status)
+      cmd_trtllm_status "$@"
+      ;;
+    list)
+      [[ $# -eq 0 ]] || die "Usage: agent trtllm list"
+      cmd_trtllm_list
+      ;;
+    prepare)
+      cmd_trtllm_prepare "$@"
+      ;;
+    load)
+      cmd_trtllm_load "$@"
+      ;;
+    unload)
+      cmd_trtllm_unload "$@"
+      ;;
+    help|-h|--help)
+      cat <<USAGE
+Usage:
+  agent trtllm status
+  agent trtllm list
+  agent trtllm prepare <model|all>
+  agent trtllm load <model>
+  agent trtllm unload
+USAGE
+      ;;
+    *)
+      die "Usage: agent trtllm [status|list|prepare <model|all>|load <model>|unload]"
       ;;
   esac
 }
@@ -4052,6 +4310,10 @@ case "$cmd" in
   ollama)
     shift
     cmd_ollama "$@"
+    ;;
+  trtllm)
+    shift
+    cmd_trtllm "$@"
     ;;
   sudo-mode)
     shift

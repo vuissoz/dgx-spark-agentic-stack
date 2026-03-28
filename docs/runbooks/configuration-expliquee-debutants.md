@@ -133,6 +133,7 @@ Secrets runtime pour `git-forge` :
 | `OLLAMA_PRELOAD_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | entier positif | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
+| `TRTLLM_ACTIVE_MODEL_KEY` | cle de catalogue du modele TRT actif (`nemotron-super-120b` ou `nemotron-cascade-30b`) | `nemotron-super-120b` | shell, `runtime.env` |
 | `TRTLLM_MODELS` | liste CSV de modeles exposes par TRT-LLM | `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
 | `TRTLLM_NATIVE_MODEL_POLICY` | `auto` ou `strict-nvfp4-local-only` | `auto` | shell |
 | `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | chemin absolu du runtime NVFP4 prepare pour DGX Spark | `/models/super_fp4` | shell |

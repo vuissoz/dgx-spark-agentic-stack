@@ -38,10 +38,11 @@ The repository still needs deterministic regression coverage on machines where:
 7. Keep `TRTLLM_NATIVE_MODEL_POLICY=auto` as the generic default, including the existing FP8 canonicalization path for the Nemotron NVFP4 alias.
 8. Add `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` for DGX Spark:
    - exactly one TRT model alias is exposed,
-   - the exposed alias must be the Nemotron NVFP4 slug (or the same local directory path),
+   - the exposed alias must match the currently selected NVFP4 catalog entry (or the same local directory path),
    - the actual serve target becomes `TRTLLM_NVFP4_LOCAL_MODEL_DIR`,
    - and `auto` mode no longer silently falls back to `mock`.
 9. When the default TRT Nemotron NVFP4 alias is selected and a Hugging Face token is present, prepare the pinned NVFP4 snapshot automatically under `${AGENTIC_ROOT}/trtllm/models/super_fp4` before the service starts.
+10. Maintain a small built-in catalog of known local NVFP4 payloads and expose operator commands to prepare them on disk and switch the active TRT model without attempting to keep multiple huge models resident in memory at once.
 
 ## Consequences
 
@@ -52,3 +53,4 @@ The repository still needs deterministic regression coverage on machines where:
 - In `auto`, the exact native model actually served can still differ from the requested onboarding alias for the Nemotron-3-Super NVFP4 case.
 - In `strict-nvfp4-local-only`, the stack serves only a prepared local NVFP4 runtime and fails closed if that runtime is missing or the exposed alias drifts.
 - Default TRT onboarding now bootstraps that local NVFP4 runtime automatically when the token is present, while preserving deterministic no-token flows.
+- Operators can keep multiple local NVFP4 payloads on disk, but the service still serves only one active TRT model at a time on DGX Spark.

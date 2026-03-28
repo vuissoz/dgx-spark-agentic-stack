@@ -105,6 +105,8 @@ grep -q "^export COMPOSE_PROFILES='trt'$" "${env_file}" \
   || fail "full setup onboarding env must export COMPOSE_PROFILES"
 grep -q "^export TRTLLM_MODELS='${trt_models}'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_MODELS"
+grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_ACTIVE_MODEL_KEY"
 grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/super_fp4'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_NVFP4_LOCAL_MODEL_DIR"
 grep -q "^export TRTLLM_NVFP4_HF_REVISION='b1ffe4992d7db6d768453a551a656b8d12c638fb'$" "${env_file}" \

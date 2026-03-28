@@ -1512,6 +1512,7 @@ export AGENTIC_DEFAULT_MODEL=$(shell_quote "${default_model}")
 export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=$(shell_quote "${default_model_context_window}")
 export OLLAMA_CONTEXT_LENGTH=$(shell_quote "${default_model_context_window}")
 export TRTLLM_MODELS=$(shell_quote "${trtllm_models}")
+export TRTLLM_ACTIVE_MODEL_KEY='nemotron-super-120b'
 export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/super_fp4'
 export TRTLLM_NVFP4_HF_REPO='nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4'
 export TRTLLM_NVFP4_HF_REVISION='b1ffe4992d7db6d768453a551a656b8d12c638fb'

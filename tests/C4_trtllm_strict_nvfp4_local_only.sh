@@ -12,10 +12,11 @@ trap 'rm -rf "${tmp_root}"' EXIT
 
 server_path="${SCRIPT_DIR}/../deployments/trtllm/server.py"
 strict_model_dir="${tmp_root}/super_fp4"
+cascade_model_dir="${tmp_root}/cascade_30b_nvfp4"
 state_dir="${tmp_root}/state"
 logs_dir="${tmp_root}/logs"
 models_dir="${tmp_root}/models"
-mkdir -p "${strict_model_dir}" "${state_dir}" "${logs_dir}" "${models_dir}"
+mkdir -p "${strict_model_dir}" "${cascade_model_dir}" "${state_dir}" "${logs_dir}" "${models_dir}"
 
 TRTLLM_RUNTIME_MODE=mock \
 TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only \
@@ -49,6 +50,34 @@ assert payload["primary_model_handle"] == strict_model_dir
 assert payload["nvfp4_local_model_dir"] == strict_model_dir
 PY
 ok "strict NVFP4 local-only maps the Nemotron alias to a local directory"
+
+TRTLLM_RUNTIME_MODE=mock \
+TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only \
+TRTLLM_NVFP4_LOCAL_MODEL_DIR="${cascade_model_dir}" \
+TRTLLM_NVFP4_HF_REPO="chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4" \
+TRTLLM_MODELS="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4" \
+TRTLLM_MODELS_DIR="${models_dir}" \
+TRTLLM_STATE_DIR="${state_dir}" \
+TRTLLM_LOGS_DIR="${logs_dir}" \
+TRTLLM_NATIVE_START_TIMEOUT_SECONDS=5 \
+python3 - "${server_path}" "${cascade_model_dir}" <<'PY' || fail "strict NVFP4 local-only alias mapping must also work for Cascade 30B"
+import importlib.util
+import pathlib
+import sys
+
+server_path = pathlib.Path(sys.argv[1])
+cascade_model_dir = sys.argv[2]
+spec = importlib.util.spec_from_file_location("trtllm_server_strict_cascade", server_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+controller = module.CONTROLLER
+
+assert controller.native_model_policy == "strict-nvfp4-local-only"
+assert controller.primary_entry.display_name == "https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4"
+assert controller.primary_entry.requested_handle == "chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4"
+assert controller.primary_entry.serve_handle == cascade_model_dir
+PY
+ok "strict NVFP4 local-only maps the Cascade 30B alias to a local directory"
 
 TRTLLM_RUNTIME_MODE=auto \
 TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only \

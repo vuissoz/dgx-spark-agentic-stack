@@ -40,18 +40,32 @@ source .runtime/env.generated.sh
 En mode interactif, `./agent onboard` propose aussi explicitement l'activation TRT quand `COMPOSE_PROFILES` ne contient pas encore `trt`, puis demande la liste `TRTLLM_MODELS`.
 Le service `trtllm` essaie désormais de lancer un vrai backend NVIDIA TRT-LLM quand `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide; sinon il retombe volontairement sur le mode `mock` pour garder des tests déterministes.
 Par défaut (`TRTLLM_NATIVE_MODEL_POLICY=auto`), le runtime natif garde le comportement générique et peut encore canoniser le slug Nemotron NVFP4 vers le handle Spark documenté `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
-Un mode durci `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` existe maintenant pour DGX Spark: il n'accepte qu'un seul alias exposé (`TRTLLM_MODELS`, par défaut le slug Hugging Face NVFP4) et force le chargement depuis `TRTLLM_NVFP4_LOCAL_MODEL_DIR` (défaut `/models/super_fp4`), sans fallback silencieux vers HF/FP8.
-Quand `COMPOSE_PROFILES` contient `trt`, que `TRTLLM_MODELS` reste sur ce slug NVFP4 par défaut, et que `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide, `./agent up core` prépare automatiquement le snapshot NVFP4 local dans `${AGENTIC_ROOT}/trtllm/models/super_fp4` avant de démarrer `trtllm`.
+Un mode durci `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` existe maintenant pour DGX Spark: il n'accepte qu'un seul alias exposé a la fois (`TRTLLM_MODELS`) et force le chargement depuis `TRTLLM_NVFP4_LOCAL_MODEL_DIR`, sans fallback silencieux vers HF/FP8.
+Le stack connait maintenant deux payloads NVFP4 locaux:
+- `nemotron-super-120b` -> `${AGENTIC_ROOT}/trtllm/models/super_fp4`
+- `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4`
+Le modele TRT actif est pilote par `TRTLLM_ACTIVE_MODEL_KEY`. Quand `COMPOSE_PROFILES` contient `trt`, que `TRTLLM_MODELS` expose l'alias du modele actif, et que `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide, `./agent up core` prepare automatiquement le snapshot NVFP4 local correspondant avant de demarrer `trtllm`.
 Exemple d'activation:
 
 ```bash
 export TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only
+export TRTLLM_ACTIVE_MODEL_KEY=nemotron-super-120b
 export TRTLLM_NVFP4_LOCAL_MODEL_DIR=/srv/agentic/trtllm/models/super_fp4
 ./agent up core
 ```
 
 Si le répertoire local NVFP4 n'existe pas encore, `/healthz` remonte une erreur explicite au lieu de retomber sur `mock`.
 La progression du bootstrap local est journalisée dans `${AGENTIC_ROOT}/trtllm/logs/nvfp4-model-prepare.log`.
+Commandes operateur TRT:
+
+```bash
+./agent trtllm list
+./agent trtllm prepare all
+./agent trtllm load nemotron-cascade-30b
+./agent trtllm unload
+```
+
+Un seul modele TRT peut etre charge en memoire a la fois sur DGX Spark, mais plusieurs payloads locaux peuvent etre prepares et bascules a la demande.
 Au premier démarrage natif, le backend peut rester plusieurs minutes en `status=starting` pendant le téléchargement/chargement Hugging Face; tant que `native_ready=false`, les requêtes gate reçoivent une `503` explicite au lieu de retomber silencieusement sur un mock.
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) et réutilisé pour le preload Ollama.
@@ -321,6 +335,7 @@ agent ps
 agent llm mode [local|hybrid|mixed|remote]
 agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
+agent trtllm [status|list|prepare <model|all>|load <model>|unload]
 agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
 agent logs <service>
 agent stop <tool>
