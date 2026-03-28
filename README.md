@@ -69,3 +69,8 @@ It is an opinionated operator stack for running agentic services on DGX Spark wi
 - traceable updates,
 - rollback as a built-in workflow,
 - security constraints that stay visible in the implementation.
+
+## License
+
+Licensed under Apache 2.0. See [LICENSE](LICENSE).
+Copyright 2026 Pierre-André Vuissoz.
