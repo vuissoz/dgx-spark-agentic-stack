@@ -138,6 +138,8 @@ Notes:
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `TRTLLM_MODELS` | CSV list of model ids exposed by TRT-LLM | `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
+| `TRTLLM_NATIVE_MODEL_POLICY` | `auto` or `strict-nvfp4-local-only` | `auto` | shell |
+| `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | absolute path for the prepared DGX Spark NVFP4 runtime | `/models/super_fp4` | shell |
 | `COMFYUI_REF` | git ref for ComfyUI image build | `master` | shell |
 | `COMFYUI_MANAGER_REPO` | ComfyUI manager extension git repo (empty = disabled) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |
 | `COMFYUI_MANAGER_REF` | ComfyUI manager extension git ref | `main` | shell |

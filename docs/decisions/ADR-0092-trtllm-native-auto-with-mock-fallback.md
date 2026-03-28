@@ -9,13 +9,14 @@ The user request now explicitly targets NVIDIA's DGX Spark TRT-LLM playbook:
 
 - https://build.nvidia.com/spark/trt-llm
 
-As observed on 2026-03-28, the NVIDIA Spark playbook documents:
+As observed on 2026-03-28, the NVIDIA Spark TRT-LLM material documents:
 
-- `nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc6`,
+- a TensorRT-LLM release image path already used by the repository,
 - `trtllm-serve serve ...`,
 - `HF_TOKEN`,
 - an OpenAI-compatible server on port `8355`,
-- and Nemotron-3-Super-120B support listed with the FP8 handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
+- Nemotron-3-Super-120B support listed with the FP8 handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`,
+- and a DGX Spark NVFP4 flow based on a prepared local directory such as `/data/super_fp4/`.
 
 The repository still needs deterministic regression coverage on machines where:
 
@@ -33,7 +34,13 @@ The repository still needs deterministic regression coverage on machines where:
    - `mock` otherwise.
 4. In native mode, the adapter starts `trtllm-serve serve ...` on loopback inside the container and proxies requests to it.
 5. Preserve mock mode for deterministic repository tests that do not ship a real HF token.
-6. Keep the user-facing default TRT model slug unchanged in onboarding, but canonicalize the specific Nemotron NVFP4 alias to the Spark-documented FP8 serving handle internally when launching the native TRT-LLM server.
+6. Keep the user-facing default TRT model slug unchanged in onboarding.
+7. Keep `TRTLLM_NATIVE_MODEL_POLICY=auto` as the generic default, including the existing FP8 canonicalization path for the Nemotron NVFP4 alias.
+8. Add `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` for DGX Spark:
+   - exactly one TRT model alias is exposed,
+   - the exposed alias must be the Nemotron NVFP4 slug (or the same local directory path),
+   - the actual serve target becomes `TRTLLM_NVFP4_LOCAL_MODEL_DIR`,
+   - and `auto` mode no longer silently falls back to `mock`.
 
 ## Consequences
 
@@ -41,4 +48,5 @@ The repository still needs deterministic regression coverage on machines where:
 - Existing routing/tests remain runnable because the service still has an explicit mock path.
 - The native server remains internal-only: `ollama-gate` is still the intended caller.
 - Operators get an actionable health signal when native startup fails instead of a silently fake backend.
-- The exact native model actually served can differ from the requested onboarding alias for the Nemotron-3-Super NVFP4 case; this translation is deliberate and tied to the Spark playbook support matrix observed on 2026-03-28.
+- In `auto`, the exact native model actually served can still differ from the requested onboarding alias for the Nemotron-3-Super NVFP4 case.
+- In `strict-nvfp4-local-only`, the stack serves only a prepared local NVFP4 runtime and fails closed if that runtime is missing or the exposed alias drifts.

@@ -48,6 +48,7 @@ import urllib.request
 health = json.loads(urllib.request.urlopen("http://trtllm:11436/healthz", timeout=5).read().decode("utf-8"))
 assert health["runtime_mode_requested"] in {"auto", "mock", "native"}, health
 assert health["runtime_mode_effective"] in {"mock", "native"}, health
+assert health["native_model_policy"] in {"auto", "strict-nvfp4-local-only"}, health
 assert health["primary_model_requested"], health
 
 models = json.loads(urllib.request.urlopen("http://trtllm:11436/v1/models", timeout=5).read().decode("utf-8"))

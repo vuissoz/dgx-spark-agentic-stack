@@ -19,7 +19,11 @@ from pathlib import Path
 
 
 DEFAULT_TRTLLM_MODEL = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+DEFAULT_TRTLLM_MODEL_HANDLE = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
 DEFAULT_NEMOTRON_NATIVE_HANDLE = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8"
+DEFAULT_NVFP4_LOCAL_MODEL_DIR = "/models/super_fp4"
+MODEL_POLICY_AUTO = "auto"
+MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY = "strict-nvfp4-local-only"
 HF_URL_PREFIX = "https://huggingface.co/"
 WORKSPACE_PATH_RE = re.compile(r"(/workspace/[^\s\"'<>]+)")
 
@@ -83,8 +87,32 @@ def strip_hf_url(value: str) -> str:
     return candidate
 
 
-def model_serve_handle(model: str) -> str:
+def normalize_model_policy(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "-") if value else MODEL_POLICY_AUTO
+    if normalized in {"", MODEL_POLICY_AUTO}:
+        return MODEL_POLICY_AUTO
+    if normalized == MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY:
+        return MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY
+    raise ValueError(
+        "TRTLLM_NATIVE_MODEL_POLICY must be one of: auto, strict-nvfp4-local-only"
+    )
+
+
+def build_alias_values(display_name: str, requested_handle: str, serve_handle: str) -> tuple[str, ...]:
+    alias_values = {display_name, requested_handle, serve_handle}
+    for candidate in (requested_handle, serve_handle):
+        if not candidate:
+            continue
+        alias_values.add(f"trtllm/{candidate}")
+        if not candidate.startswith("/"):
+            alias_values.add(f"{HF_URL_PREFIX}{candidate}")
+    return tuple(sorted(alias for alias in alias_values if alias))
+
+
+def model_serve_handle(model: str, native_model_policy: str = MODEL_POLICY_AUTO, nvfp4_local_model_dir: str = DEFAULT_NVFP4_LOCAL_MODEL_DIR) -> str:
     normalized = strip_hf_url(model)
+    if native_model_policy == MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY and normalized == DEFAULT_TRTLLM_MODEL_HANDLE:
+        return nvfp4_local_model_dir.rstrip("/") or nvfp4_local_model_dir
     if normalized == "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4":
         # NVIDIA's DGX Spark TRT-LLM playbook observed on 2026-03-28 lists the FP8
         # Nemotron-3-Super handle as the Spark-supported serving target.
@@ -100,7 +128,37 @@ class ModelEntry:
     aliases: tuple[str, ...]
 
 
-def build_model_entries(raw_models: str) -> list[ModelEntry]:
+def build_model_entries(
+    raw_models: str,
+    native_model_policy: str = MODEL_POLICY_AUTO,
+    nvfp4_local_model_dir: str = DEFAULT_NVFP4_LOCAL_MODEL_DIR,
+) -> list[ModelEntry]:
+    if native_model_policy == MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY:
+        configured = [item.strip() for item in raw_models.split(",") if item.strip()]
+        if not configured:
+            configured = [DEFAULT_TRTLLM_MODEL]
+        if len(configured) != 1:
+            raise ValueError(
+                "strict NVFP4 local-only mode supports exactly one TRTLLM_MODELS entry"
+            )
+
+        display_name = configured[0]
+        requested_handle = strip_hf_url(display_name)
+        serve_handle = nvfp4_local_model_dir.rstrip("/") or nvfp4_local_model_dir
+        if requested_handle not in {DEFAULT_TRTLLM_MODEL_HANDLE, serve_handle}:
+            raise ValueError(
+                "strict NVFP4 local-only mode requires TRTLLM_MODELS to expose "
+                f"{DEFAULT_TRTLLM_MODEL} or {serve_handle}"
+            )
+        return [
+            ModelEntry(
+                display_name=display_name,
+                requested_handle=requested_handle,
+                serve_handle=serve_handle,
+                aliases=build_alias_values(display_name, requested_handle, serve_handle),
+            )
+        ]
+
     entries: list[ModelEntry] = []
     for item in raw_models.split(","):
         display_name = item.strip()
@@ -108,22 +166,17 @@ def build_model_entries(raw_models: str) -> list[ModelEntry]:
             continue
 
         requested_handle = strip_hf_url(display_name)
-        serve_handle = model_serve_handle(display_name)
-        alias_values = {
+        serve_handle = model_serve_handle(
             display_name,
-            requested_handle,
-            serve_handle,
-            f"{HF_URL_PREFIX}{requested_handle}",
-            f"{HF_URL_PREFIX}{serve_handle}",
-            f"trtllm/{requested_handle}",
-            f"trtllm/{serve_handle}",
-        }
+            native_model_policy=native_model_policy,
+            nvfp4_local_model_dir=nvfp4_local_model_dir,
+        )
         entries.append(
             ModelEntry(
                 display_name=display_name,
                 requested_handle=requested_handle,
                 serve_handle=serve_handle,
-                aliases=tuple(sorted(alias for alias in alias_values if alias)),
+                aliases=build_alias_values(display_name, requested_handle, serve_handle),
             )
         )
 
@@ -131,18 +184,17 @@ def build_model_entries(raw_models: str) -> list[ModelEntry]:
         return entries
 
     fallback = strip_hf_url(DEFAULT_TRTLLM_MODEL)
+    fallback_serve_handle = model_serve_handle(
+        DEFAULT_TRTLLM_MODEL,
+        native_model_policy=native_model_policy,
+        nvfp4_local_model_dir=nvfp4_local_model_dir,
+    )
     return [
         ModelEntry(
             display_name=DEFAULT_TRTLLM_MODEL,
             requested_handle=fallback,
-            serve_handle=model_serve_handle(DEFAULT_TRTLLM_MODEL),
-            aliases=(
-                DEFAULT_TRTLLM_MODEL,
-                fallback,
-                model_serve_handle(DEFAULT_TRTLLM_MODEL),
-                f"trtllm/{fallback}",
-                f"trtllm/{model_serve_handle(DEFAULT_TRTLLM_MODEL)}",
-            ),
+            serve_handle=fallback_serve_handle,
+            aliases=build_alias_values(DEFAULT_TRTLLM_MODEL, fallback, fallback_serve_handle),
         )
     ]
 
@@ -272,7 +324,7 @@ class RuntimeController:
         self.runtime_mode_requested = os.environ.get("TRTLLM_RUNTIME_MODE", "auto").strip().lower() or "auto"
         self.native_host = os.environ.get("TRTLLM_NATIVE_HOST", "127.0.0.1")
         self.native_port = env_int("TRTLLM_NATIVE_PORT", 8355)
-        self.native_backend = os.environ.get("TRTLLM_NATIVE_BACKEND", "pytorch").strip() or "pytorch"
+        self.native_backend = os.environ.get("TRTLLM_NATIVE_BACKEND", "").strip()
         self.native_log_level = os.environ.get("TRTLLM_NATIVE_LOG_LEVEL", "info").strip() or "info"
         self.native_max_batch_size = max(1, env_int("TRTLLM_NATIVE_MAX_BATCH_SIZE", 1))
         self.native_cuda_graph_max_batch_size = max(
@@ -282,8 +334,14 @@ class RuntimeController:
         self.native_enable_block_reuse = env_bool("TRTLLM_NATIVE_ENABLE_BLOCK_REUSE", False)
         self.native_free_gpu_memory_fraction = env_float("TRTLLM_NATIVE_FREE_GPU_MEMORY_FRACTION", 0.8)
         self.native_start_timeout_seconds = max(5, env_int("TRTLLM_NATIVE_START_TIMEOUT_SECONDS", 7200))
+        self.native_model_policy = normalize_model_policy(os.environ.get("TRTLLM_NATIVE_MODEL_POLICY", MODEL_POLICY_AUTO))
+        self.strict_nvfp4_local_only = self.native_model_policy == MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY
         self.hf_token_file = Path(os.environ.get("TRTLLM_HF_TOKEN_FILE", "/run/secrets/huggingface.token"))
         self.models_dir = Path(os.environ.get("TRTLLM_MODELS_DIR", "/models"))
+        self.nvfp4_local_model_dir = (
+            os.environ.get("TRTLLM_NVFP4_LOCAL_MODEL_DIR", DEFAULT_NVFP4_LOCAL_MODEL_DIR).strip().rstrip("/")
+            or DEFAULT_NVFP4_LOCAL_MODEL_DIR
+        )
         self.state_dir = Path(os.environ.get("TRTLLM_STATE_DIR", "/state"))
         self.logs_dir = Path(os.environ.get("TRTLLM_LOGS_DIR", "/logs"))
         self.extra_config_file = self.state_dir / "trtllm-extra-llm-api-config.yml"
@@ -292,7 +350,20 @@ class RuntimeController:
         self.tool_parser = os.environ.get("TRTLLM_TOOL_PARSER", "").strip()
         self.reasoning_parser = os.environ.get("TRTLLM_REASONING_PARSER", "").strip()
         self.trust_remote_code = env_bool("TRTLLM_TRUST_REMOTE_CODE", True)
-        self.entries = build_model_entries(os.environ.get("TRTLLM_MODELS", DEFAULT_TRTLLM_MODEL))
+        self.configuration_error = ""
+        try:
+            self.entries = build_model_entries(
+                os.environ.get("TRTLLM_MODELS", DEFAULT_TRTLLM_MODEL),
+                native_model_policy=self.native_model_policy,
+                nvfp4_local_model_dir=self.nvfp4_local_model_dir,
+            )
+        except ValueError as exc:
+            self.configuration_error = str(exc)
+            self.entries = build_model_entries(
+                DEFAULT_TRTLLM_MODEL,
+                native_model_policy=self.native_model_policy,
+                nvfp4_local_model_dir=self.nvfp4_local_model_dir,
+            )
         self.primary_entry = self.entries[0]
         self.runtime_mode_effective = self._resolve_runtime_mode()
         self.native_proc: subprocess.Popen[str] | None = None
@@ -309,6 +380,8 @@ class RuntimeController:
     def _resolve_runtime_mode(self) -> str:
         if self.runtime_mode_requested in {"mock", "native"}:
             return self.runtime_mode_requested
+        if self.strict_nvfp4_local_only:
+            return "native"
         if self.primary_entry.serve_handle.startswith("/") and Path(self.primary_entry.serve_handle).exists():
             return "native"
         if self.read_hf_token() and shutil.which("trtllm-serve"):
@@ -333,10 +406,13 @@ class RuntimeController:
         payload = {
             "runtime_mode_requested": self.runtime_mode_requested,
             "runtime_mode_effective": self.runtime_mode_effective,
+            "native_model_policy": self.native_model_policy,
             "native_ready": self.native_ready,
             "native_error": self.native_error,
+            "configuration_error": self.configuration_error,
             "primary_model_requested": self.primary_entry.display_name,
             "primary_model_handle": self.primary_entry.serve_handle,
+            "nvfp4_local_model_dir": self.nvfp4_local_model_dir,
             "native_notice": self.native_notice,
             "updated_at_epoch": int(time.time()),
         }
@@ -347,6 +423,8 @@ class RuntimeController:
     def start(self) -> None:
         self.ensure_runtime_dirs()
         self.write_runtime_state()
+        if self.configuration_error:
+            return
         if self.runtime_mode_effective == "native":
             self.start_native()
 
@@ -375,12 +453,33 @@ class RuntimeController:
             self.write_runtime_state()
             return
 
-        if "/" in primary.serve_handle and not token and not Path(primary.serve_handle).exists():
+        if self.strict_nvfp4_local_only:
+            local_model_dir = Path(primary.serve_handle)
+            if not local_model_dir.is_absolute():
+                self.native_error = (
+                    "strict NVFP4 local-only mode requires an absolute TRTLLM_NVFP4_LOCAL_MODEL_DIR "
+                    f"(got {primary.serve_handle!r})"
+                )
+                self.write_runtime_state()
+                return
+            if not local_model_dir.exists():
+                self.native_error = (
+                    "strict NVFP4 local-only mode requires a prepared local model directory at "
+                    f"{local_model_dir}"
+                )
+                self.write_runtime_state()
+                return
+        elif "/" in primary.serve_handle and not token and not Path(primary.serve_handle).exists():
             self.native_error = f"HF token missing: create non-empty file {self.hf_token_file} to serve {primary.serve_handle}"
             self.write_runtime_state()
             return
 
-        if primary.requested_handle != primary.serve_handle:
+        if self.strict_nvfp4_local_only:
+            self.native_notice = (
+                f"strict NVFP4 local-only mode serves requested model {primary.requested_handle} "
+                f"from local directory {primary.serve_handle}"
+            )
+        elif primary.requested_handle != primary.serve_handle:
             self.native_notice = (
                 f"requested model {primary.requested_handle} is served through Spark-supported handle "
                 f"{primary.serve_handle}"
@@ -438,8 +537,6 @@ class RuntimeController:
             self.native_host,
             "--port",
             str(self.native_port),
-            "--backend",
-            self.native_backend,
             "--log_level",
             self.native_log_level,
             "--max_batch_size",
@@ -447,6 +544,9 @@ class RuntimeController:
             "--config",
             str(self.extra_config_file),
         ]
+        effective_backend = self.native_backend or ("" if self.strict_nvfp4_local_only else "pytorch")
+        if effective_backend:
+            cmd.extend(["--backend", effective_backend])
         if self.trust_remote_code:
             cmd.append("--trust_remote_code")
         if self.tool_parser:
@@ -520,6 +620,8 @@ class RuntimeController:
             self.write_runtime_state()
 
     def status_code(self) -> int:
+        if self.configuration_error:
+            return HTTPStatus.SERVICE_UNAVAILABLE
         if self.runtime_mode_effective == "mock":
             return HTTPStatus.OK
         if not self.native_error:
@@ -529,6 +631,8 @@ class RuntimeController:
         return HTTPStatus.SERVICE_UNAVAILABLE
 
     def request_status_code(self) -> int:
+        if self.configuration_error:
+            return HTTPStatus.SERVICE_UNAVAILABLE
         if self.runtime_mode_effective == "mock":
             return HTTPStatus.OK
         if self.native_ready:
@@ -537,7 +641,9 @@ class RuntimeController:
 
     def health_payload(self) -> dict:
         status = "ok"
-        if self.runtime_mode_effective == "native" and not self.native_ready:
+        if self.configuration_error:
+            status = "error"
+        elif self.runtime_mode_effective == "native" and not self.native_ready:
             status = "starting"
         if self.native_error:
             status = "error"
@@ -545,12 +651,16 @@ class RuntimeController:
             "status": status,
             "runtime_mode_requested": self.runtime_mode_requested,
             "runtime_mode_effective": self.runtime_mode_effective,
+            "native_model_policy": self.native_model_policy,
             "primary_model_requested": self.primary_entry.display_name,
             "primary_model_handle": self.primary_entry.serve_handle,
+            "nvfp4_local_model_dir": self.nvfp4_local_model_dir,
             "native_ready": self.native_ready,
         }
         if self.native_notice:
             payload["notice"] = self.native_notice
+        if self.configuration_error:
+            payload["error"] = self.configuration_error
         if self.native_error:
             payload["error"] = self.native_error
         return payload

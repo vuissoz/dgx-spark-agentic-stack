@@ -39,7 +39,17 @@ source .runtime/env.generated.sh
 
 In interactive mode, `./agent onboard` now also asks explicitly whether to enable TRT when `COMPOSE_PROFILES` does not already contain `trt`, then records `TRTLLM_MODELS`.
 The `trtllm` service now attempts to launch a real NVIDIA TRT-LLM backend whenever `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty; otherwise it intentionally falls back to `mock` mode to preserve deterministic tests.
-For the specific Nemotron NVFP4 slug, the native runtime currently canonicalizes the actual load target to the Spark-documented handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8` (NVIDIA playbook observed on March 28, 2026) while keeping the requested alias at the stack boundary.
+By default (`TRTLLM_NATIVE_MODEL_POLICY=auto`), the native runtime keeps the generic behavior and can still canonicalize the Nemotron NVFP4 slug to the Spark-documented handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
+A hardened DGX Spark mode now exists: `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` accepts exactly one exposed alias (`TRTLLM_MODELS`, defaulting to the NVFP4 Hugging Face slug) and forces the actual load target to `TRTLLM_NVFP4_LOCAL_MODEL_DIR` (default `/models/super_fp4`), with no silent fallback to HF/FP8.
+Example activation:
+
+```bash
+export TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only
+export TRTLLM_NVFP4_LOCAL_MODEL_DIR=/srv/agentic/trtllm/models/super_fp4
+./agent up core
+```
+
+If the local NVFP4 directory is missing, `/healthz` returns an explicit error instead of silently falling back to `mock`.
 On the first native startup, the backend can remain in `status=starting` for several minutes while it downloads and warms the Hugging Face artifacts; until `native_ready=true`, gate requests receive an explicit `503` instead of silently falling back to a mock.
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) and reused by Ollama preload.
