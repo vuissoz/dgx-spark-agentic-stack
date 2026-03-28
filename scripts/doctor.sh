@@ -162,6 +162,129 @@ mount_destination_matches_source() {
   [[ "${actual_real}" == "${expected_real}" ]]
 }
 
+read_env_file_value() {
+  local file_path="$1"
+  local key="$2"
+  awk -F= -v k="${key}" '$1 == k {print substr($0, index($0, "=") + 1); exit}' "${file_path}" 2>/dev/null
+}
+
+monitoring_dir_size_mb() {
+  local path="$1"
+  if [[ ! -d "${path}" ]]; then
+    printf '0\n'
+    return 0
+  fi
+  du -sm "${path}" 2>/dev/null | awk 'NR==1 {print $1+0}'
+}
+
+check_observability_retention_policy() {
+  local policy_file="${AGENTIC_ROOT}/monitoring/config/retention-policy.env"
+  local loki_config="${AGENTIC_ROOT}/monitoring/config/loki-config.yml"
+  local prom_cid="" loki_cid="" cmd_dump="" env_dump=""
+  local total_budget_mb=0 prom_dir_mb=0 loki_dir_mb=0 total_used_mb=0
+  local file_value=""
+  local key expected
+  local -a file_checks=(
+    "AGENTIC_OBS_RETENTION_TIME:${AGENTIC_OBS_RETENTION_TIME}"
+    "AGENTIC_OBS_MAX_DISK:${AGENTIC_OBS_MAX_DISK}"
+    "AGENTIC_PROMETHEUS_DISK_BUDGET:${AGENTIC_PROMETHEUS_DISK_BUDGET}"
+    "AGENTIC_LOKI_DISK_BUDGET:${AGENTIC_LOKI_DISK_BUDGET}"
+    "PROMETHEUS_RETENTION_TIME:${PROMETHEUS_RETENTION_TIME}"
+    "PROMETHEUS_RETENTION_SIZE:${PROMETHEUS_RETENTION_SIZE}"
+    "LOKI_RETENTION_PERIOD:${LOKI_RETENTION_PERIOD}"
+    "LOKI_MAX_QUERY_LOOKBACK:${LOKI_MAX_QUERY_LOOKBACK}"
+  )
+
+  if ! agentic_obs_duration_to_hours "${AGENTIC_OBS_RETENTION_TIME}" >/dev/null 2>&1; then
+    doctor_fail_or_warn "AGENTIC_OBS_RETENTION_TIME is invalid: ${AGENTIC_OBS_RETENTION_TIME}"
+    return 0
+  fi
+  if ! agentic_obs_size_to_mb "${AGENTIC_OBS_MAX_DISK}" >/dev/null 2>&1; then
+    doctor_fail_or_warn "AGENTIC_OBS_MAX_DISK is invalid: ${AGENTIC_OBS_MAX_DISK}"
+    return 0
+  fi
+  if ! agentic_obs_size_to_mb "${AGENTIC_PROMETHEUS_DISK_BUDGET}" >/dev/null 2>&1; then
+    doctor_fail_or_warn "AGENTIC_PROMETHEUS_DISK_BUDGET is invalid: ${AGENTIC_PROMETHEUS_DISK_BUDGET}"
+    return 0
+  fi
+  if ! agentic_obs_size_to_mb "${AGENTIC_LOKI_DISK_BUDGET}" >/dev/null 2>&1; then
+    doctor_fail_or_warn "AGENTIC_LOKI_DISK_BUDGET is invalid: ${AGENTIC_LOKI_DISK_BUDGET}"
+    return 0
+  fi
+  if [[ "${PROMETHEUS_RETENTION_TIME}" != "${AGENTIC_OBS_RETENTION_TIME}" ]]; then
+    doctor_fail_or_warn "PROMETHEUS_RETENTION_TIME=${PROMETHEUS_RETENTION_TIME} must match AGENTIC_OBS_RETENTION_TIME=${AGENTIC_OBS_RETENTION_TIME}"
+  fi
+  if [[ "${LOKI_RETENTION_PERIOD}" != "${AGENTIC_OBS_RETENTION_TIME}" ]]; then
+    doctor_fail_or_warn "LOKI_RETENTION_PERIOD=${LOKI_RETENTION_PERIOD} must match AGENTIC_OBS_RETENTION_TIME=${AGENTIC_OBS_RETENTION_TIME}"
+  fi
+  if [[ "${LOKI_MAX_QUERY_LOOKBACK}" != "${AGENTIC_OBS_RETENTION_TIME}" ]]; then
+    doctor_fail_or_warn "LOKI_MAX_QUERY_LOOKBACK=${LOKI_MAX_QUERY_LOOKBACK} must match AGENTIC_OBS_RETENTION_TIME=${AGENTIC_OBS_RETENTION_TIME}"
+  fi
+  if [[ "${PROMETHEUS_RETENTION_SIZE}" != "${AGENTIC_PROMETHEUS_DISK_BUDGET}" ]]; then
+    doctor_fail_or_warn "PROMETHEUS_RETENTION_SIZE=${PROMETHEUS_RETENTION_SIZE} must match AGENTIC_PROMETHEUS_DISK_BUDGET=${AGENTIC_PROMETHEUS_DISK_BUDGET}"
+  fi
+
+  if [[ ! -s "${policy_file}" ]]; then
+    doctor_fail_or_warn "observability retention policy file is missing: ${policy_file}"
+  else
+    for key_expected in "${file_checks[@]}"; do
+      key="${key_expected%%:*}"
+      expected="${key_expected#*:}"
+      file_value="$(read_env_file_value "${policy_file}" "${key}")"
+      if [[ -z "${file_value}" ]]; then
+        doctor_fail_or_warn "observability retention policy file is missing ${key}: ${policy_file}"
+      elif [[ "${file_value}" != "${expected}" ]]; then
+        doctor_fail_or_warn "observability retention policy mismatch for ${key}: file=${file_value} expected=${expected}"
+      fi
+    done
+    ok "observability retention policy file is present (${policy_file})"
+  fi
+
+  if [[ ! -s "${loki_config}" ]]; then
+    doctor_fail_or_warn "loki config is missing: ${loki_config}"
+  else
+    grep -Eq "^[[:space:]]*retention_period:[[:space:]]*${LOKI_RETENTION_PERIOD}$" "${loki_config}" \
+      || doctor_fail_or_warn "loki config must set retention_period=${LOKI_RETENTION_PERIOD} (${loki_config})"
+    grep -Eq "^[[:space:]]*max_query_lookback:[[:space:]]*${LOKI_MAX_QUERY_LOOKBACK}$" "${loki_config}" \
+      || doctor_fail_or_warn "loki config must set max_query_lookback=${LOKI_MAX_QUERY_LOOKBACK} (${loki_config})"
+    grep -Eq "^[[:space:]]*retention_enabled:[[:space:]]*true$" "${loki_config}" \
+      || doctor_fail_or_warn "loki config must enable retention compaction (${loki_config})"
+    grep -Eq "^[[:space:]]*delete_request_store:[[:space:]]*filesystem$" "${loki_config}" \
+      || doctor_fail_or_warn "loki config must use delete_request_store=filesystem (${loki_config})"
+    ok "loki retention config is present (${loki_config})"
+  fi
+
+  prom_cid="$(service_container_id "prometheus")"
+  if [[ -n "${prom_cid}" ]]; then
+    cmd_dump="$(docker inspect --format '{{range .Config.Cmd}}{{println .}}{{end}}' "${prom_cid}" 2>/dev/null || true)"
+    grep -Fxq -- "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME}" <<<"${cmd_dump}" \
+      || doctor_fail_or_warn "prometheus container is missing --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME}"
+    grep -Fxq -- "--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE}" <<<"${cmd_dump}" \
+      || doctor_fail_or_warn "prometheus container is missing --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE}"
+    ok "prometheus runtime retention flags are configured"
+  fi
+
+  loki_cid="$(service_container_id "loki")"
+  if [[ -n "${loki_cid}" ]]; then
+    env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${loki_cid}" 2>/dev/null || true)"
+    grep -Fxq -- "LOKI_RETENTION_PERIOD=${LOKI_RETENTION_PERIOD}" <<<"${env_dump}" \
+      || doctor_fail_or_warn "loki container env is missing LOKI_RETENTION_PERIOD=${LOKI_RETENTION_PERIOD}"
+    grep -Fxq -- "LOKI_MAX_QUERY_LOOKBACK=${LOKI_MAX_QUERY_LOOKBACK}" <<<"${env_dump}" \
+      || doctor_fail_or_warn "loki container env is missing LOKI_MAX_QUERY_LOOKBACK=${LOKI_MAX_QUERY_LOOKBACK}"
+    ok "loki runtime retention env is configured"
+  fi
+
+  total_budget_mb="$(agentic_obs_size_to_mb "${AGENTIC_OBS_MAX_DISK}" 2>/dev/null || printf '0')"
+  prom_dir_mb="$(monitoring_dir_size_mb "${AGENTIC_ROOT}/monitoring/prometheus")"
+  loki_dir_mb="$(monitoring_dir_size_mb "${AGENTIC_ROOT}/monitoring/loki")"
+  total_used_mb="$(( prom_dir_mb + loki_dir_mb ))"
+  if (( total_budget_mb > 0 && total_used_mb > total_budget_mb )); then
+    doctor_fail_or_warn "observability data exceeds configured budget: used=${total_used_mb}MB budget=${total_budget_mb}MB (prometheus=${prom_dir_mb}MB loki=${loki_dir_mb}MB)"
+  else
+    ok "observability data budget is coherent: used=${total_used_mb}MB budget=${total_budget_mb}MB"
+  fi
+}
+
 allowlist_has_entry() {
   local allowlist_file="$1"
   local entry="$2"
@@ -1382,6 +1505,7 @@ fi
 check_default_model_tool_call_regression_notice
 check_default_model_context_resources
 check_llm_backend_runtime_policy
+check_observability_retention_policy
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"

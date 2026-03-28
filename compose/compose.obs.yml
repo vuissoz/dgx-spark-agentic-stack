@@ -15,7 +15,12 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-${AGENTIC_OBS_RETENTION_TIME:-7d}}
+      - --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-2GB}
       - --web.enable-lifecycle
+    environment:
+      PROMETHEUS_RETENTION_TIME: ${PROMETHEUS_RETENTION_TIME:-${AGENTIC_OBS_RETENTION_TIME:-7d}}
+      PROMETHEUS_RETENTION_SIZE: ${PROMETHEUS_RETENTION_SIZE:-2GB}
     ports:
       - 127.0.0.1:${PROMETHEUS_HOST_PORT:-19090}:9090
     volumes:
@@ -88,6 +93,10 @@ services:
       - no-new-privileges:true
     command:
       - -config.file=/etc/loki/loki-config.yml
+    environment:
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-${AGENTIC_OBS_RETENTION_TIME:-7d}}
+      LOKI_MAX_QUERY_LOOKBACK: ${LOKI_MAX_QUERY_LOOKBACK:-${AGENTIC_OBS_RETENTION_TIME:-7d}}
+      AGENTIC_LOKI_DISK_BUDGET: ${AGENTIC_LOKI_DISK_BUDGET:-6GB}
     ports:
       - 127.0.0.1:${LOKI_HOST_PORT:-13100}:3100
     volumes:

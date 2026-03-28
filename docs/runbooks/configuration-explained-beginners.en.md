@@ -171,6 +171,28 @@ Value formats:
 - CPU: positive decimal (`0.5`, `1`, `2.5`)
 - Memory: Docker format (`512m`, `1g`, `2G`)
 
+Observability retention policy:
+- `AGENTIC_OBS_RETENTION_TIME`
+- `AGENTIC_OBS_MAX_DISK`
+- `AGENTIC_PROMETHEUS_DISK_BUDGET`
+- `AGENTIC_LOKI_DISK_BUDGET`
+- `PROMETHEUS_RETENTION_TIME`
+- `PROMETHEUS_RETENTION_SIZE`
+- `LOKI_RETENTION_PERIOD`
+- `LOKI_MAX_QUERY_LOOKBACK`
+
+Defaults:
+- `rootless-dev`: `AGENTIC_OBS_RETENTION_TIME=7d`, `AGENTIC_OBS_MAX_DISK=8GB`
+- `strict-prod`: `AGENTIC_OBS_RETENTION_TIME=30d`, `AGENTIC_OBS_MAX_DISK=32GB`
+
+Derivation:
+- Prometheus gets 25% of the total observability disk budget.
+- Loki gets 75% of the total observability disk budget.
+
+Formats:
+- retention time: `<integer><unit>` with unit in `h`, `d`, `w`, `m`, `y`
+- disk budget: `<integer><unit>` with unit in `MB`, `GB`, `TB`
+
 ## 3.7 Container User and Telemetry Mount Variables
 
 Container user IDs:

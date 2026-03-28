@@ -124,6 +124,43 @@ quantile_over_time(
 
 Repeat with `0.99` for p99.
 
+## Retention Policy and Disk Budget
+
+Onboarding now manages the observability retention contract end to end:
+
+- `AGENTIC_OBS_RETENTION_TIME`: maximum age kept for metrics/logs
+- `AGENTIC_OBS_MAX_DISK`: total disk budget for `${AGENTIC_ROOT}/monitoring/{prometheus,loki}`
+- derived values:
+  - `AGENTIC_PROMETHEUS_DISK_BUDGET`
+  - `AGENTIC_LOKI_DISK_BUDGET`
+  - `PROMETHEUS_RETENTION_TIME`
+  - `PROMETHEUS_RETENTION_SIZE`
+  - `LOKI_RETENTION_PERIOD`
+  - `LOKI_MAX_QUERY_LOOKBACK`
+
+Effective runtime artifacts:
+- `${AGENTIC_ROOT}/monitoring/config/retention-policy.env`
+- `${AGENTIC_ROOT}/monitoring/config/loki-config.yml`
+
+Quick audit:
+
+```bash
+./agent profile | grep -E 'obs_retention|prometheus_retention|loki_retention|disk_budget'
+sed -n '1,120p' "${AGENTIC_ROOT}/monitoring/config/retention-policy.env"
+grep -E 'retention_period|max_query_lookback|retention_enabled' "${AGENTIC_ROOT}/monitoring/config/loki-config.yml"
+./agent doctor
+```
+
+Change the policy with onboarding or explicit exports:
+
+```bash
+./agent onboard --obs-retention-time 14d --obs-max-disk 12GB
+source ./.runtime/env.generated.sh
+./agent up obs
+```
+
+Prometheus enforces both time and size retention. Loki enforces the time-based retention policy from the managed config; doctor also validates that combined Prometheus+Loki disk usage stays within the configured stack budget.
+
 ### 4) Container restart storm
 
 PromQL:

@@ -253,6 +253,22 @@ grep -q "^export AGENTIC_LIMIT_CORE_MEM='3g'$" "${default_env_file}" \
   || fail "default AGENTIC_LIMIT_CORE_MEM is not 3g"
 grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='96g'$" "${default_env_file}" \
   || fail "default AGENTIC_LIMIT_OLLAMA_MEM is not 96g for strict-prod"
+grep -q "^export AGENTIC_OBS_RETENTION_TIME='30d'$" "${default_env_file}" \
+  || fail "default AGENTIC_OBS_RETENTION_TIME is not 30d"
+grep -q "^export AGENTIC_OBS_MAX_DISK='32GB'$" "${default_env_file}" \
+  || fail "default AGENTIC_OBS_MAX_DISK is not 32GB"
+grep -q "^export AGENTIC_PROMETHEUS_DISK_BUDGET='8GB'$" "${default_env_file}" \
+  || fail "default AGENTIC_PROMETHEUS_DISK_BUDGET is not 8GB"
+grep -q "^export AGENTIC_LOKI_DISK_BUDGET='24GB'$" "${default_env_file}" \
+  || fail "default AGENTIC_LOKI_DISK_BUDGET is not 24GB"
+grep -q "^export PROMETHEUS_RETENTION_TIME='30d'$" "${default_env_file}" \
+  || fail "default PROMETHEUS_RETENTION_TIME is not 30d"
+grep -q "^export PROMETHEUS_RETENTION_SIZE='8GB'$" "${default_env_file}" \
+  || fail "default PROMETHEUS_RETENTION_SIZE is not 8GB"
+grep -q "^export LOKI_RETENTION_PERIOD='30d'$" "${default_env_file}" \
+  || fail "default LOKI_RETENTION_PERIOD is not 30d"
+grep -q "^export LOKI_MAX_QUERY_LOOKBACK='30d'$" "${default_env_file}" \
+  || fail "default LOKI_MAX_QUERY_LOOKBACK is not 30d"
 
 assert_git_ignored "${default_env_file}"
 ok "wizard default Enter flow generates expected defaults"
@@ -324,6 +340,22 @@ grep -q "^export AGENTIC_LIMIT_OBS_MEM='512m'$" "${override_env_file}" \
   || fail "rootless default AGENTIC_LIMIT_OBS_MEM is not applied"
 grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='64g'$" "${override_env_file}" \
   || fail "override flow default AGENTIC_LIMIT_OLLAMA_MEM is not 64g for rootless-dev"
+grep -q "^export AGENTIC_OBS_RETENTION_TIME='7d'$" "${override_env_file}" \
+  || fail "rootless default AGENTIC_OBS_RETENTION_TIME is not applied"
+grep -q "^export AGENTIC_OBS_MAX_DISK='8GB'$" "${override_env_file}" \
+  || fail "rootless default AGENTIC_OBS_MAX_DISK is not applied"
+grep -q "^export AGENTIC_PROMETHEUS_DISK_BUDGET='2GB'$" "${override_env_file}" \
+  || fail "rootless default AGENTIC_PROMETHEUS_DISK_BUDGET is not applied"
+grep -q "^export AGENTIC_LOKI_DISK_BUDGET='6GB'$" "${override_env_file}" \
+  || fail "rootless default AGENTIC_LOKI_DISK_BUDGET is not applied"
+grep -q "^export PROMETHEUS_RETENTION_TIME='7d'$" "${override_env_file}" \
+  || fail "rootless default PROMETHEUS_RETENTION_TIME is not applied"
+grep -q "^export PROMETHEUS_RETENTION_SIZE='2GB'$" "${override_env_file}" \
+  || fail "rootless default PROMETHEUS_RETENTION_SIZE is not applied"
+grep -q "^export LOKI_RETENTION_PERIOD='7d'$" "${override_env_file}" \
+  || fail "rootless default LOKI_RETENTION_PERIOD is not applied"
+grep -q "^export LOKI_MAX_QUERY_LOOKBACK='7d'$" "${override_env_file}" \
+  || fail "rootless default LOKI_MAX_QUERY_LOOKBACK is not applied"
 
 assert_git_ignored "${override_env_file}"
 ok "wizard override flow writes custom values"
@@ -375,6 +407,10 @@ grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${rootless_default_env_f
   || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be False"
 grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama-gate:11435'$" "${rootless_default_env_file}" \
   || fail "rootless default OPENWEBUI_OLLAMA_BASE_URL must be http://ollama-gate:11435"
+grep -q "^export AGENTIC_OBS_RETENTION_TIME='7d'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_OBS_RETENTION_TIME must be 7d"
+grep -q "^export AGENTIC_OBS_MAX_DISK='8GB'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_OBS_MAX_DISK must be 8GB"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
 
 if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
@@ -469,6 +505,8 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --limits-ui-mem 1g \
   --limits-obs-cpus 0.55 \
   --limits-obs-mem 768m \
+  --obs-retention-time 14d \
+  --obs-max-disk 12GB \
   --limits-rag-cpus 0.90 \
   --limits-rag-mem 1g \
   --limits-optional-cpus 0.40 \
@@ -513,6 +551,22 @@ grep -q "^export GRAFANA_ADMIN_USER='grafana-admin'$" "${non_interactive_env_fil
   || fail "non-interactive GRAFANA_ADMIN_USER is not applied"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='grafana-strong-password'$" "${non_interactive_env_file}" \
   || fail "non-interactive GRAFANA_ADMIN_PASSWORD is not applied"
+grep -q "^export AGENTIC_OBS_RETENTION_TIME='14d'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_OBS_RETENTION_TIME is not applied"
+grep -q "^export AGENTIC_OBS_MAX_DISK='12GB'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_OBS_MAX_DISK is not applied"
+grep -q "^export AGENTIC_PROMETHEUS_DISK_BUDGET='3GB'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_PROMETHEUS_DISK_BUDGET is not derived correctly"
+grep -q "^export AGENTIC_LOKI_DISK_BUDGET='9GB'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_LOKI_DISK_BUDGET is not derived correctly"
+grep -q "^export PROMETHEUS_RETENTION_TIME='14d'$" "${non_interactive_env_file}" \
+  || fail "non-interactive PROMETHEUS_RETENTION_TIME is not applied"
+grep -q "^export PROMETHEUS_RETENTION_SIZE='3GB'$" "${non_interactive_env_file}" \
+  || fail "non-interactive PROMETHEUS_RETENTION_SIZE is not derived correctly"
+grep -q "^export LOKI_RETENTION_PERIOD='14d'$" "${non_interactive_env_file}" \
+  || fail "non-interactive LOKI_RETENTION_PERIOD is not applied"
+grep -q "^export LOKI_MAX_QUERY_LOOKBACK='14d'$" "${non_interactive_env_file}" \
+  || fail "non-interactive LOKI_MAX_QUERY_LOOKBACK is not applied"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${non_interactive_env_file}" \
   || fail "non-interactive default OPENWEBUI_ENABLE_OLLAMA_API must be False"
 grep -q "^export OPENWEBUI_OLLAMA_BASE_URL='http://ollama-gate:11435'$" "${non_interactive_env_file}" \

@@ -34,6 +34,10 @@ grep -q "default model '.*' executes a direct tool-call probe through ollama-gat
   || fail "doctor nominal output must include the default model tool-call probe"
 grep -q "llm backend policy '.*' runtime effective='.*' cooldown=.* state=" /tmp/agent-f3-doctor-nominal.out \
   || fail "doctor nominal output must include the llm backend runtime policy check"
+grep -q "observability retention policy file is present" /tmp/agent-f3-doctor-nominal.out \
+  || fail "doctor nominal output must include the observability retention policy check"
+grep -q "observability data budget is coherent:" /tmp/agent-f3-doctor-nominal.out \
+  || fail "doctor nominal output must include the observability data budget check"
 ok "doctor passes in nominal state"
 
 tmp_server_log="$(mktemp)"

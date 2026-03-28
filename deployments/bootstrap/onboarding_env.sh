@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 preseed_goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT-}"
+preseed_obs_retention_time="${AGENTIC_OBS_RETENTION_TIME-}"
+preseed_obs_max_disk="${AGENTIC_OBS_MAX_DISK-}"
 # shellcheck source=scripts/lib/runtime.sh
 source "${REPO_ROOT}/scripts/lib/runtime.sh"
 # shellcheck source=scripts/lib/ollama_context.sh
@@ -44,6 +46,8 @@ limits_ui_cpus_override=""
 limits_ui_mem_override=""
 limits_obs_cpus_override=""
 limits_obs_mem_override=""
+obs_retention_time_override=""
+obs_max_disk_override=""
 limits_rag_cpus_override=""
 limits_rag_mem_override=""
 limits_optional_cpus_override=""
@@ -115,6 +119,8 @@ Runtime options:
   --limits-ui-mem <size>
   --limits-obs-cpus <cores>
   --limits-obs-mem <size>
+  --obs-retention-time <duration>
+  --obs-max-disk <size>
   --limits-rag-cpus <cores>
   --limits-rag-mem <size>
   --limits-optional-cpus <cores>
@@ -398,6 +404,48 @@ validate_memory_limit_value() {
   }
   [[ "${value}" =~ ^[0-9]+([.][0-9]+)?[bBkKmMgG]$ ]] || {
     echo "${key} must use docker memory format (example: 512m, 1g, 2G)" >&2
+    return 1
+  }
+}
+
+validate_retention_time_value() {
+  local key="$1"
+  local value="$2"
+  local hours=""
+
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+
+  hours="$(agentic_obs_duration_to_hours "${value}" 2>/dev/null || true)"
+  [[ -n "${hours}" ]] || {
+    echo "${key} must use <integer><unit> with unit in h,d,w,m,y (example: 168h, 7d, 4w, 1m)" >&2
+    return 1
+  }
+  (( hours >= 24 )) || {
+    echo "${key} must be at least 24h" >&2
+    return 1
+  }
+}
+
+validate_retention_size_value() {
+  local key="$1"
+  local value="$2"
+  local mb=""
+
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+
+  mb="$(agentic_obs_size_to_mb "${value}" 2>/dev/null || true)"
+  [[ -n "${mb}" ]] || {
+    echo "${key} must use <integer><unit> with unit in MB,GB,TB (example: 2048MB, 8GB, 1TB)" >&2
+    return 1
+  }
+  (( mb >= 1024 )) || {
+    echo "${key} must be at least 1GB" >&2
     return 1
   }
 }
@@ -1289,11 +1337,19 @@ write_env_file() {
   local limits_ui_mem="${31}"
   local limits_obs_cpus="${32}"
   local limits_obs_mem="${33}"
-  local limits_rag_cpus="${34}"
-  local limits_rag_mem="${35}"
-  local limits_optional_cpus="${36}"
-  local limits_optional_mem="${37}"
-  local out_file="${38}"
+  local obs_retention_time="${34}"
+  local obs_max_disk="${35}"
+  local prometheus_disk_budget="${36}"
+  local loki_disk_budget="${37}"
+  local prometheus_retention_time="${38}"
+  local prometheus_retention_size="${39}"
+  local loki_retention_period="${40}"
+  local loki_max_query_lookback="${41}"
+  local limits_rag_cpus="${42}"
+  local limits_rag_mem="${43}"
+  local limits_optional_cpus="${44}"
+  local limits_optional_mem="${45}"
+  local out_file="${46}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1346,6 +1402,14 @@ export AGENTIC_LIMIT_UI_CPUS=$(shell_quote "${limits_ui_cpus}")
 export AGENTIC_LIMIT_UI_MEM=$(shell_quote "${limits_ui_mem}")
 export AGENTIC_LIMIT_OBS_CPUS=$(shell_quote "${limits_obs_cpus}")
 export AGENTIC_LIMIT_OBS_MEM=$(shell_quote "${limits_obs_mem}")
+export AGENTIC_OBS_RETENTION_TIME=$(shell_quote "${obs_retention_time}")
+export AGENTIC_OBS_MAX_DISK=$(shell_quote "${obs_max_disk}")
+export AGENTIC_PROMETHEUS_DISK_BUDGET=$(shell_quote "${prometheus_disk_budget}")
+export AGENTIC_LOKI_DISK_BUDGET=$(shell_quote "${loki_disk_budget}")
+export PROMETHEUS_RETENTION_TIME=$(shell_quote "${prometheus_retention_time}")
+export PROMETHEUS_RETENTION_SIZE=$(shell_quote "${prometheus_retention_size}")
+export LOKI_RETENTION_PERIOD=$(shell_quote "${loki_retention_period}")
+export LOKI_MAX_QUERY_LOOKBACK=$(shell_quote "${loki_max_query_lookback}")
 export AGENTIC_LIMIT_RAG_CPUS=$(shell_quote "${limits_rag_cpus}")
 export AGENTIC_LIMIT_RAG_MEM=$(shell_quote "${limits_rag_mem}")
 export AGENTIC_LIMIT_OPTIONAL_CPUS=$(shell_quote "${limits_optional_cpus}")
@@ -1699,6 +1763,16 @@ while [[ $# -gt 0 ]]; do
       limits_obs_mem_override="$2"
       shift 2
       ;;
+    --obs-retention-time)
+      [[ $# -ge 2 ]] || die "missing value for --obs-retention-time"
+      obs_retention_time_override="$2"
+      shift 2
+      ;;
+    --obs-max-disk)
+      [[ $# -ge 2 ]] || die "missing value for --obs-max-disk"
+      obs_max_disk_override="$2"
+      shift 2
+      ;;
     --limits-rag-cpus)
       [[ $# -ge 2 ]] || die "missing value for --limits-rag-cpus"
       limits_rag_cpus_override="$2"
@@ -1939,6 +2013,14 @@ collect_mem_limit limits_ui_mem "AGENTIC_LIMIT_UI_MEM" "$(default_limits_stack_m
 
 collect_cpu_limit limits_obs_cpus "AGENTIC_LIMIT_OBS_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "obs")" "${limits_obs_cpus_override}" "AGENTIC_LIMIT_OBS_CPUS/AGENTIC_LIMIT_OBS_MEM set defaults for observability."
 collect_mem_limit limits_obs_mem "AGENTIC_LIMIT_OBS_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "obs")" "${limits_obs_mem_override}"
+collect_text_value obs_retention_time "AGENTIC_OBS_RETENTION_TIME" "${preseed_obs_retention_time:-$(agentic_obs_default_retention_time_for_profile "${profile}")}" "${obs_retention_time_override}" validate_retention_time_value "AGENTIC_OBS_RETENTION_TIME is the maximum age kept for observability data (Prometheus/Loki)."
+collect_text_value obs_max_disk "AGENTIC_OBS_MAX_DISK" "${preseed_obs_max_disk:-$(agentic_obs_default_max_disk_for_profile "${profile}")}" "${obs_max_disk_override}" validate_retention_size_value "AGENTIC_OBS_MAX_DISK is the total disk budget reserved for Prometheus + Loki data."
+prometheus_disk_budget="$(agentic_obs_mb_to_size "$(agentic_obs_budget_slice_mb "$(agentic_obs_size_to_mb "${obs_max_disk}")" 1 4)")"
+loki_disk_budget="$(agentic_obs_mb_to_size "$(agentic_obs_budget_slice_mb "$(agentic_obs_size_to_mb "${obs_max_disk}")" 3 4)")"
+prometheus_retention_time="${obs_retention_time}"
+prometheus_retention_size="${prometheus_disk_budget}"
+loki_retention_period="${obs_retention_time}"
+loki_max_query_lookback="${obs_retention_time}"
 
 collect_cpu_limit limits_rag_cpus "AGENTIC_LIMIT_RAG_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "rag")" "${limits_rag_cpus_override}" "AGENTIC_LIMIT_RAG_CPUS/AGENTIC_LIMIT_RAG_MEM set defaults for RAG services."
 collect_mem_limit limits_rag_mem "AGENTIC_LIMIT_RAG_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "rag")" "${limits_rag_mem_override}"
@@ -1980,6 +2062,14 @@ write_env_file \
   "${limits_ui_mem}" \
   "${limits_obs_cpus}" \
   "${limits_obs_mem}" \
+  "${obs_retention_time}" \
+  "${obs_max_disk}" \
+  "${prometheus_disk_budget}" \
+  "${loki_disk_budget}" \
+  "${prometheus_retention_time}" \
+  "${prometheus_retention_size}" \
+  "${loki_retention_period}" \
+  "${loki_max_query_lookback}" \
   "${limits_rag_cpus}" \
   "${limits_rag_mem}" \
   "${limits_optional_cpus}" \
@@ -2413,6 +2503,12 @@ if [[ "${#context_estimate_summary[@]}" -gt 0 ]]; then
     echo "  - ${item}"
   done
 fi
+
+echo "Observability retention:"
+echo "  - retention_time=${obs_retention_time}"
+echo "  - max_disk=${obs_max_disk}"
+echo "  - prometheus_budget=${prometheus_disk_budget}"
+echo "  - loki_budget=${loki_disk_budget}"
 
 echo
 if [[ "${profile}" == "strict-prod" ]]; then

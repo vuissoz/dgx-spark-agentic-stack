@@ -9,6 +9,109 @@ agentic_repo_root() {
 AGENTIC_REPO_ROOT="$(agentic_repo_root)"
 AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
 
+agentic_obs_default_retention_time_for_profile() {
+  local profile="$1"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "7d"
+  else
+    printf '%s\n' "30d"
+  fi
+}
+
+agentic_obs_default_max_disk_for_profile() {
+  local profile="$1"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "8GB"
+  else
+    printf '%s\n' "32GB"
+  fi
+}
+
+agentic_obs_duration_to_hours() {
+  local value="$1"
+  local amount unit
+
+  [[ "${value}" =~ ^([0-9]+)([hdwmy])$ ]] || return 1
+  amount="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]}"
+
+  case "${unit}" in
+    h) printf '%s\n' "${amount}" ;;
+    d) printf '%s\n' "$(( amount * 24 ))" ;;
+    w) printf '%s\n' "$(( amount * 24 * 7 ))" ;;
+    m) printf '%s\n' "$(( amount * 24 * 30 ))" ;;
+    y) printf '%s\n' "$(( amount * 24 * 365 ))" ;;
+    *) return 1 ;;
+  esac
+}
+
+agentic_obs_hours_to_duration() {
+  local hours="$1"
+
+  [[ "${hours}" =~ ^[0-9]+$ ]] || return 1
+  if (( hours % (24 * 365) == 0 )); then
+    printf '%sy\n' "$(( hours / (24 * 365) ))"
+  elif (( hours % (24 * 30) == 0 )); then
+    printf '%sm\n' "$(( hours / (24 * 30) ))"
+  elif (( hours % (24 * 7) == 0 )); then
+    printf '%sw\n' "$(( hours / (24 * 7) ))"
+  elif (( hours % 24 == 0 )); then
+    printf '%sd\n' "$(( hours / 24 ))"
+  else
+    printf '%sh\n' "${hours}"
+  fi
+}
+
+agentic_obs_size_to_mb() {
+  local value="$1"
+  local amount unit
+
+  [[ "${value}" =~ ^([0-9]+)(MB|GB|TB)$ ]] || return 1
+  amount="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]}"
+
+  case "${unit}" in
+    MB) printf '%s\n' "${amount}" ;;
+    GB) printf '%s\n' "$(( amount * 1024 ))" ;;
+    TB) printf '%s\n' "$(( amount * 1024 * 1024 ))" ;;
+    *) return 1 ;;
+  esac
+}
+
+agentic_obs_mb_to_size() {
+  local value="$1"
+
+  [[ "${value}" =~ ^[0-9]+$ ]] || return 1
+  if (( value % (1024 * 1024) == 0 )); then
+    printf '%sTB\n' "$(( value / (1024 * 1024) ))"
+  elif (( value % 1024 == 0 )); then
+    printf '%sGB\n' "$(( value / 1024 ))"
+  else
+    printf '%sMB\n' "${value}"
+  fi
+}
+
+agentic_obs_budget_slice_mb() {
+  local total_mb="$1"
+  local numerator="$2"
+  local denominator="$3"
+  local slice=0
+
+  [[ "${total_mb}" =~ ^[0-9]+$ ]] || return 1
+  [[ "${numerator}" =~ ^[0-9]+$ ]] || return 1
+  [[ "${denominator}" =~ ^[0-9]+$ ]] || return 1
+  (( denominator > 0 )) || return 1
+
+  slice="$(( (total_mb * numerator) / denominator ))"
+  if (( slice < 256 )); then
+    slice=256
+  fi
+  if (( slice > total_mb )); then
+    slice="${total_mb}"
+  fi
+  printf '%s\n' "${slice}"
+}
+
 case "${AGENTIC_PROFILE}" in
   strict-prod|rootless-dev)
     ;;
@@ -121,6 +224,24 @@ OLLAMA_PRELOAD_EMBED_MODEL="${OLLAMA_PRELOAD_EMBED_MODEL:-qwen3-embedding:0.6b}"
 OLLAMA_MODEL_STORE_BUDGET_GB="${OLLAMA_MODEL_STORE_BUDGET_GB:-32}"
 RAG_EMBED_MODEL="${RAG_EMBED_MODEL:-qwen3-embedding:0.6b}"
 OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}}"
+AGENTIC_OBS_RETENTION_TIME="${AGENTIC_OBS_RETENTION_TIME:-$(agentic_obs_default_retention_time_for_profile "${AGENTIC_PROFILE}")}"
+AGENTIC_OBS_MAX_DISK="${AGENTIC_OBS_MAX_DISK:-$(agentic_obs_default_max_disk_for_profile "${AGENTIC_PROFILE}")}"
+if ! obs_total_budget_mb="$(agentic_obs_size_to_mb "${AGENTIC_OBS_MAX_DISK}" 2>/dev/null)"; then
+  echo "WARN: invalid AGENTIC_OBS_MAX_DISK='${AGENTIC_OBS_MAX_DISK}', defaulting to profile-safe value" >&2
+  AGENTIC_OBS_MAX_DISK="$(agentic_obs_default_max_disk_for_profile "${AGENTIC_PROFILE}")"
+  obs_total_budget_mb="$(agentic_obs_size_to_mb "${AGENTIC_OBS_MAX_DISK}")"
+fi
+if ! obs_retention_hours="$(agentic_obs_duration_to_hours "${AGENTIC_OBS_RETENTION_TIME}" 2>/dev/null)"; then
+  echo "WARN: invalid AGENTIC_OBS_RETENTION_TIME='${AGENTIC_OBS_RETENTION_TIME}', defaulting to profile-safe value" >&2
+  AGENTIC_OBS_RETENTION_TIME="$(agentic_obs_default_retention_time_for_profile "${AGENTIC_PROFILE}")"
+  obs_retention_hours="$(agentic_obs_duration_to_hours "${AGENTIC_OBS_RETENTION_TIME}")"
+fi
+AGENTIC_PROMETHEUS_DISK_BUDGET="${AGENTIC_PROMETHEUS_DISK_BUDGET:-$(agentic_obs_mb_to_size "$(agentic_obs_budget_slice_mb "${obs_total_budget_mb}" 1 4)")}"
+AGENTIC_LOKI_DISK_BUDGET="${AGENTIC_LOKI_DISK_BUDGET:-$(agentic_obs_mb_to_size "$(agentic_obs_budget_slice_mb "${obs_total_budget_mb}" 3 4)")}"
+PROMETHEUS_RETENTION_TIME="${PROMETHEUS_RETENTION_TIME:-${AGENTIC_OBS_RETENTION_TIME}}"
+PROMETHEUS_RETENTION_SIZE="${PROMETHEUS_RETENTION_SIZE:-${AGENTIC_PROMETHEUS_DISK_BUDGET}}"
+LOKI_RETENTION_PERIOD="${LOKI_RETENTION_PERIOD:-${AGENTIC_OBS_RETENTION_TIME}}"
+LOKI_MAX_QUERY_LOOKBACK="${LOKI_MAX_QUERY_LOOKBACK:-${AGENTIC_OBS_RETENTION_TIME}}"
 AGENTIC_LLM_MODE="${AGENTIC_LLM_MODE:-hybrid}"
 case "${AGENTIC_LLM_MODE}" in
   local|hybrid|remote) ;;
@@ -229,6 +350,8 @@ export QDRANT_CONTAINER_USER GATE_CONTAINER_USER OLLAMA_CONTAINER_USER TRTLLM_CO
 export PROMETHEUS_CONTAINER_USER GRAFANA_CONTAINER_USER LOKI_CONTAINER_USER PROMTAIL_CONTAINER_USER
 export AGENTIC_OLLAMA_MODELS_LINK OLLAMA_MODELS_DIR OLLAMA_CONTAINER_MODELS_PATH OLLAMA_MODELS_MOUNT_MODE
 export AGENTIC_DEFAULT_MODEL AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW AGENTIC_GOOSE_CONTEXT_LIMIT OLLAMA_PRELOAD_GENERATE_MODEL OLLAMA_PRELOAD_EMBED_MODEL OLLAMA_MODEL_STORE_BUDGET_GB RAG_EMBED_MODEL OLLAMA_CONTEXT_LENGTH
+export AGENTIC_OBS_RETENTION_TIME AGENTIC_OBS_MAX_DISK AGENTIC_PROMETHEUS_DISK_BUDGET AGENTIC_LOKI_DISK_BUDGET
+export PROMETHEUS_RETENTION_TIME PROMETHEUS_RETENTION_SIZE LOKI_RETENTION_PERIOD LOKI_MAX_QUERY_LOOKBACK
 export AGENTIC_LLM_MODE AGENTIC_LLM_BACKEND AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS GATE_ENABLE_TEST_MODE
 export AGENTIC_OPENAI_DAILY_TOKENS AGENTIC_OPENAI_MONTHLY_TOKENS AGENTIC_OPENAI_DAILY_REQUESTS AGENTIC_OPENAI_MONTHLY_REQUESTS
 export AGENTIC_OPENROUTER_DAILY_TOKENS AGENTIC_OPENROUTER_MONTHLY_TOKENS AGENTIC_OPENROUTER_DAILY_REQUESTS AGENTIC_OPENROUTER_MONTHLY_REQUESTS
