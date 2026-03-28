@@ -33,3 +33,4 @@ We treat targeted stop/start of a single agent container or bundled user-facing 
 - The test cycles real agent services using all supported entrypoints (`agent stop <tool>`, `agent stop/start service`, `agent stop/start container`).
 - The test asserts peer/core health remains intact and that the restarted container recreates its tmux session contract before user attachment.
 - The repository now also includes `tests/L12_surface_stop_isolation.sh` to cover user-facing stop/start targets (`openclaw`, `goose`, `openwebui`, `openhands`, `comfyui`) alongside the CLI agents in one disposable stack.
+- `agent status` is now the per-container view for the compose project, while `agent ls` remains the target-oriented summary.

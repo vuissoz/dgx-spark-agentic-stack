@@ -23,7 +23,7 @@ export AGENTIC_COMPOSE_PROJECT="agentic-${suffix}"
 export AGENTIC_NETWORK="agentic-${suffix}"
 export AGENTIC_LLM_NETWORK="agentic-${suffix}-llm"
 export AGENTIC_EGRESS_NETWORK="agentic-${suffix}-egress"
-export AGENTIC_OPTIONAL_MODULES="goose"
+export AGENTIC_OPTIONAL_MODULES="goose,pi-mono"
 export AGENTIC_SKIP_OPTIONAL_GATING=1
 export OLLAMA_HOST_PORT="31434"
 export OPENWEBUI_HOST_PORT="38080"
@@ -33,7 +33,7 @@ export OPENCLAW_WEBHOOK_HOST_PORT="38111"
 export OPENCLAW_GATEWAY_HOST_PORT="38789"
 export OPENCLAW_RELAY_HOST_PORT="38112"
 
-targets=(claude codex opencode vibestral openclaw goose openwebui openhands comfyui)
+targets=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
 
 cleanup() {
   AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" down optional >/tmp/agent-l12-down-optional.out 2>&1 || true
@@ -65,6 +65,7 @@ target_services() {
         "openclaw-sandbox" \
         "openclaw-relay"
       ;;
+    pi-mono) printf '%s\n' "optional-pi-mono" ;;
     goose) printf '%s\n' "optional-goose" ;;
     openwebui) printf '%s\n' "openwebui" ;;
     openhands) printf '%s\n' "openhands" ;;
@@ -128,6 +129,7 @@ all_services=(
   openhands
   comfyui
   comfyui-loopback
+  optional-pi-mono
   optional-goose
   optional-sentinel
 )
@@ -150,6 +152,17 @@ assert_unrelated_services_healthy() {
     fi
     assert_service_healthy_now "${service}" || return 1
   done
+}
+
+assert_agent_status_output() {
+  local service="$1"
+  local expected_state="$2"
+  local line
+
+  line="$("${agent_bin}" status | awk -F '\t' -v service="${service}" '$1 == service { print $0; exit }')"
+  [[ -n "${line}" ]] || fail "agent status is missing row for service '${service}'"
+  [[ "$(printf '%s\n' "${line}" | awk -F '\t' '{print $3}')" == "${expected_state}" ]] \
+    || fail "agent status state mismatch for ${service} (expected=${expected_state})"
 }
 
 "${REPO_ROOT}/deployments/bootstrap/init_fs.sh"
@@ -175,6 +188,7 @@ for target in "${targets[@]}"; do
   while IFS= read -r service; do
     [[ -n "${service}" ]] || continue
     assert_service_state "${service}" "exited"
+    assert_agent_status_output "${service}" "exited"
   done < <(target_services "${target}")
   assert_unrelated_services_healthy "${target}"
 
@@ -184,6 +198,7 @@ for target in "${targets[@]}"; do
     [[ -n "${service}" ]] || continue
     wait_for_container_ready "$(require_service_container "${service}")" 150 \
       || fail "service '${service}' did not recover after start ${target}"
+    assert_agent_status_output "${service}" "running"
   done < <(target_services "${target}")
   assert_unrelated_services_healthy ""
 done

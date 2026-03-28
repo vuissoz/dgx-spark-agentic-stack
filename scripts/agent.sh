@@ -27,6 +27,7 @@ AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_v
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_TOOLS=(claude codex opencode vibestral openclaw pi-mono goose)
+AGENT_STATUS_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
 STOP_START_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
 OPTIONAL_MODULES=(mcp pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
@@ -49,6 +50,7 @@ Usage:
   agent openclaw sandbox [ls [--json] | attach <sandbox_id> | destroy <sandbox_id> [--json]]
   agent openclaw approvals [list [--status <pending|approved|denied|expired|all>] [--json] | approve <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] | deny <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] [--reason <text>] | promote <id>]
   agent ls
+  agent status
   agent ps
   agent llm mode [local|hybrid|mixed|remote]
   agent llm backend [ollama|trtllm|both|remote]
@@ -142,6 +144,21 @@ agent_workspace_dir() {
   esac
 }
 
+target_workspace_dir() {
+  local target="$1"
+  case "${target}" in
+    claude|codex|opencode|vibestral|openclaw|pi-mono|goose)
+      agent_workspace_dir "${target}"
+      ;;
+    openhands)
+      printf '%s\n' "${AGENTIC_OPENHANDS_WORKSPACES_DIR}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 tool_to_service() {
   case "$1" in
     claude) echo "agentic-claude" ;;
@@ -160,6 +177,14 @@ tool_session_mode() {
     openclaw) echo "openclaw-shell" ;;
     goose) echo "goose-direct" ;;
     *) echo "tmux" ;;
+  esac
+}
+
+target_session_mode() {
+  case "$1" in
+    claude|codex|opencode|vibestral|pi-mono) echo "tmux" ;;
+    openclaw|goose|openwebui|openhands|comfyui) echo "n/a" ;;
+    *) return 1 ;;
   esac
 }
 
@@ -878,6 +903,41 @@ service_container_id() {
     --format '{{.ID}}' | head -n 1
 }
 
+service_container_any_id() {
+  local service="$1"
+  docker ps -a \
+    --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
+    --filter "label=com.docker.compose.service=${service}" \
+    --format '{{.ID}}' | head -n 1
+}
+
+target_status_from_services() {
+  local target="$1"
+  local -a services=()
+  local service container_id current_state aggregate_state=""
+
+  mapfile -t services < <(target_to_services "${target}") || return 1
+  [[ "${#services[@]}" -gt 0 ]] || return 1
+
+  for service in "${services[@]}"; do
+    container_id="$(service_container_any_id "${service}")"
+    if [[ -z "${container_id}" ]]; then
+      current_state="missing"
+    else
+      current_state="$(docker inspect --format '{{.State.Status}}' "${container_id}" 2>/dev/null || echo unknown)"
+    fi
+
+    if [[ -z "${aggregate_state}" ]]; then
+      aggregate_state="${current_state}"
+    elif [[ "${aggregate_state}" != "${current_state}" ]]; then
+      printf '%s\n' "mixed"
+      return 0
+    fi
+  done
+
+  printf '%s\n' "${aggregate_state:-missing}"
+}
+
 existing_compose_files() {
   local -a ordered_targets=(core agents ui obs rag optional)
   local target
@@ -1535,31 +1595,28 @@ cmd_ls() {
 
   printf 'tool\tservice\tstatus\ttmux\tworkspace\tsticky_model\truntime\n'
 
-  local tool service container_id status tmux_status workspace_size sticky runtime session_mode
-  for tool in "${AGENT_TOOLS[@]}"; do
-    service="$(tool_to_service "${tool}")"
-    container_id="$(service_container_id "${service}")"
-    session_mode="$(tool_session_mode "${tool}")"
+  local target service container_id status tmux_status workspace_size sticky runtime session_mode
+  for target in "${AGENT_STATUS_TARGETS[@]}"; do
+    service="$(target_to_services "${target}" | head -n 1)"
+    container_id="$(service_container_any_id "${service}")"
+    session_mode="$(target_session_mode "${target}" 2>/dev/null || printf '%s\n' "n/a")"
 
-    status="down"
+    status="$(target_status_from_services "${target}" 2>/dev/null || printf '%s\n' "missing")"
     if [[ "${session_mode}" == "tmux" ]]; then
       tmux_status="-"
     else
       tmux_status="n/a"
     fi
-    if [[ -n "${container_id}" ]]; then
-      status="$(docker inspect --format '{{.State.Status}}' "${container_id}" 2>/dev/null || echo unknown)"
-      if [[ "${session_mode}" == "tmux" ]]; then
-        if docker exec "${container_id}" tmux has-session -t "${tool}" >/dev/null 2>&1; then
-          tmux_status="up"
-        else
-          tmux_status="missing"
-        fi
+    if [[ -n "${container_id}" && "${session_mode}" == "tmux" && "${status}" == "running" ]]; then
+      if docker exec "${container_id}" tmux has-session -t "${target}" >/dev/null 2>&1; then
+        tmux_status="up"
+      else
+        tmux_status="missing"
       fi
     fi
 
     local workspace_host_dir
-    workspace_host_dir="$(agent_workspace_dir "${tool}")"
+    workspace_host_dir="$(target_workspace_dir "${target}" 2>/dev/null || true)"
     if [[ -d "${workspace_host_dir}" ]]; then
       workspace_size="$(du -sh "${workspace_host_dir}" 2>/dev/null | awk '{print $1}')"
       workspace_size="${workspace_size:-0B}"
@@ -1567,14 +1624,30 @@ cmd_ls() {
       workspace_size="n/a"
     fi
 
-    sticky="$(sticky_model_for_session "${tool}")"
+    sticky="-"
+    case "${target}" in
+      claude|codex|opencode|vibestral|openclaw|pi-mono|goose)
+        sticky="$(sticky_model_for_session "${target}")"
+        ;;
+    esac
     runtime="-"
-    if [[ "${tool}" == "openclaw" ]]; then
+    if [[ "${target}" == "openclaw" ]]; then
       runtime="$(openclaw_runtime_summary)"
     fi
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "${tool}" "${service}" "${status}" "${tmux_status}" "${workspace_size}" "${sticky}" "${runtime}"
+      "${target}" "${service}" "${status}" "${tmux_status}" "${workspace_size}" "${sticky}" "${runtime}"
   done
+}
+
+cmd_status() {
+  require_cmd docker
+
+  printf 'service\tcontainer\tstate\thealth\timage\n'
+
+  docker ps -a \
+    --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
+    --format '{{.Label "com.docker.compose.service"}}\t{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Image}}' \
+    | sort
 }
 
 cmd_stop_target() {
@@ -3428,6 +3501,9 @@ case "$cmd" in
     ;;
   ls)
     cmd_ls
+    ;;
+  status)
+    cmd_status
     ;;
   ps)
     require_cmd docker
