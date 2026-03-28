@@ -32,14 +32,12 @@ install -d -m 0700 "${agentic_root}/secrets/runtime"
 
 printf '%s\n' "k11-openclaw-token-$(date +%s)" >"${agentic_root}/secrets/runtime/openclaw.token"
 printf '%s\n' "k11-openclaw-webhook-$(date +%s)" >"${agentic_root}/secrets/runtime/openclaw.webhook_secret"
-printf '%s\n' "123456:k11-telegram" >"${agentic_root}/secrets/runtime/telegram.bot_token"
 printf '%s\n' "k11-discord" >"${agentic_root}/secrets/runtime/discord.bot_token"
 printf '%s\n' "xoxb-k11-slack-bot" >"${agentic_root}/secrets/runtime/slack.bot_token"
 printf '%s\n' "xapp-k11-slack-app" >"${agentic_root}/secrets/runtime/slack.app_token"
 chmod 0600 \
   "${agentic_root}/secrets/runtime/openclaw.token" \
   "${agentic_root}/secrets/runtime/openclaw.webhook_secret" \
-  "${agentic_root}/secrets/runtime/telegram.bot_token" \
   "${agentic_root}/secrets/runtime/discord.bot_token" \
   "${agentic_root}/secrets/runtime/slack.bot_token" \
   "${agentic_root}/secrets/runtime/slack.app_token"
@@ -48,19 +46,21 @@ if [[ "${EUID}" -eq 0 ]]; then
   chown "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}" \
     "${agentic_root}/secrets/runtime/openclaw.token" \
     "${agentic_root}/secrets/runtime/openclaw.webhook_secret" \
-    "${agentic_root}/secrets/runtime/telegram.bot_token" \
     "${agentic_root}/secrets/runtime/discord.bot_token" \
     "${agentic_root}/secrets/runtime/slack.bot_token" \
     "${agentic_root}/secrets/runtime/slack.app_token"
 fi
 
-"${agent_bin}" openclaw init "${project_name}" >/tmp/agent-k11-init.out \
+telegram_bot_token="123456:k11-telegram"
+"${agent_bin}" openclaw init "${project_name}" --telegram-bot-token "${telegram_bot_token}" >/tmp/agent-k11-init.out \
   || fail "agent openclaw init must succeed on a first-time stack"
 
 grep -q '^OpenClaw managed init complete\.$' /tmp/agent-k11-init.out \
   || fail "managed init output must confirm completion"
 grep -q "^workspace=${workspace_dir}$" /tmp/agent-k11-init.out \
   || fail "managed init output must report the stack workspace"
+grep -q "^telegram_secret_file=${agentic_root}/secrets/runtime/telegram.bot_token$" /tmp/agent-k11-init.out \
+  || fail "managed init output must report the telegram secret file when configured"
 grep -q 'Do not use openclaw gateway run for normal stack operation' /tmp/agent-k11-init.out \
   || fail "managed init output must demote manual gateway run"
 
@@ -70,6 +70,20 @@ wait_for_container_ready "${openclaw_cid}" 120 || fail "openclaw did not become 
 wait_for_container_ready "${provider_bridge_cid}" 120 || fail "openclaw-provider-bridge did not become ready after managed init"
 
 [[ -d "${workspace_host_dir}" ]] || fail "managed init must create the host workspace directory"
+[[ "$(tr -d '\r\n' <"${agentic_root}/secrets/runtime/telegram.bot_token")" == "${telegram_bot_token}" ]] \
+  || fail "managed init must persist the telegram bot token into the stack-managed secret file"
+
+provider_bridge_status_file="${agentic_root}/openclaw/state/provider-bridge-status.json"
+python3 - "${provider_bridge_status_file}" <<'PY' >/dev/null
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+provider = (payload.get("providers") or {}).get("telegram") or {}
+assert provider.get("configured") is True
+PY
+[[ $? -eq 0 ]] || fail "managed init must leave the provider bridge reporting telegram as configured"
 
 python3 - "${overlay_file}" "${workspace_dir}" <<'PY' >/dev/null
 import json

@@ -319,12 +319,15 @@ Recommended baseline from the host:
 
 ```bash
 ./agent openclaw init openclaw-default
+# optional: inject/update the stack-managed Telegram bot token during init
+./agent openclaw init openclaw-default --telegram-bot-token-file "${AGENTIC_ROOT}/secrets/bootstrap/telegram.bot_token"
 ```
 
 Why this is the recommended beginner flow:
 - it forces the default workspace back under `/workspace/...`,
 - it applies the stack-safe non-interactive OpenClaw bootstrap against `ollama-gate`,
 - it exports the managed gateway token from the file-backed secret for the bootstrap path,
+- it can write `${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token` directly from `--telegram-bot-token` or `--telegram-bot-token-file`,
 - it keeps Telegram/Discord/Slack on the provider-bridge path instead of pushing beginners into the upstream channel wizard,
 - it prints the exact next steps and explicitly warns against `openclaw gateway run`.
 

@@ -103,6 +103,37 @@ warn() {
   echo "WARN: $*" >&2
 }
 
+read_secret_value() {
+  local inline_value="$1"
+  local file_path="$2"
+
+  if [[ -n "${inline_value}" && -n "${file_path}" ]]; then
+    die "choose only one of inline secret value or secret file path"
+  fi
+
+  if [[ -n "${file_path}" ]]; then
+    [[ -r "${file_path}" ]] || die "secret file is not readable: ${file_path}"
+    tr -d '\r\n' <"${file_path}"
+    return 0
+  fi
+
+  printf '%s' "${inline_value}"
+}
+
+write_runtime_secret_file() {
+  local destination="$1"
+  local value="$2"
+
+  [[ -n "${value}" ]] || die "secret value for ${destination} must be non-empty"
+  install -d -m 0700 "$(dirname "${destination}")"
+  umask 077
+  printf '%s\n' "${value}" >"${destination}"
+  chmod 0600 "${destination}" || true
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${destination}" || true
+  fi
+}
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
@@ -3016,6 +3047,10 @@ cmd_openclaw_init() {
   local raw_project=""
   local workspace=""
   local workspace_host_dir=""
+  local telegram_bot_token=""
+  local telegram_bot_token_file=""
+  local telegram_secret_file="${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token"
+  local telegram_secret_value=""
   local overlay_file="${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json"
   local overlay_template_file="${AGENTIC_REPO_ROOT}/examples/optional/openclaw.operator-overlay.v1.json"
   local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
@@ -3034,13 +3069,14 @@ cmd_openclaw_init() {
   if [[ "${project}" == "help" || "${project}" == "-h" || "${project}" == "--help" ]]; then
     cat <<USAGE
 Usage:
-  agent openclaw init [project]
+  agent openclaw init [project] [--telegram-bot-token <token> | --telegram-bot-token-file <path>]
 
 Description:
   Apply the stack-managed OpenClaw onboarding/repair flow.
   - repairs the layered OpenClaw host config if the default workspace drifted,
   - starts the core OpenClaw services if needed,
   - seeds the stack-safe local provider/gateway defaults,
+  - optionally writes the Telegram bot token into the stack-managed secret file,
   - prints the next file-backed provider/channel steps.
 
 Notes:
@@ -3063,12 +3099,22 @@ USAGE
       -h|--help|help)
         cat <<USAGE
 Usage:
-  agent openclaw init [project]
+  agent openclaw init [project] [--telegram-bot-token <token> | --telegram-bot-token-file <path>]
 USAGE
-        return 0
+    return 0
+        ;;
+      --telegram-bot-token)
+        [[ $# -ge 2 ]] || die "missing value for --telegram-bot-token"
+        telegram_bot_token="$2"
+        shift 2
+        ;;
+      --telegram-bot-token-file)
+        [[ $# -ge 2 ]] || die "missing value for --telegram-bot-token-file"
+        telegram_bot_token_file="$2"
+        shift 2
         ;;
       *)
-        die "Usage: agent openclaw init [project]"
+        die "Usage: agent openclaw init [project] [--telegram-bot-token <token> | --telegram-bot-token-file <path>]"
         ;;
     esac
   done
@@ -3081,6 +3127,11 @@ USAGE
   workspace_host_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR}/${project}"
 
   ensure_runtime_env
+
+  telegram_secret_value="$(read_secret_value "${telegram_bot_token}" "${telegram_bot_token_file}")"
+  if [[ -n "${telegram_secret_value}" ]]; then
+    write_runtime_secret_file "${telegram_secret_file}" "${telegram_secret_value}"
+  fi
 
   if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
     [[ -x "${AGENT_OLLAMA_LINK_SCRIPT}" ]] || die "missing script: ${AGENT_OLLAMA_LINK_SCRIPT}"
@@ -3246,6 +3297,9 @@ PY
   printf 'workspace=%s\n' "${workspace}"
   printf 'workspace_host_dir=%s\n' "${workspace_host_dir}"
   printf 'default_model=%s\n' "${AGENTIC_DEFAULT_MODEL}"
+  if [[ -n "${telegram_secret_value}" ]]; then
+    printf 'telegram_secret_file=%s\n' "${telegram_secret_file}"
+  fi
   printf 'providers=%s\n' "$(printf '%s\n' "${bridge_summary}" | sed -n 's/^providers=//p')"
   printf 'repair=%s\n' "${init_repair_json}"
   if [[ -n "${bridge_warnings}" ]]; then

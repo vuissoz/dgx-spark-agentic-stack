@@ -22,6 +22,7 @@ Recommended beginner command:
 - `./agent openclaw init [project]`
   - stack-managed OpenClaw bootstrap/repair,
   - repairs the default workspace back under `/workspace/...`,
+  - can also write the Telegram bot token into `${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token`,
   - keeps the upstream wizard as expert fallback instead of the primary path.
 
 Simple mental model:
