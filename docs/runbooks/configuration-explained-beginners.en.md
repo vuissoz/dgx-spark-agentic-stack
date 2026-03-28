@@ -137,7 +137,7 @@ Notes:
 | `OLLAMA_PRELOAD_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
-| `TRTLLM_MODELS` | CSV list of model ids exposed by TRT-LLM | `qwen3-nvfp4-demo` | shell |
+| `TRTLLM_MODELS` | CSV list of model ids exposed by TRT-LLM | `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
 | `COMFYUI_REF` | git ref for ComfyUI image build | `master` | shell |
 | `COMFYUI_MANAGER_REPO` | ComfyUI manager extension git repo (empty = disabled) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |
 | `COMFYUI_MANAGER_REF` | ComfyUI manager extension git ref | `main` | shell |

@@ -133,7 +133,7 @@ Secrets runtime pour `git-forge` :
 | `OLLAMA_PRELOAD_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | entier positif | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
-| `TRTLLM_MODELS` | liste CSV de modeles exposes par TRT-LLM | `qwen3-nvfp4-demo` | shell |
+| `TRTLLM_MODELS` | liste CSV de modeles exposes par TRT-LLM | `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | shell |
 | `COMFYUI_REF` | ref git pour build image ComfyUI | `master` | shell |
 | `COMFYUI_MANAGER_REPO` | repo git extension manager ComfyUI (vide = desactive) | `https://github.com/ltdrdata/ComfyUI-Manager.git` | shell |
 | `COMFYUI_MANAGER_REF` | ref git extension manager ComfyUI | `main` | shell |

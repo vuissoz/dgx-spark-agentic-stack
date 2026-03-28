@@ -1,0 +1,44 @@
+# ADR-0092: TRT-LLM native runtime with automatic mock fallback
+
+## Context
+
+The repository originally exposed `trtllm` through a lightweight synthetic Python server.
+That was sufficient for routing and contract tests, but it did not execute a real TensorRT-LLM backend.
+
+The user request now explicitly targets NVIDIA's DGX Spark TRT-LLM playbook:
+
+- https://build.nvidia.com/spark/trt-llm
+
+As observed on 2026-03-28, the NVIDIA Spark playbook documents:
+
+- `nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc6`,
+- `trtllm-serve serve ...`,
+- `HF_TOKEN`,
+- an OpenAI-compatible server on port `8355`,
+- and Nemotron-3-Super-120B support listed with the FP8 handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
+
+The repository still needs deterministic regression coverage on machines where:
+
+- no GPU is available,
+- no Hugging Face token is configured,
+- or the native model pull would be too heavy for routine tests.
+
+## Decision
+
+1. Replace the mock-only TRT-LLM image with the official NVIDIA TensorRT-LLM container base.
+2. Keep the existing stack contract (`/healthz`, `/api/tags`, `/api/chat`, `/api/embeddings`, `/v1/models`) by running a local adapter inside the TRT-LLM container.
+3. Introduce `TRTLLM_RUNTIME_MODE=auto|mock|native` with:
+   - `auto` as the Compose default,
+   - `native` when the Hugging Face token file is present or the configured model is a local path,
+   - `mock` otherwise.
+4. In native mode, the adapter starts `trtllm-serve serve ...` on loopback inside the container and proxies requests to it.
+5. Preserve mock mode for deterministic repository tests that do not ship a real HF token.
+6. Keep the user-facing default TRT model slug unchanged in onboarding, but canonicalize the specific Nemotron NVFP4 alias to the Spark-documented FP8 serving handle internally when launching the native TRT-LLM server.
+
+## Consequences
+
+- The stack can now run a real TensorRT-LLM backend on DGX Spark when the required GPU and Hugging Face token are present.
+- Existing routing/tests remain runnable because the service still has an explicit mock path.
+- The native server remains internal-only: `ollama-gate` is still the intended caller.
+- Operators get an actionable health signal when native startup fails instead of a silently fake backend.
+- The exact native model actually served can differ from the requested onboarding alias for the Nemotron-3-Super NVFP4 case; this translation is deliberate and tied to the Spark playbook support matrix observed on 2026-03-28.

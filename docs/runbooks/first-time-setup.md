@@ -335,7 +335,7 @@ Example with explicit default local model:
 Example with explicit TRT enablement captured by onboarding:
 
 ```bash
-./agent onboard --compose-profiles trt --trtllm-models qwen3-nvfp4-demo,nemotron-cascade-2:30b
+./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
 ```
 
 In `rootless-dev`, onboarding now proposes the Ollama host model path:

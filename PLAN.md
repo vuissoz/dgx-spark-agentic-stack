@@ -119,6 +119,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-wlx` est `in_progress` : métriques Prometheus natives pour forwarders TCP OpenClaw.
   - `dgx-spark-agentic-stack-cx9` est resolu : l'onboarding exporte maintenant `COMPOSE_PROFILES` et `TRTLLM_MODELS`, avec prompt explicite d'activation TRT.
   - `dgx-spark-agentic-stack-wav3` : le défaut `agent onboard` pour `TRTLLM_MODELS` pointe maintenant vers le slug Hugging Face `NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, avec fallback runtime cohérent et vérification `agent doctor` exécutée sur le profil actif.
+  - `dgx-spark-agentic-stack-vb7p` reste ouvert : valider un premier `hello` complet Nemotron-3-Super après warm-up initial du backend TRT-LLM natif.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
@@ -510,12 +511,15 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - stockage dédié (ex: `${AGENTIC_ROOT}/trtllm/{models,state,logs}`) pour moteurs/modèles NVFP4.
 - healthcheck interne du runtime TRT-LLM.
 - `agent onboard` propose par défaut `TRTLLM_MODELS=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, et le fallback Compose/runtime reste aligné sur cette valeur.
+- le conteneur `trtllm` embarque maintenant l'image NVIDIA `nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc6`, lance `trtllm-serve serve` en backend natif quand `huggingface.token` est present, et garde un mode `mock` deterministe sans token.
+- le slug NVFP4 demande par la stack reste expose tel quel, mais le chargement natif est canonise vers le handle Spark documente `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
 - documenter les prérequis GPU/moteurs NVFP4 et la procédure de chargement des modèles.
 
 **Test** : `tests/C3_trtllm_basic.sh`
 - `trtllm` est `healthy` lorsqu’activé.
 - aucun port `trtllm` n’est publié sur l’hôte.
 - accès direct externe refusé, accès interne depuis `ollama-gate` seulement.
+- au premier boot natif, `/healthz` peut rester en `status=starting` pendant le téléchargement/chargement initial du modèle avant le premier `hello`.
  
 ---
 

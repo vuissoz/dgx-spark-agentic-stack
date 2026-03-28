@@ -48,6 +48,17 @@ ensure_secret_file_if_missing() {
   log "generated runtime secret: ${file}"
 }
 
+ensure_optional_secret_file() {
+  local file="$1"
+  if [[ -f "${file}" ]]; then
+    chmod 0600 "${file}" || true
+    return 0
+  fi
+  : >"${file}"
+  chmod 0600 "${file}" || true
+  log "created optional runtime secret placeholder: ${file}"
+}
+
 copy_if_missing() {
   local src="$1"
   local dst="$2"
@@ -452,6 +463,7 @@ main() {
   ensure_gate_mode_file
   ensure_gate_quotas_file
   ensure_gate_mcp_token
+  ensure_optional_secret_file "${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"

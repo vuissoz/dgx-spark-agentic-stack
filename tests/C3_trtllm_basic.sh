@@ -40,6 +40,24 @@ timeout 15 docker exec "${gate_cid}" sh -lc 'python3 -c "import sys,urllib.reque
   || fail "ollama-gate cannot reach trtllm internal endpoint"
 ok "ollama-gate reaches trtllm internal endpoint"
 
+timeout 20 docker exec -i "${gate_cid}" python3 - <<'PY' \
+  || fail "trtllm runtime health/models contract is invalid"
+import json
+import urllib.request
+
+health = json.loads(urllib.request.urlopen("http://trtllm:11436/healthz", timeout=5).read().decode("utf-8"))
+assert health["runtime_mode_requested"] in {"auto", "mock", "native"}, health
+assert health["runtime_mode_effective"] in {"mock", "native"}, health
+assert health["primary_model_requested"], health
+
+models = json.loads(urllib.request.urlopen("http://trtllm:11436/v1/models", timeout=5).read().decode("utf-8"))
+data = models.get("data")
+assert isinstance(data, list) and data, models
+assert isinstance(data[0], dict) and data[0].get("id"), models
+print("ok")
+PY
+ok "trtllm exposes health metadata and a non-empty model catalog"
+
 set +e
 timeout 10 docker exec "${toolbox_cid}" sh -lc 'curl -fsS --max-time 4 http://trtllm:11436/healthz >/dev/null 2>&1'
 toolbox_rc=$?

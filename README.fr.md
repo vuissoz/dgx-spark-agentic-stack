@@ -38,6 +38,9 @@ source .runtime/env.generated.sh
 ```
 
 En mode interactif, `./agent onboard` propose aussi explicitement l'activation TRT quand `COMPOSE_PROFILES` ne contient pas encore `trt`, puis demande la liste `TRTLLM_MODELS`.
+Le service `trtllm` essaie désormais de lancer un vrai backend NVIDIA TRT-LLM quand `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide; sinon il retombe volontairement sur le mode `mock` pour garder des tests déterministes.
+Dans le cas spécifique du slug Nemotron NVFP4, le runtime natif canonise actuellement le chargement vers le handle Spark documenté `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8` (playbook NVIDIA observé le 28 mars 2026), tout en conservant l'alias demandé côté stack.
+Au premier démarrage natif, le backend peut rester plusieurs minutes en `status=starting` pendant le téléchargement/chargement Hugging Face; tant que `native_ready=false`, les requêtes gate reçoivent une `503` explicite au lieu de retomber silencieusement sur un mock.
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) et réutilisé pour le preload Ollama.
 La stack émet un avertissement explicite si vous choisissez `qwen3.5:35b`: au 26 mars 2026, nos runs locaux Codex/OpenHands ont déjà observé des pseudo balises d'outils au lieu de vrais tool calls, même si le modèle est annoncé avec support `tools` upstream sur Ollama. Le modèle n'est plus bloqué, car le problème est traité comme un bug d'intégration à corriger côté stack.

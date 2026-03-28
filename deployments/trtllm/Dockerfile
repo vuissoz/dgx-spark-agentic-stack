@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM nvcr.io/nvidia/tensorrt-llm/release:1.2.0rc6
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1

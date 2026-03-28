@@ -542,6 +542,11 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_TRTLLM_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_TRTLLM_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    gpus: all
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
     user: "${TRTLLM_CONTAINER_USER:-${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}}"
     read_only: true
     tmpfs:
@@ -553,13 +558,35 @@ services:
     profiles:
       - trt
     environment:
+      HOME: /state/home
+      HF_HOME: /models/huggingface
+      HF_HUB_CACHE: /models/huggingface/hub
+      TRANSFORMERS_CACHE: /models/huggingface
+      XDG_CACHE_HOME: /state/cache
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      ALL_PROXY: http://egress-proxy:3128
+      NO_PROXY: 127.0.0.1,localhost,trtllm
       TRTLLM_LISTEN_HOST: 0.0.0.0
       TRTLLM_PORT: 11436
+      TRTLLM_RUNTIME_MODE: ${TRTLLM_RUNTIME_MODE:-auto}
+      TRTLLM_NATIVE_HOST: 127.0.0.1
+      TRTLLM_NATIVE_PORT: 8355
+      TRTLLM_NATIVE_BACKEND: ${TRTLLM_NATIVE_BACKEND:-pytorch}
+      TRTLLM_NATIVE_LOG_LEVEL: ${TRTLLM_NATIVE_LOG_LEVEL:-info}
+      TRTLLM_NATIVE_MAX_BATCH_SIZE: ${TRTLLM_NATIVE_MAX_BATCH_SIZE:-64}
+      TRTLLM_NATIVE_FREE_GPU_MEMORY_FRACTION: ${TRTLLM_NATIVE_FREE_GPU_MEMORY_FRACTION:-0.9}
+      TRTLLM_NATIVE_START_TIMEOUT_SECONDS: ${TRTLLM_NATIVE_START_TIMEOUT_SECONDS:-1800}
+      TRTLLM_HF_TOKEN_FILE: /run/secrets/huggingface.token
+      TRTLLM_MODELS_DIR: /models
+      TRTLLM_STATE_DIR: /state
+      TRTLLM_LOGS_DIR: /logs
       TRTLLM_MODELS: ${TRTLLM_MODELS:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/models:/models
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/trtllm/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/huggingface.token:/run/secrets/huggingface.token:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -571,7 +598,10 @@ services:
       retries: 5
       start_period: 10s
     networks:
-      - agentic-llm
+      agentic-llm:
+        priority: 100
+      agentic-egress:
+        priority: 1000
 
   toolbox:
     image: ghcr.io/nicolaka/netshoot:latest
