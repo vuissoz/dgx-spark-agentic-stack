@@ -10,6 +10,7 @@ AGENT_RUNTIME_GID="${AGENT_RUNTIME_GID:-1000}"
 AGENTIC_OPENHANDS_WORKSPACES_DIR="${AGENTIC_OPENHANDS_WORKSPACES_DIR:-${AGENTIC_ROOT}/openhands/workspaces}"
 TEMPLATE_DIR="${REPO_ROOT}/examples/ui"
 WORKSPACE_SEED_DIR="${AGENTIC_WORKSPACE_SEED_DIR:-${REPO_ROOT}/examples/workspace-default-python}"
+GIT_FORGE_ADMIN_USER="${GIT_FORGE_ADMIN_USER:-system-manager}"
 
 log() {
   echo "INFO: $*"
@@ -18,6 +19,32 @@ log() {
 die() {
   echo "ERROR: $*" >&2
   exit 1
+}
+
+ensure_secret_mode() {
+  local file="$1"
+  if [[ -f "${file}" ]]; then
+    chmod 0600 "${file}"
+  fi
+}
+
+random_secret_hex() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24
+    return 0
+  fi
+  od -An -N24 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+ensure_secret_file_if_missing() {
+  local file="$1"
+  if [[ -f "${file}" ]]; then
+    return 0
+  fi
+  umask 077
+  random_secret_hex >"${file}"
+  chmod 0600 "${file}" || true
+  log "generated runtime secret: ${file}"
 }
 
 copy_if_missing() {
@@ -148,6 +175,20 @@ seed_openhands_workspace_if_missing() {
 }
 
 main() {
+  local git_forge_secret
+  local -a git_forge_accounts=(
+    "${GIT_FORGE_ADMIN_USER}"
+    openclaw
+    openhands
+    comfyui
+    claude
+    codex
+    opencode
+    vibestral
+    pi-mono
+    goose
+  )
+
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui"
   install -d -m 0750 "${AGENTIC_ROOT}/openwebui/config"
   install -d -m 0770 "${AGENTIC_ROOT}/openwebui/data"
@@ -165,6 +206,16 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/comfyui/output"
   install -d -m 0770 "${AGENTIC_ROOT}/comfyui/user"
   install -d -m 0770 "${AGENTIC_ROOT}/comfyui/custom_nodes"
+
+  install -d -m 0750 "${AGENTIC_ROOT}/optional"
+  install -d -m 0750 "${AGENTIC_ROOT}/optional/git"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/git/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/git/config"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/git/bootstrap"
+
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
+  install -d -m 0750 "${AGENTIC_ROOT}/secrets/runtime/git-forge"
 
   copy_if_missing "${TEMPLATE_DIR}/openwebui.env" "${AGENTIC_ROOT}/openwebui/config/openwebui.env" 0600
   copy_if_missing "${TEMPLATE_DIR}/openhands.env" "${AGENTIC_ROOT}/openhands/config/openhands.env" 0600
@@ -191,6 +242,12 @@ main() {
     "${AGENTIC_ROOT}/openhands/config/openhands.env" \
     "${AGENTIC_ROOT}/openhands/state/settings.json"
 
+  for git_forge_secret in "${git_forge_accounts[@]}"; do
+    ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password"
+    ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password"
+    chmod 0640 "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password" || true
+  done
+
   chmod 0600 "${AGENTIC_ROOT}/openwebui/config/openwebui.env" "${AGENTIC_ROOT}/openhands/config/openhands.env"
   chmod 0660 "${AGENTIC_ROOT}/openhands/state/settings.json" || true
 
@@ -206,7 +263,14 @@ main() {
       "${AGENTIC_ROOT}/comfyui/input" \
       "${AGENTIC_ROOT}/comfyui/output" \
       "${AGENTIC_ROOT}/comfyui/user" \
-      "${AGENTIC_ROOT}/comfyui/custom_nodes"
+      "${AGENTIC_ROOT}/comfyui/custom_nodes" \
+      "${AGENTIC_ROOT}/optional/git/state" \
+      "${AGENTIC_ROOT}/optional/git/config" \
+      "${AGENTIC_ROOT}/optional/git/bootstrap"
+    for git_forge_secret in "${git_forge_accounts[@]}"; do
+      chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password" || true
+      chmod 0640 "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password" || true
+    done
   fi
 
   if [[ "${EUID}" -ne 0 ]]; then
@@ -219,7 +283,10 @@ main() {
       "${AGENTIC_ROOT}/comfyui/input" \
       "${AGENTIC_ROOT}/comfyui/output" \
       "${AGENTIC_ROOT}/comfyui/user" \
-      "${AGENTIC_ROOT}/comfyui/custom_nodes"
+      "${AGENTIC_ROOT}/comfyui/custom_nodes" \
+      "${AGENTIC_ROOT}/optional/git/state" \
+      "${AGENTIC_ROOT}/optional/git/config" \
+      "${AGENTIC_ROOT}/optional/git/bootstrap"
     log "non-root runtime init: relaxed UI runtime dirs for userns compatibility"
 
     if [[ -f "${AGENTIC_ROOT}/openwebui/data/webui.db" && ! -w "${AGENTIC_ROOT}/openwebui/data/webui.db" ]]; then

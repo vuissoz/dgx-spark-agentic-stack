@@ -103,7 +103,6 @@ optional_request_default_need() {
   local module="$1"
   case "${module}" in
     mcp) printf '%s\n' "Expose a restricted MCP catalog for local automation workflows." ;;
-    git-forge) printf '%s\n' "Provide a shared self-hosted Git forge so agents can clone, push, fetch, pull, and share projects." ;;
     pi-mono) printf '%s\n' "Provide an additional isolated CLI agent runtime for targeted tasks." ;;
     goose) printf '%s\n' "Provide an isolated Goose CLI runtime for approved workflows." ;;
     portainer) printf '%s\n' "Provide temporary loopback-only Portainer visibility for local diagnostics." ;;
@@ -115,7 +114,6 @@ optional_request_default_success() {
   local module="$1"
   case "${module}" in
     mcp) printf '%s\n' "Only allowlisted tools are available and service healthcheck stays green." ;;
-    git-forge) printf '%s\n' "Forgejo stays healthy on loopback-only bind and stack-managed agent accounts can access the shared repository without credential prompts." ;;
     pi-mono) printf '%s\n' "Container starts with expected user/workspace mappings and no forbidden mounts." ;;
     goose) printf '%s\n' "Container starts successfully with isolated workspace and expected proxy controls." ;;
     portainer) printf '%s\n' "UI is reachable on loopback only and runs without docker.sock mount." ;;
@@ -209,7 +207,6 @@ main() {
 
   copy_if_missing "${TEMPLATE_DIR}/mcp.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt" 0640
   ensure_optional_request_file "mcp"
-  ensure_optional_request_file "git-forge"
   ensure_optional_request_file "pi-mono"
   ensure_optional_request_file "goose"
   ensure_optional_request_file "portainer"

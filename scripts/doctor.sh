@@ -174,24 +174,6 @@ service_git_forge_account() {
   esac
 }
 
-optional_module_enabled() {
-  local needle="$1"
-  local raw="${AGENTIC_OPTIONAL_MODULES:-}"
-  local module
-
-  [[ -n "${raw}" ]] || return 1
-  raw="${raw//,/ }"
-
-  for module in ${raw}; do
-    [[ -n "${module}" ]] || continue
-    if [[ "${module}" == "${needle}" ]]; then
-      return 0
-    fi
-  done
-
-  return 1
-}
-
 assert_agent_sudo_mode_hardening() {
   local cid="$1"
   local inspect_out readonly cap_drop security_opt
@@ -1200,15 +1182,13 @@ mapfile -t running_services < <(
     --format '{{.ID}}|{{.Label "com.docker.compose.service"}}' | sort -t'|' -k2,2
 )
 
-git_forge_enabled=0
 git_forge_ready=1
 git_forge_bootstrap_state_file="${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json"
 optional_forgejo_cid=""
-if optional_module_enabled "git-forge"; then
-  git_forge_enabled=1
+if [[ "${#running_services[@]}" -gt 0 ]]; then
   optional_forgejo_cid="$(service_container_id optional-forgejo)"
   if [[ -z "${optional_forgejo_cid}" ]]; then
-    doctor_fail "git-forge is enabled but optional-forgejo is not running; re-run 'agent up agents,ui,obs,rag' or 'AGENTIC_OPTIONAL_MODULES=git-forge agent up optional'"
+    doctor_fail "git-forge baseline service 'optional-forgejo' is not running; re-run 'agent up ui' or 'agent up agents,ui,obs,rag'"
     git_forge_ready=0
   fi
   if [[ ! -s "${git_forge_bootstrap_state_file}" ]]; then
@@ -1551,9 +1531,6 @@ PY
 
   git_forge_account="$(service_git_forge_account "${service}" 2>/dev/null || true)"
   if [[ -n "${git_forge_account}" ]]; then
-    if [[ "${git_forge_enabled}" -ne 1 ]]; then
-      continue
-    fi
     if [[ "${git_forge_ready}" -ne 1 ]]; then
       continue
     fi

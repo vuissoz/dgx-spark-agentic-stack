@@ -12,13 +12,12 @@ Provide one self-hosted Git forge inside the stack so:
 
 ## Service Model
 
-- compose profile: `optional-git-forge`
 - service: `optional-forgejo` using `codeberg.org/forgejo/forgejo:14-rootless`
 - host UI/API bind: `127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}`
 - agent access path: private Docker network service DNS, not public host networking
 - default transport: internal HTTP on the private Docker network with per-account password helpers
 - forge SSH: disabled by default
-- deployment path when enabled: converged together with `./agent up agents,ui,obs,rag` (and therefore `./agent first-up`) so agent Git bootstrap exists before `./agent doctor`
+- deployment path: converged together with `./agent up ui`, `./agent up agents,ui,obs,rag`, and `./agent first-up` so agent Git bootstrap exists before `./agent doctor`
 
 Reason for the default transport choice:
 
@@ -50,7 +49,6 @@ Application/API secrets stay `chmod 600`; forge account password files stay `chm
 
 Expected non-secret onboarding outputs:
 
-- `AGENTIC_OPTIONAL_MODULES` includes `git-forge` when the operator enables it
 - `GIT_FORGE_HOST_PORT` for the loopback UI/API bind
 - `GIT_FORGE_ADMIN_USER` with default `system-manager`
 - `GIT_FORGE_SHARED_NAMESPACE` for the shared organization/group used by stack-managed repositories
@@ -127,7 +125,7 @@ This keeps project exchange auditable and closer to real developer workflows.
 
 ## Reference E2E Repository
 
-When the git-forge module is enabled, bootstrap now also reconciles one
+Because git-forge is part of the baseline stack, bootstrap also reconciles one
 stack-managed reference repository:
 
 - name: `eight-queens-agent-e2e`

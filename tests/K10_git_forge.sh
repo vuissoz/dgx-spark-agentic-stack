@@ -40,9 +40,6 @@ assert_cmd python3
 openhands_cid="$(require_service_container openhands)" || exit 1
 wait_for_container_ready "${openhands_cid}" 180 || fail "openhands did not become ready"
 
-AGENTIC_OPTIONAL_MODULES=git-forge "${agent_bin}" up optional >/tmp/agent-k10-up-optional.out \
-  || fail "agent up optional (git-forge) failed"
-
 forgejo_cid="$(require_service_container optional-forgejo)" || exit 1
 wait_for_container_ready "${forgejo_cid}" 180 || fail "optional-forgejo did not become ready"
 assert_container_security "${forgejo_cid}" || fail "optional-forgejo security baseline failed"
@@ -196,9 +193,5 @@ timeout 90 docker exec "${goose_cid}" sh -lc "
   test -f .agentic/reference-e2e.manifest.json
 " >/tmp/agent-k10-goose-smoke.out 2>&1 \
   || fail "goose clone/share smoke failed on the reference repository"
-
-changes_log="${AGENTIC_ROOT}/deployments/changes.log"
-[[ -s "${changes_log}" ]] || fail "changes log missing: ${changes_log}"
-grep -q 'module=git-forge' "${changes_log}" || fail "changes log must include a git-forge activation record"
 
 ok "K10_git_forge passed"

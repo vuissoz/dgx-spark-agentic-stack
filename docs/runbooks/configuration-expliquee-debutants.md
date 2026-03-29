@@ -75,14 +75,14 @@ Note pratique:
 | Variable | Valeurs possibles | Defaut | Stockage |
 |---|---|---|---|
 | `AGENTIC_STACK_ALL_TARGETS` | liste CSV de `core,agents,ui,obs,rag,optional` (sous-ensemble possible) | `core,agents,ui,obs,rag,optional` | shell |
-| `AGENTIC_OPTIONAL_MODULES` | liste CSV de `mcp,git-forge,pi-mono,goose,portainer` | vide | shell |
+| `AGENTIC_OPTIONAL_MODULES` | liste CSV de `mcp,pi-mono,goose,portainer` | vide | shell |
 | `COMPOSE_PROFILES` | liste CSV. Supporte ici: `trt`, `rag-lexical` | vide | shell |
 
 Notes:
 - `trt` active `trtllm` dans `core`.
 - `rag-lexical` active `opensearch` dans `rag`.
 - Si `COMPOSE_PROFILES` ne contient pas encore `trt`, `./agent onboard` propose maintenant explicitement l'activation TRT, puis persiste la valeur retenue dans le fichier genere.
-- Si `AGENTIC_OPTIONAL_MODULES` inclut `git-forge`, l'onboarding doit aussi demander le port loopback de l'UI, le compte admin Forge, le namespace partage, et si `push-to-create` doit etre active.
+- L'onboarding demande toujours aussi les variables `git-forge`, car Forgejo fait partie de la baseline.
 
 Variables pour `git-forge` :
 

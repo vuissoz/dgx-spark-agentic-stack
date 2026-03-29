@@ -33,7 +33,7 @@ AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod
 AGENT_TOOLS=(claude codex opencode vibestral openclaw pi-mono goose)
 AGENT_STATUS_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose forgejo openwebui openhands comfyui)
 STOP_START_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose forgejo openwebui openhands comfyui)
-OPTIONAL_MODULES=(mcp git-forge pi-mono goose portainer)
+OPTIONAL_MODULES=(mcp pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
 STACK_STOP_ORDER=(optional rag obs ui agents core)
@@ -94,7 +94,7 @@ Usage:
   agent doctor [--fix-net] [--check-tool-stream-e2e]
 
 Optional modules (disabled by default):
-  AGENTIC_OPTIONAL_MODULES=mcp,git-forge,pi-mono,goose,portainer agent up optional
+  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer agent up optional
 USAGE
 }
 
@@ -253,7 +253,7 @@ service_start_hint() {
     openclaw|openclaw-gateway) echo "agent up core" ;;
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
-    optional-forgejo) echo "AGENTIC_OPTIONAL_MODULES=git-forge agent up optional" ;;
+    optional-forgejo) echo "agent up ui" ;;
     *) echo "agent up agents" ;;
   esac
 }
@@ -262,8 +262,8 @@ target_to_compose_file() {
   case "$1" in
     claude|codex|opencode|vibestral) stack_to_compose_file agents ;;
     openclaw) stack_to_compose_file core ;;
-    openwebui|openhands|comfyui) stack_to_compose_file ui ;;
-    pi-mono|goose|forgejo) stack_to_compose_file optional ;;
+    openwebui|openhands|comfyui|forgejo) stack_to_compose_file ui ;;
+    pi-mono|goose) stack_to_compose_file optional ;;
     *) return 1 ;;
   esac
 }
@@ -354,7 +354,6 @@ targets_include() {
 optional_module_profile() {
   case "$1" in
     mcp) echo "optional-mcp" ;;
-    git-forge) echo "optional-git-forge" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "optional-goose" ;;
     portainer) echo "optional-portainer" ;;
@@ -365,19 +364,6 @@ optional_module_profile() {
 optional_module_secret_files() {
   case "$1" in
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
-    git-forge)
-      printf '%s\n' \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/${GIT_FORGE_ADMIN_USER}.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/openclaw.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/openhands.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/comfyui.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/claude.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/codex.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/opencode.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/vibestral.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/pi-mono.password" \
-        "${AGENTIC_ROOT}/secrets/runtime/git-forge/goose.password"
-      ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
     goose|portainer) ;;
     *) return 1 ;;
@@ -386,7 +372,7 @@ optional_module_secret_files() {
 
 optional_module_config_files() {
   case "$1" in
-    mcp|git-forge|pi-mono|goose|portainer) ;;
+    mcp|pi-mono|goose|portainer) ;;
     *) return 1 ;;
   esac
 }
@@ -471,15 +457,7 @@ parse_optional_modules() {
 }
 
 baseline_optional_modules() {
-  local module
-  local -a enabled_modules=()
-
-  mapfile -t enabled_modules < <(parse_optional_modules)
-  for module in "${enabled_modules[@]}"; do
-    case "${module}" in
-      git-forge) printf '%s\n' "${module}" ;;
-    esac
-  done
+  return 0
 }
 
 validate_optional_request_file() {
@@ -545,7 +523,6 @@ append_changes_log() {
 optional_module_build_services() {
   case "$1" in
     mcp) echo "optional-mcp-catalog" ;;
-    git-forge) echo "" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "" ;;
     portainer) echo "" ;;
@@ -1901,8 +1878,16 @@ cmd_start_target() {
     || die "Unknown stop/start target '${target}'. Expected one of: ${STOP_START_TARGETS[*]}"
   [[ -f "${compose_file}" ]] || die "Compose file not found for tool stack: ${compose_file}"
 
+  case "${target}" in
+    forgejo|openwebui|openhands|comfyui) ensure_ui_runtime ;;
+    pi-mono|goose) ensure_optional_runtime ;;
+  esac
+
   require_cmd docker
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" up -d --no-deps "${services_to_start[@]}"
+  if [[ "${target}" == "forgejo" || "${target}" == "ui" ]]; then
+    run_git_forge_bootstrap
+  fi
 }
 
 cmd_service_action() {
@@ -2398,7 +2383,6 @@ collect_cleanup_image_refs() {
       --profile rag-lexical \
       --profile optional \
       --profile optional-mcp \
-      --profile optional-git-forge \
       --profile optional-pi-mono \
       --profile optional-goose \
       --profile optional-portainer \
@@ -4115,6 +4099,7 @@ cmd_update() {
 
   "${pull_cmd[@]}"
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" up -d --remove-orphans
+  run_git_forge_bootstrap
   apply_core_network_policy
 
   local release_id
@@ -4315,13 +4300,12 @@ case "$cmd" in
       docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
         "${optional_profiles[@]}" \
         -f "${optional_compose_file}" up -d
-
-      if targets_include "git-forge" "${optional_modules[@]}"; then
-        run_git_forge_bootstrap
-      fi
     else
       run_compose_on_targets up "$target_arg" -d
       up_enabled_baseline_optional_modules "${targets[@]}"
+      if targets_include "ui" "${targets[@]}"; then
+        run_git_forge_bootstrap
+      fi
     fi
 
     release_manifest_targets=("${targets[@]}")
@@ -4370,7 +4354,6 @@ case "$cmd" in
       docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
         --profile optional \
         --profile optional-mcp \
-        --profile optional-git-forge \
         --profile optional-pi-mono \
         --profile optional-goose \
         --profile optional-portainer \

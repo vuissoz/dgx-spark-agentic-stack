@@ -855,11 +855,11 @@ validate_optional_modules_csv() {
       none)
         saw_none=1
         ;;
-      mcp|git-forge|pi-mono|goose|portainer)
+      mcp|pi-mono|goose|portainer)
         saw_module=1
         ;;
       *)
-        echo "unknown optional module '${entry}' (allowed: mcp,git-forge,pi-mono,goose,portainer,none)" >&2
+        echo "unknown optional module '${entry}' (allowed: mcp,pi-mono,goose,portainer,none)" >&2
         return 1
         ;;
     esac
@@ -1246,7 +1246,6 @@ optional_request_default_need() {
   case "${module}" in
     openclaw) printf '%s\n' "Enable scoped OpenClaw webhook and DM automation for approved workflows." ;;
     mcp) printf '%s\n' "Expose a restricted MCP catalog for local automation workflows." ;;
-    git-forge) printf '%s\n' "Provide a shared self-hosted Git forge so agents can clone, push, fetch, pull, and share projects." ;;
     pi-mono) printf '%s\n' "Provide an additional isolated CLI agent runtime for targeted tasks." ;;
     goose) printf '%s\n' "Provide an isolated Goose CLI runtime for approved workflows." ;;
     portainer) printf '%s\n' "Provide temporary loopback-only Portainer visibility for local diagnostics." ;;
@@ -1259,7 +1258,6 @@ optional_request_default_success() {
   case "${module}" in
     openclaw) printf '%s\n' "Webhook auth succeeds, deny paths stay blocked, and service healthcheck stays green." ;;
     mcp) printf '%s\n' "Only allowlisted tools are available and service healthcheck stays green." ;;
-    git-forge) printf '%s\n' "Forgejo stays healthy on loopback-only bind and stack-managed agent accounts can access the shared repository without credential prompts." ;;
     pi-mono) printf '%s\n' "Container starts with expected user/workspace mappings and no forbidden mounts." ;;
     goose) printf '%s\n' "Container starts successfully with isolated workspace and expected proxy controls." ;;
     portainer) printf '%s\n' "UI is reachable on loopback only and runs without docker.sock mount." ;;
@@ -1556,14 +1554,12 @@ export AGENTIC_LIMIT_OPTIONAL_MEM=$(shell_quote "${limits_optional_mem}")
 export AGENTIC_OPTIONAL_MODULES=$(shell_quote "${optional_modules_csv}")
 EOF_ENV
 
-  if optional_modules_include "${optional_modules_csv}" "git-forge"; then
-    cat >>"${tmp_file}" <<EOF_ENV
+  cat >>"${tmp_file}" <<EOF_ENV
 export GIT_FORGE_HOST_PORT=$(shell_quote "${git_forge_host_port}")
 export GIT_FORGE_ADMIN_USER=$(shell_quote "${git_forge_admin_user}")
 export GIT_FORGE_SHARED_NAMESPACE=$(shell_quote "${git_forge_shared_namespace}")
 export GIT_FORGE_ENABLE_PUSH_CREATE=$(shell_quote "${git_forge_enable_push_create}")
 EOF_ENV
-  fi
 
   mv "${tmp_file}" "${out_file}"
   chmod 0640 "${out_file}"
@@ -2236,7 +2232,7 @@ collect_mem_limit limits_optional_mem "AGENTIC_LIMIT_OPTIONAL_MEM" "$(default_li
 optional_modules_raw="${optional_modules_override:-none}"
 if [[ "${non_interactive}" -eq 0 && -z "${optional_modules_override}" ]]; then
   while true; do
-    candidate="$(prompt_with_default "AGENTIC_OPTIONAL_MODULES (csv: none,mcp,git-forge,pi-mono,goose,portainer)" "${optional_modules_raw}")"
+    candidate="$(prompt_with_default "AGENTIC_OPTIONAL_MODULES (csv: none,mcp,pi-mono,goose,portainer)" "${optional_modules_raw}")"
     if validate_optional_modules_csv "${candidate}"; then
       optional_modules_raw="${candidate}"
       break
@@ -2251,12 +2247,10 @@ git_forge_host_port=""
 git_forge_admin_user=""
 git_forge_shared_namespace=""
 git_forge_enable_push_create=""
-if optional_modules_include "${optional_modules_raw}" "git-forge"; then
-  collect_text_value git_forge_host_port "GIT_FORGE_HOST_PORT" "${git_forge_host_port_override:-${GIT_FORGE_HOST_PORT:-13010}}" "${git_forge_host_port_override}" validate_port_value "GIT_FORGE_HOST_PORT is the loopback-only host port that exposes the forge web UI and API."
-  collect_text_value git_forge_admin_user "GIT_FORGE_ADMIN_USER" "${git_forge_admin_user_override:-${GIT_FORGE_ADMIN_USER:-system-manager}}" "${git_forge_admin_user_override}" validate_non_empty_single_line_value "GIT_FORGE_ADMIN_USER is the bootstrap admin login for the local forge."
-  collect_text_value git_forge_shared_namespace "GIT_FORGE_SHARED_NAMESPACE" "${git_forge_shared_namespace_override:-${GIT_FORGE_SHARED_NAMESPACE:-agentic}}" "${git_forge_shared_namespace_override}" validate_git_namespace_value "GIT_FORGE_SHARED_NAMESPACE is the shared org/group slug where stack-managed collaborative repositories live."
-  collect_text_value git_forge_enable_push_create "GIT_FORGE_ENABLE_PUSH_CREATE" "${git_forge_enable_push_create_override:-${GIT_FORGE_ENABLE_PUSH_CREATE:-0}}" "${git_forge_enable_push_create_override}" validate_zero_one_value "GIT_FORGE_ENABLE_PUSH_CREATE controls whether authenticated users may create repositories by pushing over Git."
-fi
+collect_text_value git_forge_host_port "GIT_FORGE_HOST_PORT" "${git_forge_host_port_override:-${GIT_FORGE_HOST_PORT:-13010}}" "${git_forge_host_port_override}" validate_port_value "GIT_FORGE_HOST_PORT is the loopback-only host port that exposes the forge web UI and API."
+collect_text_value git_forge_admin_user "GIT_FORGE_ADMIN_USER" "${git_forge_admin_user_override:-${GIT_FORGE_ADMIN_USER:-system-manager}}" "${git_forge_admin_user_override}" validate_non_empty_single_line_value "GIT_FORGE_ADMIN_USER is the bootstrap admin login for the local forge."
+collect_text_value git_forge_shared_namespace "GIT_FORGE_SHARED_NAMESPACE" "${git_forge_shared_namespace_override:-${GIT_FORGE_SHARED_NAMESPACE:-agentic}}" "${git_forge_shared_namespace_override}" validate_git_namespace_value "GIT_FORGE_SHARED_NAMESPACE is the shared org/group slug where stack-managed collaborative repositories live."
+collect_text_value git_forge_enable_push_create "GIT_FORGE_ENABLE_PUSH_CREATE" "${git_forge_enable_push_create_override:-${GIT_FORGE_ENABLE_PUSH_CREATE:-0}}" "${git_forge_enable_push_create_override}" validate_zero_one_value "GIT_FORGE_ENABLE_PUSH_CREATE controls whether authenticated users may create repositories by pushing over Git."
 
 write_env_file \
   "${profile}" \
@@ -2669,28 +2663,27 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
             fi
           fi
           ;;
-        git-forge)
-          existing_git_forge_admin_secret="${root_path}/secrets/runtime/git-forge/${git_forge_admin_user}.password"
-          if [[ -z "${git_forge_admin_password}" && -s "${existing_git_forge_admin_secret}" ]]; then
-            git_forge_admin_password="$(tr -d '\n' <"${existing_git_forge_admin_secret}")"
-          fi
-          if [[ -z "${git_forge_admin_password}" ]]; then
-            if [[ "${non_interactive}" -eq 0 ]]; then
-              candidate="$(prompt_password_or_generate "git-forge/${git_forge_admin_user}.password")"
-              if [[ -n "${candidate}" ]]; then
-                git_forge_admin_password="${candidate}"
-              else
-                git_forge_admin_password="$(generate_secret_value 24)"
-              fi
-            else
-              git_forge_admin_password="$(generate_secret_value 24)"
-            fi
-          fi
-          ;;
         pi-mono|goose|portainer)
           ;;
       esac
     done
+  fi
+
+  existing_git_forge_admin_secret="${root_path}/secrets/runtime/git-forge/${git_forge_admin_user}.password"
+  if [[ -z "${git_forge_admin_password}" && -s "${existing_git_forge_admin_secret}" ]]; then
+    git_forge_admin_password="$(tr -d '\n' <"${existing_git_forge_admin_secret}")"
+  fi
+  if [[ -z "${git_forge_admin_password}" ]]; then
+    if [[ "${non_interactive}" -eq 0 ]]; then
+      candidate="$(prompt_password_or_generate "git-forge/${git_forge_admin_user}.password")"
+      if [[ -n "${candidate}" ]]; then
+        git_forge_admin_password="${candidate}"
+      else
+        git_forge_admin_password="$(generate_secret_value 24)"
+      fi
+    else
+      git_forge_admin_password="$(generate_secret_value 24)"
+    fi
   fi
 
   if [[ "${root_is_writable}" -ne 1 ]]; then
@@ -2715,11 +2708,9 @@ if [[ "${secret_section_enabled}" -eq 1 ]]; then
     write_secret_file "${root_path}" "openclaw.webhook_secret" "${openclaw_webhook_secret}" || true
     write_secret_file "${root_path}" "mcp.token" "${mcp_token}" || true
     write_secret_file "${root_path}" "git-forge/${git_forge_admin_user}.password" "${git_forge_admin_password}" || true
-    if optional_modules_include "${optional_modules_raw}" "git-forge"; then
-      for git_forge_account in "${git_forge_accounts[@]}"; do
-        ensure_generated_secret_file "${root_path}" "git-forge/${git_forge_account}.password" 0640 || true
-      done
-    fi
+    for git_forge_account in "${git_forge_accounts[@]}"; do
+      ensure_generated_secret_file "${root_path}" "git-forge/${git_forge_account}.password" 0640 || true
+    done
 
     # Defensive hardening: keep app secrets at 0600 while forge agent passwords stay readable for the matching runtime group.
     if [[ -d "${root_path}/secrets/runtime" ]]; then

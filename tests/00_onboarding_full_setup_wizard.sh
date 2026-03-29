@@ -72,7 +72,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --openrouter-api-key "${openrouter_key}" \
   --huggingface-token "${huggingface_token}" \
   --openclaw-init-project "${openclaw_init_project}" \
-  --optional-modules 'mcp,git-forge' \
+  --optional-modules 'mcp' \
   --git-forge-host-port "${git_forge_host_port}" \
   --git-forge-admin-user "${git_forge_admin_user}" \
   --git-forge-shared-namespace "${git_forge_shared_namespace}" \
@@ -143,7 +143,7 @@ grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${root_dir}/optional/pi-mono/wo
   || fail "full setup onboarding env must export AGENTIC_PI_MONO_WORKSPACES_DIR"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${root_dir}/optional/goose/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_GOOSE_WORKSPACES_DIR"
-grep -q "^export AGENTIC_OPTIONAL_MODULES='mcp,git-forge'$" "${env_file}" \
+grep -q "^export AGENTIC_OPTIONAL_MODULES='mcp'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_OPTIONAL_MODULES"
 grep -q "^export GRAFANA_ADMIN_USER='${grafana_admin_user}'$" "${env_file}" \
   || fail "full setup onboarding env must export GRAFANA_ADMIN_USER"
@@ -191,7 +191,6 @@ openclaw_webhook_file="${root_dir}/secrets/runtime/openclaw.webhook_secret"
 mcp_token_file="${root_dir}/secrets/runtime/mcp.token"
 mcp_request_file="${root_dir}/deployments/optional/mcp.request"
 git_forge_admin_password_file="${root_dir}/secrets/runtime/git-forge/${git_forge_admin_user}.password"
-git_forge_request_file="${root_dir}/deployments/optional/git-forge.request"
 openclaw_profile_file="${root_dir}/openclaw/config/integration-profile.current.json"
 
 [[ -s "${openwebui_env}" ]] || fail "openwebui env file missing: ${openwebui_env}"
@@ -238,9 +237,7 @@ for git_forge_account in openclaw openhands comfyui claude codex opencode vibest
   [[ "${perm}" == "640" ]] || fail "git-forge account secret permissions must be 640: ${account_secret} (got ${perm})"
 done
 
-for request_file in \
-  "${mcp_request_file}" \
-  "${git_forge_request_file}"; do
+for request_file in "${mcp_request_file}"; do
   [[ -s "${request_file}" ]] || fail "optional request file missing: ${request_file}"
   request_perm="$(stat -c '%a' "${request_file}")"
   [[ "${request_perm}" == "640" ]] || fail "optional request file permissions must be 640: ${request_file} (got ${request_perm})"

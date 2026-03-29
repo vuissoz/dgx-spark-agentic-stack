@@ -51,19 +51,21 @@ chmod +x "${fake_bootstrap}"
 PATH="${fake_bin}:${PATH}" \
 AGENTIC_ROOT="${runtime_root}" \
 AGENTIC_PROFILE=rootless-dev \
-AGENTIC_OPTIONAL_MODULES=git-forge \
 AGENTIC_SKIP_AGENT_IMAGE_BUILD=1 \
 AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT="${fake_bootstrap}" \
 bash "${agent_bin}" rootless-dev up agents,ui,obs,rag >/tmp/agent-l14-up.out 2>&1 \
-  || fail "agent up agents,ui,obs,rag failed when git-forge was enabled"
+  || fail "agent up agents,ui,obs,rag failed"
 
 grep -q -- 'compose --project-name agentic-dev -f .*/compose\.agents\.yml -f .*/compose\.ui\.yml -f .*/compose\.obs\.yml -f .*/compose\.rag\.yml up -d' "${runtime_root}/docker.log" \
   || fail "baseline up must still launch the agents/ui/obs/rag compose files"
 ok "baseline up launches the main compose files"
 
-grep -q -- 'compose --project-name agentic-dev --profile optional-git-forge -f .*/compose\.optional\.yml up -d' "${runtime_root}/docker.log" \
-  || fail "baseline up must also launch optional-forgejo when git-forge is enabled"
-ok "baseline up launches git-forge alongside the baseline stacks"
+grep -q -- 'compose --project-name agentic-dev -f .*/compose\.agents\.yml -f .*/compose\.ui\.yml -f .*/compose\.obs\.yml -f .*/compose\.rag\.yml up -d' "${runtime_root}/docker.log" \
+  || fail "baseline up must launch forgejo through the ui compose file"
+if grep -q -- 'compose --project-name agentic-dev --profile optional-git-forge -f .*/compose\.optional\.yml up -d' "${runtime_root}/docker.log"; then
+  fail "baseline up must not rely on the optional git-forge profile anymore"
+fi
+ok "baseline up carries forgejo in the baseline ui stack"
 
 grep -q '^bootstrap invoked$' "${runtime_root}/git-forge-bootstrap.log" \
   || fail "baseline up must run git-forge bootstrap before doctor-time convergence"

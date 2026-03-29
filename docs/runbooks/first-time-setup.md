@@ -64,7 +64,7 @@ Use the same profile consistently for all commands.
 - `agent profile`,
 - `deployments/bootstrap/init_fs.sh`,
 - `agent up core`,
-- `agent up agents,ui,obs,rag` (also converges `optional-forgejo` when `AGENTIC_OPTIONAL_MODULES` includes `git-forge`),
+- `agent up agents,ui,obs,rag` (also converges `optional-forgejo` as part of the baseline UI stack),
 - `agent doctor`.
 
 In `strict-prod`, run with sudo:
@@ -81,7 +81,7 @@ If you prefer no shell exports, prefix each call with profile directly:
 ./agent rootless-dev doctor
 ```
 
-If `git-forge` is enabled in `AGENTIC_OPTIONAL_MODULES`, the second command also starts Forgejo and runs its bootstrap before `doctor`.
+The second command also starts Forgejo and runs its bootstrap before `doctor`.
 
 `strict-prod` equivalent:
 
@@ -600,7 +600,7 @@ AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
 Before activation:
 - fill `${AGENTIC_ROOT}/deployments/optional/*.request` (`need=`, `success=`),
 - place required tokens/secrets in `${AGENTIC_ROOT}/secrets/runtime/`,
-- if `git-forge` is enabled, run onboarding so the generated env captures `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, and `GIT_FORGE_ENABLE_PUSH_CREATE`, while secrets are written separately under `${AGENTIC_ROOT}/secrets/runtime/git-forge/`; Forgejo itself is then converged by the baseline `agent up agents,ui,obs,rag` / `agent first-up` path,
+- run onboarding so the generated env captures `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, and `GIT_FORGE_ENABLE_PUSH_CREATE`, while secrets are written separately under `${AGENTIC_ROOT}/secrets/runtime/git-forge/`; Forgejo itself is then converged by the baseline `agent up ui` / `agent up agents,ui,obs,rag` / `agent first-up` path,
 - review OpenClaw allowlists:
   - `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
   - `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`

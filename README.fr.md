@@ -186,7 +186,7 @@ Note GPU: si votre environnement utilise un chemin CDI/driver spécifique, vous 
 
 ## Démarrage rapide
 
-Si `AGENTIC_OPTIONAL_MODULES` inclut `git-forge`, Forgejo est désormais convergé pendant `./agent up agents,ui,obs,rag` et `./agent first-up`, avant `./agent doctor`.
+Forgejo fait partie de la baseline: `./agent up ui`, `./agent up agents,ui,obs,rag` et `./agent first-up` le convergent avant `./agent doctor`.
 
 ### `strict-prod`
 
