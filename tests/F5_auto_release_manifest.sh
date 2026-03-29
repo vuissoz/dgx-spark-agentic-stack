@@ -39,17 +39,33 @@ docker network create --driver bridge "${AGENTIC_EGRESS_NETWORK}" >/dev/null
 
 "${REPO_ROOT}/deployments/bootstrap/init_fs.sh" >/tmp/agent-f5-initfs.out
 
-AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" up optional >/tmp/agent-f5-up.out \
+"${agent_bin}" up core >/tmp/agent-f5-up-core.out \
+  || fail "agent up core failed in F5"
+AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" up optional >/tmp/agent-f5-up-optional.out \
   || fail "agent up optional failed in F5"
 
-auto_snapshot_line_count="$(grep -c '^auto snapshot created release=' /tmp/agent-f5-up.out || true)"
-[[ "${auto_snapshot_line_count}" -ge 1 ]] \
-  || fail "agent up should create an automatic release snapshot when none exists"
+auto_snapshot_line_count="$(
+  (
+    grep -c '^auto snapshot created release=' /tmp/agent-f5-up-core.out || true
+    grep -c '^auto snapshot created release=' /tmp/agent-f5-up-optional.out || true
+  ) | awk '{sum += $1} END {print sum + 0}'
+)"
+[[ "${auto_snapshot_line_count}" -ge 2 ]] \
+  || fail "sequential agent up runs should refresh the automatic release snapshot"
 
 release_images="${AGENTIC_ROOT}/deployments/current/images.json"
 [[ -s "${release_images}" ]] || fail "automatic release snapshot must create ${release_images}"
+release_compose_files="${AGENTIC_ROOT}/deployments/current/compose.files"
+release_latest_resolution="${AGENTIC_ROOT}/deployments/current/latest-resolution.json"
+
+[[ -s "${release_compose_files}" ]] || fail "automatic release snapshot must record compose.files"
+[[ -s "${release_latest_resolution}" ]] || fail "automatic release snapshot must record latest-resolution.json"
 
 grep -q 'optional-sentinel' "${release_images}" \
   || fail "automatic release snapshot must include running optional-sentinel service"
+grep -q '/compose\.core\.yml$' "${release_compose_files}" \
+  || fail "automatic release snapshot must retain compose.core.yml after a later up"
+grep -q '/compose\.optional\.yml$' "${release_compose_files}" \
+  || fail "automatic release snapshot must include compose.optional.yml after optional up"
 
 ok "F5_auto_release_manifest passed"

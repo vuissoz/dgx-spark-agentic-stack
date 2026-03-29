@@ -699,6 +699,13 @@ def ensure_git_include(gitconfig_path: pathlib.Path, include_path: str) -> None:
     os.chmod(gitconfig_path, 0o660)
 
 
+def ensure_gitconfig_value(gitconfig_path: pathlib.Path, key: str, value: str) -> None:
+    gitconfig_path.parent.mkdir(parents=True, exist_ok=True)
+    gitconfig_path.touch(exist_ok=True)
+    run(["git", "config", "--file", str(gitconfig_path), key, value])
+    os.chmod(gitconfig_path, 0o660)
+
+
 def bootstrap_git_home(account: dict[str, object]) -> None:
     host_home = pathlib.Path(str(account["host_home"]))
     container_home = str(account["container_home"])
@@ -740,7 +747,7 @@ while IFS='=' read -r key value; do
 done
 
 case "${{protocol}}:${{host}}" in
-  http:optional-forgejo|http:127.0.0.1)
+  http:optional-forgejo|http:optional-forgejo:*|http:127.0.0.1|http:127.0.0.1:*)
     ;;
   *)
     exit 0
@@ -776,6 +783,10 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
     write_if_changed(include_path, include_content, 0o660)
     write_if_changed(env_path, env_content, 0o660)
     ensure_git_include(gitconfig_path, container_include_path)
+    ensure_gitconfig_value(gitconfig_path, "user.name", display_name)
+    ensure_gitconfig_value(gitconfig_path, "user.email", str(account["email"]))
+    ensure_gitconfig_value(gitconfig_path, "credential.helper", container_helper_path)
+    ensure_gitconfig_value(gitconfig_path, "init.defaultBranch", "main")
 
 
 def write_bootstrap_state() -> None:

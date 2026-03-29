@@ -284,7 +284,11 @@ target_to_services() {
       ;;
     pi-mono) printf '%s\n' "optional-pi-mono" ;;
     goose) printf '%s\n' "optional-goose" ;;
-    forgejo) printf '%s\n' "optional-forgejo" ;;
+    forgejo)
+      printf '%s\n' \
+        "optional-forgejo" \
+        "optional-forgejo-loopback"
+      ;;
     openwebui) printf '%s\n' "openwebui" ;;
     openhands) printf '%s\n' "openhands" ;;
     comfyui)
@@ -4009,17 +4013,24 @@ cmd_sudo_mode() {
 cmd_ensure_release_manifest() {
   local -a selected_targets=("$@")
   local -a compose_files=()
+  local -a current_compose_files=()
+  local -a ordered_compose_files=()
   local -A seen_compose=()
   local target compose_file
   local current_release_dir="${AGENTIC_ROOT}/deployments/current"
   local current_release_images="${current_release_dir}/images.json"
+  local current_release_compose_files="${current_release_dir}/compose.files"
+  local current_release_latest_resolution="${current_release_dir}/latest-resolution.json"
   local release_id
+  local need_snapshot=1
+  local resolution_dir=""
+  local resolution_rc=0
+  local -a snapshot_args=()
+  local idx
 
   if [[ "${AGENTIC_DISABLE_AUTO_SNAPSHOT:-0}" == "1" ]]; then
     return 0
   fi
-
-  [[ ! -s "${current_release_images}" ]] || return 0
 
   if ! docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}' | grep -q .; then
     return 0
@@ -4027,29 +4038,82 @@ cmd_ensure_release_manifest() {
 
   [[ -x "${AGENT_RELEASE_SNAPSHOT_SCRIPT}" ]] || return 0
 
+  mapfile -t ordered_compose_files < <(existing_compose_files)
+
+  if [[ -f "${current_release_compose_files}" ]]; then
+    while IFS= read -r compose_file || [[ -n "${compose_file}" ]]; do
+      [[ -n "${compose_file}" ]] || continue
+      [[ -f "${compose_file}" ]] || continue
+      current_compose_files+=("${compose_file}")
+      seen_compose["${compose_file}"]=1
+    done < "${current_release_compose_files}"
+  fi
+
   if [[ "${#selected_targets[@]}" -gt 0 ]]; then
     for target in "${selected_targets[@]}"; do
       compose_file="$(stack_to_compose_file "${target}")" || continue
       [[ -f "${compose_file}" ]] || continue
-      if [[ -z "${seen_compose[${compose_file}]:-}" ]]; then
+      seen_compose["${compose_file}"]=1
+    done
+  fi
+
+  if [[ "${#seen_compose[@]}" -eq 0 ]]; then
+    compose_files=("${ordered_compose_files[@]}")
+  else
+    for compose_file in "${ordered_compose_files[@]}"; do
+      if [[ -n "${seen_compose[${compose_file}]:-}" ]]; then
         compose_files+=("${compose_file}")
-        seen_compose["${compose_file}"]=1
       fi
     done
   fi
 
-  if [[ "${#compose_files[@]}" -eq 0 ]]; then
-    mapfile -t compose_files < <(existing_compose_files)
+  [[ "${#compose_files[@]}" -gt 0 ]] || return 0
+
+  if [[ -s "${current_release_images}" && -s "${current_release_latest_resolution}" ]]; then
+    if [[ "${#current_compose_files[@]}" -eq "${#compose_files[@]}" ]]; then
+      need_snapshot=0
+      for idx in "${!compose_files[@]}"; do
+        if [[ "${compose_files[${idx}]}" != "${current_compose_files[${idx}]}" ]]; then
+          need_snapshot=1
+          break
+        fi
+      done
+    fi
+  fi
+
+  [[ "${need_snapshot}" -eq 1 ]] || return 0
+
+  resolution_dir="$(mktemp -d)"
+  set +e
+  resolve_update_latest_inputs "${resolution_dir}" "${compose_files[@]}" >/tmp/agent-auto-resolution.out 2>&1
+  resolution_rc=$?
+  set -e
+  if [[ "${resolution_rc}" -eq 0 ]]; then
+    if [[ -f "${resolution_dir}/compose.resolved.override.yml" ]]; then
+      snapshot_args+=(--compose-override "${resolution_dir}/compose.resolved.override.yml")
+    fi
+  else
+    warn "unable to resolve mutable latest inputs for automatic release snapshot"
+    if [[ -s /tmp/agent-auto-resolution.out ]]; then
+      cat /tmp/agent-auto-resolution.out >&2
+    fi
+    rm -rf "${resolution_dir}"
+    resolution_dir=""
   fi
 
   set +e
-  release_id="$("${AGENT_RELEASE_SNAPSHOT_SCRIPT}" --reason up-auto-bootstrap "${compose_files[@]}" 2>/tmp/agent-auto-snapshot.out)"
+  release_id="$("${AGENT_RELEASE_SNAPSHOT_SCRIPT}" --reason up-auto-bootstrap "${snapshot_args[@]}" "${compose_files[@]}" 2>/tmp/agent-auto-snapshot.out)"
   rc=$?
   set -e
 
   if [[ "${rc}" -eq 0 && -n "${release_id}" ]]; then
+    if [[ -n "${resolution_dir}" ]]; then
+      capture_update_resolution_artifacts "${release_id}" "${resolution_dir}"
+      rm -rf "${resolution_dir}"
+    fi
     printf 'auto snapshot created release=%s\n' "${release_id}"
   else
+    [[ -z "${resolution_dir}" ]] || rm -rf "${resolution_dir}"
     warn "unable to create automatic release snapshot after up"
     if [[ -s /tmp/agent-auto-snapshot.out ]]; then
       cat /tmp/agent-auto-snapshot.out >&2

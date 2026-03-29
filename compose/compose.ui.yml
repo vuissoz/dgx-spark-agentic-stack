@@ -29,8 +29,6 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    ports:
-      - 127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}:3000
     environment:
       USER_UID: "1000"
       USER_GID: "1000"
@@ -59,6 +57,65 @@ services:
       start_period: 20s
     networks:
       - agentic
+
+  optional-forgejo-loopback:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    depends_on:
+      optional-forgejo:
+        condition: service_healthy
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_GIT_FORGE_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_GIT_FORGE_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
+        cat >/tmp/nginx.conf <<'NGINX'
+        pid /tmp/nginx.pid;
+        events {}
+        http {
+          client_body_temp_path /tmp/client_temp;
+          proxy_temp_path /tmp/proxy_temp;
+          fastcgi_temp_path /tmp/fastcgi_temp;
+          uwsgi_temp_path /tmp/uwsgi_temp;
+          scgi_temp_path /tmp/scgi_temp;
+          server {
+            listen 3000;
+            location / {
+              proxy_pass http://optional-forgejo:3000;
+              proxy_http_version 1.1;
+              proxy_set_header Host $$http_host;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Host $$http_host;
+              proxy_set_header X-Forwarded-Proto $$scheme;
+              proxy_buffering off;
+            }
+          }
+        }
+        NGINX
+        exec nginx -g 'daemon off;' -c /tmp/nginx.conf
+    ports:
+      - 127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}:3000
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O- http://127.0.0.1:3000/ >/dev/null
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 15s
+    networks:
+      - agentic
+      - agentic-egress
 
   openwebui:
     image: ghcr.io/open-webui/open-webui:latest
