@@ -363,6 +363,7 @@ agent update
 agent rollback all <release_id>
 agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
+agent repo-e2e [--agents <csv>] [--repo <name>] [--clone-url <url>] [--artifacts-dir <path>] [--dry-run]
 agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --default-model ... --grafana-admin-user ... --grafana-admin-password ... --openwebui-allow-model-pull <true|false> --huggingface-token ... --openclaw-init-project ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
 agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
@@ -385,6 +386,7 @@ Examples:
 ./agent sudo-mode on
 ./agent update
 ./agent rollback all <release_id>
+./agent repo-e2e --dry-run
 ./agent test all --skip-d5-tests
 ./agent vm test --name agentic-strict-prod --allow-no-gpu --skip-d5-tests
 ./agent comfyui flux-1-dev --no-egress-check
@@ -590,6 +592,7 @@ Runtime prerequisites for core OpenClaw:
 
 - Global diagnostics: `./agent doctor`
 - Explicit stream tool-call probe (codex, claude, openhands, opencode, openclaw, pi-mono, goose): `./agent doctor --check-tool-stream-e2e`
+- Repository-driven multi-agent E2E orchestrator: `./agent repo-e2e` (reference repo bootstrapped by `git-forge`: `eight-queens-agent-e2e`)
 - Goose verification (context contract + banner aligned with `AGENTIC_GOOSE_CONTEXT_LIMIT`): `./agent test K`
 - Test campaigns: `./agent test <A..L|V|all>`
 - VM `strict-prod` campaign (evidence + update/rollback + tests): `./agent vm test --name agentic-strict-prod`

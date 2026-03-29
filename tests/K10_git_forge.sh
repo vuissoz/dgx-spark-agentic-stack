@@ -60,8 +60,9 @@ admin_password_file="${AGENTIC_ROOT}/secrets/runtime/git-forge/${admin_user}.pas
 admin_password="$(tr -d '\n' <"${admin_password_file}")"
 shared_namespace="${GIT_FORGE_SHARED_NAMESPACE:-agentic}"
 shared_repository="${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}"
+reference_repository="${GIT_FORGE_REFERENCE_REPOSITORY:-eight-queens-agent-e2e}"
 
-python3 - "${git_forge_port}" "${admin_user}" "${admin_password}" "${shared_namespace}" "${shared_repository}" <<'PY' \
+python3 - "${git_forge_port}" "${admin_user}" "${admin_password}" "${shared_namespace}" "${shared_repository}" "${reference_repository}" <<'PY' \
   || fail "git-forge API bootstrap verification failed"
 import base64
 import json
@@ -69,7 +70,7 @@ import sys
 import urllib.error
 import urllib.request
 
-port, username, password, org, repo = sys.argv[1:6]
+port, username, password, org, shared_repo, reference_repo = sys.argv[1:7]
 base = f"http://127.0.0.1:{port}"
 token = base64.b64encode(f"{username}:{password}".encode()).decode()
 headers = {
@@ -95,10 +96,43 @@ def request(path: str):
         return json.loads(response.read().decode("utf-8"))
 
 request(f"/api/v1/orgs/{org}")
-request(f"/api/v1/repos/{org}/{repo}")
+request(f"/api/v1/repos/{org}/{shared_repo}")
+request(f"/api/v1/repos/{org}/{reference_repo}")
 
 for user in users:
     request(f"/api/v1/users/{user}")
+
+protections = request(f"/api/v1/repos/{org}/{reference_repo}/branch_protections")
+assert isinstance(protections, list) and protections
+main_rules = [rule for rule in protections if isinstance(rule, dict) and rule.get("branch_name") == "main"]
+assert main_rules, protections
+rule = main_rules[0]
+assert rule.get("enable_push") is True
+assert username in (rule.get("push_whitelist_usernames") or [])
+PY
+
+python3 - "${bootstrap_state}" "${reference_repository}" <<'PY' \
+  || fail "git-forge bootstrap state must include the reference repo contract"
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert payload.get("reference_repository") == sys.argv[2]
+branch_policy = payload.get("reference_branch_policy") or {}
+branches = set(branch_policy.get("agent_branches") or [])
+expected = {
+    "agent/codex",
+    "agent/openclaw",
+    "agent/claude",
+    "agent/opencode",
+    "agent/openhands",
+    "agent/pi-mono",
+    "agent/goose",
+    "agent/vibestral",
+}
+assert branches == expected
+assert branch_policy.get("protected_branch") == "main"
 PY
 
 for mapping in \
@@ -134,22 +168,34 @@ goose_cid="$(require_service_container optional-goose)" || exit 1
 timeout 90 docker exec "${codex_cid}" sh -lc "
   set -eu
   rm -rf /workspace/git-forge-smoke-codex
-  git clone http://optional-forgejo:3000/${shared_namespace}/${shared_repository}.git /workspace/git-forge-smoke-codex
+  git clone http://optional-forgejo:3000/${shared_namespace}/${reference_repository}.git /workspace/git-forge-smoke-codex
   cd /workspace/git-forge-smoke-codex
+  git checkout -B agent/codex origin/agent/codex
   printf 'codex-smoke\n' > codex-smoke.txt
   git add codex-smoke.txt
   git commit -m 'codex smoke commit'
-  git push origin main
+  git push origin HEAD:agent/codex
 " >/tmp/agent-k10-codex-smoke.out 2>&1 \
-  || fail "codex clone/commit/push smoke failed"
+  || fail "codex clone/commit/push smoke failed on agent/codex"
+
+if timeout 90 docker exec "${codex_cid}" sh -lc "
+  set -eu
+  cd /workspace/git-forge-smoke-codex
+  git push origin HEAD:main
+" >/tmp/agent-k10-codex-main-push.out 2>&1; then
+  fail "codex push to protected main must fail on the reference repository"
+fi
 
 timeout 90 docker exec "${goose_cid}" sh -lc "
   set -eu
   rm -rf /workspace/git-forge-smoke-goose
-  git clone http://optional-forgejo:3000/${shared_namespace}/${shared_repository}.git /workspace/git-forge-smoke-goose
-  test -f /workspace/git-forge-smoke-goose/codex-smoke.txt
+  git clone http://optional-forgejo:3000/${shared_namespace}/${reference_repository}.git /workspace/git-forge-smoke-goose
+  cd /workspace/git-forge-smoke-goose
+  git checkout -B agent/goose origin/agent/goose
+  test -f README.md
+  test -f .agentic/reference-e2e.manifest.json
 " >/tmp/agent-k10-goose-smoke.out 2>&1 \
-  || fail "goose clone/share smoke failed"
+  || fail "goose clone/share smoke failed on the reference repository"
 
 changes_log="${AGENTIC_ROOT}/deployments/changes.log"
 [[ -s "${changes_log}" ]] || fail "changes log missing: ${changes_log}"

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "kind": "agentic.reference-repo",
+  "id": "eight-queens-agent-e2e",
+  "problem": "classic-8-queens",
+  "entrypoint": "src/eight_queens.py",
+  "test_command": "python3 -m pytest -q",
+  "verification": {
+    "type": "pytest",
+    "expected_exit_code": 0
+  },
+  "branch_policy": {
+    "protected_branch": "main",
+    "agent_branch_prefix": "agent/"
+  }
+}

@@ -6,8 +6,10 @@ import json
 import os
 import pathlib
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 
@@ -15,6 +17,7 @@ import urllib.parse
 SERVICE_NAME = "optional-forgejo"
 SHARED_TEAM = "agents"
 SHARED_REPOSITORY = os.environ.get("GIT_FORGE_SHARED_REPOSITORY", "shared-workbench")
+REFERENCE_REPOSITORY = os.environ.get("GIT_FORGE_REFERENCE_REPOSITORY", "eight-queens-agent-e2e")
 AGENTIC_ROOT = os.environ.get("AGENTIC_ROOT", "/srv/agentic")
 AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "agentic")
 GIT_FORGE_HOST_PORT = os.environ.get("GIT_FORGE_HOST_PORT", "13010")
@@ -24,6 +27,8 @@ HOST_BASE_URL = f"http://127.0.0.1:{GIT_FORGE_HOST_PORT}"
 INTERNAL_BASE_URL = "http://optional-forgejo:3000"
 SECRETS_ROOT = pathlib.Path(AGENTIC_ROOT) / "secrets" / "runtime" / "git-forge"
 BOOTSTRAP_DIR = pathlib.Path(AGENTIC_ROOT) / "optional" / "git" / "bootstrap"
+REFERENCE_TEMPLATE_DIR = pathlib.Path(__file__).resolve().parents[2] / "examples" / "optional" / REFERENCE_REPOSITORY
+REFERENCE_MANIFEST_PATH = ".agentic/reference-e2e.manifest.json"
 
 MANAGED_ACCOUNTS = (
     {
@@ -102,14 +107,28 @@ TEAM_UNITS = [
     "repo.wiki",
 ]
 
+REFERENCE_AGENT_BRANCHES = tuple(
+    f"agent/{name}"
+    for name in ("codex", "openclaw", "claude", "opencode", "openhands", "pi-mono", "goose", "vibestral")
+)
 
-def run(cmd: list[str], *, input_text: str | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
+
+def run(
+    cmd: list[str],
+    *,
+    input_text: str | None = None,
+    check: bool = True,
+    cwd: pathlib.Path | None = None,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
         input=input_text,
         text=True,
         capture_output=True,
         check=check,
+        cwd=str(cwd) if cwd is not None else None,
+        env=env,
     )
 
 
@@ -120,6 +139,27 @@ def fail(message: str) -> None:
 
 def info(message: str) -> None:
     print(f"INFO: {message}")
+
+
+def repo_clone_url(base_url: str, repository: str) -> str:
+    return f"{base_url}/{GIT_FORGE_SHARED_NAMESPACE}/{repository}.git"
+
+
+def repo_api_path(repository: str) -> str:
+    return f"/api/v1/repos/{urllib.parse.quote(GIT_FORGE_SHARED_NAMESPACE)}/{urllib.parse.quote(repository)}"
+
+
+def repo_exists(repository: str, admin_user: str, admin_password: str) -> bool:
+    existing = api_request(
+        container_id,
+        "GET",
+        repo_api_path(repository),
+        username=admin_user,
+        password=admin_password,
+        expected=(200,),
+        allow_not_found=True,
+    )
+    return existing is not None
 
 
 def service_container_id(service_name: str) -> str:
@@ -316,6 +356,25 @@ def ensure_team(admin_user: str, admin_password: str) -> int:
     assert isinstance(result, dict)
     for entry in result.get("data", []):
         if isinstance(entry, dict) and entry.get("name") == SHARED_TEAM and isinstance(entry.get("id"), int):
+            permission = str(entry.get("permission", "")).strip().lower()
+            if permission != "write":
+                api_request(
+                    container_id,
+                    "PATCH",
+                    f"/api/v1/teams/{entry['id']}",
+                    username=admin_user,
+                    password=admin_password,
+                    payload={
+                        "name": SHARED_TEAM,
+                        "description": "Stack-managed team for agent collaboration",
+                        "permission": "write",
+                        "can_create_org_repo": True,
+                        "includes_all_repositories": True,
+                        "units": TEAM_UNITS,
+                    },
+                    expected=(200, 201),
+                )
+                info(f"updated forge team '{SHARED_TEAM}' permission to write")
             return int(entry["id"])
 
     result = api_request(
@@ -327,7 +386,7 @@ def ensure_team(admin_user: str, admin_password: str) -> int:
         payload={
             "name": SHARED_TEAM,
             "description": "Stack-managed team for agent collaboration",
-            "permission": "admin",
+            "permission": "write",
             "can_create_org_repo": True,
             "includes_all_repositories": True,
             "units": TEAM_UNITS,
@@ -362,17 +421,8 @@ def ensure_team_member(team_id: int, username: str, admin_user: str, admin_passw
     )
 
 
-def ensure_shared_repo(admin_user: str, admin_password: str) -> None:
-    existing = api_request(
-        container_id,
-        "GET",
-        f"/api/v1/repos/{urllib.parse.quote(GIT_FORGE_SHARED_NAMESPACE)}/{urllib.parse.quote(SHARED_REPOSITORY)}",
-        username=admin_user,
-        password=admin_password,
-        expected=(200,),
-        allow_not_found=True,
-    )
-    if existing is not None:
+def ensure_repository(repository: str, description: str, admin_user: str, admin_password: str) -> None:
+    if repo_exists(repository, admin_user, admin_password):
         return
 
     api_request(
@@ -382,8 +432,8 @@ def ensure_shared_repo(admin_user: str, admin_password: str) -> None:
         username=admin_user,
         password=admin_password,
         payload={
-            "name": SHARED_REPOSITORY,
-            "description": "Shared repository for stack-managed collaboration checks",
+            "name": repository,
+            "description": description,
             "private": True,
             "auto_init": True,
             "default_branch": "main",
@@ -391,7 +441,186 @@ def ensure_shared_repo(admin_user: str, admin_password: str) -> None:
         },
         expected=(201,),
     )
-    info(f"created shared forge repository '{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}'")
+    info(f"created forge repository '{GIT_FORGE_SHARED_NAMESPACE}/{repository}'")
+
+
+def ensure_shared_repo(admin_user: str, admin_password: str) -> None:
+    ensure_repository(
+        SHARED_REPOSITORY,
+        "Shared repository for stack-managed collaboration checks",
+        admin_user,
+        admin_password,
+    )
+
+
+def git_with_askpass(
+    args: list[str],
+    *,
+    username: str,
+    password: str,
+    cwd: pathlib.Path | None = None,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory(prefix="git-forge-bootstrap-") as temp_dir:
+        temp_path = pathlib.Path(temp_dir)
+        askpass_path = temp_path / "askpass.sh"
+        askpass_path.write_text("#!/bin/sh\nprintf '%s\\n' \"$GIT_FORGE_PASSWORD\"\n", encoding="utf-8")
+        os.chmod(askpass_path, 0o700)
+        env = os.environ.copy()
+        env.update(
+            {
+                "GIT_ASKPASS": str(askpass_path),
+                "GIT_TERMINAL_PROMPT": "0",
+                "GIT_USERNAME": username,
+                "GIT_FORGE_PASSWORD": password,
+            }
+        )
+        return run(["git", *args], cwd=cwd, env=env, check=check)
+
+
+def sync_reference_template(target_dir: pathlib.Path) -> None:
+    if not REFERENCE_TEMPLATE_DIR.is_dir():
+        fail(f"reference repository template is missing: {REFERENCE_TEMPLATE_DIR}")
+
+    for entry in target_dir.iterdir():
+        if entry.name == ".git":
+            continue
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+    for source in REFERENCE_TEMPLATE_DIR.rglob("*"):
+        relative = source.relative_to(REFERENCE_TEMPLATE_DIR)
+        destination = target_dir / relative
+        if source.is_dir():
+            destination.mkdir(parents=True, exist_ok=True)
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+
+def repo_is_managed_reference(target_dir: pathlib.Path) -> bool:
+    return (target_dir / REFERENCE_MANIFEST_PATH).is_file()
+
+
+def repo_is_seedable_default(target_dir: pathlib.Path) -> bool:
+    proc = run(["git", "ls-files"], cwd=target_dir)
+    tracked = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    return tracked in ([], ["README.md"])
+
+
+def ensure_remote_branch_exists(
+    repository_dir: pathlib.Path,
+    branch_name: str,
+    *,
+    username: str,
+    password: str,
+) -> None:
+    proc = git_with_askpass(
+        ["ls-remote", "--heads", "origin", branch_name],
+        username=username,
+        password=password,
+        cwd=repository_dir,
+    )
+    if proc.stdout.strip():
+        return
+
+    git_with_askpass(["branch", "-f", branch_name, "main"], username=username, password=password, cwd=repository_dir)
+    git_with_askpass(
+        ["push", "origin", f"{branch_name}:refs/heads/{branch_name}"],
+        username=username,
+        password=password,
+        cwd=repository_dir,
+    )
+    info(f"created reference branch '{branch_name}'")
+
+
+def ensure_main_branch_protection(admin_user: str, admin_password: str) -> None:
+    branch_path = (
+        f"{repo_api_path(REFERENCE_REPOSITORY)}/branch_protections/"
+        f"{urllib.parse.quote('main', safe='')}"
+    )
+    payload = {
+        "branch_name": "main",
+        "enable_push": True,
+        "enable_push_whitelist": True,
+        "push_whitelist_usernames": [GIT_FORGE_ADMIN_USER],
+        "enable_merge_whitelist": False,
+        "enable_status_check": False,
+        "enable_approvals_whitelist": False,
+        "required_approvals": 0,
+    }
+    existing = api_request(
+        container_id,
+        "GET",
+        branch_path,
+        username=admin_user,
+        password=admin_password,
+        expected=(200,),
+        allow_not_found=True,
+    )
+    if existing is None:
+        api_request(
+            container_id,
+            "POST",
+            f"{repo_api_path(REFERENCE_REPOSITORY)}/branch_protections",
+            username=admin_user,
+            password=admin_password,
+            payload=payload,
+            expected=(201,),
+        )
+        info("enabled main branch protection for reference repo")
+        return
+
+    api_request(
+        container_id,
+        "PATCH",
+        branch_path,
+        username=admin_user,
+        password=admin_password,
+        payload=payload,
+        expected=(200, 201),
+    )
+
+
+def seed_reference_repo(admin_user: str, admin_password: str) -> None:
+    ensure_repository(
+        REFERENCE_REPOSITORY,
+        "Stack-managed repository for the repository-driven multi-agent E2E scenario",
+        admin_user,
+        admin_password,
+    )
+
+    with tempfile.TemporaryDirectory(prefix="agentic-reference-repo-") as temp_dir:
+        repo_dir = pathlib.Path(temp_dir) / REFERENCE_REPOSITORY
+        git_with_askpass(
+            ["clone", repo_clone_url(HOST_BASE_URL, REFERENCE_REPOSITORY), str(repo_dir)],
+            username=admin_user,
+            password=admin_password,
+        )
+        run(["git", "config", "user.name", "System Manager"], cwd=repo_dir)
+        run(["git", "config", "user.email", f"{GIT_FORGE_ADMIN_USER}@forge.agentic.local"], cwd=repo_dir)
+
+        if repo_is_managed_reference(repo_dir) or repo_is_seedable_default(repo_dir):
+            sync_reference_template(repo_dir)
+            run(["git", "add", "-A"], cwd=repo_dir)
+            status = run(["git", "status", "--porcelain"], cwd=repo_dir)
+            if status.stdout.strip():
+                run(["git", "commit", "-m", "Bootstrap reference eight queens E2E repository"], cwd=repo_dir)
+                git_with_askpass(["push", "origin", "main"], username=admin_user, password=admin_password, cwd=repo_dir)
+                info(f"seeded managed reference repository '{REFERENCE_REPOSITORY}'")
+        else:
+            info(
+                "reference repository already contains non-managed content; "
+                "leaving main branch untouched"
+            )
+
+        git_with_askpass(["fetch", "origin"], username=admin_user, password=admin_password, cwd=repo_dir)
+        for branch_name in REFERENCE_AGENT_BRANCHES:
+            ensure_remote_branch_exists(repo_dir, branch_name, username=admin_user, password=admin_password)
+
+    ensure_main_branch_protection(admin_user, admin_password)
 
 
 def write_if_changed(path: pathlib.Path, content: str, mode: int) -> None:
@@ -429,8 +658,10 @@ def bootstrap_git_home(account: dict[str, object]) -> None:
     include_path = config_dir / "git-forge.gitconfig"
     env_path = config_dir / "git-forge.env"
     gitconfig_path = host_home / ".gitconfig"
-    clone_url_internal = f"{INTERNAL_BASE_URL}/{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}.git"
-    clone_url_host = f"{HOST_BASE_URL}/{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}.git"
+    clone_url_internal = repo_clone_url(INTERNAL_BASE_URL, SHARED_REPOSITORY)
+    clone_url_host = repo_clone_url(HOST_BASE_URL, SHARED_REPOSITORY)
+    reference_clone_url_internal = repo_clone_url(INTERNAL_BASE_URL, REFERENCE_REPOSITORY)
+    reference_clone_url_host = repo_clone_url(HOST_BASE_URL, REFERENCE_REPOSITORY)
     container_helper_path = f"{container_home}/.config/agentic/git-forge-credential.sh"
     container_include_path = f"{container_home}/.config/agentic/git-forge.gitconfig"
 
@@ -483,6 +714,10 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
         f"export AGENTIC_GIT_FORGE_SHARED_REPOSITORY='{SHARED_REPOSITORY}'\n"
         f"export AGENTIC_GIT_FORGE_SHARED_CLONE_URL='{clone_url_internal}'\n"
         f"export AGENTIC_GIT_FORGE_HOST_CLONE_URL='{clone_url_host}'\n"
+        f"export AGENTIC_GIT_FORGE_REFERENCE_REPOSITORY='{REFERENCE_REPOSITORY}'\n"
+        f"export AGENTIC_GIT_FORGE_REFERENCE_CLONE_URL='{reference_clone_url_internal}'\n"
+        f"export AGENTIC_GIT_FORGE_REFERENCE_HOST_CLONE_URL='{reference_clone_url_host}'\n"
+        f"export AGENTIC_GIT_FORGE_REFERENCE_BRANCH='agent/{username}'\n"
     )
 
     write_if_changed(helper_path, helper_content, 0o750)
@@ -501,8 +736,16 @@ def write_bootstrap_state() -> None:
         "shared_namespace": GIT_FORGE_SHARED_NAMESPACE,
         "shared_team": SHARED_TEAM,
         "shared_repository": SHARED_REPOSITORY,
-        "shared_clone_url_host": f"{HOST_BASE_URL}/{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}.git",
-        "shared_clone_url_internal": f"{INTERNAL_BASE_URL}/{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}.git",
+        "shared_clone_url_host": repo_clone_url(HOST_BASE_URL, SHARED_REPOSITORY),
+        "shared_clone_url_internal": repo_clone_url(INTERNAL_BASE_URL, SHARED_REPOSITORY),
+        "reference_repository": REFERENCE_REPOSITORY,
+        "reference_clone_url_host": repo_clone_url(HOST_BASE_URL, REFERENCE_REPOSITORY),
+        "reference_clone_url_internal": repo_clone_url(INTERNAL_BASE_URL, REFERENCE_REPOSITORY),
+        "reference_branch_policy": {
+            "protected_branch": "main",
+            "main_push_allowlist_users": [GIT_FORGE_ADMIN_USER],
+            "agent_branches": list(REFERENCE_AGENT_BRANCHES),
+        },
         "managed_users": [account["username"] for account in MANAGED_ACCOUNTS],
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -540,6 +783,7 @@ def main() -> None:
         ensure_team_member(team_id, str(account["username"]), GIT_FORGE_ADMIN_USER, admin_password)
         bootstrap_git_home(account)
     ensure_shared_repo(GIT_FORGE_ADMIN_USER, admin_password)
+    seed_reference_repo(GIT_FORGE_ADMIN_USER, admin_password)
     write_bootstrap_state()
     info("git-forge bootstrap finished")
 

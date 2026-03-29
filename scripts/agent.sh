@@ -26,6 +26,7 @@ AGENT_OPENCLAW_OPERATOR_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/opencl
 AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_module_manifest.py"
 AGENT_OPENCLAW_MANAGED_INIT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_managed_init.py"
 AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/git_forge_bootstrap.py"
+AGENT_REPO_E2E_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/agent_repo_e2e.py"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
@@ -83,6 +84,7 @@ Usage:
   agent rollback all <release_id>
   agent rollback host-net <backup_id>
   agent rollback ollama-link <backup_id|latest>
+  agent repo-e2e [--agents <csv>] [--repo <name>] [--clone-url <url>] [--artifacts-dir <path>] [--dry-run]
   agent prereqs
   agent onboard [runtime flags...] [--compose-profiles ... --default-model ... --default-model-context-window ... --trtllm-models ... --grafana-admin-user ... --grafana-admin-password ... --obs-retention-time ... --obs-max-disk ... --openwebui-admin-email ... --openwebui-admin-password ... --openhands-llm-model ... --allowlist-domains ... --huggingface-token ... --openclaw-init-project ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --optional-modules ... --output ... --non-interactive --require-complete]
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
@@ -4420,6 +4422,11 @@ case "$cmd" in
   rollback)
     [[ $# -ge 3 ]] || die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id> | agent rollback ollama-link <backup_id|latest>"
     cmd_rollback "$2" "$3"
+    ;;
+  repo-e2e)
+    shift
+    [[ -x "${AGENT_REPO_E2E_SCRIPT}" ]] || die "repo e2e script missing or not executable: ${AGENT_REPO_E2E_SCRIPT}"
+    exec python3 "${AGENT_REPO_E2E_SCRIPT}" "$@"
     ;;
   onboard)
     shift

@@ -2335,6 +2335,35 @@ if [[ -n "${optional_forgejo_cid}" ]]; then
   if [[ ! -s "${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json" ]]; then
     doctor_fail "git-forge bootstrap state file is missing: ${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json"
   fi
+  if ! python3 - "${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+reference_repo = str(payload.get("reference_repository", "")).strip()
+branch_policy = payload.get("reference_branch_policy") or {}
+branches = branch_policy.get("agent_branches") or []
+
+expected = {
+    "agent/codex",
+    "agent/openclaw",
+    "agent/claude",
+    "agent/opencode",
+    "agent/openhands",
+    "agent/pi-mono",
+    "agent/goose",
+    "agent/vibestral",
+}
+
+assert reference_repo == "eight-queens-agent-e2e"
+assert branch_policy.get("protected_branch") == "main"
+assert set(branches) == expected
+assert "system-manager" in (branch_policy.get("main_push_allowlist_users") or [])
+PY
+  then
+    doctor_fail "git-forge bootstrap state must describe the protected reference repository and agent branches"
+  fi
   forgejo_status="$(curl -sS -o /tmp/doctor-forgejo.out -w '%{http_code}' "http://127.0.0.1:${git_forge_host_port}/" 2>/dev/null || true)"
   if [[ ! "${forgejo_status}" =~ ^(200|302|401|403)$ ]]; then
     doctor_fail "optional-forgejo endpoint is unreachable on loopback (http_status=${forgejo_status:-none})"

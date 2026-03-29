@@ -101,7 +101,9 @@ The implemented bootstrap flow is:
 5. Materialize per-account passwords outside git.
 6. Create one shared organization or namespace for stack-managed projects.
 7. Create an initial shared repository and team-scoped access.
-8. Record the resulting forge version and image digest in the release artifact.
+8. Create and seed the managed reference repository `eight-queens-agent-e2e`.
+9. Protect `main`, reserve `agent/<tool>` branches, and record the resulting
+   forge metadata in bootstrap/release artifacts.
 
 The bootstrap must be idempotent. Re-running `agent update` must converge the state instead of creating duplicate users or repositories.
 
@@ -121,6 +123,64 @@ The operator flow for a shared project is:
 5. Shared work happens through normal branches and remotes, not by bind-mounting another agent's workspace.
 
 This keeps project exchange auditable and closer to real developer workflows.
+
+## Reference E2E Repository
+
+When the git-forge module is enabled, bootstrap now also reconciles one
+stack-managed reference repository:
+
+- name: `eight-queens-agent-e2e`
+- namespace: `${GIT_FORGE_SHARED_NAMESPACE}`
+- contract:
+  - problem statement lives in the repository itself,
+  - Python target implementation under `src/`,
+  - verification through `python3 -m pytest -q`,
+  - branch policy stored in `.agentic/reference-e2e.manifest.json`
+
+Managed branch rules:
+
+- `main` is protected and only `system-manager` stays on the push allowlist,
+- the following branches are prepared for agent runs:
+  - `agent/codex`
+  - `agent/openclaw`
+  - `agent/claude`
+  - `agent/opencode`
+  - `agent/openhands`
+  - `agent/pi-mono`
+  - `agent/goose`
+  - `agent/vibestral`
+
+Each managed agent home now also receives:
+
+- `AGENTIC_GIT_FORGE_REFERENCE_REPOSITORY`
+- `AGENTIC_GIT_FORGE_REFERENCE_CLONE_URL`
+- `AGENTIC_GIT_FORGE_REFERENCE_HOST_CLONE_URL`
+- `AGENTIC_GIT_FORGE_REFERENCE_BRANCH`
+
+## Repository-driven E2E Runner
+
+The non-interactive orchestrator is:
+
+- `./agent repo-e2e`
+
+Typical invocations:
+
+```bash
+# plan only
+AGENTIC_PROFILE=rootless-dev ./agent repo-e2e --dry-run
+
+# real run with full artefacts
+AGENTIC_PROFILE=rootless-dev ./agent repo-e2e \
+  --artifacts-dir "${AGENTIC_ROOT}/deployments/validation/agent-repo-e2e/manual-$(date -u +%Y%m%dT%H%M%SZ)"
+```
+
+The runner stores:
+
+- one artefact directory per agent,
+- stdout/stderr of prepare/invoke/verify steps,
+- git status and diff after the run,
+- `summary.json` with a unified per-agent result schema,
+- `doctor.json` with consolidated failure classes.
 
 ## Rotation and Revocation
 
