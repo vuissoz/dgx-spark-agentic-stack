@@ -98,6 +98,7 @@ sudo ./agent test all
 
 Notes:
 - `core` in this profile also brings up the internal control services `gate-mcp` and the OpenClaw set (`openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`).
+- if `AGENTIC_OPTIONAL_MODULES` includes `git-forge`, the baseline `agent up agents,ui,obs,rag` command also converges `optional-forgejo` before `doctor`.
 - `./agent test all` stops on first failure. For staged diagnosis, run `sudo ./agent test A` ... `sudo ./agent test V`.
 - if you need one-command restart after initial bootstrap, use `sudo -E ./agent first-up`.
 
@@ -120,6 +121,7 @@ export AGENTIC_EGRESS_NETWORK=agentic-dev-egress
 ```
 
 Notes:
+- if `AGENTIC_OPTIONAL_MODULES` includes `git-forge`, the baseline `agent up agents,ui,obs,rag` command also converges `optional-forgejo` before `doctor`.
 - `./agent test all` stops on first failure. For progressive diagnosis, run `./agent test A` ... `./agent test L`.
 - In `rootless-dev`, some host-root checks are intentionally skipped/degraded (expected behavior).
 - Optional module tests (`K*`) require a green baseline doctor and module prerequisites (request files/secrets).

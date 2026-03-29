@@ -102,6 +102,9 @@ Each request file must include non-empty:
   - `GIT_FORGE_ADMIN_USER`
   - `GIT_FORGE_SHARED_NAMESPACE`
   - `GIT_FORGE_ENABLE_PUSH_CREATE`
+- Activation path:
+  - enable `git-forge` in `AGENTIC_OPTIONAL_MODULES`, then run `./agent up agents,ui,obs,rag` or `./agent first-up`
+  - do not wait for a separate `./agent up optional`; doctor expects Forgejo bootstrap to exist before optional gating
 - Agent bootstrap behavior:
   - preconfigure each agent container with its own forge identity and auth helper so first `git clone`/checkout works without manual credential entry
 - Documentation: `docs/runbooks/git-forge-management.md`
@@ -118,6 +121,7 @@ What happens during activation:
 - `agent` resolves requested module names to compose profiles,
 - validates request files and required secrets,
 - launches only selected optional services,
+- exception: when `git-forge` is enabled, `optional-forgejo` is launched during the baseline `agents,ui,obs,rag` convergence so `doctor` sees a complete Git bootstrap,
 - appends an activation audit line in `${AGENTIC_ROOT}/deployments/changes.log`.
 
 ## Validation

@@ -21,6 +21,8 @@ This repository is built for people who want serious agent infrastructure on a s
 
 ## Fast Start
 
+If `AGENTIC_OPTIONAL_MODULES` includes `git-forge`, the Forgejo service is now converged during `./agent up agents,ui,obs,rag` and `./agent first-up`, before `./agent doctor`.
+
 `rootless-dev`:
 
 ```bash

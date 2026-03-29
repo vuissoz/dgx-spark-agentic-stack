@@ -25,7 +25,7 @@ AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openc
 AGENT_OPENCLAW_OPERATOR_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_operator.py"
 AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_module_manifest.py"
 AGENT_OPENCLAW_MANAGED_INIT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_managed_init.py"
-AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/git_forge_bootstrap.py"
+AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT="${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT:-${AGENTIC_REPO_ROOT}/deployments/optional/git_forge_bootstrap.py}"
 AGENT_REPO_E2E_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/agent_repo_e2e.py"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
@@ -468,6 +468,18 @@ parse_optional_modules() {
   done
 
   printf '%s\n' "${parsed[@]}"
+}
+
+baseline_optional_modules() {
+  local module
+  local -a enabled_modules=()
+
+  mapfile -t enabled_modules < <(parse_optional_modules)
+  for module in "${enabled_modules[@]}"; do
+    case "${module}" in
+      git-forge) printf '%s\n' "${module}" ;;
+    esac
+  done
 }
 
 validate_optional_request_file() {
@@ -1476,6 +1488,55 @@ ensure_rag_runtime() {
 ensure_optional_runtime() {
   if ! "${AGENTIC_REPO_ROOT}/deployments/optional/init_runtime.sh"; then
     die "failed to initialize optional runtime in ${AGENTIC_ROOT}; re-run with sudo or set AGENTIC_ROOT to a writable path"
+  fi
+}
+
+run_git_forge_bootstrap() {
+  [[ -x "${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}" ]] || die "git-forge bootstrap script missing or not executable: ${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}"
+  if ! "${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}"; then
+    die "git-forge bootstrap failed; inspect optional-forgejo logs and runtime secrets under ${AGENTIC_ROOT}/secrets/runtime/git-forge"
+  fi
+}
+
+up_enabled_baseline_optional_modules() {
+  local -a selected_targets=("$@")
+  local -a enabled_modules=()
+  local -a optional_profiles=()
+  local optional_compose_file
+  local module
+  local baseline_requested=0
+
+  for module in "${selected_targets[@]}"; do
+    case "${module}" in
+      agents|ui|obs|rag)
+        baseline_requested=1
+        break
+        ;;
+    esac
+  done
+
+  [[ "${baseline_requested}" -eq 1 ]] || return 0
+
+  mapfile -t enabled_modules < <(baseline_optional_modules)
+  [[ "${#enabled_modules[@]}" -gt 0 ]] || return 0
+
+  ensure_optional_runtime
+  optional_compose_file="$(stack_to_compose_file optional)"
+
+  for module in "${enabled_modules[@]}"; do
+    validate_optional_module_prereqs "${module}"
+    optional_profiles+=(--profile "$(optional_module_profile "${module}")")
+  done
+
+  build_optional_module_images "${optional_compose_file}" "${enabled_modules[@]}"
+
+  require_cmd docker
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+    "${optional_profiles[@]}" \
+    -f "${optional_compose_file}" up -d
+
+  if targets_include "git-forge" "${enabled_modules[@]}"; then
+    run_git_forge_bootstrap
   fi
 }
 
@@ -4256,19 +4317,31 @@ case "$cmd" in
         -f "${optional_compose_file}" up -d
 
       if targets_include "git-forge" "${optional_modules[@]}"; then
-        [[ -x "${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}" ]] || die "git-forge bootstrap script missing or not executable: ${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}"
-        if ! "${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}"; then
-          die "git-forge bootstrap failed; inspect optional-forgejo logs and runtime secrets under ${AGENTIC_ROOT}/secrets/runtime/git-forge"
-        fi
+        run_git_forge_bootstrap
       fi
     else
       run_compose_on_targets up "$target_arg" -d
+      up_enabled_baseline_optional_modules "${targets[@]}"
+    fi
+
+    release_manifest_targets=("${targets[@]}")
+    if [[ "${#targets[@]}" -gt 0 ]] && mapfile -t baseline_modules_for_release < <(baseline_optional_modules) && [[ "${#baseline_modules_for_release[@]}" -gt 0 ]]; then
+      if ! targets_include optional "${release_manifest_targets[@]}"; then
+        for release_target in "${targets[@]}"; do
+          case "${release_target}" in
+            agents|ui|obs|rag)
+              release_manifest_targets+=(optional)
+              break
+              ;;
+          esac
+        done
+      fi
     fi
 
     if targets_include "core" "${targets[@]}"; then
       apply_core_network_policy
     fi
-    cmd_ensure_release_manifest "${targets[@]}"
+    cmd_ensure_release_manifest "${release_manifest_targets[@]}"
     ;;
   down)
     [[ $# -ge 2 ]] || die "Usage: agent down <core|agents|ui|obs|rag|optional>"
