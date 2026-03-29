@@ -174,6 +174,24 @@ service_git_forge_account() {
   esac
 }
 
+optional_module_enabled() {
+  local needle="$1"
+  local raw="${AGENTIC_OPTIONAL_MODULES:-}"
+  local module
+
+  [[ -n "${raw}" ]] || return 1
+  raw="${raw//,/ }"
+
+  for module in ${raw}; do
+    [[ -n "${module}" ]] || continue
+    if [[ "${module}" == "${needle}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 assert_agent_sudo_mode_hardening() {
   local cid="$1"
   local inspect_out readonly cap_drop security_opt
@@ -1182,6 +1200,23 @@ mapfile -t running_services < <(
     --format '{{.ID}}|{{.Label "com.docker.compose.service"}}' | sort -t'|' -k2,2
 )
 
+git_forge_enabled=0
+git_forge_ready=1
+git_forge_bootstrap_state_file="${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json"
+optional_forgejo_cid=""
+if optional_module_enabled "git-forge"; then
+  git_forge_enabled=1
+  optional_forgejo_cid="$(service_container_id optional-forgejo)"
+  if [[ -z "${optional_forgejo_cid}" ]]; then
+    doctor_fail "git-forge is enabled but optional-forgejo is not running; re-run 'agent up agents,ui,obs,rag' or 'AGENTIC_OPTIONAL_MODULES=git-forge agent up optional'"
+    git_forge_ready=0
+  fi
+  if [[ ! -s "${git_forge_bootstrap_state_file}" ]]; then
+    doctor_fail "git-forge bootstrap state file is missing: ${git_forge_bootstrap_state_file}"
+    git_forge_ready=0
+  fi
+fi
+
 for row in "${running_services[@]}"; do
   cid="${row%%|*}"
   service="${row#*|}"
@@ -1516,6 +1551,12 @@ PY
 
   git_forge_account="$(service_git_forge_account "${service}" 2>/dev/null || true)"
   if [[ -n "${git_forge_account}" ]]; then
+    if [[ "${git_forge_enabled}" -ne 1 ]]; then
+      continue
+    fi
+    if [[ "${git_forge_ready}" -ne 1 ]]; then
+      continue
+    fi
     env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
     if ! printf '%s\n' "${env_dump}" | grep -q '^AGENTIC_GIT_FORGE_BASE_URL=http://optional-forgejo:3000$'; then
       doctor_fail "${service} must set AGENTIC_GIT_FORGE_BASE_URL=http://optional-forgejo:3000"
@@ -1531,16 +1572,19 @@ PY
     if ! timeout 20 docker exec "${cid}" sh -lc 'command -v git >/dev/null'; then
       doctor_fail "${service} must provide git for first-checkout bootstrap"
     fi
-    if ! timeout 20 docker exec "${cid}" sh -lc 'test -r /run/secrets/git-forge.password'; then
-      doctor_fail "${service} git forge password secret is not readable"
+    if ! timeout 20 docker exec "${cid}" sh -lc 'test -f /run/secrets/git-forge.password && test -r /run/secrets/git-forge.password'; then
+      doctor_fail "${service} git forge password secret must be a readable regular file"
     fi
-    if ! timeout 20 docker exec "${cid}" sh -lc 'git config --global user.name >/dev/null && git config --global user.email >/dev/null'; then
+    if ! timeout 20 docker exec "${cid}" sh -lc 'test -n "$(git config user.name 2>/dev/null)" && test -n "$(git config user.email 2>/dev/null)"'; then
       doctor_fail "${service} git identity bootstrap is missing"
     fi
-    if ! timeout 20 docker exec "${cid}" sh -lc 'git config --global credential.helper | grep -q git-forge-credential.sh'; then
+    if ! timeout 20 docker exec "${cid}" sh -lc 'test "$(git config user.email 2>/dev/null)" = "'"${git_forge_account}"'@forge.agentic.local"'; then
+      doctor_fail "${service} git user.email bootstrap is incorrect (expected ${git_forge_account}@forge.agentic.local)"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc 'helper="$(git config credential.helper 2>/dev/null || true)"; test -n "${helper}" && printf "%s\n" "${helper}" | grep -q git-forge-credential.sh'; then
       doctor_fail "${service} git credential helper bootstrap is missing"
     fi
-    if optional_forgejo_cid="$(service_container_id optional-forgejo)" && [[ -n "${optional_forgejo_cid}" ]]; then
+    if [[ -n "${optional_forgejo_cid}" ]]; then
       if ! timeout 25 docker exec "${cid}" sh -lc "GIT_TERMINAL_PROMPT=0 git ls-remote http://optional-forgejo:3000/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
         doctor_fail "${service} cannot access the shared git-forge repository without prompts"
       fi
@@ -2321,7 +2365,9 @@ PY
   fi
 fi
 
-optional_forgejo_cid="$(service_container_id optional-forgejo)"
+if [[ -z "${optional_forgejo_cid}" ]]; then
+  optional_forgejo_cid="$(service_container_id optional-forgejo)"
+fi
 if [[ -n "${optional_forgejo_cid}" ]]; then
   if ! assert_no_public_bind "${git_forge_host_port}"; then
     doctor_fail "optional forgejo host bind must stay loopback-only on port ${git_forge_host_port}"
@@ -2332,10 +2378,10 @@ if [[ -n "${optional_forgejo_cid}" ]]; then
   if ! mount_destination_present "${optional_forgejo_cid}" "/var/lib/gitea/custom/conf"; then
     doctor_fail "optional-forgejo must mount /var/lib/gitea/custom/conf for persistent config"
   fi
-  if [[ ! -s "${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json" ]]; then
-    doctor_fail "git-forge bootstrap state file is missing: ${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json"
+  if [[ ! -s "${git_forge_bootstrap_state_file}" ]]; then
+    doctor_fail "git-forge bootstrap state file is missing: ${git_forge_bootstrap_state_file}"
   fi
-  if ! python3 - "${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json" <<'PY' >/dev/null 2>&1
+  if ! python3 - "${git_forge_bootstrap_state_file}" <<'PY' >/dev/null 2>&1
 import json
 import pathlib
 import sys
