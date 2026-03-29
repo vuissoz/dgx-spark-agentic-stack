@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import atexit
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -903,6 +904,7 @@ def openai_to_ollama_payload(requested_model: str, payload: dict) -> dict:
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "trtllm-adapter/0.2"
+    protocol_version = "HTTP/1.1"
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
@@ -931,6 +933,284 @@ class Handler(BaseHTTPRequestHandler):
 
     def _native_unavailable(self) -> None:
         self._send_json(CONTROLLER.request_status_code(), CONTROLLER.health_payload())
+
+    def _send_stream_headers(self, status: int, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+
+    def _stream_bytes(self, chunks: list[bytes] | tuple[bytes, ...]) -> None:
+        for chunk in chunks:
+            if not chunk:
+                continue
+            self.wfile.write(chunk)
+            self.wfile.flush()
+
+    def _stream_openai_mock_chat_completion(self, model: str, payload: dict) -> None:
+        body_chunks = [b'data: {"choices":[{"delta":{"role":"assistant"},"index":0,"finish_reason":null}],"created":0,"id":"chatcmpl-mock","model":"']
+        body_chunks.append(model.encode("utf-8"))
+        body_chunks.append(b'","object":"chat.completion.chunk"}\n\n')
+        tool_call = synthetic_tool_call_payload(payload)
+        if tool_call is not None:
+            tool_payload = {
+                "id": "chatcmpl-mock",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [{"index": 0, "delta": {"tool_calls": [tool_call]}, "finish_reason": None}],
+            }
+            body_chunks.append(f"data: {json.dumps(tool_payload, separators=(',', ':'))}\n\n".encode("utf-8"))
+            finish_reason = "tool_calls"
+        else:
+            content_payload = {
+                "id": "chatcmpl-mock",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": f"trtllm synthetic response model={model}"},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+            body_chunks.append(f"data: {json.dumps(content_payload, separators=(',', ':'))}\n\n".encode("utf-8"))
+            finish_reason = "stop"
+        final_payload = {
+            "id": "chatcmpl-mock",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        }
+        body_chunks.append(f"data: {json.dumps(final_payload, separators=(',', ':'))}\n\n".encode("utf-8"))
+        body_chunks.append(b"data: [DONE]\n\n")
+        self._send_stream_headers(HTTPStatus.OK, "text/event-stream; charset=utf-8")
+        self._stream_bytes(body_chunks)
+
+    def _stream_ollama_mock_chat(self, model: str, payload: dict) -> None:
+        body_chunks: list[bytes] = []
+        tool_call = synthetic_tool_call_payload(payload)
+        if tool_call is not None:
+            body_chunks.append(
+                (
+                    json.dumps(
+                        {
+                            "model": model,
+                            "message": {"role": "assistant", "content": "", "tool_calls": [tool_call]},
+                            "done": False,
+                        },
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                ).encode("utf-8")
+            )
+            finish_reason = "tool_calls"
+        else:
+            body_chunks.append(
+                (
+                    json.dumps(
+                        {
+                            "model": model,
+                            "message": {"role": "assistant", "content": f"trtllm synthetic response model={model}"},
+                            "done": False,
+                        },
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                ).encode("utf-8")
+            )
+            finish_reason = "stop"
+        body_chunks.append(
+            (
+                json.dumps(
+                    {
+                        "model": model,
+                        "message": {"role": "assistant", "content": ""},
+                        "done": True,
+                        "done_reason": finish_reason,
+                        "prompt_eval_count": 0,
+                        "eval_count": 0,
+                        "total_tokens": 0,
+                    },
+                    separators=(",", ":"),
+                )
+                + "\n"
+            ).encode("utf-8")
+        )
+        self._send_stream_headers(HTTPStatus.OK, "application/x-ndjson; charset=utf-8")
+        self._stream_bytes(body_chunks)
+
+    def _open_native_stream(self, method: str, path: str, payload: dict) -> tuple[http.client.HTTPConnection, http.client.HTTPResponse]:
+        body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+        conn = http.client.HTTPConnection(CONTROLLER.native_host, CONTROLLER.native_port, timeout=30)
+        conn.request(
+            method,
+            path,
+            body=body,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+            },
+        )
+        response = conn.getresponse()
+        if conn.sock is not None:
+            conn.sock.settimeout(None)
+        return conn, response
+
+    def _stream_openai_event_line(self, requested_model: str, raw_line: bytes) -> bytes:
+        if not raw_line.startswith(b"data: "):
+            return raw_line
+        payload = raw_line[6:].strip()
+        if payload == b"[DONE]" or not payload:
+            return raw_line
+        try:
+            parsed = json.loads(payload.decode("utf-8"))
+        except Exception:
+            return raw_line
+        if isinstance(parsed, dict):
+            parsed["model"] = requested_model
+            return f"data: {json.dumps(parsed, separators=(',', ':'))}\n".encode("utf-8")
+        return raw_line
+
+    def _ollama_chunk_from_openai_event(self, requested_model: str, raw_line: bytes) -> list[bytes]:
+        if not raw_line.startswith(b"data: "):
+            return []
+        payload = raw_line[6:].strip()
+        if payload == b"[DONE]" or not payload:
+            return []
+        try:
+            parsed = json.loads(payload.decode("utf-8"))
+        except Exception:
+            return []
+        if not isinstance(parsed, dict):
+            return []
+        choices = parsed.get("choices")
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            return []
+        choice = choices[0]
+        delta = choice.get("delta")
+        if not isinstance(delta, dict):
+            delta = {}
+        chunks: list[bytes] = []
+        content = delta.get("content")
+        if isinstance(content, str) and content:
+            chunks.append(
+                (
+                    json.dumps(
+                        {
+                            "model": requested_model,
+                            "message": {"role": "assistant", "content": content},
+                            "done": False,
+                        },
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                ).encode("utf-8")
+            )
+        tool_calls = delta.get("tool_calls")
+        if isinstance(tool_calls, list) and tool_calls:
+            chunks.append(
+                (
+                    json.dumps(
+                        {
+                            "model": requested_model,
+                            "message": {"role": "assistant", "content": "", "tool_calls": tool_calls},
+                            "done": False,
+                        },
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                ).encode("utf-8")
+            )
+        finish_reason = choice.get("finish_reason")
+        if isinstance(finish_reason, str):
+            usage = parsed.get("usage")
+            final_payload = {
+                "model": requested_model,
+                "message": {"role": "assistant", "content": ""},
+                "done": True,
+                "done_reason": finish_reason,
+            }
+            if isinstance(usage, dict):
+                final_payload["prompt_eval_count"] = int(usage.get("prompt_tokens", 0) or 0)
+                final_payload["eval_count"] = int(usage.get("completion_tokens", 0) or 0)
+                final_payload["total_tokens"] = int(usage.get("total_tokens", 0) or 0)
+            chunks.append((json.dumps(final_payload, separators=(",", ":")) + "\n").encode("utf-8"))
+        return chunks
+
+    def _handle_native_chat_completion_stream(self, payload: dict, ollama_style: bool) -> None:
+        if CONTROLLER.request_status_code() != HTTPStatus.OK:
+            self._native_unavailable()
+            return
+
+        try:
+            requested_model, serve_model = CONTROLLER.resolve_request_model(payload.get("model"))
+        except ValueError as exc:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": {"message": str(exc), "type": "invalid_request"}})
+            return
+
+        upstream_payload = {
+            "model": serve_model,
+            "messages": payload.get("messages") if isinstance(payload.get("messages"), list) else [],
+            "stream": True,
+        }
+        if isinstance(payload.get("tools"), list):
+            upstream_payload["tools"] = payload["tools"]
+        if isinstance(payload.get("tool_choice"), (str, dict)):
+            upstream_payload["tool_choice"] = payload["tool_choice"]
+
+        conn: http.client.HTTPConnection | None = None
+        response: http.client.HTTPResponse | None = None
+        try:
+            conn, response = self._open_native_stream("POST", "/v1/chat/completions", upstream_payload)
+            if response.status >= 400:
+                raw = response.read().decode("utf-8", errors="replace")
+                try:
+                    parsed = json.loads(raw) if raw else None
+                except json.JSONDecodeError:
+                    parsed = None
+                if parsed is None:
+                    self._send_json(response.status, {"error": {"message": raw or "empty upstream response", "type": "upstream_error"}})
+                else:
+                    self._send_json(response.status, parsed)
+                return
+
+            content_type = "application/x-ndjson; charset=utf-8" if ollama_style else "text/event-stream; charset=utf-8"
+            self._send_stream_headers(response.status, content_type)
+            while True:
+                line = response.readline()
+                if not line:
+                    break
+                if ollama_style:
+                    for chunk in self._ollama_chunk_from_openai_event(requested_model, line):
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                    continue
+                rewritten = self._stream_openai_event_line(requested_model, line)
+                self.wfile.write(rewritten)
+                self.wfile.flush()
+        except ConnectionError as exc:
+            CONTROLLER.native_error = str(exc)
+            CONTROLLER.write_runtime_state()
+            self._native_unavailable()
+            return
+        except Exception as exc:
+            CONTROLLER.native_error = str(exc)
+            CONTROLLER.write_runtime_state()
+            if not self.wfile.closed:
+                self._native_unavailable()
+            return
+        finally:
+            if response is not None:
+                response.close()
+            if conn is not None:
+                conn.close()
 
     def _handle_native_chat_completion(self, payload: dict, ollama_style: bool) -> None:
         if CONTROLLER.request_status_code() != HTTPStatus.OK:
@@ -1051,7 +1331,13 @@ class Handler(BaseHTTPRequestHandler):
                 model = CONTROLLER.primary_entry.display_name
                 payload["model"] = model
             if CONTROLLER.runtime_mode_effective == "mock":
+                if bool(payload.get("stream")):
+                    self._stream_ollama_mock_chat(model, payload)
+                    return
                 self._send_json(HTTPStatus.OK, mock_api_chat_payload(model, payload))
+                return
+            if bool(payload.get("stream")):
+                self._handle_native_chat_completion_stream(payload, ollama_style=True)
                 return
             self._handle_native_chat_completion(payload, ollama_style=True)
             return
@@ -1061,7 +1347,13 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(model, str) or not model:
                 payload["model"] = CONTROLLER.primary_entry.display_name
             if CONTROLLER.runtime_mode_effective == "mock":
+                if bool(payload.get("stream")):
+                    self._stream_openai_mock_chat_completion(payload["model"], payload)
+                    return
                 self._send_json(HTTPStatus.OK, mock_chat_completion_payload(payload["model"], payload))
+                return
+            if bool(payload.get("stream")):
+                self._handle_native_chat_completion_stream(payload, ollama_style=False)
                 return
             self._handle_native_chat_completion(payload, ollama_style=False)
             return

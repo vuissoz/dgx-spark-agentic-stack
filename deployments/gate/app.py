@@ -9,12 +9,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, AsyncIterator, Callable, Dict, Tuple
 
 import httpx
 import yaml
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 
 from tool_call_parser import pseudo_tool_calls_from_content
 
@@ -1324,6 +1324,13 @@ def upstream_response_with_gate_headers(
     return Response(status_code=upstream.status_code, content=upstream.content, headers=headers)
 
 
+class UpstreamStreamingResponse:
+    def __init__(self, status_code: int, content_type: str, stream: AsyncIterator[bytes]) -> None:
+        self.status_code = status_code
+        self.content_type = content_type
+        self.stream = stream
+
+
 def llm_mode_block_response(provider: str, endpoint: str, llm_mode: str) -> JSONResponse:
     return JSONResponse(
         status_code=403,
@@ -2304,6 +2311,73 @@ async def backend_chat_completion(
     raise RuntimeError(f"unsupported backend protocol '{protocol}'")
 
 
+async def backend_chat_completion_stream(
+    backend: str,
+    model: str,
+    messages: Any,
+    *,
+    tools: Any = None,
+    tool_choice: Any = None,
+) -> tuple[int, UpstreamStreamingResponse | None, str]:
+    cfg = state.backend_config(backend)
+    if cfg is None:
+        raise RuntimeError(f"backend '{backend}' is not configured")
+
+    protocol = cfg["protocol"]
+
+    if protocol not in {"ollama", "openai"}:
+        raise RuntimeError(f"unsupported backend protocol '{protocol}'")
+
+    upstream_payload: Dict[str, Any] = {
+        "model": model,
+        "messages": messages if isinstance(messages, list) else [],
+        "stream": True,
+    }
+    if isinstance(tools, list):
+        upstream_payload["tools"] = tools
+    if isinstance(tool_choice, (str, dict)):
+        upstream_payload["tool_choice"] = tool_choice
+
+    headers: Dict[str, str] | None = None
+    if protocol == "openai":
+        api_key = resolve_backend_api_key(backend, cfg)
+        headers = backend_request_headers(cfg, api_key)
+        url = f"{cfg['base_url']}/chat/completions"
+    else:
+        url = f"{cfg['base_url']}/v1/chat/completions"
+
+    timeout = httpx.Timeout(connect=30.0, read=None, write=60.0, pool=60.0)
+    client = httpx.AsyncClient(timeout=timeout, trust_env=True)
+    stream_cm = client.stream("POST", url, json=upstream_payload, headers=headers)
+
+    try:
+        upstream = await stream_cm.__aenter__()
+    except httpx.RequestError as exc:
+        await client.aclose()
+        raise ConnectionError(str(exc)) from exc
+
+    if upstream.status_code >= 400:
+        try:
+            text = await upstream.aread()
+        finally:
+            await stream_cm.__aexit__(None, None, None)
+            await client.aclose()
+        return upstream.status_code, None, text.decode("utf-8", errors="replace")
+
+    content_type = upstream.headers.get("content-type") or "text/event-stream; charset=utf-8"
+
+    async def stream() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in upstream.aiter_raw():
+                if chunk:
+                    yield chunk
+        finally:
+            await stream_cm.__aexit__(None, None, None)
+            await client.aclose()
+
+    return upstream.status_code, UpstreamStreamingResponse(upstream.status_code, content_type, stream()), ""
+
+
 async def backend_embedding(backend: str, model: str, prompt: str) -> tuple[int, dict[str, Any], str]:
     cfg = state.backend_config(backend)
     if cfg is None:
@@ -2672,6 +2746,7 @@ async def handle_chat_completion_endpoint(
     quota_detail: Dict[str, Any] = {}
     response_tool_calls: list[Dict[str, Any]] | None = None
     finish_reason = "stop"
+    stream_handed_off = False
     try:
         try:
             model_served, model_switch = await resolve_model(
@@ -2730,6 +2805,115 @@ async def handle_chat_completion_endpoint(
                         "total_tokens": external_tokens_used,
                     }
         else:
+            if stream and backend == "trtllm":
+                try:
+                    upstream_status, upstream_stream, upstream_text = await backend_chat_completion_stream(
+                        backend,
+                        model_served,
+                        messages,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                    )
+                except BackendAuthError as exc:
+                    status_code = 503
+                    reason = "backend_auth_error"
+                    return backend_auth_response(backend, provider, str(exc))
+                except ConnectionError as exc:
+                    status_code = 503
+                    reason = "backend_unavailable"
+                    return backend_unavailable_response(backend, model_served, str(exc))
+                except Exception as exc:
+                    status_code = 500
+                    reason = "backend_config_error"
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "error": {
+                                "message": str(exc),
+                                "type": "backend_config_error",
+                                "backend": backend,
+                                "provider": provider,
+                            }
+                        },
+                    )
+
+                if upstream_status >= 500:
+                    status_code = 503
+                    reason = "backend_unavailable"
+                    return backend_unavailable_response(
+                        backend,
+                        model_served,
+                        f"HTTP {upstream_status}: {upstream_text[:300]}",
+                    )
+
+                if upstream_status >= 400 or upstream_stream is None:
+                    status_code = upstream_status
+                    reason = "upstream_error"
+                    return JSONResponse(
+                        status_code=upstream_status,
+                        content={
+                            "error": {
+                                "message": upstream_text,
+                                "type": "upstream_error",
+                                "backend": backend,
+                                "provider": provider,
+                            }
+                        },
+                    )
+
+                status_code = 200
+                effective_model = model_served or requested_model or "unknown"
+                headers = gate_response_headers(
+                    decision=decision,
+                    backend=backend,
+                    provider=provider,
+                    llm_mode=llm_mode,
+                    llm_backend=llm_backend,
+                    llm_backend_effective=llm_backend_effective,
+                    model_served=effective_model,
+                )
+                headers["Content-Type"] = upstream_stream.content_type
+                handed_off_acquired = acquired
+                acquired = False
+                stream_handed_off = True
+
+                async def gate_stream() -> AsyncIterator[bytes]:
+                    stream_reason = reason
+                    try:
+                        async for chunk in upstream_stream.stream:
+                            yield chunk
+                    finally:
+                        await release_gate_slot(handed_off_acquired)
+                        await state.mark_decision(decision)
+                        latency_ms = int((time.monotonic() - started) * 1000)
+                        state.write_log(
+                            event_base(
+                                session=session,
+                                project=project,
+                                endpoint=endpoint,
+                                decision=decision,
+                                model_requested=requested_model,
+                                model_served=model_served,
+                                status_code=status_code,
+                                latency_ms=latency_ms,
+                                backend=backend,
+                                provider=provider,
+                                model_switch=model_switch,
+                                reason=stream_reason,
+                                llm_mode=llm_mode,
+                                llm_backend=llm_backend,
+                                llm_backend_effective=llm_backend_effective,
+                                external_tokens=external_tokens_used if is_external_provider else None,
+                            )
+                        )
+
+                return StreamingResponse(
+                    gate_stream(),
+                    status_code=200,
+                    headers=headers,
+                    media_type=None,
+                )
+
             try:
                 upstream_status, upstream_json, upstream_text = await backend_chat_completion(
                     backend,
@@ -2864,29 +3048,30 @@ async def handle_chat_completion_endpoint(
             ),
         )
     finally:
-        await release_gate_slot(acquired)
-        await state.mark_decision("denied" if status_code == 429 else decision)
-        latency_ms = int((time.monotonic() - started) * 1000)
-        state.write_log(
-            event_base(
-                session=session,
-                project=project,
-                endpoint=endpoint,
-                decision="denied" if status_code == 429 else decision,
-                model_requested=requested_model,
-                model_served=model_served,
-                status_code=status_code,
-                latency_ms=latency_ms,
-                backend=backend,
-                provider=provider,
-                model_switch=model_switch,
-                reason=reason,
-                llm_mode=llm_mode,
-                llm_backend=llm_backend,
-                llm_backend_effective=llm_backend_effective,
-                external_tokens=external_tokens_used if is_external_provider else None,
+        if not stream_handed_off:
+            await release_gate_slot(acquired)
+            await state.mark_decision("denied" if status_code == 429 else decision)
+            latency_ms = int((time.monotonic() - started) * 1000)
+            state.write_log(
+                event_base(
+                    session=session,
+                    project=project,
+                    endpoint=endpoint,
+                    decision="denied" if status_code == 429 else decision,
+                    model_requested=requested_model,
+                    model_served=model_served,
+                    status_code=status_code,
+                    latency_ms=latency_ms,
+                    backend=backend,
+                    provider=provider,
+                    model_switch=model_switch,
+                    reason=reason,
+                    llm_mode=llm_mode,
+                    llm_backend=llm_backend,
+                    llm_backend_effective=llm_backend_effective,
+                    external_tokens=external_tokens_used if is_external_provider else None,
+                )
             )
-        )
 
 
 def extract_text_content(value: Any) -> str:

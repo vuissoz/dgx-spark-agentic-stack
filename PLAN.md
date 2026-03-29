@@ -134,6 +134,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-1kso` : le gate restaure `/v1/models` sans tomber sur les backends distants sans cle, ajoute une route explicite pour `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` et valide le passage `ollama-gate -> trtllm` pour le modele TRT par defaut.
   - `dgx-spark-agentic-stack-nuya` : le catalogue `trtllm` derive maintenant un alias UI lisible a partir du modele TRT configure, afin qu'OpenWebUI puisse afficher et selectionner clairement le modele TRT actif sans dependre d'une URL Hugging Face brute ou d'un alias code en dur.
   - `dgx-spark-agentic-stack-4zhv` : simplification TRT-LLM autour d'un seul modele configure (`TRTLLM_MODELS`), suppression du catalogue local multi-modele, retrait de `TRTLLM_ACTIVE_MODEL_KEY` et des operateurs `list/load/unload`.
+  - `dgx-spark-agentic-stack-3s3a` : vrai streaming SSE/chunked `trtllm` pour `/v1/chat/completions`, avec pass-through `ollama-gate -> trtllm` sans buffering de la réponse complète.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
