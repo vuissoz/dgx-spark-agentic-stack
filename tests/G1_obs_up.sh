@@ -66,6 +66,63 @@ if not prometheus_up:
 PY
 ok "prometheus targets include a healthy prometheus job"
 
+openclaw_gateway_cid="$(require_service_container openclaw-gateway 2>/dev/null || true)"
+if [[ -n "${openclaw_gateway_cid}" ]]; then
+  python3 - <<'PY' "${targets_payload}"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+targets = payload.get("data", {}).get("activeTargets", [])
+for target in targets:
+    if not isinstance(target, dict):
+        continue
+    labels = target.get("labels") or {}
+    discovered = target.get("discoveredLabels") or {}
+    if labels.get("job") != "openclaw-tcp-forwarders":
+        continue
+    scrape_url = str(target.get("scrapeUrl", ""))
+    if target.get("health") != "up":
+        raise SystemExit("openclaw-tcp-forwarders target is not UP")
+    if "openclaw-gateway:9114/metrics" not in scrape_url and discovered.get("__address__") != "openclaw-gateway:9114":
+        raise SystemExit("openclaw-tcp-forwarders target address drifted")
+    raise SystemExit(0)
+raise SystemExit("prometheus is missing the openclaw-tcp-forwarders target")
+PY
+  ok "prometheus scrapes the openclaw tcp forwarder target"
+
+  forwarder_metric_seen=0
+  for _ in $(seq 1 15); do
+    names_payload="$(curl -fsS --max-time 12 "http://127.0.0.1:${prom_port}/api/v1/label/__name__/values")"
+    if python3 - <<'PY' "${names_payload}"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if payload.get("status") != "success":
+    raise SystemExit(1)
+
+required = {
+    "agentic_tcp_forwarder_connections_total",
+    "agentic_tcp_forwarder_active_connections",
+    "agentic_tcp_forwarder_bytes_total",
+}
+names = {name for name in payload.get("data", []) if isinstance(name, str)}
+if required.issubset(names):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+      forwarder_metric_seen=1
+      break
+    fi
+    sleep 2
+  done
+
+  [[ "${forwarder_metric_seen}" -eq 1 ]] || fail "openclaw forwarder metrics are missing from prometheus scrape data"
+  ok "openclaw forwarder metrics are present in prometheus"
+fi
+
 ts_ns="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1_000_000_000))

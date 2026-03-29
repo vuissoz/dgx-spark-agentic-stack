@@ -58,6 +58,7 @@ git_forge_host_port="${GIT_FORGE_HOST_PORT:-13010}"
 openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 openclaw_gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 openclaw_relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
+openclaw_gateway_metrics_port="${OPENCLAW_GATEWAY_PROXY_METRICS_PORT:-9114}"
 goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
 
 service_requires_proxy_env() {
@@ -1810,6 +1811,12 @@ if [[ -n "${optional_openclaw_gateway_cid}" ]]; then
   if ! grep -q '^OPENCLAW_GATEWAY_PORT=18789$' <<<"${optional_openclaw_gateway_env}"; then
     doctor_fail "openclaw-gateway must set OPENCLAW_GATEWAY_PORT=18789"
   fi
+  if ! grep -q '^OPENCLAW_GATEWAY_PROXY_METRICS_HOST=0.0.0.0$' <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "openclaw-gateway must set OPENCLAW_GATEWAY_PROXY_METRICS_HOST=0.0.0.0"
+  fi
+  if ! grep -q "^OPENCLAW_GATEWAY_PROXY_METRICS_PORT=${openclaw_gateway_metrics_port}\$" <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "openclaw-gateway must set OPENCLAW_GATEWAY_PROXY_METRICS_PORT=${openclaw_gateway_metrics_port}"
+  fi
   if ! grep -q '^OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json$' <<<"${optional_openclaw_gateway_env}"; then
     doctor_fail "openclaw-gateway must set OPENCLAW_IMMUTABLE_CONFIG_FILE=/config/immutable/openclaw.stack-config.v1.json"
   fi
@@ -1878,6 +1885,49 @@ PY
 
   if ! timeout 20 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT=0 openclaw gateway status --json --require-rpc --url ws://127.0.0.1:18789 --token "${token}" >/tmp/openclaw-gateway-health.out'; then
     doctor_fail "openclaw-gateway WS endpoint must answer token-auth RPC probe on ws://127.0.0.1:18789"
+  fi
+
+  gateway_metrics_dump="$(timeout 15 docker exec "${optional_openclaw_gateway_cid}" sh -lc "curl -fsS http://127.0.0.1:${openclaw_gateway_metrics_port}/metrics" 2>/dev/null || true)"
+  if [[ -z "${gateway_metrics_dump}" ]]; then
+    doctor_fail "openclaw-gateway forwarder metrics endpoint must be reachable on 127.0.0.1:${openclaw_gateway_metrics_port}/metrics"
+  elif ! grep -q '^agentic_tcp_forwarder_connections_total' <<<"${gateway_metrics_dump}"; then
+    doctor_fail "openclaw-gateway forwarder metrics endpoint must expose agentic_tcp_forwarder_connections_total"
+  elif ! grep -q 'forwarder=\"openclaw-gateway-ui\"' <<<"${gateway_metrics_dump}"; then
+    doctor_fail "openclaw-gateway forwarder metrics must include the openclaw-gateway-ui label set"
+  fi
+
+  prometheus_cid="$(service_container_id prometheus)"
+  if [[ -n "${prometheus_cid}" ]]; then
+    prometheus_targets_status="$(curl -sS -o /tmp/doctor-prometheus-openclaw-forwarders-targets.out -w '%{http_code}' "http://127.0.0.1:${PROMETHEUS_HOST_PORT:-19090}/api/v1/targets" 2>/dev/null || true)"
+    if [[ "${prometheus_targets_status}" != "200" ]]; then
+      doctor_fail_or_warn "prometheus targets API must be reachable to validate openclaw forwarder scraping (status=${prometheus_targets_status:-unknown})"
+    elif ! python3 - "/tmp/doctor-prometheus-openclaw-forwarders-targets.out" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+targets = payload.get("data", {}).get("activeTargets", [])
+for target in targets:
+    if not isinstance(target, dict):
+        continue
+    labels = target.get("labels") or {}
+    discovered = target.get("discoveredLabels") or {}
+    if labels.get("job") != "openclaw-tcp-forwarders":
+        continue
+    scrape_url = str(target.get("scrapeUrl", ""))
+    if target.get("health") != "up":
+        raise SystemExit(1)
+    if "openclaw-gateway:9114/metrics" not in scrape_url and discovered.get("__address__") != "openclaw-gateway:9114":
+        raise SystemExit(1)
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+      doctor_fail_or_warn "prometheus must scrape a healthy openclaw-tcp-forwarders target at openclaw-gateway:9114"
+    else
+      ok "prometheus scrapes openclaw forwarder metrics"
+    fi
   fi
 fi
 

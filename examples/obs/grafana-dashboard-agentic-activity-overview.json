@@ -637,6 +637,150 @@
     },
     {
       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "down"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "up"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 37
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "min(up{job=\"openclaw-tcp-forwarders\",instance=~\"$openclaw_forwarder_instance_regex\"})",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "OpenClaw TCP Forwarder Health",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 37
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (direction) (rate(agentic_tcp_forwarder_bytes_total{forwarder=~\"$openclaw_forwarder_regex\",instance=~\"$openclaw_forwarder_instance_regex\"}[5m]))",
+          "legendFormat": "{{direction}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (result) (rate(agentic_tcp_forwarder_connections_total{forwarder=~\"$openclaw_forwarder_regex\",instance=~\"$openclaw_forwarder_instance_regex\"}[5m]))",
+          "legendFormat": "{{result}} conn/s",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "OpenClaw TCP Forwarder Traffic",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
         "type": "loki",
         "uid": "loki"
       },
@@ -644,7 +788,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 45
       },
       "id": 12,
       "options": {
@@ -708,6 +852,34 @@
         "name": "network_service_regex",
         "options": [],
         "query": "agentic-(claude|codex|opencode|vibestral)|openwebui|openhands",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "openclaw-gateway-ui",
+          "value": "openclaw-gateway-ui"
+        },
+        "hide": 0,
+        "label": "OpenClaw Forwarder Regex",
+        "name": "openclaw_forwarder_regex",
+        "options": [],
+        "query": "openclaw-gateway-ui",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "openclaw-gateway:9114",
+          "value": "openclaw-gateway:9114"
+        },
+        "hide": 0,
+        "label": "OpenClaw Forwarder Instance Regex",
+        "name": "openclaw_forwarder_instance_regex",
+        "options": [],
+        "query": "openclaw-gateway:9114",
         "skipUrlSync": false,
         "type": "textbox"
       }

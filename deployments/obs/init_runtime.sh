@@ -121,6 +121,45 @@ promtail_path_migration() {
   fi
 }
 
+prometheus_openclaw_forwarder_job_migration() {
+  local cfg="${AGENTIC_ROOT}/monitoring/config/prometheus.yml"
+  [[ -f "${cfg}" ]] || return 0
+
+  if grep -q 'job_name: openclaw-tcp-forwarders' "${cfg}"; then
+    return 0
+  fi
+
+  cat >>"${cfg}" <<'YAML'
+
+  - job_name: openclaw-tcp-forwarders
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - openclaw-gateway:9114
+YAML
+  log "migrated prometheus config with openclaw-tcp-forwarders scrape job"
+}
+
+refresh_managed_grafana_dashboard() {
+  local src="${TEMPLATE_DIR}/grafana-dashboard-agentic-activity-overview.json"
+  local dst="${AGENTIC_ROOT}/monitoring/config/grafana/dashboards/agentic-activity-overview.json"
+
+  [[ -f "${src}" ]] || die "template not found: ${src}"
+  if [[ ! -f "${dst}" ]]; then
+    install -D -m 0644 "${src}" "${dst}"
+    log "created runtime file: ${dst}"
+    return 0
+  fi
+
+  if grep -q 'OpenClaw TCP Forwarder Traffic' "${dst}" && grep -q 'OpenClaw TCP Forwarder Health' "${dst}"; then
+    log "preserve existing runtime file: ${dst}"
+    return 0
+  fi
+
+  install -D -m 0644 "${src}" "${dst}"
+  log "refreshed managed runtime file: ${dst}"
+}
+
 main() {
   repair_rootless_obs_layout
 
@@ -150,11 +189,9 @@ main() {
     "${TEMPLATE_DIR}/grafana-dashboards.yml" \
     "${AGENTIC_ROOT}/monitoring/config/grafana/provisioning/dashboards/dashboards.yml" \
     0644
-  copy_if_missing \
-    "${TEMPLATE_DIR}/grafana-dashboard-agentic-activity-overview.json" \
-    "${AGENTIC_ROOT}/monitoring/config/grafana/dashboards/agentic-activity-overview.json" \
-    0644
+  refresh_managed_grafana_dashboard
   promtail_path_migration
+  prometheus_openclaw_forwarder_job_migration
 
   if [[ "${EUID}" -eq 0 ]]; then
     # Grafana official container runs as uid 472.

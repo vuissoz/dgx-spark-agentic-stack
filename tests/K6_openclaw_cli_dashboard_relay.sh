@@ -466,6 +466,24 @@ fi
 wait_for_gateway_rpc "${gateway_cid}" 45 \
   || fail "openclaw gateway WS RPC probe must succeed with token auth"
 
+gateway_metrics_payload="$(docker exec "${gateway_cid}" sh -lc 'curl -fsS http://127.0.0.1:9114/metrics')" \
+  || fail "openclaw gateway forwarder metrics endpoint must be reachable in-container"
+python3 - <<'PY' "${gateway_metrics_payload}"
+import sys
+
+payload = sys.argv[1]
+required = (
+    "agentic_tcp_forwarder_connections_total",
+    "agentic_tcp_forwarder_active_connections",
+    "agentic_tcp_forwarder_bytes_total",
+)
+for metric in required:
+    if metric not in payload:
+        raise SystemExit(f"missing forwarder metric: {metric}")
+if 'forwarder="openclaw-gateway-ui"' not in payload:
+    raise SystemExit("forwarder label openclaw-gateway-ui is missing from metrics payload")
+PY
+
 relay_body='{"message":"relay hello from k6","target":"discord:user:test"}'
 relay_ts="$(date +%s)"
 relay_sig="$(relay_signature "${telegram_secret}" "${relay_ts}" "${relay_body}")"

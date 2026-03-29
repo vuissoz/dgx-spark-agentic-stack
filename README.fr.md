@@ -263,6 +263,9 @@ Ensuite, sur le poste client, ouvrir:
 Au premier démarrage de `obs`, Grafana provisionne automatiquement le dashboard
 `DGX Spark Agentic Activity Overview` (UID `dgx-spark-activity`) avec les datasources
 `Prometheus` et `Loki`.
+Quand `core` est aussi actif, ce dashboard inclut maintenant `OpenClaw TCP Forwarder Health`
+et `OpenClaw TCP Forwarder Traffic`, alimentés par la cible interne
+`openclaw-gateway:9114/metrics` du forwarder de publication loopback OpenClaw.
 
 Ports utiles à tunneliser (selon les modules activés):
 - `11434` → Ollama API (`http://127.0.0.1:11434`)
@@ -284,6 +287,7 @@ Notes:
 - `opensearch` (`rag-lexical`) reste interne uniquement (pas de port host publié).
 - `openclaw` publie uniquement un ingress webhook local (`127.0.0.1:${OPENCLAW_WEBHOOK_HOST_PORT:-18111}`), jamais en `0.0.0.0`.
 - `openclaw-gateway` publie le Web UI/WS OpenClaw upstream en loopback (`127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}`), jamais en `0.0.0.0`.
+- l'endpoint de métriques du forwarder TCP OpenClaw reste interne uniquement (`openclaw-gateway:9114/metrics`) et n'est jamais publié sur l'hôte.
 
 Exemple Windows PowerShell (API Loki):
 

@@ -4,6 +4,8 @@ set -euo pipefail
 token_file="${OPENCLAW_GATEWAY_TOKEN_FILE:-/run/secrets/openclaw.token}"
 gateway_port="${OPENCLAW_GATEWAY_PORT:-18789}"
 proxy_port="${OPENCLAW_GATEWAY_PROXY_PORT:-8114}"
+metrics_host="${OPENCLAW_GATEWAY_PROXY_METRICS_HOST:-0.0.0.0}"
+metrics_port="${OPENCLAW_GATEWAY_PROXY_METRICS_PORT:-9114}"
 auth_mode="${OPENCLAW_GATEWAY_AUTH_MODE:-token}"
 bind_mode="${OPENCLAW_GATEWAY_BIND_MODE:-loopback}"
 tailscale_mode="${OPENCLAW_GATEWAY_TAILSCALE_MODE:-off}"
@@ -49,7 +51,10 @@ python3 /app/tcp_forward.py \
   --listen-host 0.0.0.0 \
   --listen-port "${proxy_port}" \
   --target-host 127.0.0.1 \
-  --target-port "${gateway_port}" &
+  --target-port "${gateway_port}" \
+  --metrics-host "${metrics_host}" \
+  --metrics-port "${metrics_port}" \
+  --forwarder-name openclaw-gateway-ui &
 proxy_pid="$!"
 
 while true; do

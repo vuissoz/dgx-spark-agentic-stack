@@ -26,6 +26,24 @@ do
 done
 ok "Grafana provisioning artifacts exist under ${root_dir}/monitoring/config/grafana"
 
+python3 - <<'PY' "${root_dir}/monitoring/config/grafana/dashboards/agentic-activity-overview.json"
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+panels = payload.get("panels") or []
+titles = {panel.get("title") for panel in panels if isinstance(panel, dict)}
+required = {
+    "OpenClaw TCP Forwarder Health",
+    "OpenClaw TCP Forwarder Traffic",
+}
+missing = sorted(required - titles)
+if missing:
+    raise SystemExit(f"dashboard is missing OpenClaw forwarder panel(s): {', '.join(missing)}")
+PY
+ok "Grafana dashboard includes OpenClaw forwarder panels"
+
 timeout 10 docker exec "${grafana_cid}" sh -lc 'test -s /etc/grafana/provisioning/datasources/datasources.yml && test -s /etc/grafana/provisioning/dashboards/dashboards.yml && test -s /etc/grafana/dashboards/agentic-activity-overview.json' \
   || fail "Grafana provisioning files are not mounted in container"
 ok "Grafana provisioning files are mounted read-only in container"

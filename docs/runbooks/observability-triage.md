@@ -77,6 +77,8 @@ Use these in Grafana Explore (Loki/Prometheus) or dashboard panels.
 Provisioned first-run dashboard:
 - Grafana auto-loads `DGX Spark Agentic Activity Overview` (UID `dgx-spark-activity`).
 - Datasources are auto-provisioned as `Prometheus` and `Loki`.
+- The dashboard now includes `OpenClaw TCP Forwarder Health` and `OpenClaw TCP Forwarder Traffic`.
+- Prometheus scrapes the OpenClaw gateway forwarder on the internal target `openclaw-gateway:9114` (`job="openclaw-tcp-forwarders"`).
 - Log streams used by this dashboard:
   - `{job="gate-events"}` from `${AGENTIC_ROOT}/gate/logs/gate.jsonl`
   - `{job="gate-mcp-audit"}` from `${AGENTIC_ROOT}/gate/mcp/logs/audit.jsonl`
@@ -119,6 +121,36 @@ quantile_over_time(
   {job="egress-proxy"}
     | pattern "<ts> <duration_ms> <src_ip> <squid_result>/<http_status> <bytes> <method> <url> <user> <hierarchy>/<upstream> <mime>"
     | unwrap duration_ms [5m]
+)
+```
+
+### 4) OpenClaw TCP forwarder health and traffic
+
+PromQL (scrape health):
+
+```promql
+up{job="openclaw-tcp-forwarders"}
+```
+
+PromQL (active connections):
+
+```promql
+agentic_tcp_forwarder_active_connections{forwarder="openclaw-gateway-ui"}
+```
+
+PromQL (traffic rate by direction):
+
+```promql
+sum by (direction) (
+  rate(agentic_tcp_forwarder_bytes_total{forwarder="openclaw-gateway-ui"}[5m])
+)
+```
+
+PromQL (accepted/error connection rate):
+
+```promql
+sum by (result) (
+  rate(agentic_tcp_forwarder_connections_total{forwarder="openclaw-gateway-ui"}[5m])
 )
 ```
 
