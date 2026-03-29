@@ -23,8 +23,18 @@ die() {
 
 ensure_secret_mode() {
   local file="$1"
+  ensure_secret_path_is_file "${file}"
   if [[ -f "${file}" ]]; then
     chmod 0600 "${file}"
+  fi
+}
+
+ensure_secret_path_is_file() {
+  local file="$1"
+  local file_type
+  if [[ -e "${file}" && ! -f "${file}" ]]; then
+    file_type="$(stat -c '%F' "${file}" 2>/dev/null || printf 'non-regular path')"
+    die "secret path must be a regular file, found ${file_type}: ${file}; remove the path and re-run runtime init"
   fi
 }
 
@@ -38,6 +48,7 @@ random_secret_hex() {
 
 ensure_secret_file_if_missing() {
   local file="$1"
+  ensure_secret_path_is_file "${file}"
   if [[ -f "${file}" ]]; then
     return 0
   fi

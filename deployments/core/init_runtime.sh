@@ -24,8 +24,18 @@ die() {
 
 ensure_secret_mode() {
   local file="$1"
+  ensure_secret_path_is_file "${file}"
   if [[ -f "${file}" ]]; then
     chmod 0600 "${file}"
+  fi
+}
+
+ensure_secret_path_is_file() {
+  local file="$1"
+  local file_type
+  if [[ -e "${file}" && ! -f "${file}" ]]; then
+    file_type="$(stat -c '%F' "${file}" 2>/dev/null || printf 'non-regular path')"
+    die "secret path must be a regular file, found ${file_type}: ${file}; remove the path and re-run runtime init"
   fi
 }
 
@@ -39,6 +49,7 @@ random_secret_hex() {
 
 ensure_secret_file_if_missing() {
   local file="$1"
+  ensure_secret_path_is_file "${file}"
   if [[ -f "${file}" ]]; then
     return 0
   fi
@@ -450,6 +461,7 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/sandbox/workspaces"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
+  install -d -m 0750 "${AGENTIC_ROOT}/secrets/runtime/git-forge"
 
   copy_if_missing "${TEMPLATE_DIR}/model_routes.yml" "${AGENTIC_ROOT}/gate/config/model_routes.yml" 0640
   ensure_gate_default_trtllm_route "${AGENTIC_ROOT}/gate/config/model_routes.yml"
@@ -501,6 +513,7 @@ main() {
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/git-forge/openclaw.password"
   [[ -f "${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token" ]] || install -D -m 0600 /dev/null "${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token"
   [[ -f "${AGENTIC_ROOT}/secrets/runtime/discord.bot_token" ]] || install -D -m 0600 /dev/null "${AGENTIC_ROOT}/secrets/runtime/discord.bot_token"
   [[ -f "${AGENTIC_ROOT}/secrets/runtime/slack.bot_token" ]] || install -D -m 0600 /dev/null "${AGENTIC_ROOT}/secrets/runtime/slack.bot_token"
@@ -512,6 +525,7 @@ main() {
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.telegram.secret"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/openclaw.relay.whatsapp.secret"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/git-forge/openclaw.password"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/telegram.bot_token"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/discord.bot_token"
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/slack.bot_token"

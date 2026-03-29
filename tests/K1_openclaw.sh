@@ -36,11 +36,13 @@ openclaw_immutable_file="${agentic_root}/openclaw/config/immutable/openclaw.stac
 openclaw_provider_bridge_file="${agentic_root}/openclaw/config/bridge/openclaw.provider-bridge.json"
 openclaw_overlay_file="${agentic_root}/openclaw/config/overlay/openclaw.operator-overlay.json"
 openclaw_state_config_file="${agentic_root}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+openclaw_git_forge_secret="${agentic_root}/secrets/runtime/git-forge/openclaw.password"
 [[ -s "${openclaw_profile_file}" ]] || fail "openclaw integration profile file is missing after init_runtime: ${openclaw_profile_file}"
 [[ -s "${openclaw_immutable_file}" ]] || fail "openclaw immutable config file is missing after init_runtime: ${openclaw_immutable_file}"
 [[ -f "${openclaw_provider_bridge_file}" ]] || fail "openclaw provider bridge file is missing after init_runtime: ${openclaw_provider_bridge_file}"
 [[ -s "${openclaw_overlay_file}" ]] || fail "openclaw operator overlay file is missing after init_runtime: ${openclaw_overlay_file}"
 [[ -f "${openclaw_state_config_file}" ]] || fail "openclaw state config file is missing after init_runtime: ${openclaw_state_config_file}"
+[[ -f "${openclaw_git_forge_secret}" ]] || fail "openclaw git-forge secret file is missing after init_runtime: ${openclaw_git_forge_secret}"
 python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
   --immutable-file "${openclaw_immutable_file}" \
   --bridge-file "${openclaw_provider_bridge_file}" \
