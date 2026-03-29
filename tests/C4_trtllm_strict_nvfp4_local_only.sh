@@ -155,10 +155,18 @@ controller = module.CONTROLLER
 cfg = controller.render_extra_config()
 cmd = controller.build_native_command()
 env = controller.build_native_env("hf_test_token")
+models_payload = controller.models_payload()
+tags_payload = controller.tags_payload()
+model_ids = [item["id"] for item in models_payload["data"]]
+tag_names = [item["name"] for item in tags_payload["models"]]
 
 assert controller.native_max_num_tokens == 4096
 assert controller.native_max_seq_len == 32768
 assert controller.native_enable_cuda_graph is False
+assert "trtllm/nemotron-3-nano:30b" in controller.primary_entry.aliases
+assert "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" in model_ids
+assert "trtllm/nemotron-3-nano:30b" in model_ids
+assert "trtllm/nemotron-3-nano:30b" in tag_names
 assert "cuda_graph_config:" not in cfg
 assert "max_num_tokens: 4096" in cfg
 assert "--max_num_tokens" in cmd and "4096" in cmd
@@ -169,7 +177,7 @@ assert env["TORCHINDUCTOR_CACHE_DIR"].endswith("/state/cache/torchinductor")
 assert env["TORCH_EXTENSIONS_DIR"].endswith("/state/cache/torch_extensions")
 assert env["HF_TOKEN"] == "hf_test_token"
 PY
-ok "Nano runtime defaults bound seq len, avoid CUDA graph warmup, and redirect JIT caches under /state/cache"
+ok "Nano runtime defaults bound seq len, expose a friendly TRT alias, avoid CUDA graph warmup, and redirect JIT caches under /state/cache"
 
 TRTLLM_RUNTIME_MODE=mock \
 TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \

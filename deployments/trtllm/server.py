@@ -20,6 +20,7 @@ from pathlib import Path
 
 DEFAULT_TRTLLM_MODEL = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
 DEFAULT_TRTLLM_MODEL_HANDLE = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS = "trtllm/nemotron-3-nano:30b"
 DEFAULT_NEMOTRON_NATIVE_HANDLE = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8"
 DEFAULT_NVFP4_LOCAL_MODEL_DIR = "/models/cascade_30b_nvfp4"
 MODEL_POLICY_AUTO = "auto"
@@ -111,7 +112,21 @@ def build_alias_values(display_name: str, requested_handle: str, serve_handle: s
         alias_values.add(f"trtllm/{candidate}")
         if not candidate.startswith("/"):
             alias_values.add(f"{HF_URL_PREFIX}{candidate}")
+    if (
+        display_name.rstrip("/") == DEFAULT_TRTLLM_MODEL.rstrip("/")
+        or strip_hf_url(display_name).rstrip("/") == DEFAULT_TRTLLM_MODEL_HANDLE.rstrip("/")
+        or requested_handle.rstrip("/") == DEFAULT_TRTLLM_MODEL_HANDLE.rstrip("/")
+        or serve_handle.rstrip("/") == DEFAULT_TRTLLM_MODEL_HANDLE.rstrip("/")
+    ):
+        alias_values.add(DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS)
     return tuple(sorted(alias for alias in alias_values if alias))
+
+
+def catalog_names_for_entry(entry: "ModelEntry") -> list[str]:
+    names = [entry.display_name]
+    if DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS in entry.aliases and DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS not in names:
+        names.append(DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS)
+    return names
 
 
 def model_serve_handle(
@@ -727,32 +742,41 @@ class RuntimeController:
     def tags_payload(self) -> dict:
         models = []
         for entry in self.available_entries():
-            details = {
-                "family": "trtllm",
-                "format": "openai-compatible",
-                "parent_model": entry.serve_handle,
-            }
-            quantization_level = infer_quantization_level(entry.serve_handle)
-            if quantization_level:
-                details["quantization_level"] = quantization_level
-            models.append(
-                {
-                    "name": entry.display_name,
-                    "modified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "size": 0,
-                    "digest": f"trtllm:{entry.serve_handle}",
-                    "details": details,
+            for catalog_name in catalog_names_for_entry(entry):
+                details = {
+                    "family": "trtllm",
+                    "format": "openai-compatible",
+                    "parent_model": entry.serve_handle,
                 }
-            )
+                if catalog_name != entry.display_name:
+                    details["canonical_model"] = entry.display_name
+                quantization_level = infer_quantization_level(entry.serve_handle)
+                if quantization_level:
+                    details["quantization_level"] = quantization_level
+                models.append(
+                    {
+                        "name": catalog_name,
+                        "modified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "size": 0,
+                        "digest": f"trtllm:{entry.serve_handle}",
+                        "details": details,
+                    }
+                )
         return {"models": models}
 
     def models_payload(self) -> dict:
         data = []
         for entry in self.available_entries():
-            record = {"id": entry.display_name, "object": "model", "owned_by": "trtllm"}
-            if entry.display_name != entry.serve_handle:
-                record["metadata"] = {"serve_handle": entry.serve_handle}
-            data.append(record)
+            for catalog_name in catalog_names_for_entry(entry):
+                record = {"id": catalog_name, "object": "model", "owned_by": "trtllm"}
+                metadata: dict[str, str] = {}
+                if catalog_name != entry.display_name:
+                    metadata["canonical_model"] = entry.display_name
+                if entry.display_name != entry.serve_handle:
+                    metadata["serve_handle"] = entry.serve_handle
+                if metadata:
+                    record["metadata"] = metadata
+                data.append(record)
         return {"object": "list", "data": data}
 
     def resolve_request_model(self, requested: str | None) -> tuple[str, str]:
