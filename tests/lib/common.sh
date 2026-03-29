@@ -248,6 +248,28 @@ assert_network_internal() {
   ok "docker network '${network_name}' is internal"
 }
 
+collect_service_ips_for_networks() {
+  local service="$1"
+  local target_var="$2"
+  shift 2
+  local -a networks=("$@")
+  local cid network_name ip
+  local -n target_ref="${target_var}"
+
+  target_ref=()
+  cid="$(service_container_id "${service}")"
+  [[ -n "${cid}" ]] || return 1
+
+  for network_name in "${networks[@]}"; do
+    [[ -n "${network_name}" ]] || continue
+    ip="$(docker inspect --format "{{with index .NetworkSettings.Networks \"${network_name}\"}}{{.IPAddress}}{{end}}" "${cid}" 2>/dev/null || true)"
+    [[ -n "${ip}" ]] || continue
+    target_ref+=("${ip}")
+  done
+
+  [[ "${#target_ref[@]}" -gt 0 ]]
+}
+
 assert_docker_user_policy() {
   assert_cmd iptables
   assert_cmd docker
@@ -261,6 +283,13 @@ assert_docker_user_policy() {
   local network_name
   local subnet
   local src_subnet
+  local agentic_subnet
+  local egress_network="${AGENTIC_EGRESS_NETWORK:-agentic-egress}"
+  local -a proxy_source_ips=()
+  local -a proxy_dest_ips=()
+  local -a unbound_source_ips=()
+  local -a unbound_dest_ips=()
+  local -a ollama_source_ips=()
   local -a source_subnets=()
   declare -A seen_source_networks=()
 
@@ -294,6 +323,12 @@ assert_docker_user_policy() {
     status=1
   }
 
+  agentic_subnet="$(docker network inspect "${AGENTIC_NETWORK:-agentic}" --format '{{(index .IPAM.Config 0).Subnet}}' 2>/dev/null || true)"
+  if [[ -z "${agentic_subnet}" ]]; then
+    fail "${chain}: unable to resolve subnet for internal network '${AGENTIC_NETWORK:-agentic}'"
+    status=1
+  fi
+
   for raw_network in ${source_networks_raw//,/ }; do
     network_name="${raw_network// /}"
     [[ -n "${network_name}" ]] || continue
@@ -319,6 +354,82 @@ assert_docker_user_policy() {
   for src_subnet in "${source_subnets[@]}"; do
     echo "$chain_rules" | grep -Fq -- "-s ${src_subnet} -j DROP" || {
       fail "${chain}: DROP rule missing for source subnet ${src_subnet}"
+      status=1
+    }
+  done
+
+  if ! collect_service_ips_for_networks "egress-proxy" proxy_source_ips "${egress_network}"; then
+    fail "${chain}: unable to resolve egress-proxy IP on '${egress_network}'"
+    status=1
+  fi
+  if ! collect_service_ips_for_networks "egress-proxy" proxy_dest_ips "${AGENTIC_NETWORK:-agentic}" "${egress_network}"; then
+    fail "${chain}: unable to resolve egress-proxy destination IPs"
+    status=1
+  fi
+  if ! collect_service_ips_for_networks "unbound" unbound_source_ips "${egress_network}"; then
+    fail "${chain}: unable to resolve unbound IP on '${egress_network}'"
+    status=1
+  fi
+  if ! collect_service_ips_for_networks "unbound" unbound_dest_ips "${AGENTIC_NETWORK:-agentic}" "${egress_network}"; then
+    fail "${chain}: unable to resolve unbound destination IPs"
+    status=1
+  fi
+  if ! collect_service_ips_for_networks "ollama" ollama_source_ips "${egress_network}"; then
+    fail "${chain}: unable to resolve ollama IP on '${egress_network}'"
+    status=1
+  fi
+
+  local proxy_ip
+  for proxy_ip in "${proxy_source_ips[@]}"; do
+    echo "$chain_rules" | grep -Fq -- "-s ${proxy_ip}/32 -p tcp --dport 80 -j ACCEPT" || {
+      fail "${chain}: egress-proxy upstream allow missing for ${proxy_ip}:80"
+      status=1
+    }
+    echo "$chain_rules" | grep -Fq -- "-s ${proxy_ip}/32 -p tcp --dport 443 -j ACCEPT" || {
+      fail "${chain}: egress-proxy upstream allow missing for ${proxy_ip}:443"
+      status=1
+    }
+  done
+
+  local unbound_ip
+  for unbound_ip in "${unbound_source_ips[@]}"; do
+    echo "$chain_rules" | grep -Fq -- "-s ${unbound_ip}/32 -p udp --dport 53 -j ACCEPT" || {
+      fail "${chain}: unbound UDP allow missing for ${unbound_ip}:53"
+      status=1
+    }
+    echo "$chain_rules" | grep -Fq -- "-s ${unbound_ip}/32 -p tcp --dport 53 -j ACCEPT" || {
+      fail "${chain}: unbound TCP allow missing for ${unbound_ip}:53"
+      status=1
+    }
+  done
+
+  local ollama_ip
+  for ollama_ip in "${ollama_source_ips[@]}"; do
+    echo "$chain_rules" | grep -Fq -- "-s ${ollama_ip}/32 -d ${agentic_subnet} -j ACCEPT" || {
+      fail "${chain}: ollama internal allow missing for ${ollama_ip} -> ${agentic_subnet}"
+      status=1
+    }
+
+    for proxy_ip in "${proxy_dest_ips[@]}"; do
+      echo "$chain_rules" | grep -Fq -- "-s ${ollama_ip}/32 -d ${proxy_ip}/32 -p tcp --dport 3128 -j ACCEPT" || {
+        fail "${chain}: ollama proxy allow missing for ${ollama_ip} -> ${proxy_ip}:3128"
+        status=1
+      }
+    done
+
+    for unbound_ip in "${unbound_dest_ips[@]}"; do
+      echo "$chain_rules" | grep -Fq -- "-s ${ollama_ip}/32 -d ${unbound_ip}/32 -p udp --dport 53 -j ACCEPT" || {
+        fail "${chain}: ollama unbound UDP allow missing for ${ollama_ip} -> ${unbound_ip}:53"
+        status=1
+      }
+      echo "$chain_rules" | grep -Fq -- "-s ${ollama_ip}/32 -d ${unbound_ip}/32 -p tcp --dport 53 -j ACCEPT" || {
+        fail "${chain}: ollama unbound TCP allow missing for ${ollama_ip} -> ${unbound_ip}:53"
+        status=1
+      }
+    done
+
+    echo "$chain_rules" | grep -Fq -- "-s ${ollama_ip}/32 -j DROP" || {
+      fail "${chain}: explicit ollama DROP missing for ${ollama_ip}"
       status=1
     }
   done

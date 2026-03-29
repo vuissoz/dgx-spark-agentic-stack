@@ -19,6 +19,7 @@ assert_docker_user_policy || fail "DOCKER-USER enforcement policy not in place"
 
 toolbox_cid="$(require_service_container toolbox)"
 proxy_cid="$(require_service_container egress-proxy)"
+ollama_cid="$(require_service_container ollama)"
 chain="${AGENTIC_DOCKER_USER_CHAIN:-AGENTIC-DOCKER-USER}"
 proxy_ip="$(docker inspect --format '{{with index .NetworkSettings.Networks "'"${AGENTIC_NETWORK:-agentic}"'"}}{{.IPAddress}}{{end}}' "${proxy_cid}")"
 [[ -n "${proxy_ip}" ]] || fail "cannot resolve egress-proxy IP on network ${AGENTIC_NETWORK:-agentic}"
@@ -66,5 +67,19 @@ if (( after_drop_count <= before_drop_count )); then
   fail "DOCKER-USER drop counter did not increase (before=${before_drop_count}, after=${after_drop_count})"
 fi
 ok "DOCKER-USER drop counter increased after blocked attempt (before=${before_drop_count}, after=${after_drop_count})"
+
+timeout 12 docker exec "${ollama_cid}" bash -lc 'exec 3<>/dev/tcp/egress-proxy/3128' \
+  || fail "ollama cannot reach egress-proxy:3128 despite explicit allow rule"
+ok "ollama can reach egress-proxy:3128"
+
+set +e
+timeout 12 docker exec "${ollama_cid}" bash -lc 'exec 3<>/dev/tcp/1.1.1.1/80'
+ollama_direct_rc=$?
+set -e
+
+if [[ "${ollama_direct_rc}" -eq 0 ]]; then
+  fail "ollama direct egress bypass succeeded; expected explicit DOCKER-USER drop"
+fi
+ok "ollama direct egress bypass attempt is blocked"
 
 ok "B4_docker_user_enforced passed"

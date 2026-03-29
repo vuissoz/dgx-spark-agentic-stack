@@ -13,6 +13,7 @@ AGENTIC_GATE_SERVICE="${AGENTIC_GATE_SERVICE:-ollama-gate}"
 AGENTIC_GATE_PORT="${AGENTIC_GATE_PORT:-11435}"
 AGENTIC_OLLAMA_SERVICE="${AGENTIC_OLLAMA_SERVICE:-ollama}"
 AGENTIC_OLLAMA_PORT="${AGENTIC_OLLAMA_PORT:-11434}"
+AGENTIC_PROXY_UPSTREAM_PORTS="${AGENTIC_PROXY_UPSTREAM_PORTS:-80,443}"
 AGENTIC_DOCKER_USER_LOG_PREFIX="${AGENTIC_DOCKER_USER_LOG_PREFIX:-AGENTIC-DROP }"
 AGENTIC_DOCKER_USER_SOURCE_NETWORKS="${AGENTIC_DOCKER_USER_SOURCE_NETWORKS:-${AGENTIC_NETWORK},${AGENTIC_EGRESS_NETWORK}}"
 AGENTIC_HOST_NET_BACKUPS_DIR="${AGENTIC_HOST_NET_BACKUPS_DIR:-${AGENTIC_ROOT}/deployments/host-net/backups}"
@@ -207,10 +208,14 @@ main() {
   local -a resolution_networks=()
   local -a source_subnets=()
   local -a internal_allow_subnets=()
+  local -a proxy_source_ips=()
   local -a proxy_ips=()
+  local -a unbound_source_ips=()
   local -a unbound_ips=()
   local -a gate_ips=()
+  local -a ollama_source_ips=()
   local -a ollama_ips=()
+  local -a proxy_upstream_ports=()
   declare -A seen_networks=()
 
   for raw_network in ${AGENTIC_DOCKER_USER_SOURCE_NETWORKS//,/ }; do
@@ -248,10 +253,17 @@ main() {
 
   collect_service_ips_with_retry "${AGENTIC_PROXY_SERVICE}" proxy_ips "${resolution_networks[@]}" \
     || die "cannot resolve IPs for '${AGENTIC_PROXY_SERVICE}' on ${resolution_networks[*]} after ${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20} attempts"
+  collect_service_ips_with_retry "${AGENTIC_PROXY_SERVICE}" proxy_source_ips "${AGENTIC_EGRESS_NETWORK}" \
+    || die "cannot resolve egress IPs for '${AGENTIC_PROXY_SERVICE}' on ${AGENTIC_EGRESS_NETWORK}"
   collect_service_ips_with_retry "${AGENTIC_UNBOUND_SERVICE}" unbound_ips "${resolution_networks[@]}" \
     || die "cannot resolve IPs for '${AGENTIC_UNBOUND_SERVICE}' on ${resolution_networks[*]} after ${AGENTIC_SERVICE_IP_RESOLVE_ATTEMPTS:-20} attempts"
+  collect_service_ips_with_retry "${AGENTIC_UNBOUND_SERVICE}" unbound_source_ips "${AGENTIC_EGRESS_NETWORK}" \
+    || die "cannot resolve egress IPs for '${AGENTIC_UNBOUND_SERVICE}' on ${AGENTIC_EGRESS_NETWORK}"
   collect_service_ips_with_retry "${AGENTIC_GATE_SERVICE}" gate_ips "${resolution_networks[@]}" || true
   collect_service_ips_with_retry "${AGENTIC_OLLAMA_SERVICE}" ollama_ips "${resolution_networks[@]}" || true
+  collect_service_ips_with_retry "${AGENTIC_OLLAMA_SERVICE}" ollama_source_ips "${AGENTIC_EGRESS_NETWORK}" || true
+
+  IFS=',' read -r -a proxy_upstream_ports <<<"${AGENTIC_PROXY_UPSTREAM_PORTS}"
 
   backup_id="$(create_host_net_backup)"
 
@@ -263,6 +275,44 @@ main() {
     || iptables -I DOCKER-USER 1 -j "${AGENTIC_DOCKER_USER_CHAIN}"
 
   iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+  for unbound_ip in "${unbound_source_ips[@]}"; do
+    iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${unbound_ip}/32" -p udp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
+    iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${unbound_ip}/32" -p tcp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
+    log "allowed recursive DNS egress from ${AGENTIC_UNBOUND_SERVICE} source ${unbound_ip}"
+  done
+
+  for proxy_ip in "${proxy_source_ips[@]}"; do
+    for port in "${proxy_upstream_ports[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${proxy_ip}/32" -p tcp --dport "${port}" -j ACCEPT
+    done
+    log "allowed upstream web egress from ${AGENTIC_PROXY_SERVICE} source ${proxy_ip} ports=${AGENTIC_PROXY_UPSTREAM_PORTS}"
+  done
+
+  for ollama_ip in "${ollama_source_ips[@]}"; do
+    for subnet in "${internal_allow_subnets[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${ollama_ip}/32" -d "${subnet}" -j ACCEPT
+    done
+
+    for unbound_ip in "${unbound_ips[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+        -s "${ollama_ip}/32" -d "${unbound_ip}/32" -p udp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+        -s "${ollama_ip}/32" -d "${unbound_ip}/32" -p tcp --dport "${AGENTIC_UNBOUND_PORT}" -j ACCEPT
+    done
+
+    for proxy_ip in "${proxy_ips[@]}"; do
+      iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+        -s "${ollama_ip}/32" -d "${proxy_ip}/32" -p tcp --dport "${AGENTIC_PROXY_PORT}" -j ACCEPT
+    done
+
+    iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+      -s "${ollama_ip}/32" \
+      -m limit --limit 6/min --limit-burst 20 \
+      -j LOG --log-prefix "${AGENTIC_DOCKER_USER_LOG_PREFIX}" --log-level 4
+    iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${ollama_ip}/32" -j DROP
+    log "constrained ${AGENTIC_OLLAMA_SERVICE} egress source ${ollama_ip} to internal mesh, ${AGENTIC_UNBOUND_SERVICE}, and ${AGENTIC_PROXY_SERVICE}"
+  done
 
   for src_subnet in "${source_subnets[@]}"; do
     for subnet in "${internal_allow_subnets[@]}"; do
