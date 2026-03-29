@@ -31,8 +31,8 @@ AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_v
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_TOOLS=(claude codex opencode vibestral openclaw pi-mono goose)
-AGENT_STATUS_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
-STOP_START_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
+AGENT_STATUS_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose forgejo openwebui openhands comfyui)
+STOP_START_TARGETS=(claude codex opencode vibestral openclaw pi-mono goose forgejo openwebui openhands comfyui)
 OPTIONAL_MODULES=(mcp git-forge pi-mono goose portainer)
 FORGET_TARGETS=(ollama claude codex opencode vibestral comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
@@ -243,7 +243,7 @@ tool_session_mode() {
 target_session_mode() {
   case "$1" in
     claude|codex|opencode|vibestral|pi-mono) echo "tmux" ;;
-    openclaw|goose|openwebui|openhands|comfyui) echo "n/a" ;;
+    openclaw|goose|forgejo|openwebui|openhands|comfyui) echo "n/a" ;;
     *) return 1 ;;
   esac
 }
@@ -253,6 +253,7 @@ service_start_hint() {
     openclaw|openclaw-gateway) echo "agent up core" ;;
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
+    optional-forgejo) echo "AGENTIC_OPTIONAL_MODULES=git-forge agent up optional" ;;
     *) echo "agent up agents" ;;
   esac
 }
@@ -262,7 +263,7 @@ target_to_compose_file() {
     claude|codex|opencode|vibestral) stack_to_compose_file agents ;;
     openclaw) stack_to_compose_file core ;;
     openwebui|openhands|comfyui) stack_to_compose_file ui ;;
-    pi-mono|goose) stack_to_compose_file optional ;;
+    pi-mono|goose|forgejo) stack_to_compose_file optional ;;
     *) return 1 ;;
   esac
 }
@@ -283,6 +284,7 @@ target_to_services() {
       ;;
     pi-mono) printf '%s\n' "optional-pi-mono" ;;
     goose) printf '%s\n' "optional-goose" ;;
+    forgejo) printf '%s\n' "optional-forgejo" ;;
     openwebui) printf '%s\n' "openwebui" ;;
     openhands) printf '%s\n' "openhands" ;;
     comfyui)
@@ -4064,6 +4066,7 @@ normalize_logs_target() {
   local target="$1"
   case "${target}" in
     claude|codex|opencode|vibestral|openclaw|pi-mono|goose) tool_to_service "${target}" ;;
+    forgejo) printf '%s\n' "optional-forgejo" ;;
     *) printf '%s\n' "${target}" ;;
   esac
 }
@@ -4266,6 +4269,7 @@ case "$cmd" in
       docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
         --profile optional \
         --profile optional-mcp \
+        --profile optional-git-forge \
         --profile optional-pi-mono \
         --profile optional-goose \
         --profile optional-portainer \
