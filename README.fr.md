@@ -61,6 +61,8 @@ Commandes operateur TRT:
 ```bash
 ./agent trtllm status
 ./agent trtllm prepare
+./agent trtllm start
+./agent trtllm stop
 ```
 
 Un seul modele TRT est expose par la stack a la fois sur DGX Spark.
@@ -333,7 +335,7 @@ agent ps
 agent llm mode [local|hybrid|mixed|remote]
 agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
-agent trtllm [status|prepare]
+agent trtllm [status|prepare|start|stop]
 agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
 agent logs <service>
 agent stop <tool>
@@ -388,6 +390,7 @@ Exemples:
 Notes:
 - `agent stop` et `agent start` gèrent les cibles `claude|codex|opencode|vibestral|openclaw|pi-mono|goose|openwebui|openhands|comfyui`.
 - `agent stop/start openclaw` pilote tout le bundle OpenClaw control/execution-plane; `agent stop/start comfyui` pilote `comfyui` et `comfyui-loopback` ensemble.
+- `agent trtllm stop` arrête proprement uniquement le service `trtllm`; `agent trtllm start` le remonte et attend son healthcheck.
 - `agent ls` lit maintenant l’état via `docker ps -a`, donc une cible stoppée remonte `exited` ou `mixed` au lieu d’un simple `down`; `agent status` liste chaque conteneur du projet avec son état et sa santé exacte.
 - `agent <tool> [project]` attache une session persistante: `claude|codex|opencode|vibestral|pi-mono` utilisent tmux (`Ctrl-b d` pour détacher), `goose` lance directement la CLI Goose dans `/workspace/<project>` (pas de tmux dans l'image upstream), et `openclaw` ouvre un shell opérateur dans le service core `openclaw` avec rappel des endpoints API loopback, Web UI (`18789`) et Gateway WS (`ws://127.0.0.1:18789`).
 - `agent openclaw init [project]` est le chemin d'onboarding/réparation OpenClaw stack-managed: il corrige le workspace par défaut vers `/workspace/...`, démarre le bundle core si nécessaire, applique le bootstrap local sûr, puis imprime les next steps providers/channels. Sans argument, il utilise `AGENTIC_OPENCLAW_INIT_PROJECT` (défaut: `openclaw-default`). `agent onboard` peut désormais collecter ce projet par défaut ainsi que les secrets provider bridge Telegram/Discord/Slack pour qu'un `agent openclaw init` ultérieur soit automatique. `openclaw onboard`, `openclaw configure --section channels` et `openclaw gateway run` restent des fallbacks experts.

@@ -72,7 +72,7 @@ Usage:
   agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
   agent ollama unload <model>
-  agent trtllm [status|prepare]
+  agent trtllm [status|prepare|start|stop]
   agent ollama-link
   agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
   agent ollama-drift schedule [--disable] [--dry-run] [--on-calendar <expr>] [--cron <expr>] [--force-cron]
@@ -2823,6 +2823,37 @@ cmd_trtllm_prepare() {
   printf 'trtllm prepared=%s local_dir=%s log=%s\n' "${TRTLLM_NVFP4_HF_REPO}" "${TRTLLM_NVFP4_LOCAL_MODEL_DIR}" "${AGENTIC_ROOT}/trtllm/logs/nvfp4-model-prepare.log"
 }
 
+cmd_trtllm_start() {
+  local compose_file
+
+  [[ $# -eq 0 ]] || die "Usage: agent trtllm start"
+  compose_file="$(stack_to_compose_file core)"
+  [[ -f "${compose_file}" ]] || die "Compose file not found for core stack: ${compose_file}"
+
+  require_cmd docker
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" up -d trtllm
+  wait_for_service_ready "trtllm" 120 || die "trtllm did not become ready after start"
+  cmd_trtllm_status
+}
+
+cmd_trtllm_stop() {
+  local compose_file
+
+  [[ $# -eq 0 ]] || die "Usage: agent trtllm stop"
+
+  if [[ -z "$(service_container_any_id "trtllm" || true)" ]]; then
+    cmd_trtllm_status
+    return 0
+  fi
+
+  compose_file="$(stack_to_compose_file core)"
+  [[ -f "${compose_file}" ]] || die "Compose file not found for core stack: ${compose_file}"
+
+  require_cmd docker
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" stop trtllm
+  cmd_trtllm_status
+}
+
 cmd_trtllm() {
   local action="${1:-status}"
   shift || true
@@ -2834,15 +2865,23 @@ cmd_trtllm() {
     prepare)
       cmd_trtllm_prepare "$@"
       ;;
+    start)
+      cmd_trtllm_start "$@"
+      ;;
+    stop)
+      cmd_trtllm_stop "$@"
+      ;;
     help|-h|--help)
       cat <<USAGE
 Usage:
   agent trtllm status
   agent trtllm prepare
+  agent trtllm start
+  agent trtllm stop
 USAGE
       ;;
     *)
-      die "Usage: agent trtllm [status|prepare]"
+      die "Usage: agent trtllm [status|prepare|start|stop]"
       ;;
   esac
 }

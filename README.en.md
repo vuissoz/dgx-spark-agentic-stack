@@ -61,6 +61,8 @@ Operator TRT commands:
 ```bash
 ./agent trtllm status
 ./agent trtllm prepare
+./agent trtllm start
+./agent trtllm stop
 ```
 
 Only one TRT model is exposed by the stack at a time on DGX Spark.
@@ -331,7 +333,7 @@ agent ps
 agent llm mode [local|hybrid|remote]
 agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
-agent trtllm [status|prepare]
+agent trtllm [status|prepare|start|stop]
 agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
 agent logs <service>
 agent stop <tool>
@@ -386,6 +388,7 @@ Examples:
 Notes:
 - `agent stop` and `agent start` handle `claude|codex|opencode|vibestral|openclaw|pi-mono|goose|openwebui|openhands|comfyui` targets.
 - `agent stop/start openclaw` manages the whole OpenClaw control/execution bundle; `agent stop/start comfyui` manages both `comfyui` and `comfyui-loopback`.
+- `agent trtllm stop` cleanly stops only the `trtllm` service; `agent trtllm start` brings it back and waits for its healthcheck.
 - `agent ls` now reads target state from `docker ps -a`, so stopped targets show `exited` or `mixed` instead of collapsing to `down`; `agent status` lists every project container with its exact state and health string.
 - `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|vibestral|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in the core `openclaw` service with loopback API, Web UI (`18789`), and Gateway WS reminders.
 - `agent openclaw init [project]` is the stack-managed OpenClaw onboarding/repair path: it repairs the default workspace back under `/workspace/...`, starts the core bundle if needed, applies the safe local bootstrap, then prints the exact provider/channel next steps. Without an argument it uses `AGENTIC_OPENCLAW_INIT_PROJECT` (default: `openclaw-default`). `agent onboard` can now collect that default project plus Telegram/Discord/Slack provider-bridge secrets so a later `agent openclaw init` can run without extra flags. `openclaw onboard`, `openclaw configure --section channels`, and `openclaw gateway run` remain expert fallbacks only.

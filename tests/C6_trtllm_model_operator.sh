@@ -34,16 +34,68 @@ case "${1:-}" in
     exit 0
     ;;
   ps)
+    if [[ -f "${AGENTIC_ROOT}/trtllm.state" ]]; then
+      printf '%s\n' "fake-trtllm-id"
+    fi
     exit 0
     ;;
   inspect)
     if [[ "${*}" == *".State.Status"* ]]; then
-      printf '%s\n' "running"
+      if [[ -f "${AGENTIC_ROOT}/trtllm.state" ]]; then
+        cat "${AGENTIC_ROOT}/trtllm.state"
+      else
+        printf '%s\n' "running"
+      fi
     elif [[ "${*}" == *".State.Health.Status"* ]]; then
-      printf '%s\n' "healthy"
+      if [[ -f "${AGENTIC_ROOT}/trtllm.health" ]]; then
+        cat "${AGENTIC_ROOT}/trtllm.health"
+      else
+        printf '%s\n' "healthy"
+      fi
     else
       printf '%s\n' "fake-trtllm-id"
     fi
+    exit 0
+    ;;
+  compose)
+    shift
+    while [[ $# -gt 0 ]]; do
+      case "${1}" in
+        --project-name|-f)
+          shift 2
+          ;;
+        up)
+          shift
+          while [[ $# -gt 0 ]]; do
+            case "${1}" in
+              -d|--no-deps)
+                shift
+                ;;
+              trtllm)
+                printf '%s\n' "running" > "${AGENTIC_ROOT}/trtllm.state"
+                printf '%s\n' "healthy" > "${AGENTIC_ROOT}/trtllm.health"
+                shift
+                ;;
+              *)
+                shift
+                ;;
+            esac
+          done
+          exit 0
+          ;;
+        stop)
+          shift
+          if [[ "${1:-}" == "trtllm" ]]; then
+            printf '%s\n' "exited" > "${AGENTIC_ROOT}/trtllm.state"
+            printf '%s\n' "-" > "${AGENTIC_ROOT}/trtllm.health"
+          fi
+          exit 0
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
     exit 0
     ;;
   *)
@@ -84,11 +136,42 @@ printf '%s\n' "${status_output}" | grep -q 'model=https://huggingface.co/nvidia/
   || fail "status must report the configured TRT model and local directory"
 ok "agent trtllm status reports the configured single-model TRT state"
 
+start_output="$(
+  PATH="${fake_bin}:${PATH}" \
+  AGENTIC_ROOT="${runtime_root}" \
+  COMPOSE_PROFILES=trt \
+  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+  TRTLLM_NVFP4_LOCAL_MODEL_DIR="/models/trtllm-model" \
+  bash "${agent_bin}" strict-prod trtllm start
+)"
+printf '%s\n' "${start_output}" | grep -q 'trtllm prepared=yes service_state=running health=healthy ' \
+  || fail "start must report a running healthy trtllm service"
+ok "agent trtllm start brings the runtime up and reports healthy state"
+
+stop_output="$(
+  PATH="${fake_bin}:${PATH}" \
+  AGENTIC_ROOT="${runtime_root}" \
+  COMPOSE_PROFILES=trt \
+  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+  TRTLLM_NVFP4_LOCAL_MODEL_DIR="/models/trtllm-model" \
+  bash "${agent_bin}" strict-prod trtllm stop
+)"
+printf '%s\n' "${stop_output}" | grep -q 'trtllm prepared=yes service_state=exited health=- ' \
+  || fail "stop must report an exited trtllm service"
+ok "agent trtllm stop stops the runtime cleanly"
+
 if PATH="${fake_bin}:${PATH}" AGENTIC_ROOT="${runtime_root}" bash "${agent_bin}" strict-prod trtllm prepare extra >/tmp/agent-c6-prepare-invalid.out 2>&1; then
   fail "agent trtllm prepare must reject extra model arguments"
 fi
 grep -q 'Usage: agent trtllm prepare' /tmp/agent-c6-prepare-invalid.out \
   || fail "prepare usage must mention the single-model interface"
 ok "agent trtllm prepare rejects obsolete multi-model arguments"
+
+if PATH="${fake_bin}:${PATH}" AGENTIC_ROOT="${runtime_root}" bash "${agent_bin}" strict-prod trtllm stop extra >/tmp/agent-c6-stop-invalid.out 2>&1; then
+  fail "agent trtllm stop must reject extra arguments"
+fi
+grep -q 'Usage: agent trtllm stop' /tmp/agent-c6-stop-invalid.out \
+  || fail "stop usage must mention the dedicated interface"
+ok "agent trtllm stop rejects unexpected arguments"
 
 ok "C6_trtllm_model_operator passed"
