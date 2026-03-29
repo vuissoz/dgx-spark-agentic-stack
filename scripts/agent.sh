@@ -1294,6 +1294,7 @@ cmd_profile() {
   printf 'pi_mono_workspaces_dir=%s\n' "${AGENTIC_PI_MONO_WORKSPACES_DIR}"
   printf 'goose_workspaces_dir=%s\n' "${AGENTIC_GOOSE_WORKSPACES_DIR}"
   printf 'compose_project=%s\n' "${AGENTIC_COMPOSE_PROJECT}"
+  printf 'compose_profiles=%s\n' "${COMPOSE_PROFILES:-}"
   printf 'network=%s\n' "${AGENTIC_NETWORK}"
   printf 'llm_network=%s\n' "${AGENTIC_LLM_NETWORK}"
   printf 'agent_base_build_context=%s\n' "${AGENTIC_AGENT_BASE_BUILD_CONTEXT}"
