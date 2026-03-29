@@ -693,6 +693,11 @@ core_service_build_inputs() {
         "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_gateway_entrypoint.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/tcp_forward.py"
       ;;
+    trtllm)
+      printf '%s\n' \
+        "${AGENTIC_REPO_ROOT}/deployments/trtllm/Dockerfile" \
+        "${AGENTIC_REPO_ROOT}/deployments/trtllm/server.py"
+      ;;
     *)
       return 1
       ;;
@@ -704,6 +709,7 @@ core_service_stamp_key() {
     ollama-gate) echo "ollama-gate-local" ;;
     gate-mcp) echo "gate-mcp-local" ;;
     openclaw) echo "openclaw-local" ;;
+    trtllm) echo "trtllm-runtime-local" ;;
     *) return 1 ;;
   esac
 }
@@ -713,8 +719,16 @@ core_service_image_ref() {
     ollama-gate) echo "agentic/ollama-gate:local" ;;
     gate-mcp) echo "agentic/gate-mcp:local" ;;
     openclaw) echo "agentic/optional-modules:local" ;;
+    trtllm) echo "agentic/trtllm-runtime:local" ;;
     *) return 1 ;;
   esac
+}
+
+core_build_services() {
+  printf '%s\n' ollama-gate gate-mcp openclaw
+  if agentic_csv_contains "trt" "${COMPOSE_PROFILES:-}"; then
+    printf '%s\n' trtllm
+  fi
 }
 
 core_service_build_fingerprint() {
@@ -749,7 +763,7 @@ core_service_build_fingerprint() {
 
 build_core_local_images() {
   local core_compose_file="$1"
-  local -a services=(ollama-gate gate-mcp openclaw)
+  local -a services=()
   local -a build_services=()
   local -a build_stamp_paths=()
   local -a build_fingerprints=()
@@ -770,6 +784,7 @@ build_core_local_images() {
   install -d -m 0750 "${stamp_dir}"
 
   require_cmd docker
+  mapfile -t services < <(core_build_services)
 
   for service in "${services[@]}"; do
     stamp_key="$(core_service_stamp_key "${service}")" || continue
@@ -789,7 +804,13 @@ build_core_local_images() {
 
   [[ "${#build_services[@]}" -gt 0 ]] || return 0
 
+  local -a compose_profile_args=()
+  if printf '%s\n' "${build_services[@]}" | grep -qx 'trtllm'; then
+    compose_profile_args+=(--profile trt)
+  fi
+
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+    "${compose_profile_args[@]}" \
     -f "${core_compose_file}" build "${build_services[@]}"
 
   local idx
