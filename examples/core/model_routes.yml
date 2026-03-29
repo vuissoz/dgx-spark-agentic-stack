@@ -41,6 +41,11 @@ backends:
       X-Title: DGX Spark Agentic Stack
 
 routes:
+  - name: default-trtllm-model
+    backend: trtllm
+    match:
+      - "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+      - "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
   - name: nvfp4-to-trtllm
     backend: trtllm
     match:

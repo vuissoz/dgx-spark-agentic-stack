@@ -2117,6 +2117,7 @@ async def v1_models(request: Request) -> JSONResponse:
     project = request.headers.get("X-Agent-Project", "-")
     llm_mode = state.get_llm_mode()
     llm_backend = state.get_llm_backend()
+    llm_backend_effective = str(state.get_backend_runtime().get("effective_backend", "")).strip().lower()
     started = time.monotonic()
     acquired = False
     decision = "active"
@@ -2162,7 +2163,10 @@ async def v1_models(request: Request) -> JSONResponse:
         for backend_name in backends:
             if not state.backend_allowed(backend_name, llm_mode=llm_mode, llm_backend=llm_backend):
                 continue
-            backend_records = await fetch_backend_model_catalog(backend_name)
+            try:
+                backend_records = await fetch_backend_model_catalog(backend_name)
+            except BackendAuthError:
+                continue
             for record in backend_records:
                 record_id = record.get("id")
                 if not isinstance(record_id, str) or not record_id or record_id in seen_ids:

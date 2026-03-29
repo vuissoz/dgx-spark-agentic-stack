@@ -338,6 +338,27 @@ prefetch_trtllm_default_model() {
   fi
 }
 
+ensure_gate_default_trtllm_route() {
+  local routes_file="$1"
+  local default_url="${AGENTIC_DEFAULT_TRTLLM_MODEL_URL:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}"
+  local default_handle="${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE:-nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}"
+
+  [[ -f "${routes_file}" ]] || return 0
+  if grep -Fq 'name: default-trtllm-model' "${routes_file}" \
+    || { grep -Fq "${default_url}" "${routes_file}" && grep -Fq "${default_handle}" "${routes_file}"; }; then
+    return 0
+  fi
+
+  cat >>"${routes_file}" <<EOF
+  - name: default-trtllm-model
+    backend: trtllm
+    match:
+      - "${default_url}"
+      - "${default_handle}"
+EOF
+  log "ensured gate route for default TRT model: ${default_url}"
+}
+
 ensure_gate_mode_file() {
   local mode_file="${AGENTIC_ROOT}/gate/state/llm_mode.json"
   local default_mode="${AGENTIC_LLM_MODE:-hybrid}"
@@ -431,6 +452,7 @@ main() {
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
 
   copy_if_missing "${TEMPLATE_DIR}/model_routes.yml" "${AGENTIC_ROOT}/gate/config/model_routes.yml" 0640
+  ensure_gate_default_trtllm_route "${AGENTIC_ROOT}/gate/config/model_routes.yml"
   copy_if_missing "${TEMPLATE_DIR}/unbound.conf" "${AGENTIC_ROOT}/dns/unbound.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/squid.conf" "${AGENTIC_ROOT}/proxy/config/squid.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt" 0644

@@ -128,9 +128,10 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-cg57` : le service Compose `trtllm` propage maintenant `TRTLLM_NVFP4_HF_REPO` et `TRTLLM_NVFP4_HF_REVISION`, ce qui corrige le démarrage strict local-only de `nemotron-cascade-30b` sans retomber sur le slug `super-120b`.
   - `dgx-spark-agentic-stack-799i` : `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` devient l'alias TRT expose par defaut dans l'onboarding, Compose, le runtime et l'adapter TRT, tout en laissant `nemotron-cascade-30b` comme entree par defaut du catalogue local NVFP4.
   - `dgx-spark-agentic-stack-9lhm` : le runtime TRT Nano borne maintenant `max_num_tokens=4096`, `max_seq_len=32768`, desactive les CUDA graphs par defaut et reroute les caches Triton/TorchInductor sous `/state/cache` pour eviter le crash `.so` sur `/tmp` monte `noexec`.
-  - `dgx-spark-agentic-stack-j4b0` reste ouvert : stabiliser le warm-up TRT de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` derriere le proxy HF pour obtenir un premier `Hello` sans `503 starting`.
+  - `dgx-spark-agentic-stack-j4b0` : le warm-up TRT de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` aboutit maintenant jusqu'a un vrai `Hello` via le wrapper `trtllm`, sans rester bloque en `503 starting`.
   - `dgx-spark-agentic-stack-xe3w` : `agent up core` avec TRT prefetch maintenant explicitement le cache HF de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`, sans telecharger `cascade` ou `super` sur ce chemin par defaut.
   - `dgx-spark-agentic-stack-u94j` : le bootstrap `agent up core` n'appelle plus aucun prechargement NVFP4 local automatique; `cascade` et `super` restent uniquement en manuel.
+  - `dgx-spark-agentic-stack-1kso` : le gate restaure `/v1/models` sans tomber sur les backends distants sans cle, ajoute une route explicite pour `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` et valide le passage `ollama-gate -> trtllm` pour le modele TRT par defaut.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 

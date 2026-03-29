@@ -8,8 +8,10 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 helper_script="${REPO_ROOT}/deployments/trtllm/prefetch_default_model.sh"
 init_script="${REPO_ROOT}/deployments/core/init_runtime.sh"
+routes_template="${REPO_ROOT}/examples/core/model_routes.yml"
 [[ -x "${helper_script}" ]] || fail "TRT HF prefetch helper missing: ${helper_script}"
 [[ -f "${init_script}" ]] || fail "core init script missing: ${init_script}"
+[[ -f "${routes_template}" ]] || fail "core model routes template missing: ${routes_template}"
 
 tmp_root="$(mktemp -d)"
 trap 'rm -rf "${tmp_root}"' EXIT
@@ -70,9 +72,19 @@ ok "TRT HF prefetch skips non-default aliases such as Cascade NVFP4"
 
 grep -q 'prefetch_trtllm_default_model' "${init_script}" \
   || fail "core init runtime must call the TRT HF prefetch helper"
+grep -q 'ensure_gate_default_trtllm_route' "${init_script}" \
+  || fail "core init runtime must normalize the gate route for the default TRT model"
 if grep -q 'prepare_trtllm_nvfp4_model' "${init_script}"; then
   fail "core init runtime must not auto-bootstrap Cascade or Super NVFP4 payloads"
 fi
 ok "core init runtime wires only the Nano HF prefetch helper on the default TRT path"
+
+grep -q 'name: default-trtllm-model' "${routes_template}" \
+  || fail "core model routes template must expose a dedicated default TRT route"
+grep -q 'https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' "${routes_template}" \
+  || fail "core model routes template must route the default Nano FP8 URL to trtllm"
+grep -q 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' "${routes_template}" \
+  || fail "core model routes template must route the default Nano FP8 handle to trtllm"
+ok "core model routes template pins the default Nano FP8 alias to trtllm"
 
 ok "C7_trtllm_default_hf_prefetch passed"

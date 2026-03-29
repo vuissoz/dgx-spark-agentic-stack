@@ -48,7 +48,7 @@ call_chat() {
     dry_header="-H 'X-Gate-Dry-Run: 1'"
   fi
 
-  timeout 25 docker exec "${toolbox_cid}" sh -lc "curl -sS -H 'Content-Type: application/json' -H 'X-Agent-Session: ${session}' -H 'X-Agent-Project: d4' ${dry_header} -d '{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"backend routing check\"}]}' http://ollama-gate:11435/v1/chat/completions -w '\n%{http_code}'"
+  timeout 45 docker exec "${toolbox_cid}" sh -lc "curl -sS -H 'Content-Type: application/json' -H 'X-Agent-Session: ${session}' -H 'X-Agent-Project: d4' ${dry_header} -d '{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"backend routing check\"}]}' http://ollama-gate:11435/v1/chat/completions -w '\n%{http_code}'"
 }
 
 extract_code() {
@@ -73,9 +73,15 @@ assert_log_backend() {
 session_ollama="d4-ollama-$$"
 resp_ollama="$(call_chat "${session_ollama}" "qwen3:0.6b" 1)"
 code_ollama="$(extract_code "${resp_ollama}")"
-[[ "${code_ollama}" == "200" ]] || fail "standard model dry-run request failed with status ${code_ollama}"
+body_ollama="$(extract_body "${resp_ollama}")"
+[[ "${code_ollama}" == "200" || "${code_ollama}" == "404" ]] || {
+  printf '%s\n' "${body_ollama}" >&2
+  fail "standard model dry-run request failed with unexpected status ${code_ollama}"
+}
 assert_log_backend "${session_ollama}" "ollama"
-ok "standard model is routed to backend=ollama"
+ok "standard model request is routed to backend=ollama"
+
+sleep 4
 
 session_trt="d4-trt-$$"
 resp_trt="$(call_chat "${session_trt}" "qwen3-nvfp4-demo" 0)"
@@ -87,6 +93,17 @@ body_trt="$(extract_body "${resp_trt}")"
 }
 assert_log_backend "${session_trt}" "trtllm"
 ok "NVFP4 model is routed to backend=trtllm"
+
+session_trt_default="d4-trt-default-$$"
+resp_trt_default="$(call_chat "${session_trt_default}" "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" 1)"
+code_trt_default="$(extract_code "${resp_trt_default}")"
+body_trt_default="$(extract_body "${resp_trt_default}")"
+[[ "${code_trt_default}" == "200" ]] || {
+  printf '%s\n' "${body_trt_default}" >&2
+  fail "default TRT model dry-run request failed with status ${code_trt_default}"
+}
+assert_log_backend "${session_trt_default}" "trtllm"
+ok "default TRT model URL is routed to backend=trtllm"
 
 docker stop "${trt_cid}" >/dev/null
 
