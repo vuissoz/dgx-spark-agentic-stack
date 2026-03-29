@@ -24,11 +24,26 @@ assert_cmd docker
 agentic_root="${AGENTIC_ROOT}"
 goose_workspaces_dir="${AGENTIC_GOOSE_WORKSPACES_DIR}"
 goose_context_limit="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
+context_budget_tokens="${AGENTIC_CONTEXT_BUDGET_TOKENS:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}"
+context_soft_tokens="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}"
+context_danger_tokens="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}"
 runtime_goose_context_limit_file="${agentic_root}/deployments/runtime.env"
 if [[ -f "${runtime_goose_context_limit_file}" ]]; then
   runtime_goose_context_limit="$(sed -n 's/^AGENTIC_GOOSE_CONTEXT_LIMIT=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
   if [[ -n "${runtime_goose_context_limit}" ]]; then
     goose_context_limit="${runtime_goose_context_limit}"
+  fi
+  runtime_context_budget_tokens="$(sed -n 's/^AGENTIC_CONTEXT_BUDGET_TOKENS=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
+  if [[ -n "${runtime_context_budget_tokens}" ]]; then
+    context_budget_tokens="${runtime_context_budget_tokens}"
+  fi
+  runtime_context_soft_tokens="$(sed -n 's/^AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
+  if [[ -n "${runtime_context_soft_tokens}" ]]; then
+    context_soft_tokens="${runtime_context_soft_tokens}"
+  fi
+  runtime_context_danger_tokens="$(sed -n 's/^AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
+  if [[ -n "${runtime_context_danger_tokens}" ]]; then
+    context_danger_tokens="${runtime_context_danger_tokens}"
   fi
 fi
 [[ "${goose_context_limit}" =~ ^[0-9]+$ ]] || fail "AGENTIC_GOOSE_CONTEXT_LIMIT must be numeric (got ${goose_context_limit})"
@@ -69,6 +84,16 @@ echo "${env_dump}" | grep -q '^OLLAMA_HOST=http://ollama-gate:11435$' \
   || fail "optional-goose must set OLLAMA_HOST=http://ollama-gate:11435"
 echo "${env_dump}" | grep -q "^GOOSE_CONTEXT_LIMIT=${goose_context_limit}$" \
   || fail "optional-goose must set GOOSE_CONTEXT_LIMIT=${goose_context_limit}"
+echo "${env_dump}" | grep -q "^AGENTIC_CONTEXT_BUDGET_TOKENS=${context_budget_tokens}$" \
+  || fail "optional-goose must set AGENTIC_CONTEXT_BUDGET_TOKENS=${context_budget_tokens}"
+echo "${env_dump}" | grep -q "^AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=${context_soft_tokens}$" \
+  || fail "optional-goose must set AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=${context_soft_tokens}"
+echo "${env_dump}" | grep -q "^AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=${context_danger_tokens}$" \
+  || fail "optional-goose must set AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=${context_danger_tokens}"
+echo "${env_dump}" | grep -q "^GOOSE_CONTEXT_COMPACTION_SOFT_TOKENS=${context_soft_tokens}$" \
+  || fail "optional-goose must set GOOSE_CONTEXT_COMPACTION_SOFT_TOKENS=${context_soft_tokens}"
+echo "${env_dump}" | grep -q "^GOOSE_CONTEXT_COMPACTION_DANGER_TOKENS=${context_danger_tokens}$" \
+  || fail "optional-goose must set GOOSE_CONTEXT_COMPACTION_DANGER_TOKENS=${context_danger_tokens}"
 
 mount_dump="$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%v\n" .Source .Destination .RW}}{{end}}' "${goose_cid}")"
 echo "${mount_dump}" | grep -q '|/state|true$' \

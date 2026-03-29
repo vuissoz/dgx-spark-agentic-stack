@@ -220,3 +220,73 @@ print(f"mem_limit_bytes={mem_limit_bytes}")
 print(f"estimated_max_fitting_context={estimated_max_fitting_context}")
 PY
 }
+
+agentic_context_effective_budget() {
+  local candidate=0
+  local budget=0
+
+  for candidate in "$@"; do
+    [[ "${candidate}" =~ ^[0-9]+$ ]] || continue
+    (( candidate > 0 )) || continue
+    if (( budget == 0 || candidate < budget )); then
+      budget="${candidate}"
+    fi
+  done
+
+  printf '%s\n' "${budget}"
+}
+
+agentic_context_compaction_percent() {
+  local raw_value="${1:-}"
+  local fallback="${2:-}"
+
+  if [[ "${raw_value}" =~ ^[0-9]+$ ]] && (( raw_value > 0 && raw_value < 100 )); then
+    printf '%s\n' "${raw_value}"
+  else
+    printf '%s\n' "${fallback}"
+  fi
+}
+
+agentic_context_compaction_report() {
+  local context_budget="${1:-0}"
+  local soft_percent="${2:-75}"
+  local danger_percent="${3:-90}"
+  local soft_tokens=0
+  local danger_tokens=0
+
+  soft_percent="$(agentic_context_compaction_percent "${soft_percent}" "75")"
+  danger_percent="$(agentic_context_compaction_percent "${danger_percent}" "90")"
+
+  if (( soft_percent >= danger_percent )); then
+    soft_percent="75"
+    danger_percent="90"
+  fi
+
+  if [[ "${context_budget}" =~ ^[0-9]+$ ]] && (( context_budget > 1 )); then
+    soft_tokens="$(( context_budget * soft_percent / 100 ))"
+    danger_tokens="$(( context_budget * danger_percent / 100 ))"
+
+    if (( soft_tokens < 1 )); then
+      soft_tokens=1
+    elif (( soft_tokens >= context_budget )); then
+      soft_tokens="$(( context_budget - 1 ))"
+    fi
+
+    if (( danger_tokens <= soft_tokens )); then
+      danger_tokens="$(( soft_tokens + 1 ))"
+    fi
+    if (( danger_tokens >= context_budget )); then
+      danger_tokens="$(( context_budget - 1 ))"
+    fi
+    if (( danger_tokens <= soft_tokens )); then
+      soft_tokens="$(( context_budget - 2 ))"
+      danger_tokens="$(( context_budget - 1 ))"
+    fi
+  fi
+
+  printf 'context_budget_tokens=%s\n' "${context_budget}"
+  printf 'soft_percent=%s\n' "${soft_percent}"
+  printf 'danger_percent=%s\n' "${danger_percent}"
+  printf 'soft_tokens=%s\n' "${soft_tokens}"
+  printf 'danger_tokens=%s\n' "${danger_tokens}"
+}

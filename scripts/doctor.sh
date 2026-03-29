@@ -33,6 +33,50 @@ doctor_fail_or_warn() {
   fi
 }
 
+validate_compaction_env_dump() {
+  local service_label="$1"
+  local env_dump="$2"
+  local budget_value=""
+  local soft_value=""
+  local danger_value=""
+  local soft_percent_value=""
+  local danger_percent_value=""
+
+  budget_value="$(printf '%s\n' "${env_dump}" | sed -n 's/^AGENTIC_CONTEXT_BUDGET_TOKENS=//p' | head -n 1)"
+  soft_value="$(printf '%s\n' "${env_dump}" | sed -n 's/^AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=//p' | head -n 1)"
+  danger_value="$(printf '%s\n' "${env_dump}" | sed -n 's/^AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=//p' | head -n 1)"
+  soft_percent_value="$(printf '%s\n' "${env_dump}" | sed -n 's/^AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT=//p' | head -n 1)"
+  danger_percent_value="$(printf '%s\n' "${env_dump}" | sed -n 's/^AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT=//p' | head -n 1)"
+
+  if ! [[ "${budget_value}" =~ ^[0-9]+$ ]] || (( budget_value < 2048 )); then
+    doctor_fail "${service_label} must expose AGENTIC_CONTEXT_BUDGET_TOKENS >= 2048"
+  elif [[ -n "${compaction_budget_expected}" && "${budget_value}" != "${compaction_budget_expected}" ]]; then
+    doctor_fail_or_warn "${service_label} context budget mismatch: runtime=${budget_value} expected=${compaction_budget_expected}"
+  fi
+
+  if ! [[ "${soft_value}" =~ ^[0-9]+$ ]] || ! [[ "${danger_value}" =~ ^[0-9]+$ ]] || (( soft_value < 1 || danger_value <= soft_value )); then
+    doctor_fail "${service_label} must expose ordered AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS/AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS"
+  else
+    if [[ -n "${compaction_soft_tokens_expected}" && "${soft_value}" != "${compaction_soft_tokens_expected}" ]]; then
+      doctor_fail_or_warn "${service_label} soft compaction threshold mismatch: runtime=${soft_value} expected=${compaction_soft_tokens_expected}"
+    fi
+    if [[ -n "${compaction_danger_tokens_expected}" && "${danger_value}" != "${compaction_danger_tokens_expected}" ]]; then
+      doctor_fail_or_warn "${service_label} danger compaction threshold mismatch: runtime=${danger_value} expected=${compaction_danger_tokens_expected}"
+    fi
+  fi
+
+  if ! [[ "${soft_percent_value}" =~ ^[0-9]+$ ]] || ! [[ "${danger_percent_value}" =~ ^[0-9]+$ ]] || (( soft_percent_value >= danger_percent_value )); then
+    doctor_fail "${service_label} must expose ordered AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT/AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT"
+  else
+    if [[ "${soft_percent_value}" != "${compaction_soft_percent_expected}" ]]; then
+      doctor_fail_or_warn "${service_label} soft compaction percent mismatch: runtime=${soft_percent_value} expected=${compaction_soft_percent_expected}"
+    fi
+    if [[ "${danger_percent_value}" != "${compaction_danger_percent_expected}" ]]; then
+      doctor_fail_or_warn "${service_label} danger compaction percent mismatch: runtime=${danger_percent_value} expected=${compaction_danger_percent_expected}"
+    fi
+  fi
+}
+
 usage() {
   cat <<USAGE
 Usage:
@@ -60,6 +104,11 @@ openclaw_gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 openclaw_relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 openclaw_gateway_metrics_port="${OPENCLAW_GATEWAY_PROXY_METRICS_PORT:-9114}"
 goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
+compaction_soft_percent_expected="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
+compaction_danger_percent_expected="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
+compaction_budget_expected="${AGENTIC_CONTEXT_BUDGET_TOKENS:-}"
+compaction_soft_tokens_expected="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-}"
+compaction_danger_tokens_expected="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}"
 
 service_requires_proxy_env() {
   local service="$1"
@@ -368,6 +417,9 @@ check_default_model_context_resources() {
   local estimated_required_bytes=0
   local estimated_required_gib=0
   local estimated_max_fitting_context=0
+  local effective_context_budget=0
+  local derived_soft_tokens=0
+  local derived_danger_tokens=0
   local cleanup_context_check_files
 
   [[ -n "${default_model}" ]] || {
@@ -427,7 +479,32 @@ check_default_model_context_resources() {
     return 0
   fi
 
-  ok "default model '${default_model}' context=${requested_context} (max=${model_max_context}, fit=${estimated_max_fitting_context}, kv_bytes/token=${kv_bytes_per_token}, est_mem=${estimated_required_gib}GiB)"
+  effective_context_budget="$(agentic_context_effective_budget "${requested_context}" "${estimated_max_fitting_context}" "${model_max_context}")"
+  while IFS='=' read -r key value; do
+    [[ -n "${key}" ]] || continue
+    case "${key}" in
+      soft_tokens) derived_soft_tokens="${value}" ;;
+      danger_tokens) derived_danger_tokens="${value}" ;;
+      *) ;;
+    esac
+  done < <(
+    agentic_context_compaction_report \
+      "${effective_context_budget}" \
+      "${compaction_soft_percent_expected}" \
+      "${compaction_danger_percent_expected}"
+  )
+
+  if [[ -n "${compaction_budget_expected}" && "${compaction_budget_expected}" != "${effective_context_budget}" ]]; then
+    doctor_fail_or_warn "published context budget (${compaction_budget_expected}) does not match the effective context budget (${effective_context_budget}) for ${default_model}"
+  fi
+  if [[ -n "${compaction_soft_tokens_expected}" && "${compaction_soft_tokens_expected}" != "${derived_soft_tokens}" ]]; then
+    doctor_fail_or_warn "published soft compaction threshold (${compaction_soft_tokens_expected}) does not match the derived value (${derived_soft_tokens}) for ${default_model}"
+  fi
+  if [[ -n "${compaction_danger_tokens_expected}" && "${compaction_danger_tokens_expected}" != "${derived_danger_tokens}" ]]; then
+    doctor_fail_or_warn "published danger compaction threshold (${compaction_danger_tokens_expected}) does not match the derived value (${derived_danger_tokens}) for ${default_model}"
+  fi
+
+  ok "default model '${default_model}' context=${requested_context} (max=${model_max_context}, fit=${estimated_max_fitting_context}, compaction soft=${derived_soft_tokens}, danger=${derived_danger_tokens}, kv_bytes/token=${kv_bytes_per_token}, est_mem=${estimated_required_gib}GiB)"
   cleanup_context_check_files
 }
 
@@ -1360,6 +1437,7 @@ PY
 
   if [[ "${service}" == "optional-goose" ]]; then
     env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    validate_compaction_env_dump "optional-goose" "${env_dump}"
     if ! echo "${env_dump}" | grep -q '^HOME=/state/home$'; then
       doctor_fail "optional-goose must set HOME=/state/home"
     fi
@@ -1382,6 +1460,12 @@ PY
       doctor_fail "optional-goose GOOSE_CONTEXT_LIMIT must be a numeric value >= 2048 (got: ${goose_context_limit_runtime})"
     elif [[ "${goose_context_limit_runtime}" != "${goose_context_limit_expected}" ]]; then
       doctor_fail_or_warn "optional-goose context limit mismatch: runtime=${goose_context_limit_runtime} expected=${goose_context_limit_expected}"
+    fi
+    if ! echo "${env_dump}" | grep -q "^GOOSE_CONTEXT_COMPACTION_SOFT_TOKENS=${compaction_soft_tokens_expected}$"; then
+      doctor_fail_or_warn "optional-goose must set GOOSE_CONTEXT_COMPACTION_SOFT_TOKENS=${compaction_soft_tokens_expected}"
+    fi
+    if ! echo "${env_dump}" | grep -q "^GOOSE_CONTEXT_COMPACTION_DANGER_TOKENS=${compaction_danger_tokens_expected}$"; then
+      doctor_fail_or_warn "optional-goose must set GOOSE_CONTEXT_COMPACTION_DANGER_TOKENS=${compaction_danger_tokens_expected}"
     fi
 
     if ! mount_destination_present "${cid}" "/state"; then
@@ -1413,6 +1497,7 @@ PY
 
   if [[ "${service}" == "openhands" ]]; then
     env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${cid}" 2>/dev/null || true)"
+    validate_compaction_env_dump "openhands" "${env_dump}"
     openhands_runtime_model="$(printf '%s\n' "${env_dump}" | sed -n 's/^LLM_MODEL=//p' | head -n 1)"
     if [[ -z "${openhands_runtime_model}" ]]; then
       doctor_fail "openhands missing LLM_MODEL"
@@ -1500,6 +1585,7 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
   if ! echo "${env_dump}" | grep -q '^OLLAMA_BASE_URL=http://ollama-gate:11435$'; then
     doctor_fail "agent '${service}' must set OLLAMA_BASE_URL=http://ollama-gate:11435"
   fi
+  validate_compaction_env_dump "agent '${service}'" "${env_dump}"
 
   if ! mount_destination_present "${cid}" "/run/secrets/gate_mcp.token"; then
     doctor_fail "agent '${service}' must mount /run/secrets/gate_mcp.token read-only"

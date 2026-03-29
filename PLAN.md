@@ -135,12 +135,13 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-nuya` : le catalogue `trtllm` derive maintenant un alias UI lisible a partir du modele TRT configure, afin qu'OpenWebUI puisse afficher et selectionner clairement le modele TRT actif sans dependre d'une URL Hugging Face brute ou d'un alias code en dur.
   - `dgx-spark-agentic-stack-4zhv` : simplification TRT-LLM autour d'un seul modele configure (`TRTLLM_MODELS`), suppression du catalogue local multi-modele, retrait de `TRTLLM_ACTIVE_MODEL_KEY` et des operateurs `list/load/unload`.
   - `dgx-spark-agentic-stack-3s3a` : vrai streaming SSE/chunked `trtllm` pour `/v1/chat/completions`, avec pass-through `ollama-gate -> trtllm` sans buffering de la réponse complète.
+  - `dgx-spark-agentic-stack-wj3` : la stack derive maintenant des seuils de compaction `soft` / `danger` depuis le budget de contexte effectif, les expose aux agents (`codex`, `goose`, `openhands`, runtimes CLI) et `agent doctor` verifie leur coherence avec le budget memoire.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
 | Issue | Status | Remaining work |
 | --- | --- | --- |
-| `dgx-spark-agentic-stack-wj3` | open | publier des seuils de compaction “soft” / “danger” dérivés du budget de contexte et les exposer aux agents |
+| `dgx-spark-agentic-stack-wj3` | closed | publier des seuils de compaction “soft” / “danger” dérivés du budget de contexte et les exposer aux agents |
 | `dgx-spark-agentic-stack-u326` | open | livrer `agent openclaw init` comme chemin stack-managed d’onboarding/réparation |
 | `dgx-spark-agentic-stack-im5` | open | demander rétention max + budget disque max en onboarding et les appliquer au runtime |
 | `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |

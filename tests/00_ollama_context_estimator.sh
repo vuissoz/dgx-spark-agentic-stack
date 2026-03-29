@@ -46,4 +46,31 @@ echo "${nemotron_report}" | grep -q '^estimated_max_fitting_context=108883$' \
   || fail "nemotron estimator must report max fitting context 108883 under 110g"
 ok "nemotron estimator computes reduced max fitting context under 110g"
 
+effective_budget="$(agentic_context_effective_budget "262144" "108883" "262144")"
+[[ "${effective_budget}" == "108883" ]] \
+  || fail "effective context budget must clamp to the max fitting context"
+
+compaction_report="$(agentic_context_compaction_report "${effective_budget}" "75" "90")"
+echo "${compaction_report}" | grep -q '^soft_tokens=81662$' \
+  || fail "soft compaction threshold must be 81662 for budget 108883 at 75%"
+echo "${compaction_report}" | grep -q '^danger_tokens=97994$' \
+  || fail "danger compaction threshold must be 97994 for budget 108883 at 90%"
+ok "compaction thresholds derive deterministically from the effective context budget"
+
+runtime_compaction_values="$(
+  env \
+    HOME="${HOME}" \
+    PATH="${PATH}" \
+    AGENTIC_PROFILE="rootless-dev" \
+    AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW="262144" \
+    OLLAMA_CONTEXT_LENGTH="262144" \
+    AGENTIC_CONTEXT_BUDGET_TOKENS="50909" \
+    AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT="75" \
+    AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT="90" \
+    bash -lc 'source "'"${REPO_ROOT}/scripts/lib/runtime.sh"'"; printf "%s|%s|%s\n" "$AGENTIC_CONTEXT_BUDGET_TOKENS" "$AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS" "$AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS"'
+)"
+[[ "${runtime_compaction_values}" == "50909|38181|45818" ]] \
+  || fail "runtime defaults must preserve explicit compaction budget and derive matching thresholds"
+ok "runtime env preserves persisted compaction budget overrides"
+
 ok "00_ollama_context_estimator passed"

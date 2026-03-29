@@ -133,6 +133,11 @@ Notes:
 | `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` | integer `>= 2048` (tokens) | `50909` | shell, `runtime.env` |
 | `OLLAMA_CONTEXT_LENGTH` | integer `>= 2048` (tokens) | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
 | `AGENTIC_GOOSE_CONTEXT_LIMIT` | integer `>= 2048` (tokens, Goose client limit) | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
+| `AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT` | integer `1..99` (`< danger`) | `75` | shell, `runtime.env` |
+| `AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT` | integer `1..99` (`> soft`) | `90` | shell, `runtime.env` |
+| `AGENTIC_CONTEXT_BUDGET_TOKENS` | integer `>= 2048` | derived from `min(AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW, OLLAMA_CONTEXT_LENGTH)` | shell, `runtime.env` |
+| `AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS` | integer `> 0` (`< danger`) | derived from budget and `AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT` | shell, `runtime.env` |
+| `AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS` | integer `> soft` (`< budget`) | derived from budget and `AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT` | shell, `runtime.env` |
 | `OLLAMA_PRELOAD_GENERATE_MODEL` | model id string | `${AGENTIC_DEFAULT_MODEL}` (fallback `nemotron-cascade-2:30b`) | `runtime.env` |
 | `OLLAMA_PRELOAD_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |

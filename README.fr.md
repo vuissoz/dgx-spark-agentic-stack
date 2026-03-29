@@ -74,6 +74,7 @@ La fenêtre de contexte est pilotée par `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` 
 Quand `./agent onboard` peut lire les métadonnées Ollama du modèle choisi, il propose automatiquement la fenêtre maximale estimée qui tient dans `AGENTIC_LIMIT_OLLAMA_MEM`; sinon il retombe sur le défaut du dépôt `50909`.
 `./agent doctor` remonte aussi cette fenêtre maximale estimée pour aider à corriger un contexte trop grand.
 Pour Goose (`optional-goose`), la limite de contexte client est pilotée séparément par `AGENTIC_GOOSE_CONTEXT_LIMIT` (défaut: `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}`) et propagée vers `GOOSE_CONTEXT_LIMIT`.
+La stack publie aussi une politique commune de compaction dérivée du budget de contexte effectif: `AGENTIC_CONTEXT_BUDGET_TOKENS`, `AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS` (politique par défaut `75%`) et `AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS` (politique par défaut `90%`). `codex` reçoit le seuil `soft` via `auto_compact_token_limit`, et `goose` / `openhands` reçoivent les mêmes seuils sous forme d’indices runtime.
 
 ## Arborescence runtime (résumé)
 

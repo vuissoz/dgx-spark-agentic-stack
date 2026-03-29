@@ -15,8 +15,27 @@ assert_cmd timeout
 assert_cmd python3
 
 default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-nemotron-cascade-2:30b}}"
+expected_context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}"
+expected_soft_threshold="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}"
+expected_danger_threshold="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}"
 exec_timeout="${AGENTIC_CODEX_MODEL_SMOKE_TIMEOUT_SECONDS:-240}"
 prompt_text="${AGENTIC_CODEX_MODEL_SMOKE_PROMPT:-Reply with exactly: codex-local-model-ok}"
+
+runtime_env_file="${AGENTIC_ROOT:-/srv/agentic}/deployments/runtime.env"
+if [[ -f "${runtime_env_file}" ]]; then
+  runtime_value="$(sed -n 's/^AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=//p' "${runtime_env_file}" | head -n 1)"
+  if [[ -n "${runtime_value}" ]]; then
+    expected_context_window="${runtime_value}"
+  fi
+  runtime_value="$(sed -n 's/^AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=//p' "${runtime_env_file}" | head -n 1)"
+  if [[ -n "${runtime_value}" ]]; then
+    expected_soft_threshold="${runtime_value}"
+  fi
+  runtime_value="$(sed -n 's/^AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=//p' "${runtime_env_file}" | head -n 1)"
+  if [[ -n "${runtime_value}" ]]; then
+    expected_danger_threshold="${runtime_value}"
+  fi
+fi
 
 codex_cid="$(require_service_container agentic-codex)" || exit 1
 gate_cid="$(require_service_container ollama-gate)" || exit 1
@@ -70,13 +89,16 @@ ok "agentic-codex config exposes managed model/provider/catalog settings"
 docker exec "${codex_cid}" sh -lc "cat '${catalog_path}'" >"${catalog_file}" \
   || fail "unable to read codex model catalog at ${catalog_path}"
 
-python3 - "${catalog_file}" "${default_model}" <<'PY'
+python3 - "${catalog_file}" "${default_model}" "${expected_context_window}" "${expected_soft_threshold}" "${expected_danger_threshold}" <<'PY'
 import json
 import pathlib
 import sys
 
 catalog_path = pathlib.Path(sys.argv[1])
 default_model = sys.argv[2]
+expected_context_window = int(sys.argv[3])
+expected_soft_threshold = int(sys.argv[4])
+expected_danger_threshold = int(sys.argv[5])
 
 with catalog_path.open('r', encoding='utf-8') as fh:
     payload = json.load(fh)
@@ -88,8 +110,26 @@ if not isinstance(models, list) or not models:
 slugs = [m.get('slug') for m in models if isinstance(m, dict)]
 if default_model not in slugs:
     raise SystemExit(f"default model {default_model!r} not present in catalog slugs={slugs!r}")
+
+target = next(m for m in models if isinstance(m, dict) and m.get('slug') == default_model)
+if target.get('context_window') != expected_context_window:
+    raise SystemExit(
+        f"unexpected context_window={target.get('context_window')!r} expected={expected_context_window}"
+    )
+if target.get('auto_compact_token_limit') != expected_soft_threshold:
+    raise SystemExit(
+        "unexpected auto_compact_token_limit="
+        f"{target.get('auto_compact_token_limit')!r} expected={expected_soft_threshold}"
+    )
+
+base_instructions = target.get('base_instructions')
+if not isinstance(base_instructions, str):
+    raise SystemExit('catalog base_instructions is missing')
+for threshold in (expected_soft_threshold, expected_danger_threshold):
+    if str(threshold) not in base_instructions:
+        raise SystemExit(f"base_instructions missing compaction threshold {threshold}")
 PY
-ok "codex model catalog contains default model '${default_model}'"
+ok "codex model catalog contains default model '${default_model}' with managed compaction policy"
 
 set +e
 timeout "${exec_timeout}" docker exec "${codex_cid}" sh -lc \

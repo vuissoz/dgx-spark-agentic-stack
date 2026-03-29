@@ -13,6 +13,24 @@ fi
 assert_cmd docker
 
 openhands_port="${OPENHANDS_HOST_PORT:-3000}"
+expected_context_budget="${AGENTIC_CONTEXT_BUDGET_TOKENS:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}"
+expected_soft_threshold="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}"
+expected_danger_threshold="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}"
+runtime_env_file="${AGENTIC_ROOT:-/srv/agentic}/deployments/runtime.env"
+if [[ -f "${runtime_env_file}" ]]; then
+  runtime_value="$(sed -n 's/^AGENTIC_CONTEXT_BUDGET_TOKENS=//p' "${runtime_env_file}" | head -n 1)"
+  if [[ -n "${runtime_value}" ]]; then
+    expected_context_budget="${runtime_value}"
+  fi
+  runtime_value="$(sed -n 's/^AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=//p' "${runtime_env_file}" | head -n 1)"
+  if [[ -n "${runtime_value}" ]]; then
+    expected_soft_threshold="${runtime_value}"
+  fi
+  runtime_value="$(sed -n 's/^AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=//p' "${runtime_env_file}" | head -n 1)"
+  if [[ -n "${runtime_value}" ]]; then
+    expected_danger_threshold="${runtime_value}"
+  fi
+fi
 openhands_cid="$(require_service_container openhands)" || exit 1
 gate_cid="$(require_service_container ollama-gate)" || exit 1
 
@@ -39,6 +57,12 @@ echo "${env_dump}" | grep -q '^HOME=/.openhands/home$' \
   || fail "openhands HOME must be set to /.openhands/home"
 echo "${env_dump}" | grep -q '^AGENT_HOME=/.openhands/home$' \
   || fail "openhands AGENT_HOME must be set to /.openhands/home"
+echo "${env_dump}" | grep -q "^AGENTIC_CONTEXT_BUDGET_TOKENS=${expected_context_budget}$" \
+  || fail "openhands must set AGENTIC_CONTEXT_BUDGET_TOKENS=${expected_context_budget}"
+echo "${env_dump}" | grep -q "^AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=${expected_soft_threshold}$" \
+  || fail "openhands must set AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=${expected_soft_threshold}"
+echo "${env_dump}" | grep -q "^AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=${expected_danger_threshold}$" \
+  || fail "openhands must set AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=${expected_danger_threshold}"
 ok "openhands model/api key env is present"
 
 settings_payload="$(curl -fsS --max-time 10 "http://127.0.0.1:${openhands_port}/api/settings" || true)"

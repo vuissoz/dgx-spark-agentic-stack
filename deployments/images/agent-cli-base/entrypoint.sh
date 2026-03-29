@@ -36,6 +36,74 @@ write_if_changed() {
   mv "${source_path}" "${target_path}"
 }
 
+agentic_context_effective_budget() {
+  local candidate=0
+  local budget=0
+
+  for candidate in "$@"; do
+    [[ "${candidate}" =~ ^[0-9]+$ ]] || continue
+    (( candidate > 0 )) || continue
+    if (( budget == 0 || candidate < budget )); then
+      budget="${candidate}"
+    fi
+  done
+
+  printf '%s\n' "${budget}"
+}
+
+derive_compaction_policy() {
+  local requested_context="${1:-0}"
+  local backend_context="${2:-0}"
+  local soft_percent="${3:-75}"
+  local danger_percent="${4:-90}"
+  local budget=0
+  local soft_tokens=0
+  local danger_tokens=0
+
+  if ! [[ "${soft_percent}" =~ ^[0-9]+$ ]] || (( soft_percent <= 0 || soft_percent >= 100 )); then
+    soft_percent="75"
+  fi
+  if ! [[ "${danger_percent}" =~ ^[0-9]+$ ]] || (( danger_percent <= 0 || danger_percent >= 100 )); then
+    danger_percent="90"
+  fi
+  if (( soft_percent >= danger_percent )); then
+    soft_percent="75"
+    danger_percent="90"
+  fi
+
+  budget="$(agentic_context_effective_budget "${requested_context}" "${backend_context}")"
+  if ! [[ "${budget}" =~ ^[0-9]+$ ]] || (( budget < 2048 )); then
+    budget="${requested_context}"
+  fi
+  if ! [[ "${budget}" =~ ^[0-9]+$ ]] || (( budget < 2048 )); then
+    budget="${default_context_window_fallback}"
+  fi
+
+  soft_tokens="$(( budget * soft_percent / 100 ))"
+  danger_tokens="$(( budget * danger_percent / 100 ))"
+  if (( soft_tokens < 1 )); then
+    soft_tokens=1
+  elif (( soft_tokens >= budget )); then
+    soft_tokens="$(( budget - 1 ))"
+  fi
+  if (( danger_tokens <= soft_tokens )); then
+    danger_tokens="$(( soft_tokens + 1 ))"
+  fi
+  if (( danger_tokens >= budget )); then
+    danger_tokens="$(( budget - 1 ))"
+  fi
+  if (( danger_tokens <= soft_tokens )); then
+    soft_tokens="$(( budget - 2 ))"
+    danger_tokens="$(( budget - 1 ))"
+  fi
+
+  printf 'context_budget_tokens=%s\n' "${budget}"
+  printf 'soft_percent=%s\n' "${soft_percent}"
+  printf 'danger_percent=%s\n' "${danger_percent}"
+  printf 'soft_tokens=%s\n' "${soft_tokens}"
+  printf 'danger_tokens=%s\n' "${danger_tokens}"
+}
+
 bootstrap_shell_home() {
   local bash_profile="${agent_home}/.bash_profile"
   local bashrc="${agent_home}/.bashrc"
@@ -62,6 +130,42 @@ EOF
 
 bootstrap_ollama_gate_defaults() {
   local defaults_dir
+  local default_context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${default_context_window_fallback}}"
+  local backend_context_window="${OLLAMA_CONTEXT_LENGTH:-${default_context_window}}"
+  local compaction_soft_percent="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
+  local compaction_danger_percent="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
+  local context_budget_tokens="${AGENTIC_CONTEXT_BUDGET_TOKENS:-}"
+  local compaction_soft_tokens="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-}"
+  local compaction_danger_tokens="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}"
+
+  if ! [[ "${default_context_window}" =~ ^[0-9]+$ ]] || (( default_context_window < 2048 )); then
+    default_context_window="${default_context_window_fallback}"
+  fi
+  if ! [[ "${backend_context_window}" =~ ^[0-9]+$ ]] || (( backend_context_window < 2048 )); then
+    backend_context_window="${default_context_window}"
+  fi
+  if ! [[ "${context_budget_tokens}" =~ ^[0-9]+$ ]] \
+    || ! [[ "${compaction_soft_tokens}" =~ ^[0-9]+$ ]] \
+    || ! [[ "${compaction_danger_tokens}" =~ ^[0-9]+$ ]]; then
+    while IFS='=' read -r key value; do
+      [[ -n "${key}" ]] || continue
+      case "${key}" in
+        context_budget_tokens) context_budget_tokens="${value}" ;;
+        soft_percent) compaction_soft_percent="${value}" ;;
+        danger_percent) compaction_danger_percent="${value}" ;;
+        soft_tokens) compaction_soft_tokens="${value}" ;;
+        danger_tokens) compaction_danger_tokens="${value}" ;;
+        *) ;;
+      esac
+    done < <(
+      derive_compaction_policy \
+        "${default_context_window}" \
+        "${backend_context_window}" \
+        "${compaction_soft_percent}" \
+        "${compaction_danger_percent}"
+    )
+  fi
+
   defaults_dir="$(dirname "${agent_defaults_file}")"
   mkdir -p "${defaults_dir}"
 
@@ -72,6 +176,12 @@ export AGENTIC_OLLAMA_GATE_BASE_URL="${AGENTIC_OLLAMA_GATE_BASE_URL:-http://olla
 export AGENTIC_OLLAMA_GATE_V1_URL="${AGENTIC_OLLAMA_GATE_V1_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL%/}/v1}"
 export AGENTIC_DEFAULT_MODEL="${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}"
 export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}"
+export OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}}"
+export AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
+export AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
+export AGENTIC_CONTEXT_BUDGET_TOKENS="${AGENTIC_CONTEXT_BUDGET_TOKENS:-50909}"
+export AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}"
+export AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}"
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL}}"
 export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}"
 export OPENAI_API_BASE_URL="${OPENAI_API_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}"
@@ -99,6 +209,12 @@ EOF
   ensure_default_export "AGENTIC_OLLAMA_GATE_V1_URL" '${AGENTIC_OLLAMA_GATE_V1_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL%/}/v1}'
   ensure_default_export "AGENTIC_DEFAULT_MODEL" '${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}'
   ensure_default_export "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" '${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}'
+  ensure_default_export "OLLAMA_CONTEXT_LENGTH" '${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}}'
+  ensure_default_export "AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT" '${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}'
+  ensure_default_export "AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT" '${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}'
+  ensure_default_export "AGENTIC_CONTEXT_BUDGET_TOKENS" '${AGENTIC_CONTEXT_BUDGET_TOKENS:-50909}'
+  ensure_default_export "AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS" '${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}'
+  ensure_default_export "AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS" '${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}'
   ensure_default_export "OLLAMA_BASE_URL" '${OLLAMA_BASE_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL}}'
   ensure_default_export "OPENAI_BASE_URL" '${OPENAI_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}'
   ensure_default_export "OPENAI_API_BASE_URL" '${OPENAI_API_BASE_URL:-${AGENTIC_OLLAMA_GATE_V1_URL}}'
@@ -122,6 +238,12 @@ bootstrap_codex_config() {
   local codex_config="${agent_home}/.codex/config.toml"
   local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
   local default_context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${default_context_window_fallback}}"
+  local backend_context_window="${OLLAMA_CONTEXT_LENGTH:-${default_context_window}}"
+  local compaction_soft_percent="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
+  local compaction_danger_percent="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
+  local context_budget_tokens="${AGENTIC_CONTEXT_BUDGET_TOKENS:-}"
+  local compaction_soft_tokens="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-}"
+  local compaction_danger_tokens="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}"
   local gate_base_url="${AGENTIC_OLLAMA_GATE_BASE_URL:-http://ollama-gate:11435}"
   local codex_base_instructions
   local tmp_catalog
@@ -145,14 +267,43 @@ EOF
   if ! [[ "${default_context_window}" =~ ^[0-9]+$ ]] || (( default_context_window < 2048 )); then
     default_context_window="${default_context_window_fallback}"
   fi
+  if ! [[ "${backend_context_window}" =~ ^[0-9]+$ ]] || (( backend_context_window < 2048 )); then
+    backend_context_window="${default_context_window}"
+  fi
+  if ! [[ "${context_budget_tokens}" =~ ^[0-9]+$ ]] \
+    || ! [[ "${compaction_soft_tokens}" =~ ^[0-9]+$ ]] \
+    || ! [[ "${compaction_danger_tokens}" =~ ^[0-9]+$ ]]; then
+    while IFS='=' read -r key value; do
+      [[ -n "${key}" ]] || continue
+      case "${key}" in
+        context_budget_tokens) context_budget_tokens="${value}" ;;
+        soft_percent) compaction_soft_percent="${value}" ;;
+        danger_percent) compaction_danger_percent="${value}" ;;
+        soft_tokens) compaction_soft_tokens="${value}" ;;
+        danger_tokens) compaction_danger_tokens="${value}" ;;
+        *) ;;
+      esac
+    done < <(
+      derive_compaction_policy \
+        "${default_context_window}" \
+        "${backend_context_window}" \
+        "${compaction_soft_percent}" \
+        "${compaction_danger_percent}"
+    )
+  fi
+  codex_base_instructions="${codex_base_instructions}
 
-  python3 - "${default_model}" "${codex_base_instructions}" "${default_context_window}" >"${tmp_catalog}" <<'PY'
+Start compacting or summarizing once the session approaches ${compaction_soft_tokens} tokens.
+Treat ${compaction_danger_tokens} tokens as near-limit and reduce context before continuing."
+
+  python3 - "${default_model}" "${codex_base_instructions}" "${default_context_window}" "${compaction_soft_tokens}" >"${tmp_catalog}" <<'PY'
 import json
 import sys
 
 model = sys.argv[1]
 base_instructions = sys.argv[2]
 context_window = int(sys.argv[3])
+auto_compact_token_limit = int(sys.argv[4])
 
 catalog = {
     "models": [
@@ -182,7 +333,7 @@ catalog = {
             "truncation_policy": {"mode": "bytes", "limit": 10000},
             "supports_parallel_tool_calls": False,
             "context_window": context_window,
-            "auto_compact_token_limit": None,
+            "auto_compact_token_limit": auto_compact_token_limit,
             "effective_context_window_percent": 95,
             "experimental_supported_tools": [],
             "input_modalities": ["text", "image"],

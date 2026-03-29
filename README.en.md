@@ -72,6 +72,7 @@ The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `nemo
 The stack now emits an explicit warning if you choose `qwen3.5:35b`: as of March 26, 2026, local Codex/OpenHands runs in this repo have already shown pseudo tool tags instead of real tool calls, even though Ollama upstream advertises the model with `tools` support. The model is no longer blocked, because this is treated as a stack integration bug to fix rather than a model capability contract.
 Context window size is controlled by `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (default `50909`) and propagated to `OLLAMA_CONTEXT_LENGTH`.
 For Goose (`optional-goose`), the client-side context limit is controlled separately by `AGENTIC_GOOSE_CONTEXT_LIMIT` (default: `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}`) and propagated to `GOOSE_CONTEXT_LIMIT`.
+The stack also publishes a shared compaction policy derived from the effective context budget: `AGENTIC_CONTEXT_BUDGET_TOKENS`, `AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS` (default policy `75%`) and `AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS` (default policy `90%`). `codex` receives the soft threshold as `auto_compact_token_limit`, while `goose` and `openhands` receive the same thresholds as runtime env hints.
 
 ## Runtime Layout (summary)
 
