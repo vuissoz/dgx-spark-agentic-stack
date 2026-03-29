@@ -159,14 +159,20 @@ models_payload = controller.models_payload()
 tags_payload = controller.tags_payload()
 model_ids = [item["id"] for item in models_payload["data"]]
 tag_names = [item["name"] for item in tags_payload["models"]]
+friendly_alias = module.friendly_catalog_alias(
+    controller.primary_entry.display_name,
+    controller.primary_entry.requested_handle,
+    controller.primary_entry.serve_handle,
+)
 
 assert controller.native_max_num_tokens == 4096
 assert controller.native_max_seq_len == 32768
 assert controller.native_enable_cuda_graph is False
-assert "trtllm/nemotron-3-nano:30b" in controller.primary_entry.aliases
+assert friendly_alias == "trtllm/nvidia-nemotron-3-nano-30b-a3b-fp8"
+assert friendly_alias in controller.primary_entry.aliases
 assert "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" in model_ids
-assert "trtllm/nemotron-3-nano:30b" in model_ids
-assert "trtllm/nemotron-3-nano:30b" in tag_names
+assert friendly_alias in model_ids
+assert friendly_alias in tag_names
 assert "cuda_graph_config:" not in cfg
 assert "max_num_tokens: 4096" in cfg
 assert "--max_num_tokens" in cmd and "4096" in cmd

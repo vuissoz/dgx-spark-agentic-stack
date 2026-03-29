@@ -20,7 +20,6 @@ from pathlib import Path
 
 DEFAULT_TRTLLM_MODEL = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
 DEFAULT_TRTLLM_MODEL_HANDLE = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
-DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS = "trtllm/nemotron-3-nano:30b"
 DEFAULT_NEMOTRON_NATIVE_HANDLE = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8"
 DEFAULT_NVFP4_LOCAL_MODEL_DIR = "/models/cascade_30b_nvfp4"
 MODEL_POLICY_AUTO = "auto"
@@ -112,20 +111,32 @@ def build_alias_values(display_name: str, requested_handle: str, serve_handle: s
         alias_values.add(f"trtllm/{candidate}")
         if not candidate.startswith("/"):
             alias_values.add(f"{HF_URL_PREFIX}{candidate}")
-    if (
-        display_name.rstrip("/") == DEFAULT_TRTLLM_MODEL.rstrip("/")
-        or strip_hf_url(display_name).rstrip("/") == DEFAULT_TRTLLM_MODEL_HANDLE.rstrip("/")
-        or requested_handle.rstrip("/") == DEFAULT_TRTLLM_MODEL_HANDLE.rstrip("/")
-        or serve_handle.rstrip("/") == DEFAULT_TRTLLM_MODEL_HANDLE.rstrip("/")
-    ):
-        alias_values.add(DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS)
+    catalog_alias = friendly_catalog_alias(display_name, requested_handle, serve_handle)
+    if catalog_alias:
+        alias_values.add(catalog_alias)
     return tuple(sorted(alias for alias in alias_values if alias))
+
+
+def friendly_catalog_alias(display_name: str, requested_handle: str, serve_handle: str) -> str | None:
+    for raw_candidate in (requested_handle, strip_hf_url(display_name), serve_handle):
+        candidate = raw_candidate.strip().rstrip("/") if isinstance(raw_candidate, str) else ""
+        if not candidate:
+            continue
+        if candidate.startswith("/"):
+            candidate = candidate.split("/")[-1]
+        else:
+            candidate = candidate.split("/")[-1]
+        normalized = re.sub(r"[^a-z0-9]+", "-", candidate.lower()).strip("-")
+        if normalized:
+            return f"trtllm/{normalized}"
+    return None
 
 
 def catalog_names_for_entry(entry: "ModelEntry") -> list[str]:
     names = [entry.display_name]
-    if DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS in entry.aliases and DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS not in names:
-        names.append(DEFAULT_TRTLLM_MODEL_CATALOG_ALIAS)
+    friendly_alias = friendly_catalog_alias(entry.display_name, entry.requested_handle, entry.serve_handle)
+    if friendly_alias and friendly_alias not in names:
+        names.append(friendly_alias)
     return names
 
 

@@ -132,7 +132,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-xe3w` : `agent up core` avec TRT prefetch maintenant explicitement le cache HF de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`, sans telecharger `cascade` ou `super` sur ce chemin par defaut.
   - `dgx-spark-agentic-stack-u94j` : le bootstrap `agent up core` n'appelle plus aucun prechargement NVFP4 local automatique; `cascade` et `super` restent uniquement en manuel.
   - `dgx-spark-agentic-stack-1kso` : le gate restaure `/v1/models` sans tomber sur les backends distants sans cle, ajoute une route explicite pour `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` et valide le passage `ollama-gate -> trtllm` pour le modele TRT par defaut.
-  - `dgx-spark-agentic-stack-nuya` : le catalogue `trtllm` expose maintenant un alias UI lisible `trtllm/nemotron-3-nano:30b`, afin qu'OpenWebUI puisse afficher et selectionner clairement le modele TRT Nano sans dependre de l'URL Hugging Face brute.
+  - `dgx-spark-agentic-stack-nuya` : le catalogue `trtllm` derive maintenant un alias UI lisible a partir du modele TRT configure, afin qu'OpenWebUI puisse afficher et selectionner clairement le modele TRT actif sans dependre d'une URL Hugging Face brute ou d'un alias code en dur.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
