@@ -1160,6 +1160,17 @@ write_file_atomic() {
   return 0
 }
 
+validate_git_forge_admin_user_value() {
+  local key="$1"
+  local value="$2"
+  validate_non_empty_single_line_value "${key}" "${value}" || return 1
+  if [[ "${value,,}" == "admin" ]]; then
+    echo "ERROR: ${key} cannot be 'admin'; Forgejo reserves that login. Use a different bootstrap admin user such as 'system-manager'." >&2
+    return 1
+  fi
+  return 0
+}
+
 upsert_export_in_file() {
   local file_path="$1"
   local key="$2"
@@ -2248,7 +2259,7 @@ git_forge_admin_user=""
 git_forge_shared_namespace=""
 git_forge_enable_push_create=""
 collect_text_value git_forge_host_port "GIT_FORGE_HOST_PORT" "${git_forge_host_port_override:-${GIT_FORGE_HOST_PORT:-13010}}" "${git_forge_host_port_override}" validate_port_value "GIT_FORGE_HOST_PORT is the loopback-only host port that exposes the forge web UI and API."
-collect_text_value git_forge_admin_user "GIT_FORGE_ADMIN_USER" "${git_forge_admin_user_override:-${GIT_FORGE_ADMIN_USER:-system-manager}}" "${git_forge_admin_user_override}" validate_non_empty_single_line_value "GIT_FORGE_ADMIN_USER is the bootstrap admin login for the local forge."
+collect_text_value git_forge_admin_user "GIT_FORGE_ADMIN_USER" "${git_forge_admin_user_override:-${GIT_FORGE_ADMIN_USER:-system-manager}}" "${git_forge_admin_user_override}" validate_git_forge_admin_user_value "GIT_FORGE_ADMIN_USER is the bootstrap admin login for the local forge."
 collect_text_value git_forge_shared_namespace "GIT_FORGE_SHARED_NAMESPACE" "${git_forge_shared_namespace_override:-${GIT_FORGE_SHARED_NAMESPACE:-agentic}}" "${git_forge_shared_namespace_override}" validate_git_namespace_value "GIT_FORGE_SHARED_NAMESPACE is the shared org/group slug where stack-managed collaborative repositories live."
 collect_text_value git_forge_enable_push_create "GIT_FORGE_ENABLE_PUSH_CREATE" "${git_forge_enable_push_create_override:-${GIT_FORGE_ENABLE_PUSH_CREATE:-0}}" "${git_forge_enable_push_create_override}" validate_zero_one_value "GIT_FORGE_ENABLE_PUSH_CREATE controls whether authenticated users may create repositories by pushing over Git."
 

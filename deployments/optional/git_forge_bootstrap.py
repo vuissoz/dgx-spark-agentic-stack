@@ -225,7 +225,18 @@ def ensure_user(container_id: str, username: str, email: str, password: str, *, 
             "--must-change-password=false "
             + ("--admin" if admin else "")
         )
-        docker_exec(container_id, "/bin/bash", "--noprofile", "--norc", "-lc", cmd, input_text=f"{password}\n")
+        try:
+            docker_exec(container_id, "/bin/bash", "--noprofile", "--norc", "-lc", cmd, input_text=f"{password}\n")
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or exc.stdout or "").strip()
+            if "name is reserved" in detail.lower():
+                fail(
+                    f"forge bootstrap user '{username}' is rejected by Forgejo because the login is reserved; "
+                    "set GIT_FORGE_ADMIN_USER to a different value such as 'system-manager' and regenerate runtime secrets"
+                )
+            fail(
+                f"failed to create forge account '{username}': {detail or f'exit status {exc.returncode}'}"
+            )
         info(f"created forge account '{username}'")
         return
 
@@ -236,7 +247,11 @@ def ensure_user(container_id: str, username: str, email: str, password: str, *, 
         "read -r pass; "
         f"exec forgejo admin user change-password --username {shlex.quote(username)} --password \"$pass\""
     )
-    docker_exec(container_id, "/bin/bash", "--noprofile", "--norc", "-lc", cmd, input_text=f"{password}\n")
+    try:
+        docker_exec(container_id, "/bin/bash", "--noprofile", "--norc", "-lc", cmd, input_text=f"{password}\n")
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        fail(f"failed to update forge password for '{username}': {detail or f'exit status {exc.returncode}'}")
 
 
 def read_secret(secret_name: str) -> str:
