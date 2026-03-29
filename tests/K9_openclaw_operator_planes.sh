@@ -85,6 +85,14 @@ toolbox_cid="$(require_service_container toolbox)" || exit 1
 wait_for_container_ready "${openclaw_cid}" 90 || fail "openclaw did not become ready"
 wait_for_container_ready "${sandbox_cid}" 90 || fail "openclaw-sandbox did not become ready"
 
+openclaw_env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${openclaw_cid}" 2>/dev/null || true)"
+printf '%s\n' "${openclaw_env_dump}" | grep -q "^AGENTIC_CONTEXT_BUDGET_TOKENS=${AGENTIC_CONTEXT_BUDGET_TOKENS}$" \
+  || fail "openclaw must expose AGENTIC_CONTEXT_BUDGET_TOKENS"
+printf '%s\n' "${openclaw_env_dump}" | grep -q "^AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS}$" \
+  || fail "openclaw must expose AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS"
+printf '%s\n' "${openclaw_env_dump}" | grep -q "^AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS}$" \
+  || fail "openclaw must expose AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS"
+
 python3 "${REPO_ROOT}/deployments/optional/openclaw_module_manifest.py" validate \
   --manifest-file "${agentic_root}/openclaw/config/module/openclaw.module-manifest.v1.json" \
   >/tmp/agent-k9-manifest.out 2>&1 \
