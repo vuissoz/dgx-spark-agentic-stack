@@ -20,11 +20,13 @@ SHARED_REPOSITORY = os.environ.get("GIT_FORGE_SHARED_REPOSITORY", "shared-workbe
 REFERENCE_REPOSITORY = os.environ.get("GIT_FORGE_REFERENCE_REPOSITORY", "eight-queens-agent-e2e")
 AGENTIC_ROOT = os.environ.get("AGENTIC_ROOT", "/srv/agentic")
 AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "agentic")
+AGENTIC_NETWORK = os.environ.get("AGENTIC_NETWORK", "agentic")
 GIT_FORGE_HOST_PORT = os.environ.get("GIT_FORGE_HOST_PORT", "13010")
 GIT_FORGE_ADMIN_USER = os.environ.get("GIT_FORGE_ADMIN_USER", "system-manager")
 GIT_FORGE_SHARED_NAMESPACE = os.environ.get("GIT_FORGE_SHARED_NAMESPACE", "agentic")
 HOST_BASE_URL = f"http://127.0.0.1:{GIT_FORGE_HOST_PORT}"
 INTERNAL_BASE_URL = "http://optional-forgejo:3000"
+GIT_HELPER_IMAGE = os.environ.get("AGENTIC_GIT_FORGE_GIT_HELPER_IMAGE", "ghcr.io/nicolaka/netshoot:latest")
 SECRETS_ROOT = pathlib.Path(AGENTIC_ROOT) / "secrets" / "runtime" / "git-forge"
 BOOTSTRAP_DIR = pathlib.Path(AGENTIC_ROOT) / "optional" / "git" / "bootstrap"
 REFERENCE_TEMPLATE_DIR = pathlib.Path(__file__).resolve().parents[2] / "examples" / "optional" / REFERENCE_REPOSITORY
@@ -245,7 +247,8 @@ def ensure_user(container_id: str, username: str, email: str, password: str, *, 
 
     cmd = (
         "read -r pass; "
-        f"exec forgejo admin user change-password --username {shlex.quote(username)} --password \"$pass\""
+        f"exec forgejo admin user change-password --username {shlex.quote(username)} "
+        "--password \"$pass\" --must-change-password=false"
     )
     try:
         docker_exec(container_id, "/bin/bash", "--noprofile", "--norc", "-lc", cmd, input_text=f"{password}\n")
@@ -477,20 +480,54 @@ def git_with_askpass(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory(prefix="git-forge-bootstrap-") as temp_dir:
-        temp_path = pathlib.Path(temp_dir)
-        askpass_path = temp_path / "askpass.sh"
-        askpass_path.write_text("#!/bin/sh\nprintf '%s\\n' \"$GIT_FORGE_PASSWORD\"\n", encoding="utf-8")
-        os.chmod(askpass_path, 0o700)
-        env = os.environ.copy()
-        env.update(
-            {
-                "GIT_ASKPASS": str(askpass_path),
-                "GIT_TERMINAL_PROMPT": "0",
-                "GIT_USERNAME": username,
-                "GIT_FORGE_PASSWORD": password,
-            }
+        askpass_path = pathlib.Path(temp_dir) / "askpass.sh"
+        askpass_path.write_text(
+            "#!/bin/sh\n"
+            "case \"$1\" in\n"
+            "  *Username*|*username*) printf '%s\\n' \"$GIT_USERNAME\" ;;\n"
+            "  *Password*|*password*) printf '%s\\n' \"$GIT_FORGE_PASSWORD\" ;;\n"
+            "  *) printf '%s\\n' \"$GIT_FORGE_PASSWORD\" ;;\n"
+            "esac\n",
+            encoding="utf-8",
         )
-        return run(["git", *args], cwd=cwd, env=env, check=check)
+        os.chmod(askpass_path, 0o700)
+        cmd = [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            AGENTIC_NETWORK,
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
+            "-e",
+            "GIT_ASKPASS=/tmp/git-forge-askpass.sh",
+            "-e",
+            "GIT_TERMINAL_PROMPT=0",
+            "-e",
+            f"GIT_USERNAME={username}",
+            "-e",
+            f"GIT_FORGE_PASSWORD={password}",
+            "-v",
+            f"{askpass_path}:/tmp/git-forge-askpass.sh:ro",
+        ]
+
+        bind_mounts: dict[pathlib.Path, pathlib.Path] = {}
+        if cwd is not None:
+            bind_mounts[cwd] = cwd
+        for arg in args:
+            if not os.path.isabs(arg):
+                continue
+            path = pathlib.Path(arg)
+            mount_path = path if path.exists() else path.parent
+            bind_mounts[mount_path] = mount_path
+        for host_path in sorted(bind_mounts, key=str):
+            cmd.extend(["-v", f"{host_path}:{bind_mounts[host_path]}"])
+
+        if cwd is not None:
+            cmd.extend(["-w", str(cwd)])
+
+        cmd.extend([GIT_HELPER_IMAGE, "git", *args])
+        return run(cmd, check=check)
 
 
 def sync_reference_template(target_dir: pathlib.Path) -> None:
@@ -610,7 +647,7 @@ def seed_reference_repo(admin_user: str, admin_password: str) -> None:
     with tempfile.TemporaryDirectory(prefix="agentic-reference-repo-") as temp_dir:
         repo_dir = pathlib.Path(temp_dir) / REFERENCE_REPOSITORY
         git_with_askpass(
-            ["clone", repo_clone_url(HOST_BASE_URL, REFERENCE_REPOSITORY), str(repo_dir)],
+            ["clone", repo_clone_url(INTERNAL_BASE_URL, REFERENCE_REPOSITORY), str(repo_dir)],
             username=admin_user,
             password=admin_password,
         )
