@@ -20,8 +20,7 @@ from pathlib import Path
 
 DEFAULT_TRTLLM_MODEL = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
 DEFAULT_TRTLLM_MODEL_HANDLE = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
-DEFAULT_NEMOTRON_NATIVE_HANDLE = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8"
-DEFAULT_NVFP4_LOCAL_MODEL_DIR = "/models/cascade_30b_nvfp4"
+DEFAULT_NVFP4_LOCAL_MODEL_DIR = "/models/trtllm-model"
 MODEL_POLICY_AUTO = "auto"
 MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY = "strict-nvfp4-local-only"
 HF_URL_PREFIX = "https://huggingface.co/"
@@ -149,10 +148,6 @@ def model_serve_handle(
     normalized = strip_hf_url(model)
     if native_model_policy == MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY and normalized == strict_expected_handle:
         return nvfp4_local_model_dir.rstrip("/") or nvfp4_local_model_dir
-    if normalized == "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4":
-        # NVIDIA's DGX Spark TRT-LLM playbook observed on 2026-03-28 lists the FP8
-        # Nemotron-3-Super handle as the Spark-supported serving target.
-        return DEFAULT_NEMOTRON_NATIVE_HANDLE
     return normalized
 
 

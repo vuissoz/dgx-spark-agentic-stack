@@ -133,6 +133,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-u94j` : le bootstrap `agent up core` n'appelle plus aucun prechargement NVFP4 local automatique; `cascade` et `super` restent uniquement en manuel.
   - `dgx-spark-agentic-stack-1kso` : le gate restaure `/v1/models` sans tomber sur les backends distants sans cle, ajoute une route explicite pour `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` et valide le passage `ollama-gate -> trtllm` pour le modele TRT par defaut.
   - `dgx-spark-agentic-stack-nuya` : le catalogue `trtllm` derive maintenant un alias UI lisible a partir du modele TRT configure, afin qu'OpenWebUI puisse afficher et selectionner clairement le modele TRT actif sans dependre d'une URL Hugging Face brute ou d'un alias code en dur.
+  - `dgx-spark-agentic-stack-4zhv` : simplification TRT-LLM autour d'un seul modele configure (`TRTLLM_MODELS`), suppression du catalogue local multi-modele, retrait de `TRTLLM_ACTIVE_MODEL_KEY` et des operateurs `list/load/unload`.
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
@@ -526,10 +527,10 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - `agent onboard` propose par défaut `TRTLLM_MODELS=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`, et le fallback Compose/runtime reste aligné sur cette valeur.
 - le conteneur `trtllm` embarque maintenant l'image NVIDIA `nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc5`, lance `trtllm-serve serve` en backend natif quand `huggingface.token` est present, et garde un mode `mock` deterministe sans token.
 - le mode standard `TRTLLM_NATIVE_MODEL_POLICY=auto` conserve le comportement générique, y compris la canonicalisation FP8 du slug Nemotron NVFP4 quand le backend natif sert directement un handle HF.
-- le mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` impose au contraire un runtime NVFP4 préparé localement (`TRTLLM_NVFP4_LOCAL_MODEL_DIR`, défaut `/models/cascade_30b_nvfp4`), sans fallback silencieux vers HF/FP8.
-- avec le modèle TRT par défaut et un `huggingface.token` non vide, `agent up core` prefetch maintenant uniquement le cache Hugging Face de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` sous `${AGENTIC_ROOT}/trtllm/models/huggingface`. Aucun payload NVFP4 local n'est téléchargé automatiquement; `cascade` et `super` demandent désormais toujours une action opérateur explicite (`agent trtllm prepare ...` ou `agent trtllm load ...`).
-- le catalogue TRT local connait maintenant deux payloads NVFP4 (`nemotron-super-120b`, `nemotron-cascade-30b`) et le modèle actif est piloté par `TRTLLM_ACTIVE_MODEL_KEY`.
-- les commandes opérateur `agent trtllm list`, `agent trtllm prepare <model|all>`, `agent trtllm load <model>` et `agent trtllm unload` permettent de préparer plusieurs payloads locaux, puis de basculer le service TRT sur un seul modèle actif à la fois.
+- le mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` impose au contraire un runtime local unique (`TRTLLM_NVFP4_LOCAL_MODEL_DIR`, défaut `/models/trtllm-model`) aligné sur le seul modèle exposé par `TRTLLM_MODELS`, sans fallback silencieux.
+- avec le modèle TRT par défaut et un `huggingface.token` non vide, `agent up core` prefetch uniquement le cache Hugging Face de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` sous `${AGENTIC_ROOT}/trtllm/models/huggingface`. Le répertoire local strict n'est jamais téléchargé automatiquement; il reste opt-in via `agent trtllm prepare`.
+- la stack TRT ne maintient plus de catalogue local multi-modele ni de variable `TRTLLM_ACTIVE_MODEL_KEY`; le contrat runtime se résume à `TRTLLM_MODELS` et, si besoin, `TRTLLM_NVFP4_LOCAL_MODEL_DIR` / `TRTLLM_NVFP4_HF_REPO` / `TRTLLM_NVFP4_HF_REVISION`.
+- les commandes opérateur TRT sont réduites à `agent trtllm status` et `agent trtllm prepare` pour coller au modèle unique exposé.
 - un essai live `Hello` sur `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` retourne encore `503 status=starting` tant que le backend TRT termine le téléchargement Hugging Face derrière le proxy.
 - documenter les prérequis GPU/moteurs NVFP4 et la procédure de chargement des modèles.
 

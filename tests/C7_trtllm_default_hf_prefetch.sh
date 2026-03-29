@@ -45,10 +45,8 @@ grep -q '^fixture-rev$' "${nano_cache_root}/refs/main" \
   || fail "Nano prefetch must materialize config.json under the snapshot directory"
 [[ -f "${nano_cache_root}/snapshots/fixture-rev/generation_config.json" ]] \
   || fail "Nano prefetch must materialize generation_config.json under the snapshot directory"
-[[ ! -e "${runtime_root}/trtllm/models/cascade_30b_nvfp4" ]] \
-  || fail "default Nano prefetch must not create the local Cascade payload"
-[[ ! -e "${runtime_root}/trtllm/models/super_fp4" ]] \
-  || fail "default Nano prefetch must not create the local Super payload"
+[[ ! -e "${runtime_root}/trtllm/models/trtllm-model" ]] \
+  || fail "default Nano prefetch must not create the local strict-mode payload"
 ok "default TRT HF prefetch materializes only the Nano FP8 cache"
 
 skip_root="${tmp_root}/skip-runtime"
@@ -59,7 +57,7 @@ skip_output="$(
   AGENTIC_PROFILE=rootless-dev \
   AGENTIC_ROOT="${skip_root}" \
   COMPOSE_PROFILES=trt \
-  TRTLLM_MODELS="https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4" \
+  TRTLLM_MODELS="https://huggingface.co/acme/Other-TRT-Model" \
   TRTLLM_HF_PREFETCH_SOURCE_DIR="${fixture_source}" \
   TRTLLM_HF_PREFETCH_REVISION="fixture-rev" \
   bash "${helper_script}"
@@ -68,7 +66,7 @@ printf '%s\n' "${skip_output}" | grep -q 'skip TRT HF prefetch' \
   || fail "helper must skip non-default TRT aliases"
 [[ ! -e "${skip_root}/trtllm/models/huggingface/hub/models--nvidia--NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" ]] \
   || fail "non-default TRT aliases must not create the Nano cache"
-ok "TRT HF prefetch skips non-default aliases such as Cascade NVFP4"
+ok "TRT HF prefetch skips non-default TRT aliases"
 
 grep -q 'prefetch_trtllm_default_model' "${init_script}" \
   || fail "core init runtime must call the TRT HF prefetch helper"

@@ -105,8 +105,6 @@ grep -q "^export COMPOSE_PROFILES='trt'$" "${env_file}" \
   || fail "full setup onboarding env must export COMPOSE_PROFILES"
 grep -q "^export TRTLLM_MODELS='${trt_models}'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_MODELS"
-grep -q "^export TRTLLM_ACTIVE_MODEL_KEY='nemotron-cascade-30b'$" "${env_file}" \
-  || fail "full setup onboarding env must export TRTLLM_ACTIVE_MODEL_KEY"
 grep -q "^export TRTLLM_NATIVE_MAX_BATCH_SIZE='1'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_BATCH_SIZE"
 grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='4096'$" "${env_file}" \
@@ -115,10 +113,12 @@ grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='32768'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_SEQ_LEN"
 grep -q "^export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH='false'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH"
-grep -q "^export TRTLLM_NVFP4_LOCAL_MODEL_DIR='/models/cascade_30b_nvfp4'$" "${env_file}" \
-  || fail "full setup onboarding env must export TRTLLM_NVFP4_LOCAL_MODEL_DIR"
-grep -q "^export TRTLLM_NVFP4_HF_REVISION='80ee3ccfe8cb5eb019a0cde78449e8b197a0155f'$" "${env_file}" \
-  || fail "full setup onboarding env must export pinned TRTLLM_NVFP4_HF_REVISION"
+if grep -q '^export TRTLLM_ACTIVE_MODEL_KEY=' "${env_file}"; then
+  fail "full setup onboarding env must not export TRTLLM_ACTIVE_MODEL_KEY anymore"
+fi
+if grep -q '^export TRTLLM_NVFP4_LOCAL_MODEL_DIR=' "${env_file}"; then
+  fail "full setup onboarding env must not hardcode TRTLLM_NVFP4_LOCAL_MODEL_DIR anymore"
+fi
 grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='${default_context_window}'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_GOOSE_CONTEXT_LIMIT aligned with default model context window"
 grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='${default_model}'$" "${env_file}" \

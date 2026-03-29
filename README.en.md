@@ -39,20 +39,17 @@ source .runtime/env.generated.sh
 
 In interactive mode, `./agent onboard` now also asks explicitly whether to enable TRT when `COMPOSE_PROFILES` does not already contain `trt`, then records `TRTLLM_MODELS`.
 The `trtllm` service now attempts to launch a real NVIDIA TRT-LLM backend whenever `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty; otherwise it intentionally falls back to `mock` mode to preserve deterministic tests.
-By default (`TRTLLM_NATIVE_MODEL_POLICY=auto`), the native runtime keeps the generic behavior and can still canonicalize the Nemotron NVFP4 slug to the Spark-documented handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`.
-A hardened DGX Spark mode now exists: `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` accepts exactly one exposed alias at a time (`TRTLLM_MODELS`) and forces the actual load target to `TRTLLM_NVFP4_LOCAL_MODEL_DIR`, with no silent fallback to HF/FP8.
-The stack now exposes `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` as the default TRT alias, while still knowing two local NVFP4 payloads for strict mode:
-- `nemotron-cascade-30b` -> `${AGENTIC_ROOT}/trtllm/models/cascade_30b_nvfp4` (default local catalog entry)
-- `nemotron-super-120b` -> `${AGENTIC_ROOT}/trtllm/models/super_fp4`
+By default (`TRTLLM_NATIVE_MODEL_POLICY=auto`), the native runtime exposes a single TRT model controlled by `TRTLLM_MODELS`, with `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` as the default value.
+A hardened DGX Spark mode now exists: `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` accepts exactly one exposed alias at a time (`TRTLLM_MODELS`) and forces the actual load target to a single local directory `TRTLLM_NVFP4_LOCAL_MODEL_DIR`, with no silent fallback.
 For UIs such as OpenWebUI, the TRT catalog also derives a readable alias from the actually configured TRT model. With the current Nano default, that becomes `trtllm/nvidia-nemotron-3-nano-30b-a3b-fp8`, while the Hugging Face URL remains the canonical identifier for direct calls and tests.
 On that default Nano path, the runtime also bounds `TRTLLM_NATIVE_MAX_NUM_TOKENS=4096`, `TRTLLM_NATIVE_MAX_SEQ_LEN=32768`, and leaves `TRTLLM_NATIVE_ENABLE_CUDA_GRAPH=false` to avoid DGX Spark warm-ups getting stuck at `max_seq_len=262144`.
-The active local-catalog TRT model is controlled by `TRTLLM_ACTIVE_MODEL_KEY`. When `COMPOSE_PROFILES` includes `trt` and `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty, `./agent up core` now prefetches only the Hugging Face cache for the default exposed TRT model `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`. No local NVFP4 payload (`nemotron-cascade-30b`, `nemotron-super-120b`) is downloaded automatically on that path anymore; they are strictly opt-in through `./agent trtllm prepare ...` or `./agent trtllm load ...`.
+When `COMPOSE_PROFILES` includes `trt` and `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` is non-empty, `./agent up core` now prefetches only the Hugging Face cache for the default exposed TRT model `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`. The strict local directory is never bootstrapped automatically; it stays opt-in through `./agent trtllm prepare`.
 Example activation:
 
 ```bash
 export TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only
-export TRTLLM_ACTIVE_MODEL_KEY=nemotron-cascade-30b
-export TRTLLM_NVFP4_LOCAL_MODEL_DIR=/srv/agentic/trtllm/models/cascade_30b_nvfp4
+export TRTLLM_MODELS=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+export TRTLLM_NVFP4_LOCAL_MODEL_DIR=/srv/agentic/trtllm/models/trtllm-model
 ./agent up core
 ```
 
@@ -61,13 +58,11 @@ Local bootstrap progress is logged to `${AGENTIC_ROOT}/trtllm/logs/nvfp4-model-p
 Operator TRT commands:
 
 ```bash
-./agent trtllm list
-./agent trtllm prepare all
-./agent trtllm load nemotron-cascade-30b
-./agent trtllm unload
+./agent trtllm status
+./agent trtllm prepare
 ```
 
-Only one TRT model can stay loaded in memory at a time on DGX Spark, but multiple local payloads can be prepared and switched on demand.
+Only one TRT model is exposed by the stack at a time on DGX Spark.
 On the first native startup, the backend can remain in `status=starting` for several minutes while it downloads and warms the Hugging Face artifacts; until `native_ready=true`, gate requests receive an explicit `503` instead of silently falling back to a mock.
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
 The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) and reused by Ollama preload.
@@ -335,7 +330,7 @@ agent ps
 agent llm mode [local|hybrid|remote]
 agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
-agent trtllm [status|list|prepare <model|all>|load <model>|unload]
+agent trtllm [status|prepare]
 agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
 agent logs <service>
 agent stop <tool>

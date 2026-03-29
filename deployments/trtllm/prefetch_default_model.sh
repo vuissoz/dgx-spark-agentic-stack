@@ -30,11 +30,11 @@ prefetch_enabled() {
       ;;
   esac
 
-  [[ "$(trtllm_strip_hf_url "${TRTLLM_MODELS:-}")" == "$(trtllm_exposed_default_handle)" ]]
+  [[ "$(trtllm_strip_hf_url "${TRTLLM_MODELS:-}")" == "${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE}" ]]
 }
 
 prefetch_repo() {
-  printf '%s\n' "${TRTLLM_HF_PREFETCH_REPO:-$(trtllm_exposed_default_handle)}"
+  printf '%s\n' "${TRTLLM_HF_PREFETCH_REPO:-${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE}}"
 }
 
 prefetch_revision() {
