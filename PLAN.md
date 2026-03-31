@@ -1393,10 +1393,12 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-2ld` — enrichir `/v1/models` dans `ollama-gate` avec des métadonnées de modèles non sensibles (issues des backends, notamment Ollama `/api/tags`) pour améliorer l’interopérabilité client.
 - `dgx-spark-agentic-stack-41m` — introduire `AGENTIC_AGENT_WORKSPACES_ROOT` (onboarding/runtime + defaults `rootless-dev`) pour isoler proprement les workspaces agents.
 - `dgx-spark-agentic-stack-zs0` — onboarding/runtime : ajouter des chemins persistants `/workspace` dédiés par conteneur (`AGENTIC_{CLAUDE,CODEX,OPENCODE,VIBESTRAL,OPENHANDS}_WORKSPACES_DIR`) pour montage explicite service par service.
+- `dgx-spark-agentic-stack-7g8k` — ajuster le sandboxing des agents pour permettre le développement logiciel (Git, compilation) tout en maintenant la sécurité : ajouter `CHOWN`, `DAC_OVERRIDE` aux `cap_add`, persister les clés SSH par agent sous `${AGENTIC_ROOT}/secrets/ssh/<agent>`, et documenter les écarts avec le hardening initial.
 
 Objectif :
 - traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).
 - définir une politique explicite d’élévation intra-conteneur pour les agents (`sudo` local au conteneur uniquement), documenter l’écart éventuel avec le hardening (`no-new-privileges`, `cap_drop`) et ajouter les contrôles associés dans `agent doctor`.
+- permettre aux agents de cloner des dépôts Git, compiler du code, et gérer des artefacts tout en isolant les credentials SSH par agent.
 
 ---
 
