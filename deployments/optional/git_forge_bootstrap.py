@@ -765,6 +765,8 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
 \thelper = {container_helper_path}
 [init]
 \tdefaultBranch = main
+[core]
+\tsshCommand = ssh -i {container_home}/.ssh/id_ed25519 -F /dev/null
 """
     env_content = (
         "# Managed by git_forge_bootstrap.py\n"
@@ -777,6 +779,8 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
         f"export AGENTIC_GIT_FORGE_REFERENCE_CLONE_URL='{reference_clone_url_internal}'\n"
         f"export AGENTIC_GIT_FORGE_REFERENCE_HOST_CLONE_URL='{reference_clone_url_host}'\n"
         f"export AGENTIC_GIT_FORGE_REFERENCE_BRANCH='agent/{username}'\n"
+        f"export AGENTIC_GIT_FORGE_SSH_URL='ssh://git@optional-forgejo:2222/{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}'\n"
+        f"export AGENTIC_GIT_FORGE_SSH_REFERENCE_URL='ssh://git@optional-forgejo:2222/{GIT_FORGE_SHARED_NAMESPACE}/{REFERENCE_REPOSITORY}'\n"
     )
 
     write_if_changed(helper_path, helper_content, 0o750)
@@ -787,6 +791,42 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
     ensure_gitconfig_value(gitconfig_path, "user.email", str(account["email"]))
     ensure_gitconfig_value(gitconfig_path, "credential.helper", container_helper_path)
     ensure_gitconfig_value(gitconfig_path, "init.defaultBranch", "main")
+
+
+def generate_ssh_key_pair(username: str) -> tuple[str, str]:
+    """Generate SSH key pair for an agent."""
+    ssh_dir = pathlib.Path(AGENTIC_ROOT) / "secrets" / "ssh" / username
+    ssh_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(ssh_dir, 0o700)
+    
+    private_key_path = ssh_dir / "id_ed25519"
+    public_key_path = ssh_dir / "id_ed25519.pub"
+    
+    if private_key_path.exists() and public_key_path.exists():
+        return private_key_path.read_text(encoding="utf-8").strip(), public_key_path.read_text(encoding="utf-8").strip()
+    
+    run(["ssh-keygen", "-t", "ed25519", "-f", str(private_key_path), "-N", ""], check=True)
+    os.chmod(private_key_path, 0o600)
+    os.chmod(public_key_path, 0o644)
+    
+    return private_key_path.read_text(encoding="utf-8").strip(), public_key_path.read_text(encoding="utf-8").strip()
+
+
+def add_ssh_key_to_forgejo(container_id: str, username: str, public_key: str, admin_user: str, admin_password: str) -> None:
+    """Add SSH public key to Forgejo user."""
+    api_request(
+        container_id,
+        "POST",
+        f"/api/v1/admin/users/{urllib.parse.quote(username)}/keys",
+        username=admin_user,
+        password=admin_password,
+        payload={
+            "title": f"{username} SSH Key",
+            "key": public_key,
+        },
+        expected=(201,),
+    )
+    info(f"added SSH key for user '{username}'")
 
 
 def write_bootstrap_state() -> None:
@@ -845,6 +885,10 @@ def main() -> None:
     for account in MANAGED_ACCOUNTS:
         ensure_team_member(team_id, str(account["username"]), GIT_FORGE_ADMIN_USER, admin_password)
         bootstrap_git_home(account)
+        # Generate SSH key pair and add to Forgejo
+        username = str(account["username"])
+        private_key, public_key = generate_ssh_key_pair(username)
+        add_ssh_key_to_forgejo(container_id, username, public_key, GIT_FORGE_ADMIN_USER, admin_password)
     ensure_shared_repo(GIT_FORGE_ADMIN_USER, admin_password)
     seed_reference_repo(GIT_FORGE_ADMIN_USER, admin_password)
     write_bootstrap_state()

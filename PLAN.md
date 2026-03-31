@@ -1257,7 +1257,7 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 - bootstrap initial idempotent de comptes dédiés pour `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`.
 - chaque compte agent reçoit des credentials stockés hors git (fichiers root-only ou secrets injectés) permettant `git clone`, `fetch`, `pull`, `push` contre la forge interne ; les chemins et la rotation de ces credentials doivent être documentés.
 - chaque conteneur agent concerné doit aussi recevoir une préconfiguration Git stack-managed (identity + auth) pointant vers la forge interne, de façon à permettre un premier `git clone`/checkout direct dès la première session sans setup manuel dans le shell utilisateur.
-- transport par défaut : HTTP interne sur le réseau Docker privé + fichiers mot de passe dédiés ; SSH côté forge désactivé par défaut sauf besoin explicite documenté.
+- transport par défaut : HTTP interne sur le réseau Docker privé + fichiers mot de passe dédiés ; SSH côté forge activé pour permettre aux agents de pousser via SSH. Les clés SSH des agents doivent être préconfigurées et montées dans les conteneurs respectifs pour permettre une authentification SSH sécurisée.
 - prévoir un bootstrap minimal d’organisation/projet partagé pour permettre à plusieurs agents de collaborer sur les mêmes dépôts sans dépendre d’un fournisseur externe.
 - à la première initialisation complète de la stack avec `git-forge` actif, créer de façon idempotente un projet/dépôt partagé de référence pour le test d’intégration agentique (problème des 8 reines) :
   - le dépôt doit porter l’énoncé du problème, la structure Python cible, la commande de test et le contrat de vérification de sortie ;
@@ -1265,8 +1265,8 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
   - la branche par défaut `main` doit être protégée contre les pushes directs des comptes agents ;
   - une branche dédiée par agent doit être créée ou réservée (`agent/codex`, `agent/openclaw`, `agent/claude`, `agent/opencode`, `agent/openhands`, `agent/pi-mono`, `agent/goose`, `agent/vibestral`) ;
   - le scénario E2E doit imposer à chaque agent de ne pousser que sur sa branche dédiée et le doctor doit signaler explicitement tout push agent sur `main` comme échec de conformité.
-- onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, créer/recueillir séparément les secrets runtime nécessaires, et annoncer que la configuration Git des agents sera préchargée pour un premier checkout direct.
-- `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur et la cohérence de la liste des comptes agents attendus.
+- onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, créer/recueillir séparément les secrets runtime nécessaires, et annoncer que la configuration Git des agents sera préchargée pour un premier checkout direct. La configuration SSH pour les agents doit être préparée lors du premier démarrage de la stack (`first-up`), incluant la génération et la distribution des clés SSH pour chaque agent.
+- `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur, la cohérence de la liste des comptes agents attendus, et la configuration SSH des agents pour permettre les pushes via SSH.
 - documentation opérateur obligatoire : bootstrap initial, création/rotation/révocation des comptes, création de dépôt, partage inter-agents, sauvegarde/restauration, conformité.
 
 **Test** : `tests/K10_git_forge.sh`
@@ -1394,6 +1394,7 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-41m` — introduire `AGENTIC_AGENT_WORKSPACES_ROOT` (onboarding/runtime + defaults `rootless-dev`) pour isoler proprement les workspaces agents.
 - `dgx-spark-agentic-stack-zs0` — onboarding/runtime : ajouter des chemins persistants `/workspace` dédiés par conteneur (`AGENTIC_{CLAUDE,CODEX,OPENCODE,VIBESTRAL,OPENHANDS}_WORKSPACES_DIR`) pour montage explicite service par service.
 - `dgx-spark-agentic-stack-7g8k` — ajuster le sandboxing des agents pour permettre le développement logiciel (Git, compilation) tout en maintenant la sécurité : ajouter `CHOWN`, `DAC_OVERRIDE` aux `cap_add`, persister les clés SSH par agent sous `${AGENTIC_ROOT}/secrets/ssh/<agent>`, et documenter les écarts avec le hardening initial.
+- `dgx-spark-agentic-stack-ssh-push` — activer la configuration SSH pour les agents afin de permettre les pushes vers Forgejo via SSH. La configuration SSH doit être préparée lors du premier démarrage de la stack (`first-up`), incluant la génération et la distribution des clés SSH pour chaque agent.
 
 Objectif :
 - traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).

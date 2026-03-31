@@ -3106,8 +3106,9 @@ Description:
   2) agent profile
   3) deployments/bootstrap/init_fs.sh
   4) agent up core
-  5) agent up agents,ui,obs,rag
-  6) agent doctor
+  5) deployments/optional/git_forge_bootstrap.py (SSH setup)
+  6) agent up agents,ui,obs,rag
+  7) agent doctor
 USAGE
         return 0
         ;;
@@ -3135,6 +3136,7 @@ USAGE
   init_fs_cmd=("${AGENTIC_REPO_ROOT}/deployments/bootstrap/init_fs.sh")
   up_core_cmd=("${AGENTIC_REPO_ROOT}/agent" up core)
   up_baseline_cmd=("${AGENTIC_REPO_ROOT}/agent" up agents,ui,obs,rag)
+  ssh_setup_cmd=("${AGENTIC_REPO_ROOT}/deployments/optional/git_forge_bootstrap.py")
   doctor_cmd=("${AGENTIC_REPO_ROOT}/agent" doctor)
 
   step="profile"
@@ -3146,6 +3148,10 @@ USAGE
   if [[ "${failed}" == "0" ]]; then
     step="up-core"
     run_first_up_step "${step}" "${dry_run}" "${up_core_cmd[@]}" || failed=1
+  fi
+  if [[ "${failed}" == "0" ]]; then
+    step="ssh-setup"
+    run_first_up_step "${step}" "${dry_run}" "${ssh_setup_cmd[@]}" || failed=1
   fi
   if [[ "${failed}" == "0" ]]; then
     step="up-baseline"
