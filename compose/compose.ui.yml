@@ -24,6 +24,10 @@ services:
     user: "1000:1000"
     tmpfs:
       - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       USER_UID: "1000"
       USER_GID: "1000"

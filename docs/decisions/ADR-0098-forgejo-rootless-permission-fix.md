@@ -79,3 +79,20 @@ The fix resolves the original doctor check failure:
 - Consider adding specific doctor checks for Forgejo permission health
 - Document the permission requirements in operator documentation
 - Consider adding a `agent forgejo repair` command if similar issues arise with other directories
+
+## Container Hardening Notes
+
+### Security Hardening Applied
+As part of resolving this issue, container security hardening was also improved:
+
+**✅ Applied:**
+- `cap_drop: [ALL]` - All Linux capabilities dropped
+- `security_opt: ["no-new-privileges:true"]` - Prevents privilege escalation
+- Non-root user (1000:1000) execution
+
+**❌ Not Feasible:**
+- `read_only: true` - Cannot be enabled due to Forgejo's architectural requirements
+- Forgejo needs write access to multiple directories for normal operation
+- Compensation: Strict volume mount restrictions and permission controls
+
+**Rationale:** The security vs. functionality tradeoff was carefully considered. While a readonly filesystem would be ideal, it would completely break Forgejo's core functionality. The applied hardening measures provide significant security benefits while maintaining operational requirements.
