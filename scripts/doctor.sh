@@ -1561,17 +1561,26 @@ PY
     if ! timeout 20 docker exec "${cid}" sh -lc 'helper="$(git config credential.helper 2>/dev/null || true)"; test -n "${helper}" && printf "%s\n" "${helper}" | grep -q git-forge-credential.sh'; then
       doctor_fail "${service} git credential helper bootstrap is missing"
     fi
-    if ! timeout 20 docker exec "${cid}" sh -lc 'test -f /home/agent/.ssh/id_ed25519 && test -r /home/agent/.ssh/id_ed25519'; then
+    # Check both old and new SSH key locations for backward compatibility
+    ssh_key_path=""
+    if timeout 20 docker exec "${cid}" sh -lc 'test -f /state/home/.ssh/id_ed25519 && test -r /state/home/.ssh/id_ed25519'; then
+      ssh_key_path="/state/home/.ssh/id_ed25519"
+    elif timeout 20 docker exec "${cid}" sh -lc 'test -f /home/agent/.ssh/id_ed25519 && test -r /home/agent/.ssh/id_ed25519'; then
+      ssh_key_path="/home/agent/.ssh/id_ed25519"
+    else
       doctor_fail "${service} SSH key is missing or not readable"
     fi
-    if ! timeout 20 docker exec "${cid}" sh -lc 'test -f /home/agent/.ssh/id_ed25519.pub && test -r /home/agent/.ssh/id_ed25519.pub'; then
+    
+    # Check public key at the same location
+    if ! timeout 20 docker exec "${cid}" sh -lc "test -f ${ssh_key_path%.pub}.pub && test -r ${ssh_key_path%.pub}.pub"; then
       doctor_fail "${service} SSH public key is missing or not readable"
     fi
     if [[ -n "${optional_forgejo_cid}" ]]; then
       if ! timeout 25 docker exec "${cid}" sh -lc "GIT_TERMINAL_PROMPT=0 git ls-remote http://optional-forgejo:3000/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
         doctor_fail "${service} cannot access the shared git-forge repository without prompts"
       fi
-      if ! timeout 25 docker exec "${cid}" sh -lc "GIT_SSH_COMMAND='ssh -i /home/agent/.ssh/id_ed25519 -F /dev/null' GIT_TERMINAL_PROMPT=0 git ls-remote ssh://git@optional-forgejo:2222/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
+      # Use the detected SSH key path for the git operation
+      if ! timeout 25 docker exec "${cid}" sh -lc "GIT_SSH_COMMAND='ssh -i ${ssh_key_path} -F /dev/null' GIT_TERMINAL_PROMPT=0 git ls-remote ssh://git@optional-forgejo:2222/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
         doctor_fail "${service} cannot access the shared git-forge repository via SSH"
       fi
     fi
