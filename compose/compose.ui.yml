@@ -56,6 +56,7 @@ services:
       - /home/vuissoz/.local/share/agentic/optional/git/state/jwt:/var/lib/gitea/jwt
       - /home/vuissoz/.local/share/agentic/optional/git/state/indexers:/var/lib/gitea/indexers
       - /home/vuissoz/.local/share/agentic/optional/git/state/ssh:/var/lib/gitea/ssh
+      - /home/vuissoz/.local/share/agentic/optional/git/state/forgejo:/var/lib/gitea/forgejo
     healthcheck:
       test:
         - CMD-SHELL
