@@ -1,8 +1,16 @@
-# AGENTS.md — Codex (dev) : implémentation conforme au CDC DGX Spark
+# AGENTS.md — Agents de développement : implémentation conforme au CDC DGX Spark
 
-Tu es **Codex**, agent de développement. Ta mission est de **livrer un repo exécutable** qui implémente la stack décrite dans le cahier des charges (CDC) DGX Spark : services agentiques conteneurisés, mises à jour fréquentes (`:latest`) mais **traçabilité + rollback stricts**, accès distant **Tailscale-only**, et un socle sécurité/MCO “raisonnable”.
+## Agents actifs sur le projet
 
-Ce fichier définit les règles de travail et les garde-fous. En cas de conflit entre ce fichier et le CDC, **le CDC prévaut** (et tu documentes le conflit).
+### Codex (agent principal)
+Agent de développement principal chargé de livrer un repo exécutable conforme au CDC DGX Spark : services agentiques conteneurisés, mises à jour fréquentes (`:latest`) avec traçabilité + rollback stricts, accès distant Tailscale-only, et socle sécurité/MCO raisonnable.
+
+### Mistral Vibe (agent CLI)
+Agent CLI spécialisé dans l'exploration de codebase, l'analyse et les modifications structurées. Opère via des outils spécialisés pour les opérations de développement, les audits de sécurité et la maintenance du codebase.
+
+## Règles de travail et garde-fous
+
+Ce fichier définit les règles de travail applicables à tous les agents. En cas de conflit entre ce fichier et le CDC, **le CDC prévaut** (et le conflit doit être documenté).
 
 ---
 
@@ -101,7 +109,7 @@ Tu ne “négocies” pas le périmètre : si un point du CDC semble trop ambiti
 
 ---
 
-## Définition de Done (acceptation)
+## Définition de Done (acceptance)
 
 Un livrable est acceptable si, depuis un clone frais :
 
@@ -151,6 +159,7 @@ Si tu es bloqué :
 - tu proposes la solution la plus sûre,
 - tu n’ouvres jamais la sécurité “pour avancer”.
 
+---
 
 ## Landing the Plane (Session Completion)
 
