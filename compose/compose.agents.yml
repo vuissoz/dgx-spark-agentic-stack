@@ -67,6 +67,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/claude.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/claude:/state/home/.ssh:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/claude:/home/agent/.ssh:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -146,6 +147,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/codex.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/codex:/state/home/.ssh:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/codex:/home/agent/.ssh:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -226,6 +228,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/opencode.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/opencode:/state/home/.ssh:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/opencode:/home/agent/.ssh:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -305,6 +308,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/vibestral.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/vibestral:/state/home/.ssh:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/vibestral:/home/agent/.ssh:ro
     healthcheck:
       test:
         - CMD-SHELL
