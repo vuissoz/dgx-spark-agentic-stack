@@ -1267,10 +1267,12 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
   - le scénario E2E doit imposer à chaque agent de ne pousser que sur sa branche dédiée et le doctor doit signaler explicitement tout push agent sur `main` comme échec de conformité.
 - onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, créer/recueillir séparément les secrets runtime nécessaires, et annoncer que la configuration Git des agents sera préchargée pour un premier checkout direct. La configuration SSH pour les agents doit être préparée lors du premier démarrage de la stack (`first-up`), incluant la génération et la distribution des clés SSH pour chaque agent.
 - `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur, la cohérence de la liste des comptes agents attendus, et la configuration SSH des agents pour permettre les pushes via SSH.
+- **Fix de permissions rootless** : Le script `deployments/ui/init_runtime.sh` inclut désormais `prepare_forgejo_volumes()` qui corrige automatiquement les permissions des volumes Forgejo pour le conteneur rootless (queues directory en 775, suppression des locks obsolètes, config directory accessible). Voir ADR-0098.
 - documentation opérateur obligatoire : bootstrap initial, création/rotation/révocation des comptes, création de dépôt, partage inter-agents, sauvegarde/restauration, conformité.
 
 **Test** : `tests/K10_git_forge.sh`
 - service `optional-forgejo` healthy ; UI répond sur `127.0.0.1` uniquement.
+- **Vérification des permissions rootless** : Après un redémarrage complet (`agent down ui && agent up ui`), le service Forgejo démarre correctement sans intervention manuelle (ADR-0098).
 - aucun bind `0.0.0.0`, aucun mount `docker.sock`, baseline hardening conforme.
 - volumes DB et dépôts pointent vers `${AGENTIC_ROOT}/optional/git/...`.
 - compte `system-manager` existe avec rôle admin/manager.

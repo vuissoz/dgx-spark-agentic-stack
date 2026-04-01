@@ -185,6 +185,25 @@ seed_openhands_workspace_if_missing() {
   log "seeded workspace folder: ${destination}"
 }
 
+prepare_forgejo_volumes() {
+  # Set permissive permissions for Forgejo queues directory to allow container to manage locks
+  if [[ -d "${AGENTIC_ROOT}/optional/git/state/queues" ]]; then
+    find "${AGENTIC_ROOT}/optional/git/state/queues" -type d -exec chmod 775 {} + 2>/dev/null || true
+    find "${AGENTIC_ROOT}/optional/git/state/queues" -type f -exec chmod 664 {} + 2>/dev/null || true
+    rm -f "${AGENTIC_ROOT}/optional/git/state/queues/common/LOCK" 2>/dev/null || true
+    log "prepared Forgejo queues directory for rootless container"
+  fi
+
+  # Ensure config directory has correct permissions
+  if [[ -d "${AGENTIC_ROOT}/optional/git/config" ]]; then
+    chmod 775 "${AGENTIC_ROOT}/optional/git/config" 2>/dev/null || true
+    if [[ -f "${AGENTIC_ROOT}/optional/git/config/app.ini" ]]; then
+      chmod 664 "${AGENTIC_ROOT}/optional/git/config/app.ini" 2>/dev/null || true
+    fi
+    log "prepared Forgejo config directory for rootless container"
+  fi
+}
+
 main() {
   local git_forge_secret
   local -a git_forge_accounts=(
@@ -299,6 +318,9 @@ main() {
       "${AGENTIC_ROOT}/optional/git/config" \
       "${AGENTIC_ROOT}/optional/git/bootstrap"
     log "non-root runtime init: relaxed UI runtime dirs for userns compatibility"
+
+    # Prepare Forgejo volumes for rootless container
+    prepare_forgejo_volumes
 
     if [[ -f "${AGENTIC_ROOT}/openwebui/data/webui.db" && ! -w "${AGENTIC_ROOT}/openwebui/data/webui.db" ]]; then
       log "non-root notice: ${AGENTIC_ROOT}/openwebui/data/webui.db is not writable by current user; fix ownership or rotate the file if OpenWebUI fails to start"
