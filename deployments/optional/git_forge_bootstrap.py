@@ -19,7 +19,7 @@ SHARED_TEAM = "agents"
 SHARED_REPOSITORY = os.environ.get("GIT_FORGE_SHARED_REPOSITORY", "shared-workbench")
 REFERENCE_REPOSITORY = os.environ.get("GIT_FORGE_REFERENCE_REPOSITORY", "eight-queens-agent-e2e")
 AGENTIC_ROOT = os.environ.get("AGENTIC_ROOT", "/srv/agentic")
-AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "agentic")
+AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "compose")
 AGENTIC_NETWORK = os.environ.get("AGENTIC_NETWORK", "agentic")
 GIT_FORGE_HOST_PORT = os.environ.get("GIT_FORGE_HOST_PORT", "13010")
 GIT_FORGE_ADMIN_USER = os.environ.get("GIT_FORGE_ADMIN_USER", "system-manager")
@@ -165,6 +165,7 @@ def repo_exists(repository: str, admin_user: str, admin_password: str) -> bool:
 
 
 def service_container_id(service_name: str) -> str:
+    # Try the primary project name first
     proc = run(
         [
             "docker",
@@ -177,7 +178,28 @@ def service_container_id(service_name: str) -> str:
             "{{.ID}}",
         ]
     )
-    return proc.stdout.strip().splitlines()[0] if proc.stdout.strip() else ""
+    if proc.stdout.strip():
+        return proc.stdout.strip().splitlines()[0]
+    
+    # If not found, try the fallback project name
+    fallback_project = "compose"
+    if AGENTIC_COMPOSE_PROJECT != fallback_project:
+        proc = run(
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"label=com.docker.compose.project={fallback_project}",
+                "--filter",
+                f"label=com.docker.compose.service={service_name}",
+                "--format",
+                "{{.ID}}",
+            ]
+        )
+        if proc.stdout.strip():
+            return proc.stdout.strip().splitlines()[0]
+    
+    return ""
 
 
 def wait_for_http(container_id: str, timeout_seconds: int = 120) -> None:
