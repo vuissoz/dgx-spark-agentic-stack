@@ -240,6 +240,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.app_token:/run/secrets/slack.app_token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/slack.signing_secret:/run/secrets/slack.signing_secret:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/openclaw.password:/run/secrets/git-forge.password:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/openclaw:/state/cli/openclaw-home/.ssh:ro
     healthcheck:
       test:
         - CMD-SHELL

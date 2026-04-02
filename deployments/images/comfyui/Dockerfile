@@ -22,6 +22,7 @@ RUN apt-get update \
     libc6-dev \
     libgl1 \
     libglib2.0-0 \
+    openssh-client \
     tini \
   && rm -rf /var/lib/apt/lists/*
 

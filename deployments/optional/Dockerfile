@@ -34,6 +34,7 @@ RUN apt-get update \
     bash \
     ca-certificates \
     curl \
+    openssh-client \
     xz-utils \
   && rm -rf /var/lib/apt/lists/*
 
