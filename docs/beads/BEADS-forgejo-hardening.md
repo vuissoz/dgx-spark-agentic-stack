@@ -1,7 +1,7 @@
 # BEADS Issue: Forgejo Container Hardening Baseline Failure
 
 ## Status
-OPEN
+RESOLVED (see BEADS-forgejo-hardening-softening.md)
 
 ## Issue
 Forgejo container fails security hardening baseline checks in `agent doctor`:

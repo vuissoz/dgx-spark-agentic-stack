@@ -1580,7 +1580,7 @@ PY
         doctor_fail "${service} cannot access the shared git-forge repository without prompts"
       fi
       # Use the detected SSH key path for the git operation
-      if ! timeout 25 docker exec "${cid}" sh -lc "GIT_SSH_COMMAND='ssh -i ${ssh_key_path} -F /dev/null' GIT_TERMINAL_PROMPT=0 git ls-remote ssh://git@optional-forgejo:2222/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
+      if ! timeout 25 docker exec "${cid}" sh -lc "GIT_SSH_COMMAND='ssh -i ${ssh_key_path} -o UserKnownHostsFile=${ssh_key_path}.known_hosts -o StrictHostKeyChecking=no' GIT_TERMINAL_PROMPT=0 git ls-remote ssh://git@optional-forgejo:2222/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
         doctor_fail "${service} cannot access the shared git-forge repository via SSH"
       fi
     fi

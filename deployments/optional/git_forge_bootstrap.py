@@ -25,7 +25,8 @@ GIT_FORGE_HOST_PORT = os.environ.get("GIT_FORGE_HOST_PORT", "13010")
 GIT_FORGE_ADMIN_USER = os.environ.get("GIT_FORGE_ADMIN_USER", "system-manager")
 GIT_FORGE_SHARED_NAMESPACE = os.environ.get("GIT_FORGE_SHARED_NAMESPACE", "agentic")
 HOST_BASE_URL = f"http://127.0.0.1:{GIT_FORGE_HOST_PORT}"
-INTERNAL_BASE_URL = "http://optional-forgejo:3000"
+# Use IP address instead of hostname to avoid DNS resolution issues between networks
+INTERNAL_BASE_URL = "http://172.18.0.17:3000"
 GIT_HELPER_IMAGE = os.environ.get("AGENTIC_GIT_FORGE_GIT_HELPER_IMAGE", "ghcr.io/nicolaka/netshoot:latest")
 SECRETS_ROOT = pathlib.Path(AGENTIC_ROOT) / "secrets" / "runtime" / "git-forge"
 BOOTSTRAP_DIR = pathlib.Path(AGENTIC_ROOT) / "optional" / "git" / "bootstrap"
@@ -801,8 +802,8 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
         f"export AGENTIC_GIT_FORGE_REFERENCE_CLONE_URL='{reference_clone_url_internal}'\n"
         f"export AGENTIC_GIT_FORGE_REFERENCE_HOST_CLONE_URL='{reference_clone_url_host}'\n"
         f"export AGENTIC_GIT_FORGE_REFERENCE_BRANCH='agent/{username}'\n"
-        f"export AGENTIC_GIT_FORGE_SSH_URL='ssh://git@optional-forgejo:2222/{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}'\n"
-        f"export AGENTIC_GIT_FORGE_SSH_REFERENCE_URL='ssh://git@optional-forgejo:2222/{GIT_FORGE_SHARED_NAMESPACE}/{REFERENCE_REPOSITORY}'\n"
+        f"export AGENTIC_GIT_FORGE_SSH_URL='ssh://git@172.18.0.17:2222/{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}'\n"
+        f"export AGENTIC_GIT_FORGE_SSH_REFERENCE_URL='ssh://git@172.18.0.17:2222/{GIT_FORGE_SHARED_NAMESPACE}/{REFERENCE_REPOSITORY}'\n"
     )
 
     write_if_changed(helper_path, helper_content, 0o750)
@@ -823,6 +824,7 @@ def generate_ssh_key_pair(username: str) -> tuple[str, str]:
     
     private_key_path = ssh_dir / "id_ed25519"
     public_key_path = ssh_dir / "id_ed25519.pub"
+    known_hosts_path = ssh_dir / "known_hosts"
     
     if private_key_path.exists() and public_key_path.exists():
         return private_key_path.read_text(encoding="utf-8").strip(), public_key_path.read_text(encoding="utf-8").strip()
@@ -831,12 +833,20 @@ def generate_ssh_key_pair(username: str) -> tuple[str, str]:
     os.chmod(private_key_path, 0o600)
     os.chmod(public_key_path, 0o644)
     
+    # Add Forgejo host key to known_hosts
+    forgejo_known_hosts = pathlib.Path(AGENTIC_ROOT) / "secrets" / "ssh" / "forgejo_known_hosts"
+    if forgejo_known_hosts.exists():
+        import shutil
+        shutil.copy(str(forgejo_known_hosts), str(known_hosts_path))
+        os.chmod(known_hosts_path, 0o644)
+    
     return private_key_path.read_text(encoding="utf-8").strip(), public_key_path.read_text(encoding="utf-8").strip()
 
 
 def add_ssh_key_to_forgejo(container_id: str, username: str, public_key: str, admin_user: str, admin_password: str) -> None:
     """Add SSH public key to Forgejo user."""
-    api_request(
+    # First check if the key already exists by trying to add it and handling the error gracefully
+    result = api_request(
         container_id,
         "POST",
         f"/api/v1/admin/users/{urllib.parse.quote(username)}/keys",
@@ -846,9 +856,16 @@ def add_ssh_key_to_forgejo(container_id: str, username: str, public_key: str, ad
             "title": f"{username} SSH Key",
             "key": public_key,
         },
-        expected=(201,),
+        expected=(201, 422),  # Accept 422 as a valid response (key already exists)
+        allow_not_found=False,
     )
-    info(f"added SSH key for user '{username}'")
+    
+    if result is None:
+        # Key was added successfully (201 status)
+        info(f"added SSH key for user '{username}'")
+    else:
+        # Key already exists (422 status)
+        info(f"SSH key already exists for user '{username}', skipping")
 
 
 def write_bootstrap_state() -> None:

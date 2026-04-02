@@ -202,6 +202,20 @@ prepare_forgejo_volumes() {
     fi
     log "prepared Forgejo config directory for rootless container"
   fi
+
+  # Create and distribute Forgejo SSH host key for agents
+  if [[ ! -f "${AGENTIC_ROOT}/secrets/ssh/forgejo_known_hosts" ]]; then
+    log "creating Forgejo SSH host key file"
+    install -d -m 0750 "${AGENTIC_ROOT}/secrets/ssh"
+    cat > "${AGENTIC_ROOT}/secrets/ssh/forgejo_known_hosts" << 'EOF'
+optional-forgejo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC+mvCpIsDts8QLg8Ake3nK22Pk1rmdAVTfLAOF0bVcqR61Ekz+DqqvZDETdQ8FE9BtYOkJD4c9d0XNS5BLkicAI2Uea9OzbKclkGuSm71QLeKdSt6GvEiKQT6ys2xTOzQtzoWetIZ/chnVGwnOtpZwS1HursaVzOYliepIR769fOfbKvjJqm2mJ81V+/m2kcp3RULFn7sWMY8zKolvLMrC7T6JWh736xhC4Th2MGO9+sBvEC4gX956UeFygEu1qoW44rOJanmCM52LqCapSZILQLsyMfvcd8exiM4LVwCod4XG26/gzxB3sr6IE/9uABi32Hc9z2qJXUW3gHiu2rIUIjxH0ftr+EPqqPG9jYynkrGq6x2F+DD8Jqv9f9LII3vZdsfozTbP3O8wE86C+1E1DxkGDyueZlhhC1nqLIwv3s9R5mIjTiCdBYr7ztFZ4kPtGNs17DR4VxAiLn8ST5wvRYrZw1L5CDL9AyJzVAtzkgZWWm2e5IYfPCCa5otaXk4tPdacnPEQXi2mjjWvWgoYVG76xZb/cz2POX6BxfPYH7PkYXRYk/a4okNpZbnqlNyQFzYqunHNylO398GeKBnehUP2tLjBMwmnDC3oAGjgMDfOjUpYXCG1rz1P/80fgvbVI1HIlZzGtJWckYuhfOw7IFxqopLL5Iab58jlmoMAew==
+EOF
+    chmod 644 "${AGENTIC_ROOT}/secrets/ssh/forgejo_known_hosts"
+    if [[ "${EUID}" -eq 0 ]]; then
+      chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${AGENTIC_ROOT}/secrets/ssh/forgejo_known_hosts"
+    fi
+    log "created Forgejo SSH host key for agents"
+  fi
 }
 
 main() {
