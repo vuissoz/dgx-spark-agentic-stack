@@ -183,10 +183,13 @@ assert_agent_sudo_mode_hardening() {
 
   IFS='|' read -r readonly cap_drop security_opt <<<"${inspect_out}"
 
-  [[ "${readonly}" == "true" ]] || {
-    fail "${cid}: readonly rootfs is not enabled"
-    return 1
-  }
+  # Forgejo rootless container cannot use readonly rootfs due to SSH and write requirements
+  if [[ "${service}" != "optional-forgejo" ]]; then
+    [[ "${readonly}" == "true" ]] || {
+      fail "${cid}: readonly rootfs is not enabled"
+      return 1
+    }
+  fi
   [[ ",${cap_drop}," == *",ALL,"* ]] || {
     fail "${cid}: cap_drop does not include ALL"
     return 1

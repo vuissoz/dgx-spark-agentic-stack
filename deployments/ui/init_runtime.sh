@@ -203,6 +203,13 @@ prepare_forgejo_volumes() {
     log "prepared Forgejo config directory for rootless container"
   fi
 
+  # Ensure custom directory has correct permissions (needed for rootless)
+  if [[ -d "${AGENTIC_ROOT}/optional/git/state" ]]; then
+    find "${AGENTIC_ROOT}/optional/git/state" -type d -exec chmod 775 {} + 2>/dev/null || true
+    find "${AGENTIC_ROOT}/optional/git/state" -type f -exec chmod 664 {} + 2>/dev/null || true
+    log "prepared Forgejo state directory for rootless container"
+  fi
+
   # Create and distribute Forgejo SSH host key for agents
   if [[ ! -f "${AGENTIC_ROOT}/secrets/ssh/forgejo_known_hosts" ]]; then
     log "creating Forgejo SSH host key file"
