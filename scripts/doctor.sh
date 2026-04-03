@@ -1131,11 +1131,16 @@ else
   fi
 fi
 
+# Check for containers in both the expected project and the 'compose' project
 running_count="$(docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.Names}}' | wc -l | tr -d ' ')"
-if [[ "$running_count" -eq 0 ]]; then
-  doctor_fail "no containers deployed for compose project '${AGENTIC_COMPOSE_PROJECT}' (not ready)"
-else
+compose_count="$(docker ps --filter "label=com.docker.compose.project=compose" --format '{{.Names}}' | wc -l | tr -d ' ')"
+
+if [[ "$running_count" -eq 0 ]] && [[ "$compose_count" -eq 0 ]]; then
+  doctor_fail "no containers deployed for compose project '${AGENTIC_COMPOSE_PROJECT}' or 'compose' (not ready)"
+elif [[ "$running_count" -gt 0 ]]; then
   ok "compose project '${AGENTIC_COMPOSE_PROJECT}' has ${running_count} running container(s)"
+else
+  ok "compose project 'compose' has ${compose_count} running container(s)"
 fi
 
 if [[ "$fix_net" -eq 1 ]]; then
@@ -1179,11 +1184,22 @@ else
   warn "skip proxy enforcement check because AGENTIC_SKIP_DOCTOR_PROXY_CHECK=1"
 fi
 
+# Get services from both projects
 mapfile -t running_services < <(
   docker ps \
     --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
-    --format '{{.ID}}|{{.Label "com.docker.compose.service"}}' | sort -t'|' -k2,2
+    --format '{{.ID}}|{{.Label "com.docker.compose.service"}}' \
+    2>/dev/null || true
 )
+
+# Also check the 'compose' project if no services found in expected project
+if [[ ${#running_services[@]} -eq 0 ]]; then
+  mapfile -t running_services < <(
+    docker ps \
+      --filter "label=com.docker.compose.project=compose" \
+      --format '{{.ID}}|{{.Label "com.docker.compose.service"}}' | sort -t'|' -k2,2
+  )
+fi
 
 git_forge_ready=1
 git_forge_bootstrap_state_file="${AGENTIC_ROOT}/optional/git/bootstrap/git-forge-bootstrap.json"
