@@ -1,7 +1,7 @@
 # BEADS Issue: Agent SSH Key Distribution Failure
 
 ## Status
-OPEN
+RESOLVED
 
 ## Issue
 Agents cannot access SSH keys to communicate with Forgejo repository, causing `agent doctor` failures:
@@ -56,11 +56,11 @@ This needs to be done for all agents: claude, codex, opencode, vibestral.
 - `agent doctor` shows NOT READY due to SSH failures
 
 ## Acceptance Criteria
-- [ ] All agents have valid SSH keys in their containers
-- [ ] SSH keys have correct permissions (600)
-- [ ] Agents can successfully clone/push to Forgejo via SSH
-- [ ] `agent doctor` passes SSH-related checks
-- [ ] SSH client is available in all agent containers
+- [x] All agents have valid SSH keys in their containers ✅
+- [x] SSH keys have correct permissions (600) ✅
+- [x] Agents can successfully clone/push to Forgejo via SSH ✅
+- [x] `agent doctor` passes SSH-related checks ✅
+- [x] SSH client is available in all agent containers ✅
 
 ## Related Files
 - `deployments/optional/git_forge_bootstrap.py` - Generates git config with SSH key paths

@@ -1,7 +1,7 @@
 # BEADS Issue: Add SSH Clients to UI Services for Forgejo Access
 
 ## Status
-OPEN
+RESOLVED
 
 ## Issue
 UI services (comfyui, openclaw, openhands) cannot access the Forgejo repository via SSH because they lack SSH clients in their containers. This prevents them from participating in git-based workflows.
@@ -18,12 +18,12 @@ These services use minimal container images that don't include SSH clients:
 - `agent doctor` shows FAIL for SSH access checks
 
 ## Acceptance Criteria
-- [ ] comfyui container includes SSH client
-- [ ] openclaw container includes SSH client  
-- [ ] openhands container includes SSH client
-- [ ] All UI services can access Forgejo via SSH
-- [ ] `agent doctor` passes SSH checks for UI services
-- [ ] Solution maintains container security
+- [x] comfyui container includes SSH client ✅
+- [x] openclaw container includes SSH client  ✅
+- [x] openhands container includes SSH client ✅
+- [x] All UI services can access Forgejo via SSH ✅
+- [x] `agent doctor` passes SSH checks for UI services ✅
+- [x] Solution maintains container security ✅
 
 ## Proposed Solutions
 
@@ -88,6 +88,14 @@ Ensure doctor script properly detects SSH clients in UI containers.
 
 ## Priority
 MEDIUM - Blocks git workflows for UI services but not critical path
+
+## Results
+
+✅ All UI services (comfyui, openclaw, openhands) now have SSH clients installed
+✅ SSH volume mounts are properly configured for all UI services
+✅ UI services can access Forgejo via SSH when needed
+✅ Container security is maintained with minimal SSH client installations
+✅ All acceptance criteria met
 
 ## Dependencies
 - BEADS-ssh-host-key-verification.md (resolved)

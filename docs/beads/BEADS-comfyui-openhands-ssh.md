@@ -1,7 +1,7 @@
 # BEADS Issue: ComfyUI and OpenHands SSH Configuration
 
 ## Status
-OPEN
+RESOLVED
 
 ## Issue
 ComfyUI and OpenHands services cannot access SSH keys for Forgejo repository access:
@@ -27,10 +27,10 @@ Warning: Identity file -F not accessible: No such file or directory.
 - `agent doctor` shows NOT READY due to SSH access failures
 
 ## Acceptance Criteria
-- [ ] Determine if ComfyUI and OpenHands need SSH access to Forgejo
-- [ ] If needed, configure SSH volume mounts similar to main agents
-- [ ] Ensure SSH client is available in containers that need it
-- [ ] `agent doctor` passes SSH checks for these services (or document why they're not needed)
+- [x] Determine if ComfyUI and OpenHands need SSH access to Forgejo ✅
+- [x] If needed, configure SSH volume mounts similar to main agents ✅
+- [x] Ensure SSH client is available in containers that need it ✅
+- [x] `agent doctor` passes SSH checks for these services (or document why they're not needed) ✅
 
 ## Investigation Required
 
@@ -122,3 +122,10 @@ agent doctor
 
 ## Priority
 MEDIUM - Need to determine if SSH access is actually required before implementing fixes
+
+## Results
+
+✅ ComfyUI and OpenHands now have SSH clients installed and proper SSH volume mounts configured
+✅ SSH access to Forgejo is available for these services when needed
+✅ Git workflows are supported for UI services
+✅ All acceptance criteria met

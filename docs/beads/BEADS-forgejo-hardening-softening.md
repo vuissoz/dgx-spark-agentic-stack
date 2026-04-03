@@ -1,7 +1,7 @@
 # BEADS Issue: Soften Forgejo Hardening Requirements for SSH Key Distribution
 
 ## Status
-OPEN
+RESOLVED
 
 ## Issue
 Forgejo container hardening baseline is failing because read-only root filesystem cannot be enabled while maintaining SSH key distribution functionality.
@@ -20,10 +20,10 @@ The current hardening baseline requires `read_only: true` which conflicts with t
 - SSH functionality would break if read_only were enforced
 
 ## Acceptance Criteria
-- [ ] Forgejo hardening requirements are realistic for the service
-- [ ] Security is maintained without breaking functionality
-- [ ] `agent doctor` passes Forgejo hardening checks
-- [ ] Documentation explains the security trade-offs
+- [x] Forgejo hardening requirements are realistic for the service ✅
+- [x] Security is maintained without breaking functionality ✅
+- [x] `agent doctor` passes Forgejo hardening checks ✅
+- [x] Documentation explains the security trade-offs ✅
 
 ## Proposed Solutions
 
@@ -93,6 +93,14 @@ Add comments explaining the security trade-offs in monitoring output.
 
 ## Priority
 LOW - Security is maintained through alternative measures
+
+## Results
+
+✅ Forgejo hardening requirements have been softened to realistic levels
+✅ Security is maintained through alternative measures (cap_drop, no-new-privileges)
+✅ Documentation in ADR-0098 explains the security trade-offs
+✅ `agent doctor` now accepts Forgejo's documented exceptions
+✅ All acceptance criteria met
 
 ## Dependencies
 - BEADS-forgejo-hardening.md (existing issue)
