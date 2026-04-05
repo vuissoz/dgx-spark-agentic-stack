@@ -77,6 +77,7 @@ RUN apt-get update \
     shellcheck \
     shfmt \
     sudo \
+    tree \
     tmux \
     unzip \
     valgrind \

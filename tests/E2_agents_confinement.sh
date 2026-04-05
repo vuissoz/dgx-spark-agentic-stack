@@ -46,8 +46,8 @@ assert_repo_task_toolchain() {
   local label="$2"
 
   timeout 20 docker exec "${container_id}" sh -lc \
-    'command -v git >/dev/null && command -v python3 >/dev/null && python3 -c "import pytest" >/dev/null' \
-    || fail "${container_id}: ${label} repo task toolchain must provide git, python3, and pytest"
+    'command -v git >/dev/null && command -v python3 >/dev/null && python3 -c "import pytest" >/dev/null && command -v tree >/dev/null' \
+    || fail "${container_id}: ${label} repo task toolchain must provide git, python3, pytest, and tree"
   ok "${container_id}: ${label} repo task toolchain is available"
 }
 
