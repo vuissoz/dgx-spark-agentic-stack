@@ -147,6 +147,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 | `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |
 | `dgx-spark-agentic-stack-zu7n` | open | ajouter une forge Git interne loopback-only avec comptes dédiés pour chaque agent et gestion opérateur documentée |
 | `dgx-spark-agentic-stack-yzk0` | open | livrer un test de stack end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, artefacts unifiés et doctor final |
+| `dgx-spark-agentic-stack-m00n` | open | intégrer Hermes Agent (`NousResearch/hermes-agent`) comme nouvel agent core stack-managed avec service dédié, état persistant, surface opérateur et couverture doctor/tests |
 
 ## Profils d’exécution (obligatoires)
 
@@ -201,7 +202,7 @@ Le contenu attendu reste identique :
 - `/srv/agentic/tests/` : tests automatiques (A→L)
 - `/srv/agentic/secrets/` : secrets runtime + logs rotation
 - `/srv/agentic/{ollama,gate,proxy,dns,openwebui,openhands,comfyui,rag,monitoring}/`
-- `/srv/agentic/{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
+- `/srv/agentic/{claude,codex,opencode,vibestral,hermes}/{state,logs,workspaces}/`
 - `/srv/agentic/optional/git/{config,state,logs,db,repositories,bootstrap}/`
 - `AGENTIC_AGENT_WORKSPACES_ROOT` peut séparer les workspaces agents du reste :
   - `strict-prod` par défaut : `${AGENTIC_ROOT}` (donc `${AGENTIC_ROOT}/<tool>/workspaces`)
@@ -683,7 +684,7 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
   - outillage productivité/qualité : ripgrep, fd-find, jq, shellcheck, shfmt, direnv
   - socle C/C++ pro : gdb, gdbserver, valgrind, clang, clangd, lld, lldb, clang-format, clang-tidy, cppcheck, ccache, bear, meson, autoconf, automake, libtool
   - dépendances build natives communes : libc6-dev, libssl-dev, zlib1g-dev, libffi-dev, libbz2-dev, libreadline-dev, libsqlite3-dev
-  - installer les CLIs agents officiels dans l'image commune (codex, claude code, opencode, vibe, openhands CLI, openclaw CLI) avec traçabilité de l'état d'installation (`/etc/agentic/*-real-path`) et wrappers de fallback explicites en cas d'échec egress
+  - installer les CLIs agents officiels dans l'image commune (codex, claude code, opencode, vibe, openhands CLI, openclaw CLI) ainsi que le runtime/CLI Hermes dérivé de `https://github.com/NousResearch/hermes-agent.git`, avec traçabilité de l'état d'installation (`/etc/agentic/*-real-path`) et wrappers de fallback explicites en cas d'échec egress
   - conserver user non-root + entrypoint tmux compatible
 - pas de docker.sock, pas de privilèges
 
@@ -691,7 +692,7 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - `docker image inspect agent-cli-base:<tag>` OK
 - `.Config.User` non-root
 - `docker run --rm ... sh -lc 'command -v gcc g++ cmake ninja clang python3 pip node npm go rustc cargo nvcc'` OK
-- `docker run --rm ... sh -lc 'command -v codex claude opencode vibe openhands openclaw'` OK
+- `docker run --rm ... sh -lc 'command -v codex claude opencode vibe openhands openclaw hermes'` OK
 - smoke C/C++ : compilation simple (`gcc` + `g++`) OK
 - smoke CUDA : `nvcc --version` OK (et test compile minimal CUDA si GPU/toolkit dispo)
 - invariants sécurité conservés (`read_only`, `cap_drop=ALL`, `no-new-privileges`, pas de `docker.sock`)
@@ -712,7 +713,7 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
 - le nouveau runbook débutant existe et est référencé depuis la documentation d’introduction/runbooks.
 - les invariants sécurité des agents restent inchangés.
 
-### E2 Déployer `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
+### E2 Déployer `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`
 **Implémentation**
 - `deployments/compose/compose.agents.yml`
 - volumes par outil :
@@ -731,15 +732,20 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
   1. `curl -LsSf https://mistral.ai/vibe/install.sh | bash`
   2. `vibe --setup`
 - persister l’état Vibe dans `${AGENTIC_ROOT}/vibestral/state` (ou sous-répertoire explicite) pour éviter de relancer `--setup` à chaque redémarrage.
+- service dédié `agentic-hermes` (même baseline sécurité que les autres agents core), dérivé du dépôt upstream `NousResearch/hermes-agent` avec contrat d'intégration stack-managed explicite :
+  1. version/source pinées (tag, commit ou release) dans l'image commune ou un wrapper dédié, sans dépendance implicite à une branche flottante ;
+  2. bootstrap non interactif compatible tmux/workspace et persistance de l’état Hermes sous `${AGENTIC_ROOT}/hermes/state` ;
+  3. routage modèle déterministe vers `ollama-gate` ou backend explicitement supporté par Hermes, sans contourner la politique réseau/egress de la stack ;
+  4. documentation des écarts éventuels entre le contrat upstream Hermes et les invariants de cette stack.
 - expliciter pour chaque service son binaire CLI principal (`AGENT_PRIMARY_CLI`) et vérifier sa présence via `doctor` et tests E2.
 
 **Test** : `tests/E2_agents_confinement.sh`
-- `docker exec agentic-claude tmux has-session -t claude` OK (idem codex/opencode/vibestral)
-- `docker exec agentic-claude sh -lc 'command -v claude'` OK (idem codex/opencode/vibe)
-- `docker exec agentic-claude sh -lc 'test -f /state/bootstrap/ollama-gate-defaults.env'` OK (idem codex/opencode/vibestral) + variables résolues vers `http://ollama-gate:11435(/v1)`
+- `docker exec agentic-claude tmux has-session -t claude` OK (idem codex/opencode/vibestral/hermes)
+- `docker exec agentic-claude sh -lc 'command -v claude'` OK (idem codex/opencode/vibe/hermes)
+- `docker exec agentic-claude sh -lc 'test -f /state/bootstrap/ollama-gate-defaults.env'` OK (idem codex/opencode/vibestral/hermes) + variables résolues vers `http://ollama-gate:11435(/v1)`
 - `docker inspect` prouve : non-root, readonly rootfs, cap_drop ALL, NNP
 - egress : direct KO, via proxy conforme
-- pour chaque agent (`claude`, `codex`, `opencode`, `vibestral`) :
+- pour chaque agent (`claude`, `codex`, `opencode`, `vibestral`, `hermes`) :
   - `getent hosts github.com` renvoie une résolution DNS valide ;
   - `ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -T git@github.com` ne doit jamais échouer sur `Temporary failure in name resolution` (un refus d’authentification est acceptable).
 - écritures : OK dans workspace/state/logs, KO ailleurs
@@ -756,13 +762,14 @@ Suivi Beads : `dgx-spark-agentic-stack-ahh`
   - `agent logs <tool>`
   - `agent stop <tool>`
   - `agent up/down` multi-compose
-- inclure `vibestral` comme tool de première classe (`agent vibestral <project>`).
+- inclure `vibestral` et `hermes` comme tools de première classe (`agent vibestral <project>`, `agent hermes <project>`).
 - stocker config runtime dans `/srv/agentic/deployments/runtime.env` (non committé)
 
 **Test** : `tests/F1_agent_cli.sh`
 - `agent ls` fonctionne même si aucune session (retour propre)
 - `agent claude` crée/attache une session tmux et workspace projet
 - `agent vibestral` crée/attache une session tmux et workspace projet
+- `agent hermes` crée/attache une session tmux et workspace projet
 
 ### F2 Snapshot par digest + rollback strict
 **Implémentation**
@@ -1411,7 +1418,7 @@ La stack est “opérable” quand :
 - egress libre impossible (proxy + DOCKER-USER prouvés)
 - Ollama local-only fonctionne et est consommé via `ollama-gate` (queue+sticky+metrics)
 - si activé, backend TRT-LLM (modèles NVFP4) est routé via `ollama-gate` vers le conteneur `trtllm` sans exposition host
-- agents CLI persistants (tmux) confinés (non-root, NNP, cap_drop ALL, rootfs ro), incluant `agentic-vibestral` avec Vibe CLI initialisé.
+- agents CLI persistants (tmux) confinés (non-root, NNP, cap_drop ALL, rootfs ro), incluant `agentic-vibestral` avec Vibe CLI initialisé et `agentic-hermes` intégré selon un contrat stack-managed explicite depuis `NousResearch/hermes-agent`.
 - UIs demandées (OpenWebUI, OpenHands, ComfyUI) bind local + auth, et ne cassent pas la posture
 - observabilité exploitable (CPU/RAM/disque/GPU, logs, erreurs proxy, drops DOCKER-USER)
 - update/rollback stricts par digest reproductibles
@@ -1436,4 +1443,3 @@ Validation complémentaire recommandée après chemin critique :
 - V1 (VM dédiée `strict-prod` prod-like)
 
 Stop condition générale : si une étape exige des privilèges élevés non compensés (root + caps + accès host), elle reste désactivée, et on documente le refus dans `deployments/changes.log`.
-
