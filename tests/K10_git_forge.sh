@@ -190,7 +190,13 @@ timeout 90 docker exec "${goose_cid}" sh -lc "
   cd /workspace/git-forge-smoke-goose
   git checkout -B agent/goose origin/agent/goose
   test -f README.md
+  test -f AGENT.md
+  test -f .gitignore
   test -f .agentic/reference-e2e.manifest.json
+  grep -qx '__pycache__/' .gitignore
+  grep -qx '\*.py\[cod\]' .gitignore
+  grep -q 'git status --short' AGENT.md
+  grep -q 'Never push to `main`' AGENT.md
 " >/tmp/agent-k10-goose-smoke.out 2>&1 \
   || fail "goose clone/share smoke failed on the reference repository"
 

@@ -185,6 +185,14 @@ run(["git", "clone", origin_dir.as_uri(), str(seed_dir)])
 run(["git", "config", "user.name", "System Manager"], cwd=seed_dir)
 run(["git", "config", "user.email", "system-manager@forge.agentic.local"], cwd=seed_dir)
 copy_tree(template_dir, seed_dir)
+assert (seed_dir / ".gitignore").is_file()
+assert (seed_dir / "AGENT.md").is_file()
+gitignore = (seed_dir / ".gitignore").read_text(encoding="utf-8")
+agent_md = (seed_dir / "AGENT.md").read_text(encoding="utf-8")
+assert "__pycache__/" in gitignore
+assert "*.py[cod]" in gitignore
+assert "git status --short" in agent_md
+assert "Never push to `main`." in agent_md
 run(["git", "add", "-A"], cwd=seed_dir)
 run(["git", "commit", "-m", "Seed reference repository"], cwd=seed_dir)
 run(["git", "branch", "-M", "main"], cwd=seed_dir)
