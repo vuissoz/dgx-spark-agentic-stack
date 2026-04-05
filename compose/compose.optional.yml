@@ -160,7 +160,10 @@ services:
       - agentic
 
   optional-goose:
-    image: ghcr.io/block/goose:latest
+    image: ${AGENTIC_GOOSE_IMAGE:-agentic/goose-cli:local}
+    build:
+      context: ..
+      dockerfile: deployments/images/goose/Dockerfile
     profiles:
       - optional-goose
     init: true

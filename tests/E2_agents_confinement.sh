@@ -41,6 +41,48 @@ assert_primary_cli() {
   ok "${container_id}: primary CLI '${cli}' is available"
 }
 
+assert_repo_task_toolchain() {
+  local container_id="$1"
+  local label="$2"
+
+  timeout 20 docker exec "${container_id}" sh -lc \
+    'command -v git >/dev/null && command -v python3 >/dev/null && python3 -c "import pytest" >/dev/null' \
+    || fail "${container_id}: ${label} repo task toolchain must provide git, python3, and pytest"
+  ok "${container_id}: ${label} repo task toolchain is available"
+}
+
+assert_codex_wrapper_bypass_fallback() {
+  local container_id="$1"
+  local probe_dir="/workspace/.e2-codex-wrapper"
+  local path_file="${probe_dir}/codex-real-path"
+  local real_bin="${probe_dir}/fake-codex.sh"
+  local args_file="${probe_dir}/argv.txt"
+
+  timeout 20 docker exec "${container_id}" sh -lc \
+    "mkdir -p '${probe_dir}' && cat >'${real_bin}' <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' \"\$@\" >'${args_file}'
+EOF
+chmod 0755 '${real_bin}'
+printf '%s\n' '${real_bin}' >'${path_file}'
+AGENTIC_WRAPPER_PATH_FILE='${path_file}' \
+AGENTIC_CODEX_SANDBOX_PROBE_CMD='exit 1' \
+/usr/local/bin/codex -a never -s workspace-write exec probe" \
+    || fail "${container_id}: codex wrapper fallback probe failed"
+
+  timeout 20 docker exec "${container_id}" sh -lc \
+    "grep -qx -- '--dangerously-bypass-approvals-and-sandbox' '${args_file}' \
+      && ! grep -qx -- '-a' '${args_file}' \
+      && ! grep -qx -- 'never' '${args_file}' \
+      && ! grep -qx -- '-s' '${args_file}' \
+      && ! grep -qx -- 'workspace-write' '${args_file}' \
+      && grep -qx -- 'exec' '${args_file}' \
+      && grep -qx -- 'probe' '${args_file}'" \
+    || fail "${container_id}: codex wrapper must switch to bypass mode when userns sandbox is unavailable"
+
+  ok "${container_id}: codex wrapper falls back to bypass mode when userns sandbox is unavailable"
+}
+
 assert_ollama_gate_defaults() {
   local container_id="$1"
   local defaults_file="/state/bootstrap/ollama-gate-defaults.env"
@@ -220,6 +262,11 @@ assert_primary_cli "${claude_cid}" "claude"
 assert_primary_cli "${codex_cid}" "codex"
 assert_primary_cli "${opencode_cid}" "opencode"
 assert_primary_cli "${vibestral_cid}" "vibe"
+assert_repo_task_toolchain "${claude_cid}" "claude"
+assert_repo_task_toolchain "${codex_cid}" "codex"
+assert_repo_task_toolchain "${opencode_cid}" "opencode"
+assert_repo_task_toolchain "${vibestral_cid}" "vibestral"
+assert_codex_wrapper_bypass_fallback "${codex_cid}"
 
 for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}"; do
   if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}" == "false" ]]; then

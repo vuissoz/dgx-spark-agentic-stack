@@ -109,6 +109,8 @@ wait_for_container_ready "${claw_cid}" 90 || fail "openclaw did not become ready
 assert_container_security "${claw_cid}" || fail "openclaw container security baseline failed"
 assert_proxy_enforced "${claw_cid}" || fail "openclaw proxy env baseline failed"
 assert_no_docker_sock_mount "${claw_cid}" || fail "openclaw must not mount docker.sock"
+docker exec "${claw_cid}" sh -lc 'command -v git >/dev/null && command -v python3 >/dev/null && python3 -c "import pytest" >/dev/null' \
+  || fail "openclaw repo task toolchain must provide git, python3, and pytest"
 
 AGENT_NO_ATTACH=1 "${agent_bin}" openclaw >/tmp/agent-k1-openclaw-entrypoint.out \
   || fail "agent openclaw operator entrypoint must be available"

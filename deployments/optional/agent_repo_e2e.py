@@ -24,6 +24,7 @@ OPENHANDS_HOST_PORT = os.environ.get("OPENHANDS_HOST_PORT", "3000")
 REFERENCE_PROBLEM_FILE = "src/eight_queens.py"
 REFERENCE_PROBLEM_SENTINEL = 'raise NotImplementedError("Implement solve_eight_queens()")'
 GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
+PYTEST_IMPORT_CHECK = "python3 -c 'import pytest' >/dev/null"
 
 AGENT_MATRIX = {
     "codex": {"service": "agentic-codex", "branch": "agent/codex", "mode": "codex"},
@@ -218,6 +219,7 @@ def verify_unresolved_workspace(
             "[ \"$current_branch\" = \"$expected_branch\" ]",
             "[ \"$current_head\" = \"$expected_head\" ]",
             f"grep -F {shlex.quote(REFERENCE_PROBLEM_SENTINEL)} {shlex.quote(REFERENCE_PROBLEM_FILE)} >/dev/null",
+            PYTEST_IMPORT_CHECK,
             "if python3 -m pytest -q; then",
             "  echo 'expected unresolved baseline tests to fail before agent work' >&2",
             "  exit 1",
@@ -246,7 +248,7 @@ def read_git_head(container_id: str, workspace: str, timeout_seconds: int) -> st
 def verify_tests(container_id: str, workspace: str, artifact_dir: pathlib.Path, timeout_seconds: int) -> tuple[bool, str]:
     proc = docker_exec(
         container_id,
-        f"cd {shlex.quote(workspace)} && python3 -m pytest -q",
+        f"cd {shlex.quote(workspace)} && {PYTEST_IMPORT_CHECK} && python3 -m pytest -q",
         timeout_seconds=timeout_seconds,
     )
     (artifact_dir / "verify.stdout.log").write_text(proc.stdout, encoding="utf-8")

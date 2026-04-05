@@ -37,6 +37,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 - `agent doctor` vérifie la cohérence contexte/capacité modèle/mémoire.
 - `tests/L7_default_model_tool_call_fs_ops.sh` couvre les opérations fichier sur `claude`, `codex`, `opencode`, `vibestral`, `openhands`.
 - Suivi ouvert `dgx-spark-agentic-stack-yzk0` : ajouter un test d’intégration end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, collecte d’artefacts et doctor final.
+- Suivi livré `dgx-spark-agentic-stack-i4o2` : tous les conteneurs agents ciblés par `repo-e2e` embarquent désormais la toolchain `git/python3/pytest` dès leur création, avec fallback runtime `codex` quand `bwrap`/user namespaces ne sont pas disponibles.
 - La compatibilité agents inspirée des contrats Ollama inclut :
   - profils de configuration par agent versionnés ;
   - chemins explicites `/v1/chat/completions`, `/v1/responses`, `/v1/messages` ;
@@ -147,6 +148,9 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 | `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |
 | `dgx-spark-agentic-stack-zu7n` | open | ajouter une forge Git interne loopback-only avec comptes dédiés pour chaque agent et gestion opérateur documentée |
 | `dgx-spark-agentic-stack-yzk0` | open | livrer un test de stack end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, artefacts unifiés et doctor final |
+| `dgx-spark-agentic-stack-i4o2` | closed | conteneurs agents `repo-e2e` autonomes dès leur création avec toolchain Python/Git/pytest et fallback runtime `codex` quand `bwrap`/user namespaces ne sont pas disponibles |
+| `dgx-spark-agentic-stack-5ahj` | open | stabiliser la preuve `ollama-gate` de `tests/H2_openhands.sh` maintenant que la toolchain OpenHands est alignée sur le Python runtime exposé |
+| `dgx-spark-agentic-stack-r1my` | open | aligner les assertions rootless-dev restantes de `tests/E2_agents_confinement.sh` et `tests/K5_goose.sh` avec les contrats runtime actuels (workspace rootless et bannière Goose) |
 | `dgx-spark-agentic-stack-m00n` | open | intégrer Hermes Agent (`NousResearch/hermes-agent`) comme nouvel agent core stack-managed avec service dédié, état persistant, surface opérateur et couverture doctor/tests |
 
 ## Profils d’exécution (obligatoires)

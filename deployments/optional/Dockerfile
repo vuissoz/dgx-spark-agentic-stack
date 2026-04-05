@@ -34,8 +34,12 @@ RUN apt-get update \
     bash \
     ca-certificates \
     curl \
+    git \
     openssh-client \
+    python3-pip \
+    python3-pytest \
     xz-utils \
+  && python3 -m pip install --no-cache-dir pytest \
   && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system app && adduser --system --ingroup app app

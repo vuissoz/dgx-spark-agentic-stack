@@ -70,6 +70,9 @@ wait_for_container_ready "${goose_cid}" 120 || fail "optional-goose did not beco
 assert_container_security "${goose_cid}" || fail "optional-goose container security baseline failed"
 assert_proxy_enforced "${goose_cid}" || fail "optional-goose proxy env baseline failed"
 assert_no_docker_sock_mount "${goose_cid}" || fail "optional-goose must not mount docker.sock"
+timeout 20 docker exec "${goose_cid}" sh -lc \
+  'command -v git >/dev/null && command -v python3 >/dev/null && python3 -c "import pytest" >/dev/null && command -v goose >/dev/null' \
+  || fail "optional-goose repo task toolchain must provide goose, git, python3, and pytest"
 
 env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${goose_cid}")"
 echo "${env_dump}" | grep -q '^HOME=/state/home$' \

@@ -45,6 +45,11 @@ docker inspect --format '{{range .Mounts}}{{println .Source "->" .Destination}}{
   && fail "openhands mounts docker.sock, which is forbidden"
 ok "openhands does not mount docker.sock"
 
+timeout 20 docker exec "${openhands_cid}" sh -lc \
+  'command -v git >/dev/null && command -v python3 >/dev/null && python3 -c "import pytest" >/dev/null' \
+  || fail "openhands repo task toolchain must provide git, python3, and pytest"
+ok "openhands repo task toolchain is available"
+
 env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${openhands_cid}")"
 echo "${env_dump}" | grep -q '^LLM_BASE_URL=http://ollama-gate:11435/v1$' \
   || fail "openhands LLM_BASE_URL is not pinned to ollama-gate"
