@@ -25,6 +25,7 @@ REFERENCE_PROBLEM_FILE = "src/eight_queens.py"
 REFERENCE_PROBLEM_SENTINEL = 'raise NotImplementedError("Implement solve_eight_queens()")'
 GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
 PYTEST_IMPORT_CHECK = "python3 -c 'import pytest' >/dev/null"
+AGENT_DEFAULTS_FILE = "/state/bootstrap/ollama-gate-defaults.env"
 
 AGENT_MATRIX = {
     "codex": {"service": "agentic-codex", "branch": "agent/codex", "mode": "codex"},
@@ -124,8 +125,16 @@ def service_container_id(service: str) -> str:
 
 
 def docker_exec(container_id: str, shell_command: str, *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+    wrapped_command = (
+        f'if [ -f {shlex.quote(AGENT_DEFAULTS_FILE)} ]; then\n'
+        f"  set -a\n"
+        f"  . {shlex.quote(AGENT_DEFAULTS_FILE)}\n"
+        f"  set +a\n"
+        f"fi\n"
+        f"{shell_command}"
+    )
     return run(
-        ["timeout", str(timeout_seconds), "docker", "exec", container_id, "sh", "-lc", shell_command],
+        ["timeout", str(timeout_seconds), "docker", "exec", container_id, "sh", "-lc", wrapped_command],
         check=False,
     )
 

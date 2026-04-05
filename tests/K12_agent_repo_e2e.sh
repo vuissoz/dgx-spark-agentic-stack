@@ -217,6 +217,22 @@ spec = importlib.util.spec_from_file_location("agent_repo_e2e", module_path)
 module = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
 spec.loader.exec_module(module)
+captured: dict[str, object] = {}
+original_run = module.run
+
+def fake_run(cmd, **kwargs):
+    captured["cmd"] = cmd
+    return subprocess.CompletedProcess(cmd, 0, "", "")
+
+module.run = fake_run
+module.docker_exec("container-123", "printf '%s\\n' \"$OPENAI_API_KEY\"", timeout_seconds=17)
+wrapped = captured["cmd"][-1]
+assert "set -a" in wrapped
+assert "/state/bootstrap/ollama-gate-defaults.env" in wrapped
+assert ". " in wrapped
+assert "printf '%s\\n' \"$OPENAI_API_KEY\"" in wrapped
+module.run = original_run
+
 module.git_forge_api_request = lambda *args, **kwargs: {"name": "eight-queens-agent-e2e"}
 module.read_secret = lambda secret_name: "dummy"
 

@@ -117,6 +117,17 @@ if command -v docker >/dev/null 2>&1; then
     grep -q "^name = \"${vibestral_default_model}\"$" "${vibestral_cfg}" \
       || fail "vibestral runtime config model must match AGENTIC_DEFAULT_MODEL (${vibestral_default_model})"
     rm -f "${vibestral_cfg}" >/dev/null 2>&1 || true
+    docker exec "${vibestral_cid}" sh -lc '
+      set -e
+      set -a
+      . /state/bootstrap/ollama-gate-defaults.env
+      set +a
+      out="$(mktemp)"
+      err="$(mktemp)"
+      timeout 60 vibe -p "Return exactly OK." --output json --workdir /workspace --max-turns 2 >"${out}" 2>"${err}"
+      grep -q "\"content\": \"OK\"" "${out}"
+      test ! -s "${err}"
+    ' || fail "vibestral programmatic mode must work once bootstrap defaults are sourced"
     ok "running vibestral container keeps adapter endpoint contract"
   else
     warn "agentic-vibestral container not running; runtime adapter assertion skipped"
