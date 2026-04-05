@@ -24,9 +24,12 @@ AGENTIC_NETWORK = os.environ.get("AGENTIC_NETWORK", "agentic")
 GIT_FORGE_HOST_PORT = os.environ.get("GIT_FORGE_HOST_PORT", "13010")
 GIT_FORGE_ADMIN_USER = os.environ.get("GIT_FORGE_ADMIN_USER", "system-manager")
 GIT_FORGE_SHARED_NAMESPACE = os.environ.get("GIT_FORGE_SHARED_NAMESPACE", "agentic")
+GIT_FORGE_INTERNAL_HOST = os.environ.get("GIT_FORGE_INTERNAL_HOST", SERVICE_NAME)
+GIT_FORGE_INTERNAL_HTTP_PORT = os.environ.get("GIT_FORGE_INTERNAL_HTTP_PORT", "3000")
+GIT_FORGE_INTERNAL_SSH_PORT = os.environ.get("GIT_FORGE_INTERNAL_SSH_PORT", "2222")
+GIT_FORGE_ALLOW_PROJECT_FALLBACK = os.environ.get("AGENTIC_GIT_FORGE_ALLOW_PROJECT_FALLBACK", "0")
 HOST_BASE_URL = f"http://127.0.0.1:{GIT_FORGE_HOST_PORT}"
-# Use IP address instead of hostname to avoid DNS resolution issues between networks
-INTERNAL_BASE_URL = "http://172.18.0.17:3000"
+INTERNAL_BASE_URL = f"http://{GIT_FORGE_INTERNAL_HOST}:{GIT_FORGE_INTERNAL_HTTP_PORT}"
 GIT_HELPER_IMAGE = os.environ.get("AGENTIC_GIT_FORGE_GIT_HELPER_IMAGE", "ghcr.io/nicolaka/netshoot:latest")
 SECRETS_ROOT = pathlib.Path(AGENTIC_ROOT) / "secrets" / "runtime" / "git-forge"
 BOOTSTRAP_DIR = pathlib.Path(AGENTIC_ROOT) / "optional" / "git" / "bootstrap"
@@ -148,6 +151,10 @@ def repo_clone_url(base_url: str, repository: str) -> str:
     return f"{base_url}/{GIT_FORGE_SHARED_NAMESPACE}/{repository}.git"
 
 
+def repo_ssh_url(host: str, port: str, repository: str) -> str:
+    return f"ssh://git@{host}:{port}/{GIT_FORGE_SHARED_NAMESPACE}/{repository}"
+
+
 def repo_api_path(repository: str) -> str:
     return f"/api/v1/repos/{urllib.parse.quote(GIT_FORGE_SHARED_NAMESPACE)}/{urllib.parse.quote(repository)}"
 
@@ -166,7 +173,6 @@ def repo_exists(repository: str, admin_user: str, admin_password: str) -> bool:
 
 
 def service_container_id(service_name: str) -> str:
-    # Try the primary project name first
     proc = run(
         [
             "docker",
@@ -181,10 +187,11 @@ def service_container_id(service_name: str) -> str:
     )
     if proc.stdout.strip():
         return proc.stdout.strip().splitlines()[0]
-    
-    # If not found, try the fallback project name
-    fallback_project = "compose"
-    if AGENTIC_COMPOSE_PROJECT != fallback_project:
+
+    if GIT_FORGE_ALLOW_PROJECT_FALLBACK in {"1", "true", "TRUE", "yes", "YES", "on", "ON"}:
+        fallback_project = "compose"
+        if AGENTIC_COMPOSE_PROJECT == fallback_project:
+            return ""
         proc = run(
             [
                 "docker",
@@ -199,7 +206,7 @@ def service_container_id(service_name: str) -> str:
         )
         if proc.stdout.strip():
             return proc.stdout.strip().splitlines()[0]
-    
+
     return ""
 
 
@@ -802,8 +809,8 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
         f"export AGENTIC_GIT_FORGE_REFERENCE_CLONE_URL='{reference_clone_url_internal}'\n"
         f"export AGENTIC_GIT_FORGE_REFERENCE_HOST_CLONE_URL='{reference_clone_url_host}'\n"
         f"export AGENTIC_GIT_FORGE_REFERENCE_BRANCH='agent/{username}'\n"
-        f"export AGENTIC_GIT_FORGE_SSH_URL='ssh://git@172.18.0.17:2222/{GIT_FORGE_SHARED_NAMESPACE}/{SHARED_REPOSITORY}'\n"
-        f"export AGENTIC_GIT_FORGE_SSH_REFERENCE_URL='ssh://git@172.18.0.17:2222/{GIT_FORGE_SHARED_NAMESPACE}/{REFERENCE_REPOSITORY}'\n"
+        f"export AGENTIC_GIT_FORGE_SSH_URL='{repo_ssh_url(GIT_FORGE_INTERNAL_HOST, GIT_FORGE_INTERNAL_SSH_PORT, SHARED_REPOSITORY)}'\n"
+        f"export AGENTIC_GIT_FORGE_SSH_REFERENCE_URL='{repo_ssh_url(GIT_FORGE_INTERNAL_HOST, GIT_FORGE_INTERNAL_SSH_PORT, REFERENCE_REPOSITORY)}'\n"
     )
 
     write_if_changed(helper_path, helper_content, 0o750)
