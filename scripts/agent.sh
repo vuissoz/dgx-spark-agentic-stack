@@ -84,7 +84,7 @@ Usage:
   agent rollback all <release_id>
   agent rollback host-net <backup_id>
   agent rollback ollama-link <backup_id|latest>
-  agent repo-e2e [--agents <csv>] [--repo <name>] [--clone-url <url>] [--artifacts-dir <path>] [--dry-run]
+  agent repo-e2e [--agents <csv>] [--repo <name>] [--clone-url <url>] [--artifacts-dir <path>] [--reset-agent-branches] [--dry-run]
   agent prereqs
   agent onboard [runtime flags...] [--compose-profiles ... --default-model ... --default-model-context-window ... --trtllm-models ... --grafana-admin-user ... --grafana-admin-password ... --obs-retention-time ... --obs-max-disk ... --openwebui-admin-email ... --openwebui-admin-password ... --openhands-llm-model ... --allowlist-domains ... --huggingface-token ... --openclaw-init-project ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --optional-modules ... --output ... --non-interactive --require-complete]
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]

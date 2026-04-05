@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import pathlib
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -19,6 +21,9 @@ AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "agentic")
 BOOTSTRAP_STATE = AGENTIC_ROOT / "optional" / "git" / "bootstrap" / "git-forge-bootstrap.json"
 DEFAULT_ARTIFACTS_ROOT = AGENTIC_ROOT / "deployments" / "validation" / "agent-repo-e2e"
 OPENHANDS_HOST_PORT = os.environ.get("OPENHANDS_HOST_PORT", "3000")
+REFERENCE_PROBLEM_FILE = "src/eight_queens.py"
+REFERENCE_PROBLEM_SENTINEL = 'raise NotImplementedError("Implement solve_eight_queens()")'
+GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
 
 AGENT_MATRIX = {
     "codex": {"service": "agentic-codex", "branch": "agent/codex", "mode": "codex"},
@@ -54,10 +59,51 @@ def run(
     )
 
 
+def read_secret(secret_name: str) -> str:
+    secret_path = GIT_FORGE_SECRET_DIR / f"{secret_name}.password"
+    if not secret_path.is_file():
+        fail(f"git-forge secret is missing: {secret_path}")
+    return secret_path.read_text(encoding="utf-8").strip()
+
+
+def git_run(
+    args: list[str],
+    *,
+    cwd: pathlib.Path | None = None,
+    username: str = "",
+    password: str = "",
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    if username and password:
+        with tempfile.TemporaryDirectory(prefix="agent-repo-e2e-git-") as temp_dir:
+            askpass_path = pathlib.Path(temp_dir) / "askpass.sh"
+            askpass_path.write_text(
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                "  *Username*|*username*) printf '%s\\n' \"$GIT_USERNAME\" ;;\n"
+                "  *Password*|*password*) printf '%s\\n' \"$GIT_PASSWORD\" ;;\n"
+                "  *) printf '%s\\n' \"$GIT_PASSWORD\" ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            askpass_path.chmod(0o700)
+            env["GIT_ASKPASS"] = str(askpass_path)
+            env["GIT_USERNAME"] = username
+            env["GIT_PASSWORD"] = password
+            return run(["git", *args], cwd=cwd, env=env, check=check)
+    return run(["git", *args], cwd=cwd, env=env, check=check)
+
+
 def load_bootstrap_state() -> dict[str, object]:
     if not BOOTSTRAP_STATE.is_file():
         fail(f"git-forge bootstrap state file is missing: {BOOTSTRAP_STATE}")
     return json.loads(BOOTSTRAP_STATE.read_text(encoding="utf-8"))
+
+
+def reference_repo_api_path(shared_namespace: str, repository: str) -> str:
+    return f"/api/v1/repos/{urllib.parse.quote(shared_namespace)}/{urllib.parse.quote(repository)}"
 
 
 def service_container_id(service: str) -> str:
@@ -140,6 +186,52 @@ def collect_git_artifacts(container_id: str, workspace: str, artifact_dir: pathl
         (artifact_dir / filename).write_text(proc.stdout, encoding="utf-8")
 
 
+def resolve_remote_head(
+    clone_url: str,
+    branch: str,
+    *,
+    username: str = "",
+    password: str = "",
+) -> str:
+    proc = git_run(["ls-remote", "--heads", clone_url, branch], username=username, password=password)
+    line = proc.stdout.strip().splitlines()
+    if not line:
+        return ""
+    return line[0].split()[0]
+
+
+def verify_unresolved_workspace(
+    container_id: str,
+    workspace: str,
+    branch: str,
+    expected_head: str,
+    artifact_dir: pathlib.Path,
+    timeout_seconds: int,
+) -> tuple[bool, str]:
+    command = "set -eu\n" + "\n".join(
+        [
+            f"cd {shlex.quote(workspace)}",
+            f"expected_branch={shlex.quote(branch)}",
+            f"expected_head={shlex.quote(expected_head)}",
+            "current_branch=\"$(git rev-parse --abbrev-ref HEAD)\"",
+            "current_head=\"$(git rev-parse HEAD)\"",
+            "[ \"$current_branch\" = \"$expected_branch\" ]",
+            "[ \"$current_head\" = \"$expected_head\" ]",
+            f"grep -F {shlex.quote(REFERENCE_PROBLEM_SENTINEL)} {shlex.quote(REFERENCE_PROBLEM_FILE)} >/dev/null",
+            "if python3 -m pytest -q; then",
+            "  echo 'expected unresolved baseline tests to fail before agent work' >&2",
+            "  exit 1",
+            "fi",
+        ]
+    )
+    proc = docker_exec(container_id, command, timeout_seconds=timeout_seconds)
+    (artifact_dir / "baseline.stdout.log").write_text(proc.stdout, encoding="utf-8")
+    (artifact_dir / "baseline.stderr.log").write_text(proc.stderr, encoding="utf-8")
+    if proc.returncode == 0:
+        return True, "prepared branch matches reset baseline and is still unresolved"
+    return False, f"prepared branch is not the expected unresolved baseline exit={proc.returncode}"
+
+
 def read_git_head(container_id: str, workspace: str, timeout_seconds: int) -> str:
     proc = docker_exec(
         container_id,
@@ -194,6 +286,168 @@ def verify_branch_publish(
     if proc.returncode == 0:
         return True, "agent committed and pushed branch update"
     return False, f"git publish contract failed exit={proc.returncode}"
+
+
+def git_forge_api_request(
+    base_url: str,
+    path: str,
+    *,
+    username: str,
+    password: str,
+) -> object:
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        f"{base_url}{path}",
+        headers={
+            "Authorization": f"Basic {token}",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as response:
+        payload = response.read().decode("utf-8")
+    return json.loads(payload) if payload.strip() else {}
+
+
+def reset_agent_branches_if_requested(
+    *,
+    state: dict[str, object],
+    repo_name: str,
+    clone_url: str,
+    selected_agents: list[str],
+    artifact_root: pathlib.Path,
+    reset_agent_branches: bool,
+    dry_run: bool,
+) -> dict[str, object]:
+    preflight_dir = artifact_root / "_preflight"
+    preflight_dir.mkdir(parents=True, exist_ok=True)
+
+    branch_summary = {
+        agent_name: {
+            "branch": str(AGENT_MATRIX[agent_name]["branch"]),
+            "reset_applied": False,
+        }
+        for agent_name in selected_agents
+    }
+
+    if not reset_agent_branches:
+        payload = {
+            "status": "skipped",
+            "reset_agent_branches": False,
+            "reference_repository": str(state.get("reference_repository") or ""),
+            "main_branch": "main",
+            "selected_agents": selected_agents,
+            "branches": branch_summary,
+        }
+        (preflight_dir / "preflight.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return payload
+
+    reference_repo = str(state.get("reference_repository") or "")
+    if repo_name != reference_repo:
+        fail(
+            "--reset-agent-branches only supports the stack-managed reference repository "
+            f"'{reference_repo}', got '{repo_name}'"
+        )
+    allowed_clone_urls = {
+        str(state.get("reference_clone_url_internal") or ""),
+        str(state.get("reference_clone_url_host") or ""),
+    }
+    if clone_url not in allowed_clone_urls:
+        fail(
+            "--reset-agent-branches only supports the stack-managed Forgejo clone URL for the reference repository; "
+            f"got '{clone_url}'"
+        )
+
+    if dry_run:
+        payload = {
+            "status": "planned",
+            "reset_agent_branches": True,
+            "reference_repository": repo_name,
+            "main_branch": "main",
+            "selected_agents": selected_agents,
+            "branches": branch_summary,
+        }
+        (preflight_dir / "preflight.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return payload
+
+    admin_user = str(state.get("admin_user") or "")
+    if not admin_user:
+        fail("git-forge bootstrap state is missing admin_user")
+    admin_password = read_secret(admin_user)
+    shared_namespace = str(state.get("shared_namespace") or "")
+    host_url = str(state.get("host_url") or "")
+    if not shared_namespace or not host_url:
+        fail("git-forge bootstrap state is missing shared_namespace or host_url")
+
+    repo_api = reference_repo_api_path(shared_namespace, repo_name)
+    git_forge_api_request(
+        host_url,
+        repo_api,
+        username=admin_user,
+        password=admin_password,
+    )
+
+    with tempfile.TemporaryDirectory(prefix="agent-repo-e2e-reference-") as temp_dir:
+        repo_dir = pathlib.Path(temp_dir) / repo_name
+        git_run(["clone", clone_url, str(repo_dir)], username=admin_user, password=admin_password)
+        git_run(["fetch", "--prune", "origin"], cwd=repo_dir, username=admin_user, password=admin_password)
+        git_run(["checkout", "-B", "main", "origin/main"], cwd=repo_dir, username=admin_user, password=admin_password)
+
+        main_head_proc = git_run(["rev-parse", "HEAD"], cwd=repo_dir)
+        main_head = main_head_proc.stdout.strip().splitlines()[0] if main_head_proc.stdout.strip() else ""
+        if not main_head:
+            fail("unable to resolve reference repository main head")
+
+        problem_file = repo_dir / REFERENCE_PROBLEM_FILE
+        if not problem_file.is_file():
+            fail(f"reference repository main branch is missing {REFERENCE_PROBLEM_FILE}")
+        problem_text = problem_file.read_text(encoding="utf-8")
+        if REFERENCE_PROBLEM_SENTINEL not in problem_text:
+            fail(
+                "reference repository main branch no longer matches the problem-only seed; "
+                f"expected sentinel in {REFERENCE_PROBLEM_FILE}"
+            )
+
+        main_proof = {
+            "branch": "main",
+            "head": main_head,
+            "problem_file": REFERENCE_PROBLEM_FILE,
+            "problem_sentinel_present": True,
+        }
+        (preflight_dir / "reference-main.json").write_text(json.dumps(main_proof, indent=2) + "\n", encoding="utf-8")
+
+        for agent_name in selected_agents:
+            branch = str(AGENT_MATRIX[agent_name]["branch"])
+            before_head = resolve_remote_head(clone_url, branch, username=admin_user, password=admin_password)
+            entry = branch_summary[agent_name]
+            entry["before_head"] = before_head
+            entry["main_head"] = main_head
+
+            if reset_agent_branches:
+                git_run(["branch", "-f", branch, "main"], cwd=repo_dir)
+                git_run(
+                    ["push", "--force", "origin", f"refs/heads/{branch}:refs/heads/{branch}"],
+                    cwd=repo_dir,
+                    username=admin_user,
+                    password=admin_password,
+                )
+                entry["reset_applied"] = True
+
+            after_head = resolve_remote_head(clone_url, branch, username=admin_user, password=admin_password)
+            entry["after_head"] = after_head
+            entry["aligned_to_main"] = after_head == main_head
+            if reset_agent_branches and not entry["aligned_to_main"]:
+                fail(f"remote branch {branch} did not reset to main")
+
+    payload = {
+        "status": "completed" if reset_agent_branches else "verified",
+        "reset_agent_branches": reset_agent_branches,
+        "reference_repository": repo_name,
+        "main_branch": "main",
+        "selected_agents": selected_agents,
+        "branches": branch_summary,
+    }
+    (preflight_dir / "preflight.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return payload
 
 
 def build_agent_command(mode: str, workspace: str, prompt: str) -> str | None:
@@ -294,6 +548,9 @@ def classify_result(
     elif stage in {"prepare", "checkout"}:
         status = "failed"
         category = "checkout"
+    elif stage == "baseline":
+        status = "failed"
+        category = "functional"
     elif stage == "invoke":
         status = "failed"
         category = "invocation_agent"
@@ -319,6 +576,8 @@ def run_agent(
     invoke_timeout: int,
     verify_timeout: int,
     dry_run: bool,
+    require_unresolved_baseline: bool,
+    expected_initial_head: str,
 ) -> dict[str, object]:
     config = AGENT_MATRIX[agent_name]
     artifact_dir = root_artifact_dir / agent_name
@@ -374,7 +633,34 @@ def run_agent(
     if not initial_head:
         result.update(classify_result(stage="checkout", ok=False, detail="unable to resolve initial branch head"))
         return result
+    if expected_initial_head and initial_head != expected_initial_head:
+        result.update(
+            classify_result(
+                stage="checkout",
+                ok=False,
+                detail=(
+                    f"prepared branch head {initial_head} does not match expected reset baseline "
+                    f"{expected_initial_head}"
+                ),
+            )
+        )
+        return result
     result["initial_head"] = initial_head
+
+    if require_unresolved_baseline:
+        baseline_ok, baseline_detail = verify_unresolved_workspace(
+            container_id,
+            workspace,
+            branch,
+            initial_head,
+            artifact_dir,
+            verify_timeout,
+        )
+        if not baseline_ok:
+            collect_git_artifacts(container_id, workspace, artifact_dir)
+            result.update(classify_result(stage="baseline", ok=False, detail=baseline_detail))
+            return result
+        result["baseline_detail"] = baseline_detail
 
     if mode == "openhands":
         ok, detail = invoke_openhands(prompt, artifact_dir, invoke_timeout)
@@ -449,6 +735,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prepare-timeout", type=int, default=120)
     parser.add_argument("--invoke-timeout", type=int, default=900)
     parser.add_argument("--verify-timeout", type=int, default=180)
+    parser.add_argument(
+        "--reset-agent-branches",
+        action="store_true",
+        help="Destructively realign selected remote agent/<tool> branches to main before the run",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Resolve plan and artifacts without invoking agents")
     return parser.parse_args()
 
@@ -470,6 +761,21 @@ def main() -> None:
     artifact_root = pathlib.Path(args.artifacts_dir) if args.artifacts_dir else DEFAULT_ARTIFACTS_ROOT / timestamp
     artifact_root.mkdir(parents=True, exist_ok=True)
 
+    preflight = reset_agent_branches_if_requested(
+        state=state,
+        repo_name=repo_name,
+        clone_url=clone_url,
+        selected_agents=selected_agents,
+        artifact_root=artifact_root,
+        reset_agent_branches=args.reset_agent_branches,
+        dry_run=args.dry_run,
+    )
+
+    expected_heads = {
+        agent_name: str((preflight.get("branches") or {}).get(agent_name, {}).get("after_head") or "")
+        for agent_name in selected_agents
+    }
+
     results = [
         run_agent(
             agent_name,
@@ -480,6 +786,8 @@ def main() -> None:
             invoke_timeout=args.invoke_timeout,
             verify_timeout=args.verify_timeout,
             dry_run=args.dry_run,
+            require_unresolved_baseline=args.reset_agent_branches,
+            expected_initial_head=expected_heads.get(agent_name, ""),
         )
         for agent_name in selected_agents
     ]
@@ -488,7 +796,12 @@ def main() -> None:
     (artifact_root / "summary.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     (artifact_root / "doctor.json").write_text(json.dumps(doctor, indent=2) + "\n", encoding="utf-8")
 
-    print(json.dumps({"artifacts_dir": str(artifact_root), "results": results, "doctor": doctor}, indent=2))
+    print(
+        json.dumps(
+            {"artifacts_dir": str(artifact_root), "preflight": preflight, "results": results, "doctor": doctor},
+            indent=2,
+        )
+    )
     if doctor["overall"] not in ("success", "partial") and not args.dry_run:
         raise SystemExit(1)
 

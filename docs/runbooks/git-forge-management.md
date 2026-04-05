@@ -171,6 +171,11 @@ AGENTIC_PROFILE=rootless-dev ./agent repo-e2e --dry-run
 # real run with full artefacts
 AGENTIC_PROFILE=rootless-dev ./agent repo-e2e \
   --artifacts-dir "${AGENTIC_ROOT}/deployments/validation/agent-repo-e2e/manual-$(date -u +%Y%m%dT%H%M%SZ)"
+
+# opt-in destructive reset of the selected agent branches back to main
+AGENTIC_PROFILE=rootless-dev ./agent repo-e2e \
+  --reset-agent-branches \
+  --artifacts-dir "${AGENTIC_ROOT}/deployments/validation/agent-repo-e2e/from-scratch-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
 The runner stores:
@@ -187,6 +192,20 @@ The runner prepares the checkout, but the agent instruction itself must perform:
 - the code change and `python3 -m pytest -q`,
 - `git commit`,
 - `git push` back to its own branch.
+
+When `--reset-agent-branches` is set, the runner first performs an explicit,
+destructive preflight on the stack-managed Forgejo reference repository
+`eight-queens-agent-e2e`:
+
+- it verifies that `main` still contains the seeded problem-only baseline
+  (`solve_eight_queens()` remains unimplemented);
+- it force-resets only the selected `agent/<tool>` remote branches to the exact
+  `main` commit;
+- it records preflight artefacts under `_preflight/` before invoking any agent;
+- each prepared workspace must start from that reset commit and still fail
+  `python3 -m pytest -q` before the agent fixes the code.
+
+Without the flag, the runner leaves remote agent branches untouched.
 
 The runner then verifies that:
 
