@@ -137,13 +137,41 @@ service_allows_root_user() {
 service_allows_readwrite_rootfs() {
   local service="$1"
   case "${service}" in
-    ollama|egress-proxy|opensearch)
+    ollama|egress-proxy|opensearch|optional-forgejo)
       return 0
       ;;
     *)
       return 1
       ;;
   esac
+}
+
+service_git_forge_ssh_private_key_candidates() {
+  local service="$1"
+  case "${service}" in
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|optional-pi-mono|optional-goose)
+      printf '%s\n' "/state/home/.ssh/id_ed25519" "/home/agent/.ssh/id_ed25519"
+      ;;
+    openclaw)
+      printf '%s\n' "/state/cli/openclaw-home/.ssh/id_ed25519"
+      ;;
+    openhands)
+      printf '%s\n' "/.openhands/home/.ssh/id_ed25519"
+      ;;
+    comfyui)
+      printf '%s\n' "/comfyui/user/.ssh/id_ed25519"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+service_git_forge_known_hosts_path() {
+  local ssh_key_path="$1"
+  local ssh_dir
+  ssh_dir="$(dirname "${ssh_key_path}")"
+  printf '%s/known_hosts\n' "${ssh_dir}"
 }
 
 service_is_agent_cli() {
@@ -1580,26 +1608,30 @@ PY
     if ! timeout 20 docker exec "${cid}" sh -lc 'helper="$(git config credential.helper 2>/dev/null || true)"; test -n "${helper}" && printf "%s\n" "${helper}" | grep -q git-forge-credential.sh'; then
       doctor_fail "${service} git credential helper bootstrap is missing"
     fi
-    # Check both old and new SSH key locations for backward compatibility
     ssh_key_path=""
-    if timeout 20 docker exec "${cid}" sh -lc 'test -f /state/home/.ssh/id_ed25519 && test -r /state/home/.ssh/id_ed25519'; then
-      ssh_key_path="/state/home/.ssh/id_ed25519"
-    elif timeout 20 docker exec "${cid}" sh -lc 'test -f /home/agent/.ssh/id_ed25519 && test -r /home/agent/.ssh/id_ed25519'; then
-      ssh_key_path="/home/agent/.ssh/id_ed25519"
-    else
+    while IFS= read -r ssh_key_candidate; do
+      [[ -n "${ssh_key_candidate}" ]] || continue
+      if timeout 20 docker exec "${cid}" sh -lc "test -f '${ssh_key_candidate}' && test -r '${ssh_key_candidate}'"; then
+        ssh_key_path="${ssh_key_candidate}"
+        break
+      fi
+    done < <(service_git_forge_ssh_private_key_candidates "${service}" 2>/dev/null || true)
+    if [[ -z "${ssh_key_path}" ]]; then
       doctor_fail "${service} SSH key is missing or not readable"
     fi
-    
-    # Check public key at the same location
-    if ! timeout 20 docker exec "${cid}" sh -lc "test -f ${ssh_key_path%.pub}.pub && test -r ${ssh_key_path%.pub}.pub"; then
+    ssh_public_key_path="${ssh_key_path}.pub"
+    ssh_known_hosts_path="$(service_git_forge_known_hosts_path "${ssh_key_path}")"
+    if ! timeout 20 docker exec "${cid}" sh -lc "test -f '${ssh_public_key_path}' && test -r '${ssh_public_key_path}'"; then
       doctor_fail "${service} SSH public key is missing or not readable"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc "test -f '${ssh_known_hosts_path}' && test -r '${ssh_known_hosts_path}'"; then
+      doctor_fail "${service} SSH known_hosts file is missing or not readable"
     fi
     if [[ -n "${optional_forgejo_cid}" ]]; then
       if ! timeout 25 docker exec "${cid}" sh -lc "GIT_TERMINAL_PROMPT=0 git ls-remote http://optional-forgejo:3000/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
         doctor_fail "${service} cannot access the shared git-forge repository without prompts"
       fi
-      # Use the detected SSH key path for the git operation
-      if ! timeout 25 docker exec "${cid}" sh -lc "GIT_SSH_COMMAND='ssh -i ${ssh_key_path} -o UserKnownHostsFile=${ssh_key_path}.known_hosts -o StrictHostKeyChecking=no' GIT_TERMINAL_PROMPT=0 git ls-remote ssh://git@optional-forgejo:2222/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
+      if ! timeout 25 docker exec "${cid}" sh -lc "GIT_SSH_COMMAND='ssh -F /dev/null -i ${ssh_key_path} -o UserKnownHostsFile=${ssh_known_hosts_path} -o StrictHostKeyChecking=yes' GIT_TERMINAL_PROMPT=0 git ls-remote ssh://git@optional-forgejo:2222/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
         doctor_fail "${service} cannot access the shared git-forge repository via SSH"
       fi
     fi

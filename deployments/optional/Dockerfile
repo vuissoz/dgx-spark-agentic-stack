@@ -39,6 +39,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system app && adduser --system --ingroup app app
+RUN groupadd --gid 1000 agentic \
+  && useradd --uid 1000 --gid 1000 --home-dir /state/cli/openclaw-home --no-create-home --shell /usr/sbin/nologin agentic
 WORKDIR /app
 COPY deployments/optional/optional_service.py /app/optional_service.py
 COPY deployments/optional/openclaw_approvals.py /app/openclaw_approvals.py

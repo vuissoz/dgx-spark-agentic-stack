@@ -50,6 +50,7 @@ MANAGED_ACCOUNTS = (
         "email": "openhands@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "openhands" / "state" / "home",
         "container_home": "/.openhands/home",
+        "ssh_reader_uids": (42420,),
     },
     {
         "username": "comfyui",
@@ -850,6 +851,32 @@ def generate_ssh_key_pair(username: str) -> tuple[str, str]:
     return private_key_path.read_text(encoding="utf-8").strip(), public_key_path.read_text(encoding="utf-8").strip()
 
 
+def reconcile_ssh_permissions(account: dict[str, object]) -> None:
+    ssh_reader_uids = tuple(account.get("ssh_reader_uids", ()))
+    if not ssh_reader_uids:
+        return
+    if shutil.which("setfacl") is None:
+        info(f"skip SSH ACL grants for user '{account['username']}': setfacl not available")
+        return
+
+    username = str(account["username"])
+    ssh_dir = pathlib.Path(AGENTIC_ROOT) / "secrets" / "ssh" / username
+    file_paths = [
+        ssh_dir / "id_ed25519",
+        ssh_dir / "id_ed25519.pub",
+        ssh_dir / "known_hosts",
+    ]
+
+    if not ssh_dir.exists():
+        return
+
+    for uid in ssh_reader_uids:
+        run(["setfacl", "-m", f"u:{uid}:--x", str(ssh_dir)], check=True)
+        for path in file_paths:
+            if path.exists():
+                run(["setfacl", "-m", f"u:{uid}:r--", str(path)], check=True)
+
+
 def add_ssh_key_to_forgejo(container_id: str, username: str, public_key: str, admin_user: str, admin_password: str) -> None:
     """Add SSH public key to Forgejo user."""
     # First check if the key already exists by trying to add it and handling the error gracefully
@@ -934,6 +961,7 @@ def main() -> None:
         # Generate SSH key pair and add to Forgejo
         username = str(account["username"])
         private_key, public_key = generate_ssh_key_pair(username)
+        reconcile_ssh_permissions(account)
         add_ssh_key_to_forgejo(container_id, username, public_key, GIT_FORGE_ADMIN_USER, admin_password)
     ensure_shared_repo(GIT_FORGE_ADMIN_USER, admin_password)
     seed_reference_repo(GIT_FORGE_ADMIN_USER, admin_password)
