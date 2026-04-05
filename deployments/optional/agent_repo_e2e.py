@@ -347,15 +347,20 @@ def reset_agent_branches_if_requested(
             "--reset-agent-branches only supports the stack-managed reference repository "
             f"'{reference_repo}', got '{repo_name}'"
         )
+    reference_clone_url_internal = str(state.get("reference_clone_url_internal") or "")
+    reference_clone_url_host = str(state.get("reference_clone_url_host") or "")
     allowed_clone_urls = {
-        str(state.get("reference_clone_url_internal") or ""),
-        str(state.get("reference_clone_url_host") or ""),
+        reference_clone_url_internal,
+        reference_clone_url_host,
     }
     if clone_url not in allowed_clone_urls:
         fail(
             "--reset-agent-branches only supports the stack-managed Forgejo clone URL for the reference repository; "
             f"got '{clone_url}'"
         )
+    if not reference_clone_url_host:
+        fail("git-forge bootstrap state is missing reference_clone_url_host")
+    preflight_clone_url = reference_clone_url_host
 
     if dry_run:
         payload = {
@@ -363,6 +368,7 @@ def reset_agent_branches_if_requested(
             "reset_agent_branches": True,
             "reference_repository": repo_name,
             "main_branch": "main",
+            "preflight_clone_url": preflight_clone_url,
             "selected_agents": selected_agents,
             "branches": branch_summary,
         }
@@ -388,7 +394,7 @@ def reset_agent_branches_if_requested(
 
     with tempfile.TemporaryDirectory(prefix="agent-repo-e2e-reference-") as temp_dir:
         repo_dir = pathlib.Path(temp_dir) / repo_name
-        git_run(["clone", clone_url, str(repo_dir)], username=admin_user, password=admin_password)
+        git_run(["clone", preflight_clone_url, str(repo_dir)], username=admin_user, password=admin_password)
         git_run(["fetch", "--prune", "origin"], cwd=repo_dir, username=admin_user, password=admin_password)
         git_run(["checkout", "-B", "main", "origin/main"], cwd=repo_dir, username=admin_user, password=admin_password)
 
@@ -417,7 +423,7 @@ def reset_agent_branches_if_requested(
 
         for agent_name in selected_agents:
             branch = str(AGENT_MATRIX[agent_name]["branch"])
-            before_head = resolve_remote_head(clone_url, branch, username=admin_user, password=admin_password)
+            before_head = resolve_remote_head(preflight_clone_url, branch, username=admin_user, password=admin_password)
             entry = branch_summary[agent_name]
             entry["before_head"] = before_head
             entry["main_head"] = main_head
@@ -432,7 +438,7 @@ def reset_agent_branches_if_requested(
                 )
                 entry["reset_applied"] = True
 
-            after_head = resolve_remote_head(clone_url, branch, username=admin_user, password=admin_password)
+            after_head = resolve_remote_head(preflight_clone_url, branch, username=admin_user, password=admin_password)
             entry["after_head"] = after_head
             entry["aligned_to_main"] = after_head == main_head
             if reset_agent_branches and not entry["aligned_to_main"]:
@@ -443,6 +449,7 @@ def reset_agent_branches_if_requested(
         "reset_agent_branches": reset_agent_branches,
         "reference_repository": repo_name,
         "main_branch": "main",
+        "preflight_clone_url": preflight_clone_url,
         "selected_agents": selected_agents,
         "branches": branch_summary,
     }

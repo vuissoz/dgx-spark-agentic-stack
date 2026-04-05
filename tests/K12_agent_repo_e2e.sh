@@ -123,6 +123,7 @@ preflight = payload.get("preflight")
 assert isinstance(preflight, dict)
 assert preflight.get("status") == "planned"
 assert preflight.get("reset_agent_branches") is True
+assert preflight.get("preflight_clone_url") == "http://127.0.0.1:13010/agentic/eight-queens-agent-e2e.git"
 branches = preflight.get("branches") or {}
 assert len(branches) == 8
 for entry in branches.values():
@@ -212,12 +213,13 @@ module.git_forge_api_request = lambda *args, **kwargs: {"name": "eight-queens-ag
 module.read_secret = lambda secret_name: "dummy"
 
 clone_url = origin_dir.as_uri()
+internal_clone_url = "http://optional-forgejo:3000/agentic/eight-queens-agent-e2e.git"
 state = {
     "host_url": "http://127.0.0.1:13010",
     "admin_user": "system-manager",
     "shared_namespace": "agentic",
     "reference_repository": "eight-queens-agent-e2e",
-    "reference_clone_url_internal": clone_url,
+    "reference_clone_url_internal": internal_clone_url,
     "reference_clone_url_host": clone_url,
 }
 selected_agents = ["codex", "goose"]
@@ -225,7 +227,7 @@ selected_agents = ["codex", "goose"]
 skipped = module.reset_agent_branches_if_requested(
     state=state,
     repo_name="eight-queens-agent-e2e",
-    clone_url=clone_url,
+    clone_url=internal_clone_url,
     selected_agents=selected_agents,
     artifact_root=artifact_root / "skipped",
     reset_agent_branches=False,
@@ -238,24 +240,26 @@ assert remote_head(clone_url, "agent/goose") == solved_heads["agent/goose"]
 planned = module.reset_agent_branches_if_requested(
     state=state,
     repo_name="eight-queens-agent-e2e",
-    clone_url=clone_url,
+    clone_url=internal_clone_url,
     selected_agents=selected_agents,
     artifact_root=artifact_root / "planned",
     reset_agent_branches=True,
     dry_run=True,
 )
 assert planned["status"] == "planned"
+assert planned["preflight_clone_url"] == clone_url
 
 completed = module.reset_agent_branches_if_requested(
     state=state,
     repo_name="eight-queens-agent-e2e",
-    clone_url=clone_url,
+    clone_url=internal_clone_url,
     selected_agents=selected_agents,
     artifact_root=artifact_root / "completed",
     reset_agent_branches=True,
     dry_run=False,
 )
 assert completed["status"] == "completed"
+assert completed["preflight_clone_url"] == clone_url
 for agent_name in selected_agents:
     branch = module.AGENT_MATRIX[agent_name]["branch"]
     entry = completed["branches"][agent_name]
