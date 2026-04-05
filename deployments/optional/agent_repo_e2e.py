@@ -97,8 +97,11 @@ def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
     return (
         "Read the repository itself before making changes. "
         f"The checked out repository is '{repo_name}' in {workspace} on branch '{branch}'. "
-        "Follow the repository instructions, implement the Python fix, run the documented tests, "
-        "and finish by writing a concise run summary. Do not ask for clarification. "
+        f"Start by running 'git pull --ff-only origin {branch}' yourself. "
+        "Follow the repository instructions, implement the Python fix, and run the documented tests. "
+        f"After the tests pass, create a commit on '{branch}' and push it yourself with 'git push origin HEAD:{branch}'. "
+        "Finish by writing a concise run summary. Do not ask for clarification. "
+        "Leave a clean worktree with local HEAD matching origin after your push. "
         "Do not push to main."
     )
 
@@ -130,10 +133,22 @@ def collect_git_artifacts(container_id: str, workspace: str, artifact_dir: pathl
         "git.diff.patch": f"cd {shlex.quote(workspace)} && git diff --binary",
         "git.head": f"cd {shlex.quote(workspace)} && git rev-parse HEAD",
         "git.branch": f"cd {shlex.quote(workspace)} && git rev-parse --abbrev-ref HEAD",
+        "git.last-commit": f"cd {shlex.quote(workspace)} && git log -1 --pretty=fuller",
     }
     for filename, shell_command in commands.items():
         proc = docker_exec(container_id, shell_command, timeout_seconds=30)
         (artifact_dir / filename).write_text(proc.stdout, encoding="utf-8")
+
+
+def read_git_head(container_id: str, workspace: str, timeout_seconds: int) -> str:
+    proc = docker_exec(
+        container_id,
+        f"cd {shlex.quote(workspace)} && git rev-parse HEAD",
+        timeout_seconds=timeout_seconds,
+    )
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout.strip().splitlines()[0] if proc.stdout.strip() else ""
 
 
 def verify_tests(container_id: str, workspace: str, artifact_dir: pathlib.Path, timeout_seconds: int) -> tuple[bool, str]:
@@ -145,6 +160,40 @@ def verify_tests(container_id: str, workspace: str, artifact_dir: pathlib.Path, 
     (artifact_dir / "verify.stdout.log").write_text(proc.stdout, encoding="utf-8")
     (artifact_dir / "verify.stderr.log").write_text(proc.stderr, encoding="utf-8")
     return proc.returncode == 0, f"pytest exit={proc.returncode}"
+
+
+def verify_branch_publish(
+    container_id: str,
+    workspace: str,
+    branch: str,
+    initial_head: str,
+    artifact_dir: pathlib.Path,
+    timeout_seconds: int,
+) -> tuple[bool, str]:
+    command = "set -eu\n" + "\n".join(
+        [
+            f"cd {shlex.quote(workspace)}",
+            f"expected_branch={shlex.quote(branch)}",
+            f"initial_head={shlex.quote(initial_head)}",
+            "git fetch origin \"$expected_branch\"",
+            "current_branch=\"$(git rev-parse --abbrev-ref HEAD)\"",
+            "local_head=\"$(git rev-parse HEAD)\"",
+            "remote_head=\"$(git rev-parse FETCH_HEAD)\"",
+            "status_output=\"$(git status --short)\"",
+            "printf 'current_branch=%s\\nlocal_head=%s\\nremote_head=%s\\n' \"$current_branch\" \"$local_head\" \"$remote_head\"",
+            "git log -1 --pretty=fuller",
+            "[ \"$current_branch\" = \"$expected_branch\" ]",
+            "[ \"$local_head\" != \"$initial_head\" ]",
+            "[ \"$local_head\" = \"$remote_head\" ]",
+            "[ -z \"$status_output\" ]",
+        ]
+    )
+    proc = docker_exec(container_id, command, timeout_seconds=timeout_seconds)
+    (artifact_dir / "publish.stdout.log").write_text(proc.stdout, encoding="utf-8")
+    (artifact_dir / "publish.stderr.log").write_text(proc.stderr, encoding="utf-8")
+    if proc.returncode == 0:
+        return True, "agent committed and pushed branch update"
+    return False, f"git publish contract failed exit={proc.returncode}"
 
 
 def build_agent_command(mode: str, workspace: str, prompt: str) -> str | None:
@@ -251,6 +300,9 @@ def classify_result(
     elif stage == "verify":
         status = "failed"
         category = "functional"
+    elif stage == "publish":
+        status = "failed"
+        category = "git"
     else:
         status = "failed"
         category = "infra"
@@ -318,6 +370,11 @@ def run_agent(
     if prepare.returncode != 0:
         result.update(classify_result(stage="checkout", ok=False, detail=f"prepare failed exit={prepare.returncode}"))
         return result
+    initial_head = read_git_head(container_id, workspace, 30)
+    if not initial_head:
+        result.update(classify_result(stage="checkout", ok=False, detail="unable to resolve initial branch head"))
+        return result
+    result["initial_head"] = initial_head
 
     if mode == "openhands":
         ok, detail = invoke_openhands(prompt, artifact_dir, invoke_timeout)
@@ -345,7 +402,20 @@ def run_agent(
 
     tests_ok, tests_detail = verify_tests(container_id, workspace, artifact_dir, verify_timeout)
     collect_git_artifacts(container_id, workspace, artifact_dir)
-    result.update(classify_result(stage="verify", ok=tests_ok, detail=tests_detail))
+    if not tests_ok:
+        result.update(classify_result(stage="verify", ok=False, detail=tests_detail))
+        return result
+
+    publish_ok, publish_detail = verify_branch_publish(
+        container_id,
+        workspace,
+        branch,
+        initial_head,
+        artifact_dir,
+        verify_timeout,
+    )
+    collect_git_artifacts(container_id, workspace, artifact_dir)
+    result.update(classify_result(stage="publish", ok=publish_ok, detail=publish_detail))
     return result
 
 

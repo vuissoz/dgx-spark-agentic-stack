@@ -181,6 +181,19 @@ The runner stores:
 - `summary.json` with a unified per-agent result schema,
 - `doctor.json` with consolidated failure classes.
 
+The runner prepares the checkout, but the agent instruction itself must perform:
+
+- `git pull --ff-only` on its reserved `agent/<tool>` branch,
+- the code change and `python3 -m pytest -q`,
+- `git commit`,
+- `git push` back to its own branch.
+
+The runner then verifies that:
+
+- the branch head changed relative to the prepared checkout,
+- local `HEAD` matches `origin/agent/<tool>`,
+- the worktree is clean after the push.
+
 ## Rotation and Revocation
 
 Credential management must support:

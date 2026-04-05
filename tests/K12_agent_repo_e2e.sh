@@ -95,6 +95,11 @@ for agent, branch in expected.items():
     assert entry["status"] == "planned"
     assert entry["category"] == "planned"
     assert entry["workspace"].startswith("/workspace/eight-queens-agent-e2e-")
+    plan_path = entry["artifacts_dir"] + "/plan.json"
+    plan = json.load(open(plan_path, encoding="utf-8"))
+    prompt = plan["prompt"]
+    assert f"git pull --ff-only origin {branch}" in prompt
+    assert f"git push origin HEAD:{branch}" in prompt
 PY
 
 ok "K12_agent_repo_e2e passed"
