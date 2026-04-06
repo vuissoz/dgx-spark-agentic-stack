@@ -16,17 +16,28 @@ source tree.
 
 Implement `solve_eight_queens()` in `src/eight_queens.py`.
 
-The function must return one valid solution to the classic 8 queens puzzle as a
-list of 8 distinct column indexes, one per row, where:
+The function must return all valid solutions to the classic 8 queens puzzle.
 
-- each value is an integer between `0` and `7`,
+Use this exact output format so the result stays easy to verify:
+
+- return a `list` of `92` items,
+- each item must be a `tuple` of `8` distinct column indexes, one per row,
+- each column index must be an integer between `0` and `7`,
+- the outer list must be sorted in ascending lexicographic order.
+
+Every tuple describes one board where:
+
 - no two queens share a column,
 - no two queens share a diagonal.
 
-Example shape only:
+Example format only:
 
 ```python
-[0, 4, 7, 5, 2, 6, 1, 3]
+[
+    (0, 4, 7, 5, 2, 6, 1, 3),
+    (0, 5, 7, 2, 6, 3, 1, 4),
+    ...
+]
 ```
 
 ## Contract
@@ -42,4 +53,3 @@ Example shape only:
 - `src/eight_queens.py`: target implementation
 - `tests/test_eight_queens.py`: functional verification
 - `.agentic/reference-e2e.manifest.json`: stack-managed manifest
-

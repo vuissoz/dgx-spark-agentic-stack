@@ -134,6 +134,8 @@ stack-managed reference repository:
   - problem statement lives in the repository itself,
   - Python target implementation under `src/`,
   - verification through `python3 -m pytest -q`,
+  - `solve_eight_queens()` must return the canonical list of all `92` valid
+    solutions as lexicographically sorted `tuple[int, ...]` rows,
   - branch policy stored in `.agentic/reference-e2e.manifest.json`
 
 Managed branch rules:

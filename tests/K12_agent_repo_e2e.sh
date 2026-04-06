@@ -234,7 +234,26 @@ main_head = run(["git", "rev-parse", "HEAD"], cwd=seed_dir).stdout.strip()
 
 problem_file = seed_dir / "src" / "eight_queens.py"
 sentinel = 'raise NotImplementedError("Implement solve_eight_queens()")'
-solution = "    return [0, 4, 7, 5, 2, 6, 1, 3]\n"
+solution = """    solutions: list[tuple[int, ...]] = []
+    placement: list[int] = []
+
+    def backtrack(row: int) -> None:
+        if row == 8:
+            solutions.append(tuple(placement))
+            return
+
+        for col in range(8):
+            if col in placement:
+                continue
+            if any(abs(prev_row - row) == abs(prev_col - col) for prev_row, prev_col in enumerate(placement)):
+                continue
+            placement.append(col)
+            backtrack(row + 1)
+            placement.pop()
+
+    backtrack(0)
+    return solutions
+"""
 solved_heads: dict[str, str] = {}
 for branch in ("agent/codex", "agent/goose"):
     run(["git", "checkout", "-B", branch, "main"], cwd=seed_dir)

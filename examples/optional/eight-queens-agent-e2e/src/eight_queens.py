@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-def solve_eight_queens() -> list[int]:
-    """Return one valid solution for the classic 8 queens puzzle."""
+def solve_eight_queens() -> list[tuple[int, ...]]:
+    """Return every valid 8 queens solution as sorted row-to-column tuples."""
     raise NotImplementedError("Implement solve_eight_queens()")
-
