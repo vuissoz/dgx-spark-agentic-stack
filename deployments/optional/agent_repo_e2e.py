@@ -149,17 +149,15 @@ def sanitize_name(value: str) -> str:
     return "".join(cleaned).strip("-") or "run"
 
 
-def build_standard_prompt(repo_name: str, branch: str, workspace: str, mode: str) -> str:
-    publish_hint = ""
-    if mode == "vibe":
-        publish_hint = (
-            "The shell is '/bin/sh', so use POSIX-compatible commands only. "
-            f"When you publish, run 'git add {REFERENCE_PROBLEM_FILE}', then create the commit with a simple "
-            "single-line command such as "
-            "'git commit -m \"Implement solve_eight_queens()\"', then push with "
-            f"'git push origin HEAD:{branch}'. "
-            "Do not use here-strings, heredocs, or shell redirections to build the commit command. "
-        )
+def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
+    publish_hint = (
+        "The shell is '/bin/sh', so use POSIX-compatible commands only. "
+        f"When you publish, run 'git add {REFERENCE_PROBLEM_FILE}', then create the commit with a simple "
+        "single-line command such as "
+        "'git commit -m \"Implement solve_eight_queens()\"', then push with "
+        f"'git push origin HEAD:{branch}'. "
+        "Do not use here-strings, heredocs, or shell redirections to build the commit command. "
+    )
     return (
         "Read the repository itself before making changes. "
         f"The checked out repository is '{repo_name}' in {workspace} on branch '{branch}'. "
@@ -616,7 +614,7 @@ def run_agent(
     branch = str(config["branch"])
     mode = str(config["mode"])
     workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
-    prompt = build_standard_prompt(repo_name, branch, workspace, mode)
+    prompt = build_standard_prompt(repo_name, branch, workspace)
 
     result: dict[str, object] = {
         "agent": agent_name,
