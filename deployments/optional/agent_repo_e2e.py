@@ -55,6 +55,24 @@ def write_json(path: pathlib.Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def http_json_request(
+    url: str,
+    *,
+    method: str = "GET",
+    payload: object | None = None,
+    timeout: int = 30,
+    headers: dict[str, str] | None = None,
+) -> object:
+    request_headers = dict(headers or {})
+    data: bytes | None = None
+    if payload is not None:
+        request_headers.setdefault("Content-Type", "application/json")
+        data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers=request_headers, method=method)
+    with urllib.request.urlopen(request, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def run(
     cmd: list[str],
     *,
@@ -577,55 +595,125 @@ def build_agent_command(mode: str, workspace: str, prompt: str) -> str | None:
 
 
 def invoke_openhands(prompt: str, artifact_dir: pathlib.Path, timeout_seconds: int) -> tuple[bool, str]:
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     base = f"http://127.0.0.1:{OPENHANDS_HOST_PORT}"
-    payload = {
-        "title": f"agent-repo-e2e-{int(time.time())}",
-        "agent_type": "default",
-        "initial_message": {
-            "role": "user",
-            "content": [{"type": "text", "text": prompt}],
-            "run": True,
-        },
-    }
-    req = urllib.request.Request(
-        f"{base}/api/v1/app-conversations",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    payload = {"title": f"agent-repo-e2e-{int(time.time())}", "agent_type": "default"}
+    invoke_trace: dict[str, object] = {"prompt": prompt}
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
+        body = http_json_request(
+            f"{base}/api/v1/app-conversations",
+            method="POST",
+            payload=payload,
+            timeout=30,
+        )
     except urllib.error.URLError as exc:
         return False, f"openhands create conversation failed: {exc}"
+    invoke_trace["create_task"] = body
 
-    task_id = body.get("id")
+    task_id = body.get("id") if isinstance(body, dict) else None
     if not isinstance(task_id, str) or not task_id:
         return False, f"openhands returned no start-task id: {body}"
 
     deadline = time.time() + timeout_seconds
     last_payload: object = body
+    conversation_id = ""
     while time.time() < deadline:
-        with urllib.request.urlopen(
+        tasks = http_json_request(
             f"{base}/api/v1/app-conversations/start-tasks?ids={urllib.parse.quote(task_id)}",
             timeout=30,
-        ) as resp:
-            tasks = json.loads(resp.read().decode("utf-8"))
+        )
         last_payload = tasks
         if isinstance(tasks, list) and tasks:
             state = tasks[0] or {}
             status = state.get("status")
             if status == "READY":
+                conversation_id = str(state.get("app_conversation_id") or "")
                 break
             if status == "ERROR":
+                invoke_trace["start_task"] = state
+                (artifact_dir / "invoke.stdout.log").write_text(json.dumps(invoke_trace, indent=2) + "\n", encoding="utf-8")
+                (artifact_dir / "invoke.stderr.log").write_text("", encoding="utf-8")
                 return False, f"openhands start-task failed: {state}"
         time.sleep(2)
     else:
+        invoke_trace["start_task"] = last_payload
+        (artifact_dir / "invoke.stdout.log").write_text(json.dumps(invoke_trace, indent=2) + "\n", encoding="utf-8")
+        (artifact_dir / "invoke.stderr.log").write_text("", encoding="utf-8")
         return False, "openhands start-task timed out"
 
-    (artifact_dir / "invoke.stdout.log").write_text(json.dumps(last_payload, indent=2) + "\n", encoding="utf-8")
+    if not conversation_id:
+        invoke_trace["start_task"] = last_payload
+        (artifact_dir / "invoke.stdout.log").write_text(json.dumps(invoke_trace, indent=2) + "\n", encoding="utf-8")
+        (artifact_dir / "invoke.stderr.log").write_text("", encoding="utf-8")
+        return False, f"openhands READY task missing app conversation id: {last_payload}"
+
+    message_response = http_json_request(
+        f"{base}/api/conversations/{urllib.parse.quote(conversation_id)}/message",
+        method="POST",
+        payload={"message": prompt},
+        timeout=30,
+    )
+    invoke_trace["start_task"] = last_payload
+    invoke_trace["conversation_id"] = conversation_id
+    invoke_trace["message_response"] = message_response
+    if not isinstance(message_response, dict) or message_response.get("success") is not True:
+        (artifact_dir / "invoke.stdout.log").write_text(json.dumps(invoke_trace, indent=2) + "\n", encoding="utf-8")
+        (artifact_dir / "invoke.stderr.log").write_text("", encoding="utf-8")
+        return False, f"openhands message dispatch failed: {message_response}"
+
+    last_events: object = None
+    last_execution_status = ""
+    last_event_error = ""
+    while time.time() < deadline:
+        try:
+            events = http_json_request(
+                f"{base}/api/v1/conversation/{urllib.parse.quote(conversation_id)}/events/search?limit=100",
+                timeout=30,
+            )
+        except urllib.error.HTTPError as exc:
+            last_event_error = f"HTTP {exc.code}"
+            time.sleep(2)
+            continue
+        except urllib.error.URLError as exc:
+            last_event_error = str(exc)
+            time.sleep(2)
+            continue
+        last_events = events
+        if isinstance(events, dict):
+            items = events.get("items")
+            if isinstance(items, list):
+                statuses = [
+                    str(item.get("value") or "")
+                    for item in items
+                    if isinstance(item, dict) and item.get("key") == "execution_status"
+                ]
+                if statuses:
+                    last_execution_status = statuses[-1]
+                    if last_execution_status == "finished":
+                        invoke_trace["events"] = events
+                        (artifact_dir / "invoke.stdout.log").write_text(
+                            json.dumps(invoke_trace, indent=2) + "\n", encoding="utf-8"
+                        )
+                        (artifact_dir / "invoke.stderr.log").write_text("", encoding="utf-8")
+                        return True, "openhands conversation finished"
+                    if last_execution_status in {"error", "failed", "cancelled"}:
+                        invoke_trace["events"] = events
+                        (artifact_dir / "invoke.stdout.log").write_text(
+                            json.dumps(invoke_trace, indent=2) + "\n", encoding="utf-8"
+                        )
+                        (artifact_dir / "invoke.stderr.log").write_text("", encoding="utf-8")
+                        return False, f"openhands execution failed with status={last_execution_status}"
+        time.sleep(2)
+
+    invoke_trace["events"] = last_events
     (artifact_dir / "invoke.stderr.log").write_text("", encoding="utf-8")
-    return True, "openhands conversation started"
+    (artifact_dir / "invoke.stdout.log").write_text(json.dumps(invoke_trace, indent=2) + "\n", encoding="utf-8")
+    error_suffix = f", last_event_error={last_event_error}" if last_event_error else ""
+    return (
+        False,
+        "openhands execution did not finish before timeout "
+        f"(last_execution_status={last_execution_status or 'unknown'}{error_suffix})",
+    )
 
 
 def classify_result(

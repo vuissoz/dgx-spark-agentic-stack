@@ -169,6 +169,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import urllib.error
 
 repo_root = pathlib.Path(sys.argv[1])
 runtime_root = pathlib.Path(sys.argv[2]) / "reset-integration"
@@ -281,6 +282,53 @@ if previous_default_model is None:
     os.environ.pop("AGENTIC_DEFAULT_MODEL", None)
 else:
     os.environ["AGENTIC_DEFAULT_MODEL"] = previous_default_model
+
+http_calls: list[tuple[str, str, object | None, int]] = []
+http_responses = iter(
+    [
+        {"id": "task-1"},
+        [{"status": "WORKING"}],
+        [{"status": "READY", "app_conversation_id": "conversation-1"}],
+        {"success": True},
+        urllib.error.HTTPError(
+            "http://127.0.0.1:3000/api/v1/conversation/conversation-1/events/search?limit=100",
+            500,
+            "Internal Server Error",
+            {},
+            None,
+        ),
+        {"items": [{"key": "execution_status", "value": "running"}]},
+        {"items": [{"key": "execution_status", "value": "finished"}]},
+    ]
+)
+original_http_json_request = module.http_json_request
+
+def fake_http_json_request(url, *, method="GET", payload=None, timeout=30, headers=None):
+    http_calls.append((url, method, payload, timeout))
+    response = next(http_responses)
+    if isinstance(response, Exception):
+        raise response
+    return response
+
+module.http_json_request = fake_http_json_request
+openhands_ok, openhands_detail = module.invoke_openhands(
+    "Solve the repository task and stop.",
+    artifact_root / "openhands-proof",
+    timeout_seconds=17,
+)
+assert openhands_ok is True
+assert openhands_detail == "openhands conversation finished"
+assert http_calls[0][0].endswith("/api/v1/app-conversations")
+assert http_calls[0][1] == "POST"
+assert http_calls[0][2] == {"title": http_calls[0][2]["title"], "agent_type": "default"}
+assert http_calls[1][0].endswith("/api/v1/app-conversations/start-tasks?ids=task-1")
+assert http_calls[3][0].endswith("/api/conversations/conversation-1/message")
+assert http_calls[3][2] == {"message": "Solve the repository task and stop."}
+assert http_calls[4][0].endswith("/api/v1/conversation/conversation-1/events/search?limit=100")
+invoke_payload = json.loads((artifact_root / "openhands-proof" / "invoke.stdout.log").read_text(encoding="utf-8"))
+assert invoke_payload["conversation_id"] == "conversation-1"
+assert invoke_payload["message_response"]["success"] is True
+module.http_json_request = original_http_json_request
 
 module.git_forge_api_request = lambda *args, **kwargs: {"name": "eight-queens-agent-e2e"}
 module.read_secret = lambda secret_name: "dummy"
