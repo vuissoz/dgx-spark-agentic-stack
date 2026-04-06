@@ -96,6 +96,31 @@ from openhands.tools.preset.planning import (
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
+OPENHANDS_EXTRA_DEFAULT_TOOL_NAMES = frozenset({"glob", "grep"})
+
+
+def _tool_name(tool: Any) -> str | None:
+    return getattr(tool, "name", None)
+
+
+def get_enriched_default_tools() -> list[Any]:
+    tools: list[Any] = []
+    seen: set[str] = set()
+
+    for tool in get_default_tools(enable_browser=False):
+        name = _tool_name(tool)
+        if name and name not in seen:
+            seen.add(name)
+        tools.append(tool)
+
+    for tool in get_planning_tools():
+        name = _tool_name(tool)
+        if name not in OPENHANDS_EXTRA_DEFAULT_TOOL_NAMES or not name or name in seen:
+            continue
+        seen.add(name)
+        tools.append(tool)
+
+    return tools
 
 
 @dataclass
@@ -924,7 +949,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         else:
             agent = Agent(
                 llm=llm,
-                tools=get_default_tools(enable_browser=False),
+                tools=get_enriched_default_tools(),
                 system_prompt_kwargs={'cli_mode': False},
                 condenser=condenser,
                 mcp_config=mcp_config,

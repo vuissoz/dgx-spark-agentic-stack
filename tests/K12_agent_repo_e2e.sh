@@ -127,6 +127,7 @@ for agent, branch in expected.items():
     assert plan["success_threshold"] == 1
     assert f"git pull --ff-only origin {branch}" in prompt
     assert f"git push origin HEAD:{branch}" in prompt
+    assert "inspect the tools and commands actually available in your runtime" in prompt
     assert "The shell is '/bin/sh'" in prompt
     assert "git add src/eight_queens.py" in prompt
     assert 'git commit -m "Implement solve_eight_queens()"' in prompt

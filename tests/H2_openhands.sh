@@ -50,6 +50,19 @@ timeout 20 docker exec "${openhands_cid}" sh -lc \
   || fail "openhands repo task toolchain must provide git, python3, and pytest"
 ok "openhands repo task toolchain is available"
 
+timeout 20 docker exec "${openhands_cid}" /app/.venv/bin/python - <<'PY' || fail "openhands default agent tools must include moderated discovery tools"
+from openhands.app_server.app_conversation.live_status_app_conversation_service import (
+    OPENHANDS_EXTRA_DEFAULT_TOOL_NAMES,
+    get_enriched_default_tools,
+)
+
+tool_names = {getattr(tool, "name", None) for tool in get_enriched_default_tools()}
+required = {"terminal", "file_editor", "task_tracker"} | set(OPENHANDS_EXTRA_DEFAULT_TOOL_NAMES)
+missing = sorted(name for name in required if name not in tool_names)
+assert not missing, missing
+PY
+ok "openhands default agent tools include moderated discovery tools"
+
 env_dump="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${openhands_cid}")"
 echo "${env_dump}" | grep -q '^LLM_BASE_URL=http://ollama-gate:11435/v1$' \
   || fail "openhands LLM_BASE_URL is not pinned to ollama-gate"

@@ -179,6 +179,10 @@ def sanitize_name(value: str) -> str:
 
 
 def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
+    tool_check_hint = (
+        "Before you act, inspect the tools and commands actually available in your runtime and only use ones "
+        "you have confirmed are present. "
+    )
     publish_hint = (
         "The shell is '/bin/sh', so use POSIX-compatible commands only. "
         f"When you publish, run 'git add {REFERENCE_PROBLEM_FILE}', then create the commit with a simple "
@@ -191,6 +195,7 @@ def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
         "Read the repository itself before making changes. "
         f"The checked out repository is '{repo_name}' in {workspace} on branch '{branch}'. "
         f"Start by running 'git pull --ff-only origin {branch}' yourself. "
+        f"{tool_check_hint}"
         "Follow the repository instructions, implement the Python fix, and run the documented tests. "
         f"{publish_hint}"
         f"After the tests pass, create a commit on '{branch}' and push it yourself with 'git push origin HEAD:{branch}'. "
