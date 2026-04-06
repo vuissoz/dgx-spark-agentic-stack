@@ -105,6 +105,11 @@ for agent, branch in expected.items():
     prompt = plan["prompt"]
     assert f"git pull --ff-only origin {branch}" in prompt
     assert f"git push origin HEAD:{branch}" in prompt
+    if agent == "vibestral":
+        assert "The shell is '/bin/sh'" in prompt
+        assert "git add src/eight_queens.py" in prompt
+        assert 'git commit -m "Implement solve_eight_queens()"' in prompt
+        assert "Do not use here-strings, heredocs" in prompt
 PY
 
 summary_reset_json="${runtime_root}/summary-reset.json"

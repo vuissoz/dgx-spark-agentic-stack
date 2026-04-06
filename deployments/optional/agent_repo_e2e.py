@@ -149,12 +149,23 @@ def sanitize_name(value: str) -> str:
     return "".join(cleaned).strip("-") or "run"
 
 
-def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
+def build_standard_prompt(repo_name: str, branch: str, workspace: str, mode: str) -> str:
+    publish_hint = ""
+    if mode == "vibe":
+        publish_hint = (
+            "The shell is '/bin/sh', so use POSIX-compatible commands only. "
+            f"When you publish, run 'git add {REFERENCE_PROBLEM_FILE}', then create the commit with a simple "
+            "single-line command such as "
+            "'git commit -m \"Implement solve_eight_queens()\"', then push with "
+            f"'git push origin HEAD:{branch}'. "
+            "Do not use here-strings, heredocs, or shell redirections to build the commit command. "
+        )
     return (
         "Read the repository itself before making changes. "
         f"The checked out repository is '{repo_name}' in {workspace} on branch '{branch}'. "
         f"Start by running 'git pull --ff-only origin {branch}' yourself. "
         "Follow the repository instructions, implement the Python fix, and run the documented tests. "
+        f"{publish_hint}"
         f"After the tests pass, create a commit on '{branch}' and push it yourself with 'git push origin HEAD:{branch}'. "
         "Finish by writing a concise run summary. Do not ask for clarification. "
         "Leave a clean worktree with local HEAD matching origin after your push. "
@@ -605,7 +616,7 @@ def run_agent(
     branch = str(config["branch"])
     mode = str(config["mode"])
     workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
-    prompt = build_standard_prompt(repo_name, branch, workspace)
+    prompt = build_standard_prompt(repo_name, branch, workspace, mode)
 
     result: dict[str, object] = {
         "agent": agent_name,
