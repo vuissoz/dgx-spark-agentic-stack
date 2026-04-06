@@ -17,6 +17,7 @@ import urllib.request
 
 
 AGENTIC_ROOT = pathlib.Path(os.environ.get("AGENTIC_ROOT", "/srv/agentic"))
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "agentic")
 BOOTSTRAP_STATE = AGENTIC_ROOT / "optional" / "git" / "bootstrap" / "git-forge-bootstrap.json"
 DEFAULT_ARTIFACTS_ROOT = AGENTIC_ROOT / "deployments" / "validation" / "agent-repo-e2e"
@@ -26,6 +27,9 @@ REFERENCE_PROBLEM_SENTINEL = 'raise NotImplementedError("Implement solve_eight_q
 GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
 PYTEST_IMPORT_CHECK = "python3 -c 'import pytest' >/dev/null"
 AGENT_DEFAULTS_FILE = "/state/bootstrap/ollama-gate-defaults.env"
+OLLAMA_SMOKE_SCRIPT = REPO_ROOT / "deployments" / "ollama" / "smoke_generate.sh"
+OLLAMA_SMOKE_API_URL = "http://127.0.0.1:11434"
+OLLAMA_SMOKE_TIMEOUT_SECONDS = 120
 DEFAULT_ATTEMPTS = 5
 VALIDATION_POLICY = "at_least_one_success"
 SUCCESS_THRESHOLD = 1
@@ -208,6 +212,32 @@ def build_attempt_statistics(attempt_results: list[dict[str, object]]) -> dict[s
         "category_counts": category_counts,
         "stage_counts": stage_counts,
     }
+
+
+def warm_default_model(artifact_dir: pathlib.Path, *, timeout_seconds: int = OLLAMA_SMOKE_TIMEOUT_SECONDS) -> tuple[bool, str]:
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = artifact_dir / "warmup.stdout.log"
+    stderr_path = artifact_dir / "warmup.stderr.log"
+    if not OLLAMA_SMOKE_SCRIPT.is_file():
+        stdout_path.write_text("", encoding="utf-8")
+        stderr_path.write_text(f"missing smoke script: {OLLAMA_SMOKE_SCRIPT}\n", encoding="utf-8")
+        return False, f"model warmup script missing: {OLLAMA_SMOKE_SCRIPT}"
+
+    default_model = (
+        os.environ.get("AGENTIC_DEFAULT_MODEL")
+        or os.environ.get("OLLAMA_PRELOAD_GENERATE_MODEL")
+        or "nemotron-cascade-2:30b"
+    )
+    env = os.environ.copy()
+    env["OLLAMA_API_URL"] = env.get("OLLAMA_API_URL", OLLAMA_SMOKE_API_URL)
+    env["OLLAMA_SMOKE_TIMEOUT_SECONDS"] = str(timeout_seconds)
+    env["OLLAMA_SMOKE_MODEL"] = default_model
+    proc = run([str(OLLAMA_SMOKE_SCRIPT)], check=False, env=env)
+    stdout_path.write_text(proc.stdout, encoding="utf-8")
+    stderr_path.write_text(proc.stderr, encoding="utf-8")
+    if proc.returncode == 0:
+        return True, f"model warmup completed for {default_model}"
+    return False, f"model warmup failed for {default_model} exit={proc.returncode}"
 
 
 def prepare_workspace(
@@ -678,6 +708,12 @@ def run_agent_once(
 
     if dry_run:
         result.update({"status": "planned", "category": "planned", "stage": "plan", "detail": "dry-run only"})
+        return result
+
+    warmup_ok, warmup_detail = warm_default_model(artifact_dir)
+    result["warmup_detail"] = warmup_detail
+    if not warmup_ok:
+        result.update(classify_result(stage="warmup", ok=False, detail=warmup_detail))
         return result
 
     container_id = service_container_id(service)

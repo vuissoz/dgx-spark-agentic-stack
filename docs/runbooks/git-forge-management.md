@@ -184,6 +184,7 @@ The runner stores:
 
 - one aggregate artefact directory per agent,
 - one per-attempt artefact directory under `attempt-01/` to `attempt-05/`,
+- one `warmup.stdout.log` / `warmup.stderr.log` pair per attempt before agent invocation,
 - stdout/stderr of prepare/invoke/verify steps for every attempt,
 - git status and diff after each attempt,
 - `summary.json` with a unified per-agent result schema including attempt statistics,
@@ -219,6 +220,11 @@ The runner then verifies that:
 The validation policy is `at_least_one_success`: each selected agent is executed
 five times by default, the result exposes per-attempt statistics, and an agent
 is considered validated if at least one attempt succeeds end-to-end.
+
+To reduce false negatives caused by cold model startup, `repo-e2e` now warms the
+default Ollama generate model before each attempt. The local gate queue timeout
+is also raised to `60` seconds so a single slow backend request does not
+immediately surface as a queue denial.
 
 ## Rotation and Revocation
 

@@ -13,6 +13,8 @@ fi
 
 assert_cmd python3
 assert_cmd git
+grep -q 'GATE_QUEUE_WAIT_TIMEOUT_SECONDS: 60' "${REPO_ROOT}/compose/compose.core.yml" \
+  || fail "compose.core.yml must set GATE_QUEUE_WAIT_TIMEOUT_SECONDS to 60"
 
 runtime_root="$(mktemp -d)"
 trap 'rm -rf "${runtime_root}"' EXIT
@@ -250,6 +252,7 @@ original_run = module.run
 
 def fake_run(cmd, **kwargs):
     captured["cmd"] = cmd
+    captured["kwargs"] = kwargs
     return subprocess.CompletedProcess(cmd, 0, "", "")
 
 module.run = fake_run
@@ -260,6 +263,24 @@ assert "/state/bootstrap/ollama-gate-defaults.env" in wrapped
 assert ". " in wrapped
 assert "printf '%s\\n' \"$OPENAI_API_KEY\"" in wrapped
 module.run = original_run
+
+import os
+previous_default_model = os.environ.get("AGENTIC_DEFAULT_MODEL")
+os.environ["AGENTIC_DEFAULT_MODEL"] = "test-warm-model:1b"
+module.run = fake_run
+warmup_ok, warmup_detail = module.warm_default_model(artifact_root / "warmup-proof", timeout_seconds=77)
+assert warmup_ok is True
+assert warmup_detail == "model warmup completed for test-warm-model:1b"
+assert captured["cmd"] == [str(repo_root / "deployments" / "ollama" / "smoke_generate.sh")]
+warmup_env = captured["kwargs"]["env"]
+assert warmup_env["OLLAMA_API_URL"] == "http://127.0.0.1:11434"
+assert warmup_env["OLLAMA_SMOKE_TIMEOUT_SECONDS"] == "77"
+assert warmup_env["OLLAMA_SMOKE_MODEL"] == "test-warm-model:1b"
+module.run = original_run
+if previous_default_model is None:
+    os.environ.pop("AGENTIC_DEFAULT_MODEL", None)
+else:
+    os.environ["AGENTIC_DEFAULT_MODEL"] = previous_default_model
 
 module.git_forge_api_request = lambda *args, **kwargs: {"name": "eight-queens-agent-e2e"}
 module.read_secret = lambda secret_name: "dummy"

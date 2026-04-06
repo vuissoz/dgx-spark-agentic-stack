@@ -60,7 +60,7 @@ services:
       GATE_LISTEN_PORT: 11435
       GATE_MODEL_ROUTES_FILE: /gate/config/model_routes.yml
       GATE_CONCURRENCY: 1
-      GATE_QUEUE_WAIT_TIMEOUT_SECONDS: 2
+      GATE_QUEUE_WAIT_TIMEOUT_SECONDS: 60
       GATE_STATE_DIR: /gate/state
       GATE_STICKY_FILE: /gate/state/sticky_sessions.json
       GATE_MODE_FILE: /gate/state/llm_mode.json
