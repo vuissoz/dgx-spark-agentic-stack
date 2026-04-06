@@ -170,21 +170,24 @@ AGENTIC_PROFILE=rootless-dev ./agent repo-e2e --dry-run
 
 # real run with full artefacts
 AGENTIC_PROFILE=rootless-dev ./agent repo-e2e \
+  --attempts 5 \
   --artifacts-dir "${AGENTIC_ROOT}/deployments/validation/agent-repo-e2e/manual-$(date -u +%Y%m%dT%H%M%SZ)"
 
 # opt-in destructive reset of the selected agent branches back to main
 AGENTIC_PROFILE=rootless-dev ./agent repo-e2e \
+  --attempts 5 \
   --reset-agent-branches \
   --artifacts-dir "${AGENTIC_ROOT}/deployments/validation/agent-repo-e2e/from-scratch-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
 The runner stores:
 
-- one artefact directory per agent,
-- stdout/stderr of prepare/invoke/verify steps,
-- git status and diff after the run,
-- `summary.json` with a unified per-agent result schema,
-- `doctor.json` with consolidated failure classes.
+- one aggregate artefact directory per agent,
+- one per-attempt artefact directory under `attempt-01/` to `attempt-05/`,
+- stdout/stderr of prepare/invoke/verify steps for every attempt,
+- git status and diff after each attempt,
+- `summary.json` with a unified per-agent result schema including attempt statistics,
+- `doctor.json` with consolidated failure classes and attempt totals.
 
 The runner prepares the checkout, but the agent instruction itself must perform:
 
@@ -195,7 +198,7 @@ The runner prepares the checkout, but the agent instruction itself must perform:
 
 When `--reset-agent-branches` is set, the runner first performs an explicit,
 destructive preflight on the stack-managed Forgejo reference repository
-`eight-queens-agent-e2e`:
+`eight-queens-agent-e2e`, and repeats that reset before each additional attempt:
 
 - it verifies that `main` still contains the seeded problem-only baseline
   (`solve_eight_queens()` remains unimplemented);
@@ -205,13 +208,17 @@ destructive preflight on the stack-managed Forgejo reference repository
 - each prepared workspace must start from that reset commit and still fail
   `python3 -m pytest -q` before the agent fixes the code.
 
-Without the flag, the runner leaves remote agent branches untouched.
+Without the flag, the runner leaves remote agent branches untouched between attempts.
 
 The runner then verifies that:
 
 - the branch head changed relative to the prepared checkout,
 - local `HEAD` matches `origin/agent/<tool>`,
 - the worktree is clean after the push.
+
+The validation policy is `at_least_one_success`: each selected agent is executed
+five times by default, the result exposes per-attempt statistics, and an agent
+is considered validated if at least one attempt succeeds end-to-end.
 
 ## Rotation and Revocation
 

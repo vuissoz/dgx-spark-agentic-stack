@@ -81,6 +81,13 @@ assert isinstance(preflight, dict)
 assert doctor.get("overall") == "partial"
 assert preflight.get("status") == "skipped"
 assert preflight.get("reset_agent_branches") is False
+assert preflight.get("attempts_requested") == 5
+assert preflight.get("validation_policy") == "at_least_one_success"
+assert preflight.get("success_threshold") == 1
+assert preflight.get("attempt_reset_policy") == "none"
+assert doctor.get("attempt_totals") == {"requested": 40, "successes": 0, "failures": 40}
+assert doctor.get("validation_policy") == "at_least_one_success"
+assert doctor.get("success_threshold") == 1
 
 agents = {entry["agent"]: entry for entry in results}
 expected = {
@@ -100,9 +107,22 @@ for agent, branch in expected.items():
     assert entry["status"] == "planned"
     assert entry["category"] == "planned"
     assert entry["workspace"].startswith("/workspace/eight-queens-agent-e2e-")
+    assert entry["attempts_requested"] == 5
+    assert entry["validation_policy"] == "at_least_one_success"
+    assert entry["success_threshold"] == 1
+    stats = entry["attempt_statistics"]
+    assert stats["requested"] == 5
+    assert stats["successes"] == 0
+    assert stats["failures"] == 5
+    assert stats["success_rate"] == 0.0
+    assert len(entry["attempts"]) == 5
+    assert all(item["status"] == "planned" for item in entry["attempts"])
     plan_path = entry["artifacts_dir"] + "/plan.json"
     plan = json.load(open(plan_path, encoding="utf-8"))
     prompt = plan["prompt"]
+    assert plan["attempts_requested"] == 5
+    assert plan["validation_policy"] == "at_least_one_success"
+    assert plan["success_threshold"] == 1
     assert f"git pull --ff-only origin {branch}" in prompt
     assert f"git push origin HEAD:{branch}" in prompt
     assert "The shell is '/bin/sh'" in prompt
@@ -128,6 +148,10 @@ assert isinstance(preflight, dict)
 assert preflight.get("status") == "planned"
 assert preflight.get("reset_agent_branches") is True
 assert preflight.get("preflight_clone_url") == "http://127.0.0.1:13010/agentic/eight-queens-agent-e2e.git"
+assert preflight.get("attempts_requested") == 5
+assert preflight.get("validation_policy") == "at_least_one_success"
+assert preflight.get("success_threshold") == 1
+assert preflight.get("attempt_reset_policy") == "before_each_attempt"
 branches = preflight.get("branches") or {}
 assert len(branches) == 8
 for entry in branches.values():
@@ -303,6 +327,49 @@ for branch in ("agent/codex", "agent/goose"):
     run(["git", "checkout", "-B", branch, f"origin/{branch}"], cwd=verify_dir)
     branch_text = (verify_dir / "src" / "eight_queens.py").read_text(encoding="utf-8")
     assert sentinel in branch_text
+
+attempt_results = [
+    {"attempt": 1, "status": "failed", "category": "functional", "stage": "verify", "detail": "pytest exit=1"},
+    {"attempt": 2, "status": "success", "category": "success", "stage": "publish", "detail": "agent committed and pushed branch update"},
+    {"attempt": 3, "status": "failed", "category": "git", "stage": "publish", "detail": "git publish contract failed exit=1"},
+    {"attempt": 4, "status": "failed", "category": "invocation_agent", "stage": "invoke", "detail": "invoke failed exit=1"},
+    {"attempt": 5, "status": "failed", "category": "functional", "stage": "verify", "detail": "pytest exit=1"},
+]
+summary = module.build_agent_result(
+    "codex",
+    clone_url=internal_clone_url,
+    repo_name="eight-queens-agent-e2e",
+    root_artifact_dir=artifact_root / "aggregate",
+    attempt_results=attempt_results,
+    attempts_requested=5,
+)
+assert summary["status"] == "success"
+assert summary["category"] == "success"
+assert summary["attempt_statistics"]["requested"] == 5
+assert summary["attempt_statistics"]["successes"] == 1
+assert summary["attempt_statistics"]["failures"] == 4
+assert summary["attempt_statistics"]["successful_attempts"] == [2]
+assert summary["validation_policy"] == "at_least_one_success"
+assert summary["success_threshold"] == 1
+
+failed_summary = module.build_agent_result(
+    "goose",
+    clone_url=internal_clone_url,
+    repo_name="eight-queens-agent-e2e",
+    root_artifact_dir=artifact_root / "aggregate-failed",
+    attempt_results=[
+        {"attempt": 1, "status": "failed", "category": "functional", "stage": "verify", "detail": "pytest exit=1"},
+        {"attempt": 2, "status": "failed", "category": "git", "stage": "publish", "detail": "git publish contract failed exit=1"},
+        {"attempt": 3, "status": "failed", "category": "functional", "stage": "verify", "detail": "pytest exit=1"},
+        {"attempt": 4, "status": "failed", "category": "functional", "stage": "verify", "detail": "pytest exit=1"},
+        {"attempt": 5, "status": "failed", "category": "functional", "stage": "verify", "detail": "pytest exit=1"},
+    ],
+    attempts_requested=5,
+)
+assert failed_summary["status"] == "failed"
+assert failed_summary["attempt_statistics"]["successes"] == 0
+assert failed_summary["category"] == "functional"
+assert failed_summary["stage"] == "aggregate"
 PY
 
 ok "K12_agent_repo_e2e passed"

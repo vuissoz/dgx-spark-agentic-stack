@@ -26,6 +26,9 @@ REFERENCE_PROBLEM_SENTINEL = 'raise NotImplementedError("Implement solve_eight_q
 GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
 PYTEST_IMPORT_CHECK = "python3 -c 'import pytest' >/dev/null"
 AGENT_DEFAULTS_FILE = "/state/bootstrap/ollama-gate-defaults.env"
+DEFAULT_ATTEMPTS = 5
+VALIDATION_POLICY = "at_least_one_success"
+SUCCESS_THRESHOLD = 1
 
 AGENT_MATRIX = {
     "codex": {"service": "agentic-codex", "branch": "agent/codex", "mode": "codex"},
@@ -42,6 +45,10 @@ AGENT_MATRIX = {
 def fail(message: str) -> None:
     print(f"ERROR: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def write_json(path: pathlib.Path, payload: object) -> None:
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def run(
@@ -169,6 +176,38 @@ def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
         "Leave a clean worktree with local HEAD matching origin after your push. "
         "Do not push to main."
     )
+
+
+def build_attempt_statistics(attempt_results: list[dict[str, object]]) -> dict[str, object]:
+    status_counts: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
+    stage_counts: dict[str, int] = {}
+    successful_attempts: list[int] = []
+
+    for result in attempt_results:
+        status = str(result.get("status", "unknown"))
+        category = str(result.get("category", "unknown"))
+        stage = str(result.get("stage", "unknown"))
+        status_counts[status] = status_counts.get(status, 0) + 1
+        category_counts[category] = category_counts.get(category, 0) + 1
+        stage_counts[stage] = stage_counts.get(stage, 0) + 1
+        if status == "success":
+            attempt = int(result.get("attempt", 0) or 0)
+            successful_attempts.append(attempt)
+
+    requested = len(attempt_results)
+    successes = len(successful_attempts)
+    failures = requested - successes
+    return {
+        "requested": requested,
+        "successes": successes,
+        "failures": failures,
+        "success_rate": (successes / requested) if requested else 0.0,
+        "successful_attempts": successful_attempts,
+        "status_counts": status_counts,
+        "category_counts": category_counts,
+        "stage_counts": stage_counts,
+    }
 
 
 def prepare_workspace(
@@ -593,7 +632,7 @@ def classify_result(
     return {"status": status, "category": category, "stage": stage, "detail": detail}
 
 
-def run_agent(
+def run_agent_once(
     agent_name: str,
     *,
     clone_url: str,
@@ -631,8 +670,11 @@ def run_agent(
         "branch": branch,
         "mode": mode,
         "prompt": prompt,
+        "attempts_requested": 1,
+        "validation_policy": VALIDATION_POLICY,
+        "success_threshold": SUCCESS_THRESHOLD,
     }
-    (artifact_dir / "plan.json").write_text(json.dumps(plan_payload, indent=2) + "\n", encoding="utf-8")
+    write_json(artifact_dir / "plan.json", plan_payload)
 
     if dry_run:
         result.update({"status": "planned", "category": "planned", "stage": "plan", "detail": "dry-run only"})
@@ -732,11 +774,97 @@ def run_agent(
     return result
 
 
+def build_agent_result(
+    agent_name: str,
+    *,
+    clone_url: str,
+    repo_name: str,
+    root_artifact_dir: pathlib.Path,
+    attempt_results: list[dict[str, object]],
+    attempts_requested: int,
+) -> dict[str, object]:
+    config = AGENT_MATRIX[agent_name]
+    artifact_dir = root_artifact_dir / agent_name
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    service = str(config["service"])
+    branch = str(config["branch"])
+    mode = str(config["mode"])
+    workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
+    prompt = build_standard_prompt(repo_name, branch, workspace)
+
+    plan_payload = {
+        "clone_url": clone_url,
+        "workspace": workspace,
+        "branch": branch,
+        "mode": mode,
+        "prompt": prompt,
+        "attempts_requested": attempts_requested,
+        "validation_policy": VALIDATION_POLICY,
+        "success_threshold": SUCCESS_THRESHOLD,
+    }
+    write_json(artifact_dir / "plan.json", plan_payload)
+
+    attempt_statistics = build_attempt_statistics(attempt_results)
+    result: dict[str, object] = {
+        "agent": agent_name,
+        "service": service,
+        "branch": branch,
+        "workspace": workspace,
+        "mode": mode,
+        "artifacts_dir": str(artifact_dir),
+        "attempts_requested": attempts_requested,
+        "validation_policy": VALIDATION_POLICY,
+        "success_threshold": SUCCESS_THRESHOLD,
+        "attempt_statistics": attempt_statistics,
+        "attempts": attempt_results,
+    }
+
+    if attempt_results and all(str(entry.get("status")) == "planned" for entry in attempt_results):
+        result.update({"status": "planned", "category": "planned", "stage": "plan", "detail": "dry-run only"})
+    elif attempt_statistics["successes"] >= SUCCESS_THRESHOLD:
+        result.update(
+            {
+                "status": "success",
+                "category": "success",
+                "stage": "aggregate",
+                "detail": (
+                    f"validation passed with {attempt_statistics['successes']}/"
+                    f"{attempt_statistics['requested']} successful attempt(s)"
+                ),
+            }
+        )
+    else:
+        last_attempt = attempt_results[-1] if attempt_results else {}
+        result.update(
+            {
+                "status": "failed",
+                "category": str(last_attempt.get("category", "infra")),
+                "stage": "aggregate",
+                "detail": (
+                    f"validation failed with 0/{attempt_statistics['requested']} successful attempt(s); "
+                    f"last attempt {last_attempt.get('attempt', '?')} failed at "
+                    f"{last_attempt.get('stage', 'unknown')}: {last_attempt.get('detail', 'no detail')}"
+                ),
+            }
+        )
+
+    write_json(artifact_dir / "attempts.json", attempt_results)
+    write_json(artifact_dir / "summary.json", result)
+    return result
+
+
 def build_final_doctor(results: list[dict[str, object]]) -> dict[str, object]:
     counts: dict[str, int] = {}
+    attempt_totals = {"requested": 0, "successes": 0, "failures": 0}
     for result in results:
         category = str(result.get("category", "infra"))
         counts[category] = counts.get(category, 0) + 1
+        stats = result.get("attempt_statistics")
+        if isinstance(stats, dict):
+            attempt_totals["requested"] += int(stats.get("requested", 0) or 0)
+            attempt_totals["successes"] += int(stats.get("successes", 0) or 0)
+            attempt_totals["failures"] += int(stats.get("failures", 0) or 0)
 
     if counts.get("success", 0) == len(results):
         overall = "success"
@@ -748,6 +876,9 @@ def build_final_doctor(results: list[dict[str, object]]) -> dict[str, object]:
     return {
         "overall": overall,
         "counts": counts,
+        "attempt_totals": attempt_totals,
+        "validation_policy": VALIDATION_POLICY,
+        "success_threshold": SUCCESS_THRESHOLD,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "required_agents": list(AGENT_MATRIX),
     }
@@ -759,6 +890,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo", default="", help="Repository name override")
     parser.add_argument("--clone-url", default="", help="Internal clone URL override")
     parser.add_argument("--artifacts-dir", default="", help="Artifacts directory override")
+    parser.add_argument("--attempts", type=int, default=DEFAULT_ATTEMPTS, help="Number of attempts per agent")
     parser.add_argument("--prepare-timeout", type=int, default=120)
     parser.add_argument("--invoke-timeout", type=int, default=900)
     parser.add_argument("--verify-timeout", type=int, default=180)
@@ -773,6 +905,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.attempts < 1:
+        fail("--attempts must be >= 1")
     state = load_bootstrap_state()
     repo_name = args.repo or str(state.get("reference_repository") or "")
     clone_url = args.clone_url or str(state.get("reference_clone_url_internal") or "")
@@ -797,24 +931,87 @@ def main() -> None:
         reset_agent_branches=args.reset_agent_branches,
         dry_run=args.dry_run,
     )
+    preflight["attempts_requested"] = args.attempts
+    preflight["validation_policy"] = VALIDATION_POLICY
+    preflight["success_threshold"] = SUCCESS_THRESHOLD
+    preflight["attempt_reset_policy"] = (
+        "before_each_attempt"
+        if args.reset_agent_branches and args.attempts > 1
+        else ("before_run" if args.reset_agent_branches else "none")
+    )
+    write_json(artifact_root / "_preflight" / "preflight.json", preflight)
 
     expected_heads = {
         agent_name: str((preflight.get("branches") or {}).get(agent_name, {}).get("after_head") or "")
         for agent_name in selected_agents
     }
 
+    per_agent_attempts: dict[str, list[dict[str, object]]] = {agent_name: [] for agent_name in selected_agents}
+
+    if args.dry_run:
+        for attempt in range(1, args.attempts + 1):
+            for agent_name in selected_agents:
+                config = AGENT_MATRIX[agent_name]
+                branch = str(config["branch"])
+                mode = str(config["mode"])
+                workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
+                per_agent_attempts[agent_name].append(
+                    {
+                        "attempt": attempt,
+                        "agent": agent_name,
+                        "branch": branch,
+                        "workspace": workspace,
+                        "mode": mode,
+                        "artifacts_dir": str(artifact_root / f"attempt-{attempt:02d}" / agent_name),
+                        "status": "planned",
+                        "category": "planned",
+                        "stage": "plan",
+                        "detail": "dry-run only",
+                    }
+                )
+    else:
+        for attempt in range(1, args.attempts + 1):
+            attempt_root = artifact_root / f"attempt-{attempt:02d}"
+            attempt_root.mkdir(parents=True, exist_ok=True)
+            round_expected_heads = expected_heads
+            if attempt > 1 and args.reset_agent_branches:
+                round_preflight = reset_agent_branches_if_requested(
+                    state=state,
+                    repo_name=repo_name,
+                    clone_url=clone_url,
+                    selected_agents=selected_agents,
+                    artifact_root=attempt_root,
+                    reset_agent_branches=True,
+                    dry_run=False,
+                )
+                round_expected_heads = {
+                    agent_name: str((round_preflight.get("branches") or {}).get(agent_name, {}).get("after_head") or "")
+                    for agent_name in selected_agents
+                }
+            for agent_name in selected_agents:
+                attempt_result = run_agent_once(
+                    agent_name,
+                    clone_url=clone_url,
+                    repo_name=repo_name,
+                    root_artifact_dir=attempt_root,
+                    prepare_timeout=args.prepare_timeout,
+                    invoke_timeout=args.invoke_timeout,
+                    verify_timeout=args.verify_timeout,
+                    dry_run=False,
+                    require_unresolved_baseline=args.reset_agent_branches,
+                    expected_initial_head=round_expected_heads.get(agent_name, ""),
+                )
+                attempt_result["attempt"] = attempt
+                per_agent_attempts[agent_name].append(attempt_result)
+
     results = [
-        run_agent(
+        build_agent_result(
             agent_name,
             clone_url=clone_url,
             repo_name=repo_name,
             root_artifact_dir=artifact_root,
-            prepare_timeout=args.prepare_timeout,
-            invoke_timeout=args.invoke_timeout,
-            verify_timeout=args.verify_timeout,
-            dry_run=args.dry_run,
-            require_unresolved_baseline=args.reset_agent_branches,
-            expected_initial_head=expected_heads.get(agent_name, ""),
+            attempt_results=per_agent_attempts[agent_name],
+            attempts_requested=args.attempts,
         )
         for agent_name in selected_agents
     ]
