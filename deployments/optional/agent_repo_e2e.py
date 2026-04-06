@@ -190,6 +190,7 @@ def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
         "'git commit -m \"Implement solve_eight_queens()\"', then push with "
         f"'git push origin HEAD:{branch}'. "
         "Do not use here-strings, heredocs, or shell redirections to build the commit command. "
+        "After your push, the repository must be completely clean: no staged, modified, or untracked files may remain. "
     )
     return (
         "Read the repository itself before making changes. "

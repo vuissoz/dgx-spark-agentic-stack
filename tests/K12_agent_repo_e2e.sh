@@ -132,6 +132,7 @@ for agent, branch in expected.items():
     assert "git add src/eight_queens.py" in prompt
     assert 'git commit -m "Implement solve_eight_queens()"' in prompt
     assert "Do not use here-strings, heredocs" in prompt
+    assert "the repository must be completely clean" in prompt
 PY
 
 summary_reset_json="${runtime_root}/summary-reset.json"
