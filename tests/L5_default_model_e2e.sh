@@ -143,6 +143,7 @@ claude_cid="$(require_service_container agentic-claude)" || exit 1
 codex_cid="$(require_service_container agentic-codex)" || exit 1
 opencode_cid="$(require_service_container agentic-opencode)" || exit 1
 vibestral_cid="$(require_service_container agentic-vibestral)" || exit 1
+hermes_cid="$(require_service_container agentic-hermes)" || exit 1
 openwebui_cid="$(require_service_container openwebui)" || exit 1
 openhands_cid="$(require_service_container openhands)" || exit 1
 
@@ -153,6 +154,7 @@ wait_for_container_ready "${claude_cid}" 90 || fail "agentic-claude is not ready
 wait_for_container_ready "${codex_cid}" 90 || fail "agentic-codex is not ready"
 wait_for_container_ready "${opencode_cid}" 90 || fail "agentic-opencode is not ready"
 wait_for_container_ready "${vibestral_cid}" 90 || fail "agentic-vibestral is not ready"
+wait_for_container_ready "${hermes_cid}" 90 || fail "agentic-hermes is not ready"
 wait_for_container_ready "${openwebui_cid}" 120 || fail "openwebui is not ready"
 wait_for_container_ready "${openhands_cid}" 120 || fail "openhands is not ready"
 
@@ -164,9 +166,10 @@ claude_response_file="$(mktemp)"
 codex_response_file="$(mktemp)"
 opencode_response_file="$(mktemp)"
 vibestral_response_file="$(mktemp)"
+hermes_response_file="$(mktemp)"
 openwebui_response_file="$(mktemp)"
 openhands_response_file="$(mktemp)"
-trap 'rm -f "${host_tags_file}" "${gate_tags_file}" "${ollama_response_file}" "${gate_response_file}" "${claude_response_file}" "${codex_response_file}" "${opencode_response_file}" "${vibestral_response_file}" "${openwebui_response_file}" "${openhands_response_file}"' EXIT
+trap 'rm -f "${host_tags_file}" "${gate_tags_file}" "${ollama_response_file}" "${gate_response_file}" "${claude_response_file}" "${codex_response_file}" "${opencode_response_file}" "${vibestral_response_file}" "${hermes_response_file}" "${openwebui_response_file}" "${openhands_response_file}"' EXIT
 
 curl -fsS --max-time 20 http://127.0.0.1:11434/api/tags >"${host_tags_file}"
 assert_model_list_contains "${host_tags_file}" "${default_model}" "ollama host /api/tags" \
@@ -209,6 +212,11 @@ call_generate_container_python "${vibestral_cid}" "http://ollama-gate:11435" "${
 assert_json_response_non_empty "${vibestral_response_file}" "agentic-vibestral -> ollama-gate" \
   || fail "agentic-vibestral model call returned empty response"
 ok "agentic-vibestral model call succeeded"
+
+call_generate_container_python "${hermes_cid}" "http://ollama-gate:11435" "${hermes_response_file}"
+assert_json_response_non_empty "${hermes_response_file}" "agentic-hermes -> ollama-gate" \
+  || fail "agentic-hermes model call returned empty response"
+ok "agentic-hermes model call succeeded"
 
 call_generate_container_python "${openwebui_cid}" "http://ollama-gate:11435" "${openwebui_response_file}"
 assert_json_response_non_empty "${openwebui_response_file}" "openwebui -> ollama-gate" \

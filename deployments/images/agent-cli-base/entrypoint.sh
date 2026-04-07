@@ -13,8 +13,8 @@ default_context_window_fallback="50909"
 
 export HOME="${agent_home}"
 mkdir -p "${workspace}" "${state_dir}" "${logs_dir}" "${agent_home}" \
-  "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe"
-chmod 0700 "${agent_home}" "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" 2>/dev/null || true
+  "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes"
+chmod 0700 "${agent_home}" "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes" 2>/dev/null || true
 if [[ -n "${TMPDIR:-}" ]]; then
   mkdir -p "${TMPDIR}"
   chmod 0700 "${TMPDIR}" 2>/dev/null || true
@@ -442,6 +442,54 @@ EOF
   log "INFO: vibestral defaults config reconciled (${vibe_config})"
 }
 
+bootstrap_hermes_config() {
+  [[ "${tool}" == "hermes" ]] || return 0
+
+  local hermes_home="${HERMES_HOME:-${AGENT_HERMES_HOME:-${agent_home}/.hermes}}"
+  local hermes_config="${hermes_home}/config.yaml"
+  local hermes_env="${hermes_home}/.env"
+  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+  local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
+  local api_key="${OPENAI_API_KEY:-local-ollama}"
+  local tmp_config
+  local tmp_env
+
+  export HERMES_HOME="${hermes_home}"
+  mkdir -p "${hermes_home}" "${hermes_home}/cron" "${hermes_home}/sessions" "${hermes_home}/logs" "${hermes_home}/memories" "${hermes_home}/skills"
+  chmod 0700 "${hermes_home}" "${hermes_home}/cron" "${hermes_home}/sessions" "${hermes_home}/logs" "${hermes_home}/memories" "${hermes_home}/skills" 2>/dev/null || true
+
+  tmp_config="$(mktemp)"
+  cat >"${tmp_config}" <<EOF
+model:
+  default: "${default_model}"
+  provider: custom
+  base_url: "${gate_v1_url}"
+  api_key: "${api_key}"
+toolsets:
+  - hermes-cli
+terminal:
+  backend: local
+  cwd: /workspace
+  persistent_shell: true
+logging:
+  level: INFO
+  max_size_mb: 5
+  backup_count: 3
+EOF
+  write_if_changed "${hermes_config}" "${tmp_config}"
+  chmod 0600 "${hermes_config}" || true
+
+  tmp_env="$(mktemp)"
+  cat >"${tmp_env}" <<EOF
+OPENAI_API_KEY=${api_key}
+OPENAI_BASE_URL=${gate_v1_url}
+EOF
+  write_if_changed "${hermes_env}" "${tmp_env}"
+  chmod 0600 "${hermes_env}" || true
+
+  log "INFO: hermes defaults config reconciled (${hermes_config})"
+}
+
 bootstrap_opencode_config() {
   [[ "${tool}" == "opencode" ]] || return 0
 
@@ -682,6 +730,7 @@ bootstrap_codex_config
 bootstrap_opencode_config
 bootstrap_pi_config
 bootstrap_vibestral_config
+bootstrap_hermes_config
 
 if ! tmux has-session -t "${session}" 2>/dev/null; then
   start_session

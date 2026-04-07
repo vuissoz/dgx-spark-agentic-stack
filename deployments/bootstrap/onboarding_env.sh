@@ -21,6 +21,7 @@ claude_workspaces_dir_override=""
 codex_workspaces_dir_override=""
 opencode_workspaces_dir_override=""
 vibestral_workspaces_dir_override=""
+hermes_workspaces_dir_override=""
 openhands_workspaces_dir_override=""
 openclaw_workspaces_dir_override=""
 pi_mono_workspaces_dir_override=""
@@ -105,6 +106,7 @@ Runtime options:
   --codex-workspaces-dir <path>
   --opencode-workspaces-dir <path>
   --vibestral-workspaces-dir <path>
+  --hermes-workspaces-dir <path>
   --openhands-workspaces-dir <path>
   --openclaw-workspaces-dir <path>
   --pi-mono-workspaces-dir <path>
@@ -1445,51 +1447,52 @@ write_env_file() {
   local codex_workspaces_dir="$5"
   local opencode_workspaces_dir="$6"
   local vibestral_workspaces_dir="$7"
-  local openhands_workspaces_dir="$8"
-  local openclaw_workspaces_dir="$9"
-  local pi_mono_workspaces_dir="${10}"
-  local goose_workspaces_dir="${11}"
-  local compose_project="${12}"
-  local compose_profiles="${13}"
-  local network="${14}"
-  local egress_network="${15}"
-  local ollama_models="${16}"
-  local default_model="${17}"
-  local default_model_context_window="${18}"
-  local trtllm_models="${19}"
-  local goose_context_limit="${20}"
-  local grafana_admin_user="${21}"
-  local grafana_admin_password="${22}"
-  local limits_default_cpus="${23}"
-  local limits_default_mem="${24}"
-  local limits_core_cpus="${25}"
-  local limits_core_mem="${26}"
-  local limits_ollama_mem="${27}"
-  local limits_agents_cpus="${28}"
-  local limits_agents_mem="${29}"
-  local limits_ui_cpus="${30}"
-  local limits_ui_mem="${31}"
-  local limits_obs_cpus="${32}"
-  local limits_obs_mem="${33}"
-  local obs_retention_time="${34}"
-  local obs_max_disk="${35}"
-  local prometheus_disk_budget="${36}"
-  local loki_disk_budget="${37}"
-  local prometheus_retention_time="${38}"
-  local prometheus_retention_size="${39}"
-  local loki_retention_period="${40}"
-  local loki_max_query_lookback="${41}"
-  local limits_rag_cpus="${42}"
-  local limits_rag_mem="${43}"
-  local limits_optional_cpus="${44}"
-  local limits_optional_mem="${45}"
-  local optional_modules_csv="${46}"
-  local git_forge_host_port="${47}"
-  local git_forge_admin_user="${48}"
-  local git_forge_shared_namespace="${49}"
-  local git_forge_enable_push_create="${50}"
-  local openclaw_init_project="${51}"
-  local out_file="${52}"
+  local hermes_workspaces_dir="$8"
+  local openhands_workspaces_dir="$9"
+  local openclaw_workspaces_dir="${10}"
+  local pi_mono_workspaces_dir="${11}"
+  local goose_workspaces_dir="${12}"
+  local compose_project="${13}"
+  local compose_profiles="${14}"
+  local network="${15}"
+  local egress_network="${16}"
+  local ollama_models="${17}"
+  local default_model="${18}"
+  local default_model_context_window="${19}"
+  local trtllm_models="${20}"
+  local goose_context_limit="${21}"
+  local grafana_admin_user="${22}"
+  local grafana_admin_password="${23}"
+  local limits_default_cpus="${24}"
+  local limits_default_mem="${25}"
+  local limits_core_cpus="${26}"
+  local limits_core_mem="${27}"
+  local limits_ollama_mem="${28}"
+  local limits_agents_cpus="${29}"
+  local limits_agents_mem="${30}"
+  local limits_ui_cpus="${31}"
+  local limits_ui_mem="${32}"
+  local limits_obs_cpus="${33}"
+  local limits_obs_mem="${34}"
+  local obs_retention_time="${35}"
+  local obs_max_disk="${36}"
+  local prometheus_disk_budget="${37}"
+  local loki_disk_budget="${38}"
+  local prometheus_retention_time="${39}"
+  local prometheus_retention_size="${40}"
+  local loki_retention_period="${41}"
+  local loki_max_query_lookback="${42}"
+  local limits_rag_cpus="${43}"
+  local limits_rag_mem="${44}"
+  local limits_optional_cpus="${45}"
+  local limits_optional_mem="${46}"
+  local optional_modules_csv="${47}"
+  local git_forge_host_port="${48}"
+  local git_forge_admin_user="${49}"
+  local git_forge_shared_namespace="${50}"
+  local git_forge_enable_push_create="${51}"
+  local openclaw_init_project="${52}"
+  local out_file="${53}"
   local tmp_file=""
 
   install -d -m 0750 "$(dirname "${out_file}")"
@@ -1506,6 +1509,7 @@ export AGENTIC_CLAUDE_WORKSPACES_DIR=$(shell_quote "${claude_workspaces_dir}")
 export AGENTIC_CODEX_WORKSPACES_DIR=$(shell_quote "${codex_workspaces_dir}")
 export AGENTIC_OPENCODE_WORKSPACES_DIR=$(shell_quote "${opencode_workspaces_dir}")
 export AGENTIC_VIBESTRAL_WORKSPACES_DIR=$(shell_quote "${vibestral_workspaces_dir}")
+export AGENTIC_HERMES_WORKSPACES_DIR=$(shell_quote "${hermes_workspaces_dir}")
 export AGENTIC_OPENHANDS_WORKSPACES_DIR=$(shell_quote "${openhands_workspaces_dir}")
 export AGENTIC_OPENCLAW_WORKSPACES_DIR=$(shell_quote "${openclaw_workspaces_dir}")
 export AGENTIC_OPENCLAW_INIT_PROJECT=$(shell_quote "${openclaw_init_project}")
@@ -1792,6 +1796,11 @@ while [[ $# -gt 0 ]]; do
     --vibestral-workspaces-dir)
       [[ $# -ge 2 ]] || die "missing value for --vibestral-workspaces-dir"
       vibestral_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --hermes-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --hermes-workspaces-dir"
+      hermes_workspaces_dir_override="$2"
       shift 2
       ;;
     --openhands-workspaces-dir)
@@ -2151,6 +2160,7 @@ collect_path_value claude_workspaces_dir "AGENTIC_CLAUDE_WORKSPACES_DIR" "${prof
 collect_path_value codex_workspaces_dir "AGENTIC_CODEX_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "codex")" "${codex_workspaces_dir_override}" "AGENTIC_CODEX_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-codex."
 collect_path_value opencode_workspaces_dir "AGENTIC_OPENCODE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "opencode")" "${opencode_workspaces_dir_override}" "AGENTIC_OPENCODE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-opencode."
 collect_path_value vibestral_workspaces_dir "AGENTIC_VIBESTRAL_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "vibestral")" "${vibestral_workspaces_dir_override}" "AGENTIC_VIBESTRAL_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-vibestral."
+collect_path_value hermes_workspaces_dir "AGENTIC_HERMES_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "hermes")" "${hermes_workspaces_dir_override}" "AGENTIC_HERMES_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-hermes."
 collect_path_value openhands_workspaces_dir "AGENTIC_OPENHANDS_WORKSPACES_DIR" "${profile}" "$(default_openhands_workspaces_dir "${root_path}")" "${openhands_workspaces_dir_override}" "AGENTIC_OPENHANDS_WORKSPACES_DIR controls the host path mounted as /workspace in openhands."
 collect_path_value openclaw_workspaces_dir "AGENTIC_OPENCLAW_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "openclaw")" "${openclaw_workspaces_dir_override}" "AGENTIC_OPENCLAW_WORKSPACES_DIR controls the host path mounted as /workspace in openclaw."
 collect_text_value openclaw_init_project "AGENTIC_OPENCLAW_INIT_PROJECT" "${AGENTIC_OPENCLAW_INIT_PROJECT:-openclaw-default}" "${openclaw_init_project_override}" validate_openclaw_project_value "AGENTIC_OPENCLAW_INIT_PROJECT is the default project name used by 'agent openclaw init' when you do not pass an explicit project."
@@ -2271,6 +2281,7 @@ write_env_file \
   "${codex_workspaces_dir}" \
   "${opencode_workspaces_dir}" \
   "${vibestral_workspaces_dir}" \
+  "${hermes_workspaces_dir}" \
   "${openhands_workspaces_dir}" \
   "${openclaw_workspaces_dir}" \
   "${pi_mono_workspaces_dir}" \
@@ -2589,6 +2600,7 @@ git_forge_accounts=(
   codex
   opencode
   vibestral
+  hermes
   pi-mono
   goose
 )

@@ -16,6 +16,10 @@ ARG OPENHANDS_INSTALL_SCRIPT=https://install.openhands.dev/install.sh
 ARG OPENCLAW_INSTALL_CLI_SCRIPT=https://openclaw.ai/install-cli.sh
 ARG OPENCLAW_INSTALL_VERSION=latest
 ARG VIBE_INSTALL_SCRIPT=https://mistral.ai/vibe/install.sh
+ARG HERMES_AGENT_GIT_URL=https://github.com/NousResearch/hermes-agent.git
+ARG HERMES_AGENT_GIT_REF=v2026.4.3
+ARG HERMES_AGENT_GIT_SHA=abf1e98f6253f6984479fe03d1098173a9b065a7
+ARG HERMES_PIP_EXTRAS=pty,cli
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -101,7 +105,9 @@ RUN install -d -m 0750 /etc/sudoers.d \
 COPY deployments/images/agent-cli-base/install-agent-clis.sh /usr/local/bin/install-agent-clis
 COPY deployments/images/agent-cli-base/entrypoint.sh /usr/local/bin/agent-entrypoint
 COPY deployments/images/agent-cli-base/agent-cli-wrapper.sh /usr/local/bin/agent-cli-wrapper
+COPY deployments/images/agent-cli-base/hermes-wrapper.sh /usr/local/bin/hermes
 RUN chmod 0755 /usr/local/bin/install-agent-clis /usr/local/bin/agent-entrypoint /usr/local/bin/agent-cli-wrapper \
+    /usr/local/bin/hermes \
   && AGENT_CLI_INSTALL_MODE="${AGENT_CLI_INSTALL_MODE}" \
     AGENT_NPM_PREFIX="${AGENT_NPM_PREFIX}" \
     AGENT_CLI_INSTALL_HOME="${AGENT_CLI_INSTALL_HOME}" \
@@ -114,6 +120,10 @@ RUN chmod 0755 /usr/local/bin/install-agent-clis /usr/local/bin/agent-entrypoint
     OPENCLAW_INSTALL_CLI_SCRIPT="${OPENCLAW_INSTALL_CLI_SCRIPT}" \
     OPENCLAW_INSTALL_VERSION="${OPENCLAW_INSTALL_VERSION}" \
     VIBE_INSTALL_SCRIPT="${VIBE_INSTALL_SCRIPT}" \
+    HERMES_AGENT_GIT_URL="${HERMES_AGENT_GIT_URL}" \
+    HERMES_AGENT_GIT_REF="${HERMES_AGENT_GIT_REF}" \
+    HERMES_AGENT_GIT_SHA="${HERMES_AGENT_GIT_SHA}" \
+    HERMES_PIP_EXTRAS="${HERMES_PIP_EXTRAS}" \
     /usr/local/bin/install-agent-clis
 COPY deployments/images/agent-cli-base/vibe-wrapper.sh /usr/local/bin/vibe
 RUN chmod 0755 /usr/local/bin/vibe \

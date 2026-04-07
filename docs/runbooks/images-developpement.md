@@ -13,7 +13,7 @@ Ce runbook couvre les images locales suivantes:
 
 | Image locale | Dockerfile/source | Utilisee par | Build declenche par |
 |---|---|---|---|
-| `agentic/agent-cli-base:local` | `deployments/images/agent-cli-base/Dockerfile` | `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `optional-pi-mono` | `./agent up agents`, `./agent update`, `./agent up optional` (si `pi-mono`) |
+| `agentic/agent-cli-base:local` | `deployments/images/agent-cli-base/Dockerfile` | `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`, `optional-pi-mono` | `./agent up agents`, `./agent update`, `./agent up optional` (si `pi-mono`) |
 | `agentic/comfyui:local` | `deployments/images/comfyui/Dockerfile` | `comfyui` | `./agent up ui` (via Compose) |
 | `agentic/ollama-gate:local` | `deployments/gate/Dockerfile` | `ollama-gate` | `./agent up core`, `./agent update` |
 | `agentic/gate-mcp:local` | `deployments/gate_mcp/Dockerfile` | `gate-mcp` | `./agent up core`, `./agent update` |

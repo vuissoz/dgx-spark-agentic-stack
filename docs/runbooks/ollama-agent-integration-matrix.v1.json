@@ -1,5 +1,5 @@
 {
-  "matrix_version": "2026-03-22.step13.v5",
+  "matrix_version": "2026-04-07.stepE2.hermes.v1",
   "scope": [
     "rootless-dev",
     "strict-prod"
@@ -159,6 +159,43 @@
       ],
       "assumed_gaps": [
         "No upstream 'ollama launch vibestral' contract is available.",
+        "Compatibility is guaranteed by the internal adapter contract and tests."
+      ]
+    },
+    {
+      "agent": "hermes",
+      "upstream_launch_support": "adapter-internal",
+      "contract_source": {
+        "kind": "stack-internal-adapter",
+        "source_id": "hermes-adapter",
+        "stack_contract_files": [
+          "deployments/images/agent-cli-base/entrypoint.sh",
+          "compose/compose.agents.yml"
+        ]
+      },
+      "config_mode": "hermes-managed-config-openai-compatible",
+      "target_endpoint": "http://ollama-gate:11435/v1",
+      "target_protocol_paths": [
+        "/v1/chat/completions",
+        "/v1/responses"
+      ],
+      "required_variables": [
+        "HERMES_HOME",
+        "OPENAI_BASE_URL",
+        "OPENAI_API_KEY",
+        "AGENTIC_DEFAULT_MODEL"
+      ],
+      "stack_sources": [
+        "deployments/images/agent-cli-base/entrypoint.sh",
+        "compose/compose.agents.yml"
+      ],
+      "contract_tests": [
+        "tests/L9_ollama_internal_adapter_contracts.sh",
+        "tests/E2_agents_confinement.sh",
+        "tests/F1_agent_cli.sh"
+      ],
+      "assumed_gaps": [
+        "No upstream 'ollama launch hermes' contract is available.",
         "Compatibility is guaranteed by the internal adapter contract and tests."
       ]
     },

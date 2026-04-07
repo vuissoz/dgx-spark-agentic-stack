@@ -8,11 +8,12 @@ Le suivi `dgx-spark-agentic-stack-7gw` demande une formalisation explicite, vers
 - `opencode`,
 - `openclaw`,
 - `openhands`,
-- `vibestral`.
+- `vibestral`,
+- `hermes`.
 
 Contrainte principale:
 - `opencode` et `openclaw` ont un contrat upstream visible via `ollama launch`.
-- `openhands` et `vibestral` n'ont pas un contrat upstream `ollama launch` equivalent et reposent sur des adapters internes du stack.
+- `openhands`, `vibestral` et `hermes` n'ont pas un contrat upstream `ollama launch` equivalent et reposent sur des adapters internes du stack.
 
 Sans matrice formelle:
 - la frontiere entre "alignement launch-supported" et "adapter interne" reste implicite,
@@ -32,7 +33,7 @@ Sans matrice formelle:
    - ecarts assumes.
 4. Ajouter des tests de contrat dedies:
    - `tests/L8_ollama_launch_alignment_contracts.sh` pour `opencode/openclaw`,
-   - `tests/L9_ollama_internal_adapter_contracts.sh` pour `openhands/vibestral`.
+   - `tests/L9_ollama_internal_adapter_contracts.sh` pour `openhands/vibestral/hermes`.
 5. Etendre le watcher de drift Ollama avec un filtre de scope:
    - `--sources <csv>` pour verifier un sous-ensemble de contrats upstream.
 

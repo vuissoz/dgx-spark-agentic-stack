@@ -5,6 +5,7 @@ Ce runbook formalise la strategie de compatibilite des integrations agents autou
 - `openclaw`
 - `openhands`
 - `vibestral`
+- `hermes`
 - `pi-mono`
 
 Source versionnee machine-readable:
@@ -18,6 +19,7 @@ Source versionnee machine-readable:
 | `openclaw` | `launch-supported` | `docs/integrations/openclaw.mdx` | Adapter core inspire launch avec profil versionne (`openclaw`) | `http://openclaw:8111` | `OPENCLAW_AUTH_TOKEN_FILE`, `OPENCLAW_WEBHOOK_SECRET_FILE`, `OPENCLAW_PROFILE_FILE`, `OPENCLAW_SANDBOX_URL`, `OPENCLAW_SANDBOX_AUTH_TOKEN_FILE`, `OPENCLAW_SANDBOX_PROFILE_FILE` |
 | `openhands` | `adapter-internal` | Contrat stack (`compose.ui` + onboarding) | Bootstrap `openhands.env` + `settings.json` | `http://ollama-gate:11435/v1` | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
 | `vibestral` | `adapter-internal` | Contrat stack (`entrypoint` + `compose.agents`) | Generation de `~/.vibe/config.toml` vers `ollama-gate` | `http://ollama-gate:11435/v1` | `AGENTIC_OLLAMA_GATE_V1_URL`, `AGENTIC_DEFAULT_MODEL`, `OLLAMA_BASE_URL` |
+| `hermes` | `adapter-internal` | Contrat stack (`entrypoint` + `compose.agents`) | Reconciliation de `HERMES_HOME/{config.yaml,.env}` vers `ollama-gate` | `http://ollama-gate:11435/v1` | `HERMES_HOME`, `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
 | `pi-mono` | `adapter-internal` | Contrat stack (`compose.optional` + `entrypoint`) | Reconciliation de `~/.pi/agent/{models,settings}.json` vers `ollama-gate` | `http://ollama-gate:11435/v1` | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `AGENTIC_DEFAULT_MODEL` |
 
 ## Tests de contrat dedies
@@ -29,9 +31,9 @@ Source versionnee machine-readable:
   - execute un drift-watch cible (`--sources opencode,openclaw`) et detecte explicitement une regression d'invariant;
   - valide le contrat de bootstrap opencode (`opencode.json` reconcile sur `ollama/<AGENTIC_DEFAULT_MODEL>` quand le service est lance).
 
-### OpenHands/Vibestral: adapters internes + non-regression
+### OpenHands/Vibestral/Hermes: adapters internes + non-regression
 - `tests/L9_ollama_internal_adapter_contracts.sh`
-  - valide que la matrice marque `openhands` et `vibestral` en `adapter-internal`;
+  - valide que la matrice marque `openhands`, `vibestral` et `hermes` en `adapter-internal`;
   - verifie les invariants de config stack (`compose.ui`, `entrypoint`, onboarding);
   - ajoute des assertions runtime opportunistes si les services sont deja lances.
 
@@ -44,7 +46,7 @@ Source versionnee machine-readable:
 ## Ecarts assumes (explicites)
 
 - `openclaw`: la stack n'appelle pas directement `ollama launch openclaw`; elle implemente un adapter core inspire du contrat observable, avec profil versionne bootstrappe au runtime.
-- `openhands` et `vibestral`: il n'existe pas de contrat `ollama launch` officiel equivalent; la compatibilite repose sur un adapter interne versionne et teste.
+- `openhands`, `vibestral` et `hermes`: il n'existe pas de contrat `ollama launch` officiel equivalent; la compatibilite repose sur un adapter interne versionne et teste.
 
 ## Contrat de maintenance
 

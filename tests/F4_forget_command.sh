@@ -58,6 +58,7 @@ AGENTIC_PROFILE=rootless-dev AGENTIC_ROOT="${runtime_root}" \
 ok "runtime initialized for forget command checks"
 
 touch "${agent_workspaces_root}/vibestral/workspaces/.f4-vibestral-marker"
+touch "${agent_workspaces_root}/hermes/workspaces/.f4-hermes-marker"
 touch "${agent_workspaces_root}/codex/workspaces/.f4-codex-marker"
 touch "${agent_workspaces_root}/claude/workspaces/.f4-claude-marker"
 
@@ -80,6 +81,14 @@ backup_count="$(find "${runtime_root}/deployments/forget-backups" -maxdepth 1 -t
 [[ "${backup_count}" -gt 0 ]] || fail "forget vibestral must produce a backup archive by default"
 ok "forget vibestral creates backup archive"
 
+run_agent forget hermes --yes --no-backup >/tmp/agent-f4-hermes.out
+[[ ! -e "${agent_workspaces_root}/hermes/workspaces/.f4-hermes-marker" ]] \
+  || fail "hermes marker must be removed after forget hermes"
+[[ -d "${agent_workspaces_root}/hermes/workspaces" ]] || fail "hermes workspace dir must be recreated"
+[[ -d "${runtime_root}/hermes/state" ]] || fail "hermes state dir must be recreated"
+[[ -d "${runtime_root}/hermes/logs" ]] || fail "hermes logs dir must be recreated"
+ok "forget hermes recreates runtime layout"
+
 run_agent forget codex --yes --no-backup >/tmp/agent-f4-codex.out
 [[ ! -e "${agent_workspaces_root}/codex/workspaces/.f4-codex-marker" ]] \
   || fail "codex marker must be removed after forget codex"
@@ -94,6 +103,7 @@ ok "forget command is idempotent for codex target"
 changes_log="${runtime_root}/deployments/changes.log"
 [[ -s "${changes_log}" ]] || fail "forget command must append to changes.log"
 grep -q 'target=vibestral' "${changes_log}" || fail "changes.log missing vibestral forget entry"
+grep -q 'target=hermes' "${changes_log}" || fail "changes.log missing hermes forget entry"
 grep -q 'target=codex' "${changes_log}" || fail "changes.log missing codex forget entry"
 ok "forget command logs actions in changes.log"
 

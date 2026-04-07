@@ -19,8 +19,8 @@ For the versioned Ollama integration compatibility matrix (launch-supported vs i
 
 Unless explicitly stated otherwise, examples in this document describe the current recommended development flow in `rootless-dev`.
 For baseline agent workspace paths, prefer the `AGENTIC_*_WORKSPACES_DIR` variables over hardcoded host paths:
-- `strict-prod` defaults to `${AGENTIC_ROOT}/{claude,codex,opencode,vibestral}/workspaces`
-- `rootless-dev` defaults to `${AGENTIC_ROOT}/agent-workspaces/{claude,codex,opencode,vibestral}/workspaces`
+- `strict-prod` defaults to `${AGENTIC_ROOT}/{claude,codex,opencode,vibestral,hermes}/workspaces`
+- `rootless-dev` defaults to `${AGENTIC_ROOT}/agent-workspaces/{claude,codex,opencode,vibestral,hermes}/workspaces`
 
 ## Platform Features (Cross-Cutting)
 
@@ -173,6 +173,7 @@ Primary CLI contract per baseline service:
 - `agentic-codex` -> `codex`
 - `agentic-opencode` -> `opencode`
 - `agentic-vibestral` -> `vibe`
+- `agentic-hermes` -> `hermes`
 
 ### `agentic-claude`
 - `./agent claude <project>`
@@ -210,9 +211,19 @@ Primary CLI contract per baseline service:
 - Persistence:
   - `${AGENTIC_ROOT}/vibestral/state`
   - `${AGENTIC_ROOT}/vibestral/logs`
-  - `${AGENTIC_VIBESTRAL_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/vibestral/workspaces` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces/vibestral/workspaces` in `rootless-dev`)
+- `${AGENTIC_VIBESTRAL_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/vibestral/workspaces` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces/vibestral/workspaces` in `rootless-dev`)
 - Why it exists:
-  - extends the same hardened, persistent agent runtime model to a fourth first-class agent tool.
+  - extends the same hardened, persistent agent runtime model to a first-class Vibe runtime with stack-managed gateway defaults.
+
+### `agentic-hermes`
+- `./agent hermes <project>`
+- Role: Hermes-oriented agent workspace runtime.
+- Persistence:
+  - `${AGENTIC_ROOT}/hermes/state`
+  - `${AGENTIC_ROOT}/hermes/logs`
+  - `${AGENTIC_HERMES_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/hermes/workspaces` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces/hermes/workspaces` in `rootless-dev`)
+- Why it exists:
+  - extends the same hardened, persistent agent runtime model to Hermes with a stack-managed OpenAI-compatible config routed through `ollama-gate`.
 
 ### Shared agent paths
 - `${AGENTIC_ROOT}/shared-ro` mounted read-only into agent containers.
@@ -415,7 +426,7 @@ Key implemented capabilities:
   - `agent vm cleanup [--name ... --yes --dry-run]`
 - profile and model store utilities:
   - `agent profile`
-  - `agent onboard [runtime flags...] [--agent-workspaces-root ... --claude-workspaces-dir ... --codex-workspaces-dir ... --opencode-workspaces-dir ... --vibestral-workspaces-dir ... --openhands-workspaces-dir ... --openclaw-workspaces-dir ... --openclaw-init-project ... --pi-mono-workspaces-dir ... --goose-workspaces-dir ... --compose-profiles ... --default-model ... --default-model-context-window ... --trtllm-models ... --openwebui-admin-email ... --openwebui-admin-password ... --openwebui-allow-model-pull <true|false> --grafana-admin-user ... --grafana-admin-password ... --openhands-llm-model ... --allowlist-domains ... --huggingface-token ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --optional-modules ... --output ... --non-interactive --require-complete]`
+  - `agent onboard [runtime flags...] [--agent-workspaces-root ... --claude-workspaces-dir ... --codex-workspaces-dir ... --opencode-workspaces-dir ... --vibestral-workspaces-dir ... --hermes-workspaces-dir ... --openhands-workspaces-dir ... --openclaw-workspaces-dir ... --openclaw-init-project ... --pi-mono-workspaces-dir ... --goose-workspaces-dir ... --compose-profiles ... --default-model ... --default-model-context-window ... --trtllm-models ... --openwebui-admin-email ... --openwebui-admin-password ... --openwebui-allow-model-pull <true|false> --grafana-admin-user ... --grafana-admin-password ... --openhands-llm-model ... --allowlist-domains ... --huggingface-token ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --optional-modules ... --output ... --non-interactive --require-complete]`
   - `agent ollama-link`
   - `agent ollama-preload ...`
   - `agent ollama-models [status|rw|ro]`

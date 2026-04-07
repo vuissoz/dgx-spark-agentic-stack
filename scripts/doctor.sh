@@ -113,7 +113,7 @@ compaction_danger_tokens_expected="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}
 service_requires_proxy_env() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|agentic-hermes|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
       return 0
       ;;
     *)
@@ -149,7 +149,7 @@ service_allows_readwrite_rootfs() {
 service_git_forge_ssh_private_key_candidates() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|optional-pi-mono|optional-goose)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|agentic-hermes|optional-pi-mono|optional-goose)
       printf '%s\n' "/state/home/.ssh/id_ed25519" "/home/agent/.ssh/id_ed25519"
       ;;
     openclaw)
@@ -177,7 +177,7 @@ service_git_forge_known_hosts_path() {
 service_is_agent_cli() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|agentic-hermes)
       return 0
       ;;
     *)
@@ -193,6 +193,7 @@ service_git_forge_account() {
     agentic-codex) printf '%s\n' "codex" ;;
     agentic-opencode) printf '%s\n' "opencode" ;;
     agentic-vibestral) printf '%s\n' "vibestral" ;;
+    agentic-hermes) printf '%s\n' "hermes" ;;
     openclaw) printf '%s\n' "openclaw" ;;
     openhands) printf '%s\n' "openhands" ;;
     comfyui) printf '%s\n' "comfyui" ;;
@@ -1657,7 +1658,7 @@ if [[ -n "${opensearch_cid}" ]]; then
 fi
 
 agents_found=0
-for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; do
+for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral agentic-hermes; do
   cid="$(service_container_id "${service}")"
   [[ -n "${cid}" ]] || continue
   agents_found=1
@@ -1671,6 +1672,11 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
   fi
   if ! echo "${env_dump}" | grep -q '^HOME=/state/home$'; then
     doctor_fail "agent '${service}' must set HOME=/state/home"
+  fi
+  if [[ "${service}" == "agentic-hermes" ]]; then
+    if ! echo "${env_dump}" | grep -q '^HERMES_HOME=/state/home/.hermes$'; then
+      doctor_fail "agent '${service}' must set HERMES_HOME=/state/home/.hermes"
+    fi
   fi
   if ! echo "${env_dump}" | grep -q '^OLLAMA_BASE_URL=http://ollama-gate:11435$'; then
     doctor_fail "agent '${service}' must set OLLAMA_BASE_URL=http://ollama-gate:11435"
@@ -1694,6 +1700,17 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral; 
 
   if ! timeout 15 docker exec "${cid}" sh -lc 'test -d /state/home && test -w /state/home'; then
     doctor_fail "agent '${service}' home directory is not writable (/state/home)"
+  fi
+  if [[ "${service}" == "agentic-hermes" ]]; then
+    if ! timeout 15 docker exec "${cid}" sh -lc '
+      test -d /state/home/.hermes &&
+      test -f /state/home/.hermes/config.yaml &&
+      grep -q "^  base_url: \"http://ollama-gate:11435/v1\"$" /state/home/.hermes/config.yaml &&
+      grep -q "^OPENAI_BASE_URL=http://ollama-gate:11435/v1$" /state/home/.hermes/.env &&
+      grep -q "^OPENAI_API_KEY=local-ollama$" /state/home/.hermes/.env
+    '; then
+      doctor_fail "agent '${service}' Hermes config must be reconciled to ollama-gate"
+    fi
   fi
   if ! timeout 15 docker exec "${cid}" sh -lc ". /state/bootstrap/ollama-gate-defaults.env && \
     test \"\${OPENAI_BASE_URL}\" = 'http://ollama-gate:11435/v1' && \
@@ -2446,6 +2463,7 @@ expected = {
     "agent/pi-mono",
     "agent/goose",
     "agent/vibestral",
+    "agent/hermes",
 }
 
 assert reference_repo == "eight-queens-agent-e2e"

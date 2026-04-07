@@ -44,7 +44,8 @@ cat >"${bootstrap_dir}/git-forge-bootstrap.json" <<'JSON'
       "agent/openhands",
       "agent/pi-mono",
       "agent/goose",
-      "agent/vibestral"
+      "agent/vibestral",
+      "agent/hermes"
     ]
   },
   "managed_users": [
@@ -55,6 +56,7 @@ cat >"${bootstrap_dir}/git-forge-bootstrap.json" <<'JSON'
     "codex",
     "opencode",
     "vibestral",
+    "hermes",
     "pi-mono",
     "goose"
   ],
@@ -77,7 +79,7 @@ results = payload.get("results")
 doctor = payload.get("doctor")
 preflight = payload.get("preflight")
 
-assert isinstance(results, list) and len(results) == 8
+assert isinstance(results, list) and len(results) == 9
 assert isinstance(doctor, dict)
 assert isinstance(preflight, dict)
 assert doctor.get("overall") == "partial"
@@ -87,7 +89,7 @@ assert preflight.get("attempts_requested") == 5
 assert preflight.get("validation_policy") == "at_least_one_success"
 assert preflight.get("success_threshold") == 1
 assert preflight.get("attempt_reset_policy") == "none"
-assert doctor.get("attempt_totals") == {"requested": 40, "successes": 0, "failures": 40}
+assert doctor.get("attempt_totals") == {"requested": 45, "successes": 0, "failures": 45}
 assert doctor.get("validation_policy") == "at_least_one_success"
 assert doctor.get("success_threshold") == 1
 
@@ -101,6 +103,7 @@ expected = {
     "pi-mono": "agent/pi-mono",
     "goose": "agent/goose",
     "vibestral": "agent/vibestral",
+    "hermes": "agent/hermes",
 }
 assert set(agents) == set(expected)
 for agent, branch in expected.items():
@@ -157,7 +160,7 @@ assert preflight.get("validation_policy") == "at_least_one_success"
 assert preflight.get("success_threshold") == 1
 assert preflight.get("attempt_reset_policy") == "before_each_attempt"
 branches = preflight.get("branches") or {}
-assert len(branches) == 8
+assert len(branches) == 9
 for entry in branches.values():
     assert entry["reset_applied"] is False
 PY

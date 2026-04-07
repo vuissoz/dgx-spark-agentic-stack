@@ -88,6 +88,13 @@ MANAGED_ACCOUNTS = (
         "container_home": "/state/home",
     },
     {
+        "username": "hermes",
+        "display_name": "Hermes",
+        "email": "hermes@forge.agentic.local",
+        "host_home": pathlib.Path(AGENTIC_ROOT) / "hermes" / "state" / "home",
+        "container_home": "/state/home",
+    },
+    {
         "username": "pi-mono",
         "display_name": "Pi Mono",
         "email": "pi-mono@forge.agentic.local",
@@ -116,7 +123,7 @@ TEAM_UNITS = [
 
 REFERENCE_AGENT_BRANCHES = tuple(
     f"agent/{name}"
-    for name in ("codex", "openclaw", "claude", "opencode", "openhands", "pi-mono", "goose", "vibestral")
+    for name in ("codex", "openclaw", "claude", "opencode", "openhands", "pi-mono", "goose", "vibestral", "hermes")
 )
 
 

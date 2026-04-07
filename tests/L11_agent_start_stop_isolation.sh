@@ -31,7 +31,7 @@ export AGENTIC_DOCTOR_CRITICAL_PORTS="${OLLAMA_HOST_PORT},${OPENCLAW_WEBHOOK_HOS
 export AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC=10
 export GATE_ENABLE_TEST_MODE=1
 
-agent_services=(agentic-claude agentic-codex agentic-opencode agentic-vibestral)
+agent_services=(agentic-claude agentic-codex agentic-opencode agentic-vibestral agentic-hermes)
 core_services=(ollama ollama-gate gate-mcp egress-proxy unbound)
 
 cleanup() {
@@ -140,7 +140,7 @@ for service in "${core_services[@]}" "${agent_services[@]}"; do
   wait_for_container_ready "${cid}" 120 || fail "service '${service}' did not become ready"
 done
 
-for tool in claude codex opencode vibestral; do
+for tool in claude codex opencode vibestral hermes; do
   prepare_agent_session "${tool}" "agentic-${tool}"
 done
 
@@ -195,5 +195,17 @@ wait_for_container_ready "$(require_service_container agentic-vibestral)" 90 || 
 assert_unrelated_services_healthy ""
 assert_ls_status "vibestral" "running" "up"
 prepare_agent_session "vibestral" "agentic-vibestral"
+
+"${agent_bin}" stop hermes >/tmp/agent-l11-stop-hermes.out \
+  || fail "agent stop hermes failed"
+assert_service_state "agentic-hermes" "exited"
+assert_unrelated_services_healthy "agentic-hermes"
+assert_ls_status "hermes" "down" "-"
+"${agent_bin}" start service agentic-hermes >/tmp/agent-l11-start-hermes.out \
+  || fail "agent start service agentic-hermes failed"
+wait_for_container_ready "$(require_service_container agentic-hermes)" 90 || fail "agentic-hermes did not recover after restart"
+assert_unrelated_services_healthy ""
+assert_ls_status "hermes" "running" "up"
+prepare_agent_session "hermes" "agentic-hermes"
 
 ok "L11_agent_start_stop_isolation passed"

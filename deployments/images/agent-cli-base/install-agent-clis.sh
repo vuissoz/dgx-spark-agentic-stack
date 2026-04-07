@@ -13,6 +13,12 @@ openhands_install_script="${OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.
 openclaw_install_script="${OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}"
 openclaw_install_version="${OPENCLAW_INSTALL_VERSION:-latest}"
 vibe_install_script="${VIBE_INSTALL_SCRIPT:-https://mistral.ai/vibe/install.sh}"
+hermes_git_url="${HERMES_AGENT_GIT_URL:-https://github.com/NousResearch/hermes-agent.git}"
+hermes_git_ref="${HERMES_AGENT_GIT_REF:-v2026.4.3}"
+hermes_git_sha="${HERMES_AGENT_GIT_SHA:-abf1e98f6253f6984479fe03d1098173a9b065a7}"
+hermes_pip_extras="${HERMES_PIP_EXTRAS:-pty,cli}"
+hermes_install_dir="${HERMES_INSTALL_DIR:-/opt/agentic/hermes-agent}"
+hermes_venv_dir="${HERMES_VENV_DIR:-/opt/agentic/hermes-venv}"
 
 status_file="/etc/agentic/cli-install-status.tsv"
 
@@ -115,6 +121,75 @@ track_cli_after_install() {
   return 1
 }
 
+install_hermes_cli() {
+  local repo_url="$1"
+  local repo_ref="$2"
+  local repo_sha="$3"
+  local extras="$4"
+  local actual_sha=""
+  local pip_target=""
+
+  rm -rf "${hermes_install_dir}" "${hermes_venv_dir}"
+
+  if ! git clone --depth 1 --branch "${repo_ref}" "${repo_url}" "${hermes_install_dir}"; then
+    if ! git clone --depth 1 "${repo_url}" "${hermes_install_dir}"; then
+      record_cli_path hermes "" "missing"
+      fail_or_warn "unable to clone Hermes Agent from ${repo_url}@${repo_ref}"
+      return 1
+    fi
+    (
+      cd "${hermes_install_dir}"
+      git fetch --depth 1 origin "${repo_ref}"
+      git checkout --detach FETCH_HEAD
+    ) || {
+      record_cli_path hermes "" "missing"
+      fail_or_warn "unable to checkout Hermes Agent ref ${repo_ref}"
+      return 1
+    }
+  fi
+
+  actual_sha="$(git -C "${hermes_install_dir}" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "${repo_sha}" && -n "${actual_sha}" && "${actual_sha}" != "${repo_sha}" ]]; then
+    record_cli_path hermes "" "missing"
+    fail_or_warn "Hermes Agent SHA mismatch: expected ${repo_sha}, got ${actual_sha}"
+    return 1
+  fi
+
+  python3 -m venv "${hermes_venv_dir}" || {
+    record_cli_path hermes "" "missing"
+    fail_or_warn "unable to create Hermes virtualenv at ${hermes_venv_dir}"
+    return 1
+  }
+
+  "${hermes_venv_dir}/bin/pip" install --no-cache-dir --upgrade pip setuptools wheel >/dev/null || {
+    record_cli_path hermes "" "missing"
+    fail_or_warn "unable to prepare Hermes virtualenv tooling"
+    return 1
+  }
+
+  pip_target="${hermes_install_dir}"
+  if [[ -n "${extras}" ]]; then
+    pip_target="${pip_target}[${extras}]"
+  fi
+
+  if "${hermes_venv_dir}/bin/pip" install --no-cache-dir "${pip_target}"; then
+    track_cli_after_install hermes "${hermes_venv_dir}/bin/hermes" \
+      || fail_or_warn "Hermes install completed but executable was not found"
+    cat > /etc/agentic/hermes-install-source <<EOF
+url=${repo_url}
+ref=${repo_ref}
+sha=${actual_sha:-unknown}
+extras=${extras}
+install_dir=${hermes_install_dir}
+venv_dir=${hermes_venv_dir}
+EOF
+    chmod 0644 /etc/agentic/hermes-install-source
+  else
+    record_cli_path hermes "" "missing"
+    fail_or_warn "unable to install Hermes Agent from ${repo_url}@${repo_ref}"
+  fi
+}
+
 install_npm_cli() {
   local cli="$1"
   local spec="$2"
@@ -191,10 +266,15 @@ else
   fail_or_warn "unable to install openclaw from ${openclaw_install_script}"
 fi
 
-for cli in codex claude opencode pi vibe openhands openclaw; do
+install_hermes_cli "${hermes_git_url}" "${hermes_git_ref}" "${hermes_git_sha}" "${hermes_pip_extras}" || true
+
+for cli in codex claude opencode pi vibe openhands openclaw hermes; do
   if [[ ! -f "/etc/agentic/${cli}-real-path" ]]; then
     record_cli_path "${cli}" "" "missing"
   fi
 done
 
-chmod -R a+rX "${npm_prefix}" "${install_home}" "${openclaw_prefix}"
+for readable_dir in "${npm_prefix}" "${install_home}" "${openclaw_prefix}" "${hermes_install_dir}" "${hermes_venv_dir}"; do
+  [[ -e "${readable_dir}" ]] || continue
+  chmod -R a+rX "${readable_dir}"
+done

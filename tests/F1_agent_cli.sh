@@ -19,14 +19,17 @@ assert_cmd docker
 claude_cid="$(require_service_container agentic-claude)" || exit 1
 codex_cid="$(require_service_container agentic-codex)" || exit 1
 vibestral_cid="$(require_service_container agentic-vibestral)" || exit 1
+hermes_cid="$(require_service_container agentic-hermes)" || exit 1
 wait_for_container_ready "${claude_cid}" 60 || fail "agentic-claude is not ready"
 wait_for_container_ready "${codex_cid}" 60 || fail "agentic-codex is not ready"
 wait_for_container_ready "${vibestral_cid}" 60 || fail "agentic-vibestral is not ready"
+wait_for_container_ready "${hermes_cid}" 60 || fail "agentic-hermes is not ready"
 
 ls_output="$("${agent_bin}" ls)"
 printf '%s\n' "${ls_output}" | grep -q '^tool' || fail "agent ls output is missing header"
 printf '%s\n' "${ls_output}" | grep -q '^claude' || fail "agent ls output is missing claude row"
 printf '%s\n' "${ls_output}" | grep -q '^vibestral' || fail "agent ls output is missing vibestral row"
+printf '%s\n' "${ls_output}" | grep -q '^hermes' || fail "agent ls output is missing hermes row"
 printf '%s\n' "${ls_output}" | grep -q '^openclaw' || fail "agent ls output is missing openclaw row"
 printf '%s\n' "${ls_output}" | grep -q '^pi-mono' || fail "agent ls output is missing pi-mono row"
 printf '%s\n' "${ls_output}" | grep -q '^goose' || fail "agent ls output is missing goose row"
@@ -75,5 +78,19 @@ vibestral_path="$(timeout 20 docker exec "${vibestral_cid}" tmux display-message
 [[ "${vibestral_path}" == "/workspace/${vibestral_project}" ]] \
   || fail "agent vibestral tmux pane path mismatch (expected=/workspace/${vibestral_project}, actual=${vibestral_path})"
 ok "agent vibestral prepares tmux session, workspace, and vibe CLI runtime"
+
+hermes_project="f1-hermes-${USER:-agent}-$$"
+AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${hermes_project}" "${agent_bin}" hermes >/tmp/agent-f1-hermes.out
+
+timeout 20 docker exec "${hermes_cid}" tmux has-session -t hermes \
+  || fail "agent hermes did not create/keep tmux session"
+timeout 20 docker exec "${hermes_cid}" sh -lc "test -d '/workspace/${hermes_project}'" \
+  || fail "agent hermes did not create project workspace /workspace/${hermes_project}"
+timeout 20 docker exec "${hermes_cid}" sh -lc 'command -v hermes >/dev/null' \
+  || fail "agent hermes runtime is missing hermes CLI"
+hermes_path="$(timeout 20 docker exec "${hermes_cid}" tmux display-message -p -t hermes '#{pane_current_path}')"
+[[ "${hermes_path}" == "/workspace/${hermes_project}" ]] \
+  || fail "agent hermes tmux pane path mismatch (expected=/workspace/${hermes_project}, actual=${hermes_path})"
+ok "agent hermes prepares tmux session, workspace, and hermes CLI runtime"
 
 ok "F1_agent_cli passed"

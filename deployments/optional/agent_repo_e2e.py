@@ -43,6 +43,7 @@ AGENT_MATRIX = {
     "pi-mono": {"service": "optional-pi-mono", "branch": "agent/pi-mono", "mode": "pi"},
     "goose": {"service": "optional-goose", "branch": "agent/goose", "mode": "goose"},
     "vibestral": {"service": "agentic-vibestral", "branch": "agent/vibestral", "mode": "vibe"},
+    "hermes": {"service": "agentic-hermes", "branch": "agent/hermes", "mode": "hermes"},
 }
 
 
@@ -591,6 +592,11 @@ def build_agent_command(mode: str, workspace: str, prompt: str) -> str | None:
         return f"cd {quoted_workspace} && opencode run --format json --dir {quoted_workspace} {quoted_prompt}"
     if mode == "vibe":
         return f"cd {quoted_workspace} && vibe -p {quoted_prompt} --output json --workdir {quoted_workspace} --max-turns 40"
+    if mode == "hermes":
+        return (
+            f"cd {quoted_workspace} && "
+            f"hermes chat -q {quoted_prompt} -Q --max-turns 40"
+        )
     if mode == "pi":
         return f"cd {quoted_workspace} && pi -p {quoted_prompt}"
     if mode == "goose":

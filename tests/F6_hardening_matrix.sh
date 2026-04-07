@@ -59,8 +59,8 @@ strict_root_required = {
 if profile == "strict-prod":
     strict_root_required.add("ollama")
     strict_root_required.add("promtail")
-readwrite_rootfs_exceptions = {"ollama", "egress-proxy", "opensearch"}
-agent_services = {"agentic-claude", "agentic-codex", "agentic-opencode", "agentic-vibestral"}
+readwrite_rootfs_exceptions = {"ollama", "egress-proxy", "opensearch", "optional-forgejo"}
+agent_services = {"agentic-claude", "agentic-codex", "agentic-opencode", "agentic-vibestral", "agentic-hermes"}
 agent_nnp = os.environ.get("AGENTIC_AGENT_NO_NEW_PRIVILEGES", "true").strip().lower()
 if agent_nnp not in {"true", "false"}:
     agent_nnp = "true"

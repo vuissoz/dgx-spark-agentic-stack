@@ -83,6 +83,7 @@ users = [
     "codex",
     "opencode",
     "vibestral",
+    "hermes",
     "pi-mono",
     "goose",
 ]
@@ -127,6 +128,7 @@ expected = {
     "agent/pi-mono",
     "agent/goose",
     "agent/vibestral",
+    "agent/hermes",
 }
 assert branches == expected
 assert branch_policy.get("protected_branch") == "main"
@@ -137,6 +139,7 @@ for mapping in \
   "agentic-codex|codex" \
   "agentic-opencode|opencode" \
   "agentic-vibestral|vibestral" \
+  "agentic-hermes|hermes" \
   "openclaw|openclaw" \
   "openhands|openhands" \
   "comfyui|comfyui" \

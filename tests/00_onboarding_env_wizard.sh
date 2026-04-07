@@ -48,6 +48,7 @@ run_override_answers() {
   local custom_codex_workspace="${work_dir}/custom-workspaces/codex"
   local custom_opencode_workspace="${work_dir}/custom-workspaces/opencode"
   local custom_vibestral_workspace="${work_dir}/custom-workspaces/vibestral"
+  local custom_hermes_workspace="${work_dir}/custom-workspaces/hermes"
   local custom_openhands_workspace="${work_dir}/custom-workspaces/openhands"
   local custom_openclaw_workspace="${work_dir}/custom-workspaces/openclaw"
   local custom_openclaw_init_project="wizard-openclaw"
@@ -68,6 +69,7 @@ ${custom_claude_workspace}
 ${custom_codex_workspace}
 ${custom_opencode_workspace}
 ${custom_vibestral_workspace}
+${custom_hermes_workspace}
 ${custom_openhands_workspace}
 ${custom_openclaw_workspace}
 ${custom_openclaw_init_project}
@@ -84,6 +86,10 @@ ${custom_trt_models}
 
 0.55
 640m
+
+
+
+
 
 
 
@@ -207,6 +213,8 @@ grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='/srv/agentic/opencode/workspac
   || fail "default AGENTIC_OPENCODE_WORKSPACES_DIR is not /srv/agentic/opencode/workspaces"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='/srv/agentic/vibestral/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not /srv/agentic/vibestral/workspaces"
+grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='/srv/agentic/hermes/workspaces'$" "${default_env_file}" \
+  || fail "default AGENTIC_HERMES_WORKSPACES_DIR is not /srv/agentic/hermes/workspaces"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='/srv/agentic/openhands/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_OPENHANDS_WORKSPACES_DIR is not /srv/agentic/openhands/workspaces"
 grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='/srv/agentic/openclaw/workspaces'$" "${default_env_file}" \
@@ -324,6 +332,8 @@ grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/custom-workspaces/
   || fail "override AGENTIC_OPENCODE_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/custom-workspaces/vibestral'$" "${override_env_file}" \
   || fail "override AGENTIC_VIBESTRAL_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='${work_dir}/custom-workspaces/hermes'$" "${override_env_file}" \
+  || fail "override AGENTIC_HERMES_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/custom-workspaces/openhands'$" "${override_env_file}" \
   || fail "override AGENTIC_OPENHANDS_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/custom-workspaces/openclaw'$" "${override_env_file}" \
@@ -424,6 +434,8 @@ grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/rootless-default-r
   || fail "rootless default AGENTIC_OPENCODE_WORKSPACES_DIR is not <root>/agent-workspaces/opencode/workspaces"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/rootless-default-root/agent-workspaces/vibestral/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not <root>/agent-workspaces/vibestral/workspaces"
+grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='${work_dir}/rootless-default-root/agent-workspaces/hermes/workspaces'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_HERMES_WORKSPACES_DIR is not <root>/agent-workspaces/hermes/workspaces"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/rootless-default-root/openhands/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_OPENHANDS_WORKSPACES_DIR is not <root>/openhands/workspaces"
 grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/rootless-default-root/openclaw/workspaces'$" "${rootless_default_env_file}" \
@@ -524,6 +536,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --codex-workspaces-dir "${work_dir}/ni-workspaces/codex" \
   --opencode-workspaces-dir "${work_dir}/ni-workspaces/opencode" \
   --vibestral-workspaces-dir "${work_dir}/ni-workspaces/vibestral" \
+  --hermes-workspaces-dir "${work_dir}/ni-workspaces/hermes" \
   --openhands-workspaces-dir "${work_dir}/ni-workspaces/openhands" \
   --openclaw-workspaces-dir "${work_dir}/ni-workspaces/openclaw" \
   --pi-mono-workspaces-dir "${work_dir}/ni-workspaces/pi-mono" \
@@ -588,6 +601,8 @@ grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/ni-workspaces/open
   || fail "non-interactive AGENTIC_OPENCODE_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/ni-workspaces/vibestral'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_VIBESTRAL_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='${work_dir}/ni-workspaces/hermes'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_HERMES_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENHANDS_WORKSPACES_DIR='${work_dir}/ni-workspaces/openhands'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_OPENHANDS_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENCLAW_WORKSPACES_DIR='${work_dir}/ni-workspaces/openclaw'$" "${non_interactive_env_file}" \

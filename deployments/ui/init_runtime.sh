@@ -236,6 +236,7 @@ main() {
     codex
     opencode
     vibestral
+    hermes
     pi-mono
     goose
   )

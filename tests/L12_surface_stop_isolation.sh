@@ -33,7 +33,7 @@ export OPENCLAW_WEBHOOK_HOST_PORT="38111"
 export OPENCLAW_GATEWAY_HOST_PORT="38789"
 export OPENCLAW_RELAY_HOST_PORT="38112"
 
-targets=(claude codex opencode vibestral openclaw pi-mono goose openwebui openhands comfyui)
+targets=(claude codex opencode vibestral hermes openclaw pi-mono goose openwebui openhands comfyui)
 
 cleanup() {
   AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" down optional >/tmp/agent-l12-down-optional.out 2>&1 || true
@@ -57,6 +57,7 @@ target_services() {
     codex) printf '%s\n' "agentic-codex" ;;
     opencode) printf '%s\n' "agentic-opencode" ;;
     vibestral) printf '%s\n' "agentic-vibestral" ;;
+    hermes) printf '%s\n' "agentic-hermes" ;;
     openclaw)
       printf '%s\n' \
         "openclaw" \
@@ -120,6 +121,7 @@ all_services=(
   agentic-codex
   agentic-opencode
   agentic-vibestral
+  agentic-hermes
   openclaw
   openclaw-gateway
   openclaw-provider-bridge

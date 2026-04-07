@@ -24,7 +24,7 @@ The canonical runtime root depends on profile:
 - `/srv/agentic/rag/`
 - `/srv/agentic/rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `/srv/agentic/monitoring/`
-- `/srv/agentic/{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
+- `/srv/agentic/{claude,codex,opencode,vibestral,hermes}/{state,logs,workspaces}/`
 - `/srv/agentic/optional/{mcp,git,pi-mono,goose,portainer}/`
 - `/srv/agentic/shared-ro/`
 - `/srv/agentic/shared-rw/`
@@ -33,7 +33,7 @@ The canonical runtime root depends on profile:
 ## Target directories (`rootless-dev`)
 
 The same runtime contract exists under `${HOME}/.local/share/agentic`, with one notable difference for baseline agent workspaces:
-- `${HOME}/.local/share/agentic/agent-workspaces/{claude,codex,opencode,vibestral}/workspaces/`
+- `${HOME}/.local/share/agentic/agent-workspaces/{claude,codex,opencode,vibestral,hermes}/workspaces/`
 
 Everything else stays under the profile root unless explicitly overridden:
 - `${HOME}/.local/share/agentic/openclaw/...`
