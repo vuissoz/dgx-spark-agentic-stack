@@ -242,26 +242,34 @@ Nettoyage du runtime `rootless-dev` (retour état "fresh"):
 Les services sont bindés en `127.0.0.1` sur l'hôte.  
 Conséquence: depuis un autre poste (même sur le réseau Tailscale), `http://<ip-tailscale-hote>:8080` ne fonctionne pas directement.
 
-Le mode d'accès attendu est un tunnel SSH depuis le client vers l'hôte DGX:
+Le mode d'accès attendu est un tunnel SSH depuis le client vers l'hôte DGX.
+Le dépôt fournit maintenant un générateur stack-aware pour garder les tunnels alignés sur les ports réellement configurés:
 
 ```bash
-ssh -N \
-  -L 8080:127.0.0.1:8080 \
-  -L 3000:127.0.0.1:3000 \
-  -L 8188:127.0.0.1:8188 \
-  -L 13000:127.0.0.1:13000 \
-  -L 19090:127.0.0.1:19090 \
-  -L 13100:127.0.0.1:13100 \
-  <user>@<hostname-ou-ip-tailscale>
+./agent tunnel list --all
+./agent tunnel check --all
 ```
 
-Ensuite, sur le poste client, ouvrir:
-- `http://127.0.0.1:8080` (OpenWebUI)
-- `http://127.0.0.1:3000` (OpenHands)
-- `http://127.0.0.1:8188` (ComfyUI)
-- `http://127.0.0.1:13000` (Grafana)
-- `http://127.0.0.1:19090` (Prometheus)
-- `http://127.0.0.1:13100` (Loki)
+Générer ensuite un artefact client pour la plateforme voulue:
+
+Linux ou macOS:
+
+```bash
+./agent tunnel generate linux --enabled --ssh-target <user>@<hostname-ou-ip-tailscale> --output ./agentic-tunnel.sh
+./agentic-tunnel.sh
+```
+
+Sur macOS, utilisez `macos` a la place de `linux`; l'artefact genere reste un script shell POSIX.
+
+Windows PowerShell:
+
+```powershell
+./agent tunnel generate windows --enabled --ssh-target <user>@<hostname-ou-ip-tailscale> --output .\agentic-tunnel.ps1
+.\agentic-tunnel.ps1
+```
+
+Si vous voulez toutes les surfaces loopback connues, même celles qui ne sont pas actives au moment de la génération, remplacez `--enabled` par `--all`.
+`./agent tunnel list --all` devient la source de vérité unique des surfaces tunnelables et de leurs ports résolus.
 
 Au premier démarrage de `obs`, Grafana provisionne automatiquement le dashboard
 `DGX Spark Agentic Activity Overview` (UID `dgx-spark-activity`) avec les datasources
@@ -270,21 +278,9 @@ Quand `core` est aussi actif, ce dashboard inclut maintenant `OpenClaw TCP Forwa
 et `OpenClaw TCP Forwarder Traffic`, alimentés par la cible interne
 `openclaw-gateway:9114/metrics` du forwarder de publication loopback OpenClaw.
 
-Ports utiles à tunneliser (selon les modules activés):
-- `11434` → Ollama API (`http://127.0.0.1:11434`)
-- `8080` → OpenWebUI (`http://127.0.0.1:8080`)
-- `3000` → OpenHands (`http://127.0.0.1:3000`)
-- `8188` → ComfyUI (`http://127.0.0.1:8188`)
-- `13000` → Grafana (`http://127.0.0.1:13000`)
-- `19090` → Prometheus (`http://127.0.0.1:19090`)
-- `13100` → Loki (`http://127.0.0.1:13100`)
-- `9001` → Portainer optionnel (`http://127.0.0.1:9001`)
-- `18111` → OpenClaw webhook ingress core (`http://127.0.0.1:18111`)
-- `18789` → OpenClaw upstream Web UI + Gateway WS core (`http://127.0.0.1:18789`, `ws://127.0.0.1:18789`)
-
 Notes:
-- tunneliser uniquement les ports nécessaires;
-- les ports host sont configurables via variables d'environnement (`*_HOST_PORT`) ;
+- tunneliser uniquement les ports nécessaires; le générateur accepte des sélections répétées `--surface <id>`;
+- les ports host sont configurables via variables d'environnement (`*_HOST_PORT`) et reflétés par `agent tunnel list` ;
 - `qdrant` n'est pas publié sur un port host dans la config actuelle.
 - `rag-retriever` (`7111`) et `rag-worker` (`7112`) ne sont pas publiés sur l'hôte.
 - `opensearch` (`rag-lexical`) reste interne uniquement (pas de port host publié).
@@ -321,8 +317,13 @@ ss -lntp | egrep ':(18789|18791|18792|188[0-9]{2})'
 
 ### iPhone
 
-Oui, c'est possible avec une app SSH iOS qui supporte le port forwarding local (par ex. Termius, Blink Shell, Prompt).  
-Principe identique: créer un tunnel local vers `127.0.0.1:<port>` de l'hôte, puis ouvrir `http://127.0.0.1:<port>` depuis l'iPhone (Safari ou navigateur intégré selon l'app).
+Oui. iPhone n'a pas de voie réaliste de script shell générique, donc le dépôt génère à la place un snippet de config OpenSSH:
+
+```bash
+./agent tunnel generate iphone --enabled --ssh-target <user>@<hostname-ou-ip-tailscale> --name dgx-spark --output ./dgx-spark-iphone.conf
+```
+
+Importer ou retranscrire ce snippet dans une app iPhone qui supporte les forwards locaux (par ex. Blink, ou une entrée manuelle équivalente dans Termius), se connecter, puis ouvrir `http://127.0.0.1:<port>` localement sur le téléphone.
 
 ## Commandes `agent`
 

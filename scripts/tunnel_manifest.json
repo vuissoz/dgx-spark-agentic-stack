@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "surfaces": [
+    {
+      "id": "ollama-api",
+      "label": "Ollama API",
+      "stack": "core",
+      "default": false,
+      "env_var": "OLLAMA_HOST_PORT",
+      "default_port": 11434,
+      "description": "Local Ollama-compatible HTTP API.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/api/tags"
+      ]
+    },
+    {
+      "id": "openwebui",
+      "label": "OpenWebUI",
+      "stack": "ui",
+      "default": true,
+      "env_var": "OPENWEBUI_HOST_PORT",
+      "default_port": 8080,
+      "description": "Primary chat web UI.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "openhands",
+      "label": "OpenHands",
+      "stack": "ui",
+      "default": true,
+      "env_var": "OPENHANDS_HOST_PORT",
+      "default_port": 3000,
+      "description": "Agent UI and conversation workspace.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "comfyui",
+      "label": "ComfyUI",
+      "stack": "ui",
+      "default": true,
+      "env_var": "COMFYUI_HOST_PORT",
+      "default_port": 8188,
+      "description": "Image-generation UI.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "grafana",
+      "label": "Grafana",
+      "stack": "obs",
+      "default": true,
+      "env_var": "GRAFANA_HOST_PORT",
+      "default_port": 13000,
+      "description": "Observability dashboards.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "prometheus",
+      "label": "Prometheus",
+      "stack": "obs",
+      "default": true,
+      "env_var": "PROMETHEUS_HOST_PORT",
+      "default_port": 19090,
+      "description": "Prometheus API and status pages.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "loki",
+      "label": "Loki",
+      "stack": "obs",
+      "default": true,
+      "env_var": "LOKI_HOST_PORT",
+      "default_port": 13100,
+      "description": "Loki HTTP API endpoint.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/loki/api/v1/query_range"
+      ]
+    },
+    {
+      "id": "forgejo-web",
+      "label": "Forgejo Web UI",
+      "stack": "ui",
+      "default": false,
+      "env_var": "GIT_FORGE_HOST_PORT",
+      "default_port": 13010,
+      "description": "Optional Git forge web UI.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "forgejo-ssh",
+      "label": "Forgejo SSH",
+      "stack": "ui",
+      "default": false,
+      "env_var": "GIT_FORGE_SSH_HOST_PORT",
+      "default_port": 2222,
+      "description": "Optional Git forge SSH endpoint for git remotes.",
+      "client_urls": [
+        "ssh://127.0.0.1:{port}"
+      ]
+    },
+    {
+      "id": "portainer",
+      "label": "Portainer",
+      "stack": "optional",
+      "default": false,
+      "env_var": "PORTAINER_HOST_PORT",
+      "default_port": 9001,
+      "description": "Optional Portainer web UI.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "openclaw-webhook",
+      "label": "OpenClaw API",
+      "stack": "core",
+      "default": false,
+      "env_var": "OPENCLAW_WEBHOOK_HOST_PORT",
+      "default_port": 18111,
+      "description": "OpenClaw dashboard and webhook ingress.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "openclaw-gateway",
+      "label": "OpenClaw Gateway",
+      "stack": "core",
+      "default": false,
+      "env_var": "OPENCLAW_GATEWAY_HOST_PORT",
+      "default_port": 18789,
+      "description": "OpenClaw upstream browser UI and WebSocket gateway.",
+      "client_urls": [
+        "http://127.0.0.1:{port}/",
+        "ws://127.0.0.1:{port}/"
+      ]
+    },
+    {
+      "id": "openclaw-relay",
+      "label": "OpenClaw Relay",
+      "stack": "core",
+      "default": false,
+      "env_var": "OPENCLAW_RELAY_HOST_PORT",
+      "default_port": 18112,
+      "description": "OpenClaw relay ingress (expert surface).",
+      "client_urls": [
+        "http://127.0.0.1:{port}/"
+      ]
+    }
+  ]
+}

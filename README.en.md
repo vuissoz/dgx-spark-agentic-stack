@@ -238,26 +238,34 @@ Cleanup for `rootless-dev` runtime (back to a "fresh" state):
 Services are bound on `127.0.0.1` on the host.
 Consequence: from another machine (even on the same Tailscale network), `http://<tailscale-host-ip>:8080` will not work directly.
 
-The expected access mode is an SSH tunnel from client to DGX host:
+The expected access mode is an SSH tunnel from client to DGX host.
+The repo now ships a stack-aware generator so tunnel commands stay aligned with the actual host-port contract:
 
 ```bash
-ssh -N \
-  -L 8080:127.0.0.1:8080 \
-  -L 3000:127.0.0.1:3000 \
-  -L 8188:127.0.0.1:8188 \
-  -L 13000:127.0.0.1:13000 \
-  -L 19090:127.0.0.1:19090 \
-  -L 13100:127.0.0.1:13100 \
-  <user>@<tailscale-hostname-or-ip>
+./agent tunnel list --all
+./agent tunnel check --all
 ```
 
-Then, on the client machine, open:
-- `http://127.0.0.1:8080` (OpenWebUI)
-- `http://127.0.0.1:3000` (OpenHands)
-- `http://127.0.0.1:8188` (ComfyUI)
-- `http://127.0.0.1:13000` (Grafana)
-- `http://127.0.0.1:19090` (Prometheus)
-- `http://127.0.0.1:13100` (Loki)
+Generate a client artifact for the target platform:
+
+Linux or macOS:
+
+```bash
+./agent tunnel generate linux --enabled --ssh-target <user>@<tailscale-hostname-or-ip> --output ./agentic-tunnel.sh
+./agentic-tunnel.sh
+```
+
+On macOS, use `macos` instead of `linux`; the generated artifact stays a POSIX shell script.
+
+Windows PowerShell:
+
+```powershell
+./agent tunnel generate windows --enabled --ssh-target <user>@<tailscale-hostname-or-ip> --output .\agentic-tunnel.ps1
+.\agentic-tunnel.ps1
+```
+
+If you want all known loopback-published surfaces rather than only the currently reachable ones, replace `--enabled` with `--all`.
+`./agent tunnel list --all` is the single source of truth for the tunnelable stack surfaces and resolved ports.
 
 On first `obs` startup, Grafana auto-provisions the
 `DGX Spark Agentic Activity Overview` dashboard (UID `dgx-spark-activity`) and
@@ -266,21 +274,9 @@ When `core` is also enabled, this dashboard now includes `OpenClaw TCP Forwarder
 and `OpenClaw TCP Forwarder Traffic`, backed by the internal scrape target
 `openclaw-gateway:9114/metrics` for the loopback-publishing gateway forwarder.
 
-Useful ports to tunnel (depending on enabled modules):
-- `11434` -> Ollama API (`http://127.0.0.1:11434`)
-- `8080` -> OpenWebUI (`http://127.0.0.1:8080`)
-- `3000` -> OpenHands (`http://127.0.0.1:3000`)
-- `8188` -> ComfyUI (`http://127.0.0.1:8188`)
-- `13000` -> Grafana (`http://127.0.0.1:13000`)
-- `19090` -> Prometheus (`http://127.0.0.1:19090`)
-- `13100` -> Loki (`http://127.0.0.1:13100`)
-- `9001` -> optional Portainer (`http://127.0.0.1:9001`)
-- `18111` -> OpenClaw core webhook ingress (`http://127.0.0.1:18111`)
-- `18789` -> OpenClaw core upstream Web UI + Gateway WS (`http://127.0.0.1:18789`, `ws://127.0.0.1:18789`)
-
 Notes:
-- tunnel only the ports you need;
-- host ports are configurable via environment variables (`*_HOST_PORT`);
+- tunnel only the ports you need; the generator accepts repeated `--surface <id>` selectors;
+- host ports are configurable via environment variables (`*_HOST_PORT`) and reflected by `agent tunnel list`;
 - `qdrant` is not published on a host port in the current configuration;
 - `rag-retriever` (`7111`) and `rag-worker` (`7112`) are never host-published;
 - `opensearch` (`rag-lexical`) remains internal-only (no host-published port);
@@ -317,8 +313,13 @@ ss -lntp | egrep ':(18789|18791|18792|188[0-9]{2})'
 
 ### iPhone
 
-Yes, this is possible with an iOS SSH app that supports local port forwarding (for example: Termius, Blink Shell, Prompt).
-Same principle: create a local tunnel to host `127.0.0.1:<port>`, then open `http://127.0.0.1:<port>` from iPhone (Safari or the app browser).
+Yes. iPhone does not have a generic shell-script path, so the repo generates an OpenSSH-style config snippet instead:
+
+```bash
+./agent tunnel generate iphone --enabled --ssh-target <user>@<tailscale-hostname-or-ip> --name dgx-spark --output ./dgx-spark-iphone.conf
+```
+
+Import or transcribe that snippet into an iPhone SSH client that supports local forwarding (for example Blink or a manual Termius host entry), connect, then open `http://127.0.0.1:<port>` locally on the phone.
 
 ## `agent` Commands
 

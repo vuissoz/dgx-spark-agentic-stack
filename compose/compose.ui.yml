@@ -129,7 +129,7 @@ services:
         exec nginx -g 'daemon off;' -c /tmp/nginx.conf
     ports:
       - 127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}:3000
-      - 127.0.0.1:2222:2222
+      - 127.0.0.1:${GIT_FORGE_SSH_HOST_PORT:-2222}:2222
     healthcheck:
       test:
         - CMD-SHELL
