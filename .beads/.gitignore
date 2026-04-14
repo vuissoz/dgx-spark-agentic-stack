@@ -5,6 +5,13 @@
 *.db-wal
 *.db-shm
 
+# Dolt backend/local backup artifacts (bd v0.50+)
+dolt/
+embeddeddolt/
+dolt-access.lock
+backup/
+.migration-hint-ts
+
 # Daemon runtime files
 daemon.lock
 daemon.log
