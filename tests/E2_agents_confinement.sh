@@ -2,8 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_E_TESTS:-0}" == "1" ]]; then
   ok "E2 skipped because AGENTIC_SKIP_E_TESTS=1"
@@ -113,6 +116,30 @@ assert_runtime_gate_routing() {
     "test \"\${OLLAMA_BASE_URL}\" = 'http://ollama-gate:11435'" \
     || fail "${container_id}: ${label} runtime OLLAMA_BASE_URL must point to ollama-gate"
   ok "${container_id}: ${label} runtime routes OLLAMA traffic through ollama-gate"
+}
+
+assert_context_runtime_contract() {
+  local container_id="$1"
+  local label="$2"
+  local agentic_root="${AGENTIC_ROOT:-/srv/agentic}"
+  local expected_budget="${AGENTIC_CONTEXT_BUDGET_TOKENS:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}"
+  local expected_soft="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}"
+  local expected_danger="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}"
+  local runtime_value
+
+  runtime_value="$(runtime_env_value "${agentic_root}" "AGENTIC_CONTEXT_BUDGET_TOKENS")"
+  [[ -z "${runtime_value}" ]] || expected_budget="${runtime_value}"
+  runtime_value="$(runtime_env_value "${agentic_root}" "AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS")"
+  [[ -z "${runtime_value}" ]] || expected_soft="${runtime_value}"
+  runtime_value="$(runtime_env_value "${agentic_root}" "AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS")"
+  [[ -z "${runtime_value}" ]] || expected_danger="${runtime_value}"
+
+  timeout 20 docker exec "${container_id}" sh -lc \
+    "test \"\${AGENTIC_CONTEXT_BUDGET_TOKENS}\" = '${expected_budget}' \
+      && test \"\${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS}\" = '${expected_soft}' \
+      && test \"\${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS}\" = '${expected_danger}'" \
+    || fail "${container_id}: ${label} context compaction env must match runtime.env/default contract"
+  ok "${container_id}: ${label} context compaction env matches runtime contract"
 }
 
 assert_gate_log_traffic_proof() {
@@ -283,6 +310,7 @@ for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}" "
   assert_egress_profile "${cid}"
   assert_ollama_gate_defaults "${cid}"
   assert_write_boundaries "${cid}"
+  assert_context_runtime_contract "${cid}" "${cid}"
   if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}" == "false" ]]; then
     timeout 20 docker exec "${cid}" sh -lc 'command -v sudo >/dev/null && sudo -n true' \
       || fail "${cid}: sudo-mode is enabled but sudo -n true failed"

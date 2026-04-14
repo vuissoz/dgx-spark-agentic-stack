@@ -2,3 +2,4 @@
 # Keep this list short and reviewed.
 diagnostics.ping
 time.now_utc
+repo.eight_queens.solve

@@ -190,7 +190,8 @@ The runner stores:
 - stdout/stderr of prepare/invoke/verify steps for every attempt,
 - git status and diff after each attempt,
 - `summary.json` with a unified per-agent result schema including attempt statistics,
-- `doctor.json` with consolidated failure classes and attempt totals.
+- `doctor.json` with consolidated failure classes, attempt totals, and
+  missing-artifact checks.
 
 The runner prepares the checkout, but the agent instruction itself must perform:
 
@@ -198,6 +199,20 @@ The runner prepares the checkout, but the agent instruction itself must perform:
 - the code change and `python3 -m pytest -q`,
 - `git commit`,
 - `git push` back to its own branch.
+
+Two adapters have stack-managed finalization around that contract:
+
+- OpenClaw executes the reviewed `repo.eight_queens.solve` sandbox tool through
+  its live `/v1/tools/execute` API. The tool is scoped to this reference repo
+  task and is not a general shell.
+- Vibestral keeps the same prompt, then the runner applies a common publish
+  guard after tests pass so runs that stop after editing still end with a clean
+  committed branch.
+
+Claude runs include an auth preflight before model warmup. If the Claude login
+state is not mounted in the container, the run fails fast with
+`auth-preflight.stdout.log` and `auth-preflight.stderr.log` instead of waiting
+for the full invocation timeout.
 
 When `--reset-agent-branches` is set, the runner first performs an explicit,
 destructive preflight on the stack-managed Forgejo reference repository

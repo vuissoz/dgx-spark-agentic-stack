@@ -208,6 +208,48 @@ require_service_container() {
   printf '%s\n' "$container_id"
 }
 
+container_env_value() {
+  local container_id="$1"
+  local key="$2"
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${container_id}" 2>/dev/null \
+    | sed -n "s/^${key}=//p" | head -n 1
+}
+
+runtime_env_value() {
+  local runtime_root="${1:-${AGENTIC_ROOT:-/srv/agentic}}"
+  local key="$2"
+  local runtime_env_file="${runtime_root}/deployments/runtime.env"
+  [[ -f "${runtime_env_file}" ]] || return 0
+  sed -n "s/^${key}=//p" "${runtime_env_file}" | head -n 1
+}
+
+container_mount_source() {
+  local container_id="$1"
+  local destination="$2"
+  docker inspect --format '{{range .Mounts}}{{if eq .Destination "'"${destination}"'"}}{{println .Source}}{{end}}{{end}}' "${container_id}" 2>/dev/null \
+    | head -n 1
+}
+
+resolve_gate_log_path() {
+  local gate_container_id="$1"
+  local gate_log_file
+  local gate_logs_source
+  local gate_log_relative
+
+  gate_log_file="$(container_env_value "${gate_container_id}" "GATE_LOG_FILE")"
+  gate_log_file="${gate_log_file:-/gate/logs/gate.jsonl}"
+  gate_logs_source="$(container_mount_source "${gate_container_id}" "/gate/logs")"
+  [[ -n "${gate_logs_source}" ]] || {
+    fail "${gate_container_id}: cannot resolve /gate/logs mount source"
+    return 1
+  }
+  case "${gate_log_file}" in
+    /gate/logs/*) gate_log_relative="${gate_log_file#/gate/logs/}" ;;
+    *) gate_log_relative="$(basename "${gate_log_file}")" ;;
+  esac
+  printf '%s/%s\n' "${gate_logs_source%/}" "${gate_log_relative}"
+}
+
 wait_for_container_ready() {
   local container_id="$1"
   local timeout_seconds="${2:-45}"

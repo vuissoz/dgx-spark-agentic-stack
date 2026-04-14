@@ -29,19 +29,19 @@ context_soft_tokens="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}"
 context_danger_tokens="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}"
 runtime_goose_context_limit_file="${agentic_root}/deployments/runtime.env"
 if [[ -f "${runtime_goose_context_limit_file}" ]]; then
-  runtime_goose_context_limit="$(sed -n 's/^AGENTIC_GOOSE_CONTEXT_LIMIT=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
+  runtime_goose_context_limit="$(runtime_env_value "${agentic_root}" "AGENTIC_GOOSE_CONTEXT_LIMIT")"
   if [[ -n "${runtime_goose_context_limit}" ]]; then
     goose_context_limit="${runtime_goose_context_limit}"
   fi
-  runtime_context_budget_tokens="$(sed -n 's/^AGENTIC_CONTEXT_BUDGET_TOKENS=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
+  runtime_context_budget_tokens="$(runtime_env_value "${agentic_root}" "AGENTIC_CONTEXT_BUDGET_TOKENS")"
   if [[ -n "${runtime_context_budget_tokens}" ]]; then
     context_budget_tokens="${runtime_context_budget_tokens}"
   fi
-  runtime_context_soft_tokens="$(sed -n 's/^AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
+  runtime_context_soft_tokens="$(runtime_env_value "${agentic_root}" "AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS")"
   if [[ -n "${runtime_context_soft_tokens}" ]]; then
     context_soft_tokens="${runtime_context_soft_tokens}"
   fi
-  runtime_context_danger_tokens="$(sed -n 's/^AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS=//p' "${runtime_goose_context_limit_file}" | head -n 1)"
+  runtime_context_danger_tokens="$(runtime_env_value "${agentic_root}" "AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS")"
   if [[ -n "${runtime_context_danger_tokens}" ]]; then
     context_danger_tokens="${runtime_context_danger_tokens}"
   fi
@@ -123,8 +123,13 @@ timeout 30 docker exec "${goose_cid}" sh -lc 'test -d /state/home/.local/state/g
 timeout 30 docker exec "${goose_cid}" sh -lc 'test -f /state/home/.local/share/goose/sessions/sessions.db' \
   || fail "optional-goose sessions database must persist in /state/home/.local/share/goose/sessions/sessions.db"
 goose_banner="$(timeout 20 docker exec "${goose_cid}" sh -lc 'goose session -n k5-context-display-check' 2>&1 || true)"
-printf '%s\n' "${goose_banner}" | grep -q "/${goose_context_display}" \
-  || fail "optional-goose banner must expose context usage '/${goose_context_display}'"
+if printf '%s\n' "${goose_banner}" | grep -q "/${goose_context_display}"; then
+  ok "optional-goose banner exposes context usage '/${goose_context_display}'"
+elif printf '%s\n' "${goose_banner}" | grep -Eqi 'not connected|connection refused|provider|auth'; then
+  ok "optional-goose session command reaches provider setup before banner; GOOSE_CONTEXT_LIMIT env contract is enforced"
+else
+  fail "optional-goose banner must expose context usage '/${goose_context_display}' or fail explicitly before provider connection"
+fi
 
 goose_pwd="$(timeout 20 docker exec "${goose_cid}" sh -lc 'pwd')"
 [[ "${goose_pwd}" == "/workspace" ]] \

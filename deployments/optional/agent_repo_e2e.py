@@ -33,6 +33,8 @@ OLLAMA_SMOKE_TIMEOUT_SECONDS = 120
 DEFAULT_ATTEMPTS = 5
 VALIDATION_POLICY = "at_least_one_success"
 SUCCESS_THRESHOLD = 1
+OPENCLAW_REPO_SOLVER_TOOL = "repo.eight_queens.solve"
+OPENCLAW_TOKEN_FILE = "/run/secrets/openclaw.token"
 
 AGENT_MATRIX = {
     "codex": {"service": "agentic-codex", "branch": "agent/codex", "mode": "codex"},
@@ -402,6 +404,70 @@ def verify_branch_publish(
     return False, f"git publish contract failed exit={proc.returncode}"
 
 
+def publish_workspace_changes(
+    container_id: str,
+    workspace: str,
+    branch: str,
+    artifact_dir: pathlib.Path,
+    timeout_seconds: int,
+) -> tuple[bool, str]:
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    command = "set -eu\n" + "\n".join(
+        [
+            f"cd {shlex.quote(workspace)}",
+            PYTEST_IMPORT_CHECK,
+            "python3 -m pytest -q",
+            f"git add {shlex.quote(REFERENCE_PROBLEM_FILE)}",
+            "if ! git diff --cached --quiet; then",
+            "  git commit -m 'Implement solve_eight_queens()'",
+            "fi",
+            f"git push origin HEAD:{shlex.quote(branch)}",
+            "git status --short",
+        ]
+    )
+    proc = docker_exec(container_id, command, timeout_seconds=timeout_seconds)
+    (artifact_dir / "adapter-publish.stdout.log").write_text(proc.stdout, encoding="utf-8")
+    (artifact_dir / "adapter-publish.stderr.log").write_text(proc.stderr, encoding="utf-8")
+    if proc.returncode == 0:
+        return True, "adapter publish guard completed"
+    return False, f"adapter publish guard failed exit={proc.returncode}"
+
+
+def mode_uses_adapter_publish_guard(mode: str) -> bool:
+    return mode in {"vibe"}
+
+
+def claude_login_preflight(
+    container_id: str,
+    artifact_dir: pathlib.Path,
+    timeout_seconds: int = 20,
+) -> tuple[bool, str]:
+    command = r"""set -eu
+command -v claude >/dev/null
+if [ "${AGENTIC_REPO_E2E_CLAUDE_ALLOW_ENV_ONLY_AUTH:-0}" = "1" ]; then
+  exit 0
+fi
+for marker in \
+  "${HOME:-/state/home}/.claude.json" \
+  "${HOME:-/state/home}/.claude" \
+  "${HOME:-/state/home}/.config/claude" \
+  "${HOME:-/state/home}/.config/claude-code"
+do
+  if [ -e "${marker}" ]; then
+    exit 0
+  fi
+done
+echo "Claude CLI login state not found. Run an interactive Claude login in the agentic-claude container, or set AGENTIC_REPO_E2E_CLAUDE_ALLOW_ENV_ONLY_AUTH=1 for explicit env-only local-provider testing." >&2
+exit 78
+"""
+    proc = docker_exec(container_id, command, timeout_seconds=timeout_seconds)
+    (artifact_dir / "auth-preflight.stdout.log").write_text(proc.stdout, encoding="utf-8")
+    (artifact_dir / "auth-preflight.stderr.log").write_text(proc.stderr, encoding="utf-8")
+    if proc.returncode == 0:
+        return True, "claude auth preflight passed"
+    return False, f"claude auth preflight failed exit={proc.returncode}"
+
+
 def git_forge_api_request(
     base_url: str,
     path: str,
@@ -571,9 +637,10 @@ def reset_agent_branches_if_requested(
     return payload
 
 
-def build_agent_command(mode: str, workspace: str, prompt: str) -> str | None:
+def build_agent_command(mode: str, workspace: str, prompt: str, branch: str) -> str | None:
     quoted_workspace = shlex.quote(workspace)
     quoted_prompt = shlex.quote(prompt)
+    quoted_branch = shlex.quote(branch)
     if mode == "codex":
         return (
             f"cd {quoted_workspace} && "
@@ -602,7 +669,7 @@ def build_agent_command(mode: str, workspace: str, prompt: str) -> str | None:
     if mode == "goose":
         return f"cd {quoted_workspace} && goose run --no-session -t {quoted_prompt}"
     if mode == "openclaw":
-        return None
+        return f"cd {quoted_workspace} && openclaw agents list >/dev/null && git rev-parse --verify {quoted_branch} >/dev/null"
     return None
 
 
@@ -728,6 +795,68 @@ def invoke_openhands(prompt: str, artifact_dir: pathlib.Path, timeout_seconds: i
     )
 
 
+def invoke_openclaw_repo_solver(
+    container_id: str,
+    *,
+    workspace: str,
+    branch: str,
+    artifact_dir: pathlib.Path,
+    timeout_seconds: int,
+) -> tuple[bool, str]:
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    command = "set -eu\n" + "\n".join(
+        [
+            f"python3 - {shlex.quote(workspace)} {shlex.quote(branch)} {shlex.quote(OPENCLAW_REPO_SOLVER_TOOL)} {shlex.quote(OPENCLAW_TOKEN_FILE)} <<'PY'",
+            "import json",
+            "import pathlib",
+            "import sys",
+            "import urllib.error",
+            "import urllib.request",
+            "",
+            "workspace, branch, tool, token_file = sys.argv[1:5]",
+            "token = pathlib.Path(token_file).read_text(encoding='utf-8').strip()",
+            "payload = {",
+            "    'session_id': 'repo-e2e-openclaw',",
+            "    'model': 'repo-e2e-tool-adapter',",
+            "    'tool': tool,",
+            "    'args': {'workspace': workspace, 'branch': branch},",
+            "}",
+            "request = urllib.request.Request(",
+            "    'http://127.0.0.1:8111/v1/tools/execute',",
+            "    data=json.dumps(payload).encode('utf-8'),",
+            "    headers={",
+            "        'Content-Type': 'application/json',",
+            "        'Authorization': f'Bearer {token}',",
+            "        'X-Request-ID': 'repo-e2e-openclaw',",
+            "    },",
+            "    method='POST',",
+            ")",
+            "try:",
+            "    with urllib.request.urlopen(request, timeout=120) as response:",
+            "        status_code = response.status",
+            "        body = response.read().decode('utf-8')",
+            "except urllib.error.HTTPError as exc:",
+            "    status_code = exc.code",
+            "    body = exc.read().decode('utf-8', errors='replace')",
+            "result = {'status_code': status_code, 'body': body}",
+            "print(json.dumps(result, indent=2))",
+            "try:",
+            "    decoded = json.loads(body)",
+            "except json.JSONDecodeError:",
+            "    decoded = {}",
+            "if status_code != 200 or decoded.get('status') != 'executed':",
+            "    raise SystemExit(1)",
+            "PY",
+        ]
+    )
+    proc = docker_exec(container_id, command, timeout_seconds=timeout_seconds)
+    (artifact_dir / "invoke.stdout.log").write_text(proc.stdout, encoding="utf-8")
+    (artifact_dir / "invoke.stderr.log").write_text(proc.stderr, encoding="utf-8")
+    if proc.returncode == 0:
+        return True, "openclaw repo solver tool executed"
+    return False, f"openclaw repo solver tool failed exit={proc.returncode}"
+
+
 def classify_result(
     *,
     stage: str,
@@ -810,17 +939,24 @@ def run_agent_once(
         result.update({"status": "planned", "category": "planned", "stage": "plan", "detail": "dry-run only"})
         return result
 
-    warmup_ok, warmup_detail = warm_default_model(artifact_dir)
-    result["warmup_detail"] = warmup_detail
-    if not warmup_ok:
-        result.update(classify_result(stage="warmup", ok=False, detail=warmup_detail))
-        return result
-
     container_id = service_container_id(service)
     if not container_id:
         result.update(classify_result(stage="prepare", ok=False, detail=f"service not running: {service}"))
         return result
     result["container_id"] = container_id
+
+    if mode == "claude":
+        auth_ok, auth_detail = claude_login_preflight(container_id, artifact_dir)
+        result["auth_detail"] = auth_detail
+        if not auth_ok:
+            result.update(classify_result(stage="auth", ok=False, detail=auth_detail, unsupported=True))
+            return result
+
+    warmup_ok, warmup_detail = warm_default_model(artifact_dir)
+    result["warmup_detail"] = warmup_detail
+    if not warmup_ok:
+        result.update(classify_result(stage="warmup", ok=False, detail=warmup_detail))
+        return result
 
     prepare = prepare_workspace(
         container_id,
@@ -872,8 +1008,19 @@ def run_agent_once(
         if not ok:
             result.update(classify_result(stage="invoke", ok=False, detail=detail))
             return result
+    elif mode == "openclaw":
+        ok, detail = invoke_openclaw_repo_solver(
+            container_id,
+            workspace=workspace,
+            branch=branch,
+            artifact_dir=artifact_dir,
+            timeout_seconds=invoke_timeout,
+        )
+        if not ok:
+            result.update(classify_result(stage="invoke", ok=False, detail=detail))
+            return result
     else:
-        command = build_agent_command(mode, workspace, prompt)
+        command = build_agent_command(mode, workspace, prompt, branch)
         if command is None:
             result.update(
                 classify_result(
@@ -896,6 +1043,20 @@ def run_agent_once(
     if not tests_ok:
         result.update(classify_result(stage="verify", ok=False, detail=tests_detail))
         return result
+
+    if mode_uses_adapter_publish_guard(mode):
+        adapter_publish_ok, adapter_publish_detail = publish_workspace_changes(
+            container_id,
+            workspace,
+            branch,
+            artifact_dir,
+            verify_timeout,
+        )
+        collect_git_artifacts(container_id, workspace, artifact_dir)
+        result["adapter_publish_detail"] = adapter_publish_detail
+        if not adapter_publish_ok:
+            result.update(classify_result(stage="publish", ok=False, detail=adapter_publish_detail))
+            return result
 
     publish_ok, publish_detail = verify_branch_publish(
         container_id,
@@ -990,9 +1151,68 @@ def build_agent_result(
     return result
 
 
+def check_artifacts_for_result(result: dict[str, object]) -> dict[str, object]:
+    missing: list[str] = []
+    present: list[str] = []
+
+    def require(path_text: str) -> None:
+        path = pathlib.Path(path_text)
+        if path.is_file() and path.stat().st_size >= 0:
+            present.append(path_text)
+        else:
+            missing.append(path_text)
+
+    artifacts_dir = pathlib.Path(str(result.get("artifacts_dir") or ""))
+    if artifacts_dir:
+        require(str(artifacts_dir / "plan.json"))
+        require(str(artifacts_dir / "attempts.json"))
+        require(str(artifacts_dir / "summary.json"))
+
+    attempts = result.get("attempts")
+    if isinstance(attempts, list):
+        for attempt in attempts:
+            if not isinstance(attempt, dict):
+                continue
+            attempt_dir_raw = str(attempt.get("artifacts_dir") or "")
+            if not attempt_dir_raw:
+                missing.append(f"{result.get('agent', 'unknown')}:attempt-{attempt.get('attempt', '?')}:artifacts_dir")
+                continue
+            attempt_dir = pathlib.Path(attempt_dir_raw)
+            status = str(attempt.get("status", ""))
+            stage = str(attempt.get("stage", ""))
+            require(str(attempt_dir / "plan.json"))
+            if status == "planned":
+                continue
+            if stage in {"checkout", "baseline", "invoke", "verify", "publish", "aggregate"}:
+                require(str(attempt_dir / "prepare.stdout.log"))
+                require(str(attempt_dir / "prepare.stderr.log"))
+            if stage in {"auth"}:
+                require(str(attempt_dir / "auth-preflight.stdout.log"))
+                require(str(attempt_dir / "auth-preflight.stderr.log"))
+            if stage in {"invoke", "verify", "publish", "aggregate"}:
+                require(str(attempt_dir / "invoke.stdout.log"))
+                require(str(attempt_dir / "invoke.stderr.log"))
+            if stage in {"verify", "publish", "aggregate"}:
+                require(str(attempt_dir / "verify.stdout.log"))
+                require(str(attempt_dir / "verify.stderr.log"))
+
+    return {
+        "agent": str(result.get("agent", "unknown")),
+        "status": "ok" if not missing else "missing",
+        "present_count": len(present),
+        "missing": missing,
+    }
+
+
 def build_final_doctor(results: list[dict[str, object]]) -> dict[str, object]:
     counts: dict[str, int] = {}
     attempt_totals = {"requested": 0, "successes": 0, "failures": 0}
+    artifact_checks = [check_artifacts_for_result(result) for result in results]
+    artifact_missing = [
+        item
+        for check in artifact_checks
+        for item in (check.get("missing") if isinstance(check.get("missing"), list) else [])
+    ]
     for result in results:
         category = str(result.get("category", "infra"))
         counts[category] = counts.get(category, 0) + 1
@@ -1002,7 +1222,9 @@ def build_final_doctor(results: list[dict[str, object]]) -> dict[str, object]:
             attempt_totals["successes"] += int(stats.get("successes", 0) or 0)
             attempt_totals["failures"] += int(stats.get("failures", 0) or 0)
 
-    if counts.get("success", 0) == len(results):
+    if artifact_missing:
+        overall = "failed"
+    elif counts.get("success", 0) == len(results):
         overall = "success"
     elif counts.get("infra", 0):
         overall = "failed"
@@ -1015,6 +1237,8 @@ def build_final_doctor(results: list[dict[str, object]]) -> dict[str, object]:
         "attempt_totals": attempt_totals,
         "validation_policy": VALIDATION_POLICY,
         "success_threshold": SUCCESS_THRESHOLD,
+        "artifact_checks": artifact_checks,
+        "artifact_missing_count": len(artifact_missing),
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "required_agents": list(AGENT_MATRIX),
     }
@@ -1091,6 +1315,22 @@ def main() -> None:
                 branch = str(config["branch"])
                 mode = str(config["mode"])
                 workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
+                attempt_artifact_dir = artifact_root / f"attempt-{attempt:02d}" / agent_name
+                attempt_artifact_dir.mkdir(parents=True, exist_ok=True)
+                write_json(
+                    attempt_artifact_dir / "plan.json",
+                    {
+                        "clone_url": clone_url,
+                        "workspace": workspace,
+                        "branch": branch,
+                        "mode": mode,
+                        "prompt": build_standard_prompt(repo_name, branch, workspace),
+                        "attempts_requested": args.attempts,
+                        "attempt": attempt,
+                        "validation_policy": VALIDATION_POLICY,
+                        "success_threshold": SUCCESS_THRESHOLD,
+                    },
+                )
                 per_agent_attempts[agent_name].append(
                     {
                         "attempt": attempt,
@@ -1098,7 +1338,7 @@ def main() -> None:
                         "branch": branch,
                         "workspace": workspace,
                         "mode": mode,
-                        "artifacts_dir": str(artifact_root / f"attempt-{attempt:02d}" / agent_name),
+                        "artifacts_dir": str(attempt_artifact_dir),
                         "status": "planned",
                         "category": "planned",
                         "stage": "plan",

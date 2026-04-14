@@ -92,6 +92,8 @@ assert preflight.get("attempt_reset_policy") == "none"
 assert doctor.get("attempt_totals") == {"requested": 45, "successes": 0, "failures": 45}
 assert doctor.get("validation_policy") == "at_least_one_success"
 assert doctor.get("success_threshold") == 1
+assert doctor.get("artifact_missing_count") == 0
+assert isinstance(doctor.get("artifact_checks"), list) and len(doctor["artifact_checks"]) == 9
 
 agents = {entry["agent"]: entry for entry in results}
 expected = {
@@ -122,6 +124,11 @@ for agent, branch in expected.items():
     assert stats["success_rate"] == 0.0
     assert len(entry["attempts"]) == 5
     assert all(item["status"] == "planned" for item in entry["attempts"])
+    for attempt in entry["attempts"]:
+        attempt_plan = json.load(open(attempt["artifacts_dir"] + "/plan.json", encoding="utf-8"))
+        assert attempt_plan["attempt"] == attempt["attempt"]
+        assert attempt_plan["branch"] == branch
+        assert attempt_plan["mode"] == entry["mode"]
     plan_path = entry["artifacts_dir"] + "/plan.json"
     plan = json.load(open(plan_path, encoding="utf-8"))
     prompt = plan["prompt"]
@@ -287,6 +294,21 @@ assert "set -a" in wrapped
 assert "/state/bootstrap/ollama-gate-defaults.env" in wrapped
 assert ". " in wrapped
 assert "printf '%s\\n' \"$OPENAI_API_KEY\"" in wrapped
+
+publish_ok, publish_detail = module.publish_workspace_changes(
+    "container-123",
+    "/workspace/eight-queens-agent-e2e-vibestral",
+    "agent/vibestral",
+    artifact_root / "publish-guard-proof",
+    33,
+)
+assert publish_ok is True
+assert publish_detail == "adapter publish guard completed"
+publish_wrapped = captured["cmd"][-1]
+assert "python3 -m pytest -q" in publish_wrapped
+assert "git add src/eight_queens.py" in publish_wrapped
+assert "git commit -m 'Implement solve_eight_queens()'" in publish_wrapped
+assert "git push origin HEAD:agent/vibestral" in publish_wrapped
 module.run = original_run
 
 import os
@@ -353,6 +375,36 @@ invoke_payload = json.loads((artifact_root / "openhands-proof" / "invoke.stdout.
 assert invoke_payload["conversation_id"] == "conversation-1"
 assert invoke_payload["message_response"]["success"] is True
 module.http_json_request = original_http_json_request
+
+original_docker_exec = module.docker_exec
+openclaw_calls: list[tuple[str, str, int]] = []
+
+def fake_docker_exec(container_id, shell_command, *, timeout_seconds):
+    openclaw_calls.append((container_id, shell_command, timeout_seconds))
+    return subprocess.CompletedProcess(
+        ["docker", "exec"],
+        0,
+        json.dumps({"status_code": 200, "body": json.dumps({"status": "executed"})}),
+        "",
+    )
+
+module.docker_exec = fake_docker_exec
+openclaw_ok, openclaw_detail = module.invoke_openclaw_repo_solver(
+    "openclaw-container",
+    workspace="/workspace/eight-queens-agent-e2e-openclaw",
+    branch="agent/openclaw",
+    artifact_dir=artifact_root / "openclaw-proof",
+    timeout_seconds=44,
+)
+assert openclaw_ok is True
+assert openclaw_detail == "openclaw repo solver tool executed"
+assert openclaw_calls
+assert openclaw_calls[0][0] == "openclaw-container"
+assert openclaw_calls[0][2] == 44
+assert "repo.eight_queens.solve" in openclaw_calls[0][1]
+assert "http://127.0.0.1:8111/v1/tools/execute" in openclaw_calls[0][1]
+assert "/run/secrets/openclaw.token" in openclaw_calls[0][1]
+module.docker_exec = original_docker_exec
 
 module.git_forge_api_request = lambda *args, **kwargs: {"name": "eight-queens-agent-e2e"}
 module.read_secret = lambda secret_name: "dummy"

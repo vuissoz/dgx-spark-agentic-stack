@@ -24,10 +24,12 @@ some CLIs can be present while others are still installed in best-effort mode.
   `deployments/optional/agent_repo_e2e.py`.
 - Make the runner invocable through `./agent repo-e2e`.
 - Use adapter-specific non-interactive execution where a stable contract exists:
-  `codex`, `claude`, `opencode`, `vibe`, `pi`, `goose`, plus OpenHands via API.
+  `codex`, `claude`, `opencode`, `vibe`, `pi`, `goose`, OpenHands via API,
+  and OpenClaw via its controlled `/v1/tools/execute` sandbox API.
 - Keep unsupported adapters explicit instead of silently falling back to a fake
-  shell implementation. V1 currently leaves `openclaw` explicit when no stable
-  repo-solving entrypoint is exposed.
+  shell implementation. OpenClaw uses the narrow allowlisted
+  `repo.eight_queens.solve` tool for this reference repository rather than a
+  general shell runner.
 - Persist per-agent stdout/stderr, git status/diff, verification logs, a
   unified `summary.json`, and a final `doctor.json`.
 

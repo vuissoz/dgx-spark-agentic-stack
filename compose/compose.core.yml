@@ -461,9 +461,11 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/sandbox/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/sandbox/workspaces:/sandbox-workspaces
+      - ${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openclaw/workspaces}:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/state/approvals:/approvals
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw.token:/run/secrets/openclaw.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/openclaw.password:/run/secrets/git-forge.password:ro
     healthcheck:
       test:
         - CMD-SHELL

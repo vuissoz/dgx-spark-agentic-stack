@@ -2,8 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=tests/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/runtime.sh
+source "${REPO_ROOT}/scripts/lib/runtime.sh"
 
 if [[ "${AGENTIC_SKIP_H_TESTS:-0}" == "1" ]]; then
   ok "H2 skipped because AGENTIC_SKIP_H_TESTS=1"
@@ -394,7 +397,7 @@ for _attempt in range(5):
 raise SystemExit(1)
 PY" || fail "openhands container failed to call ollama-gate"
 
-gate_log="${AGENTIC_ROOT:-/srv/agentic}/gate/logs/gate.jsonl"
+gate_log="$(resolve_gate_log_path "${gate_cid}")" || fail "unable to resolve active gate log path"
 [[ -s "${gate_log}" ]] || fail "gate log file missing or empty: ${gate_log}"
 grep -q "\"session\":\"${session}\"" "${gate_log}" \
   || fail "gate logs do not contain the openhands smoke session"
