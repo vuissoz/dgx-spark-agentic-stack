@@ -88,6 +88,20 @@ timeout 20 docker exec "${hermes_cid}" sh -lc "test -d '/workspace/${hermes_proj
   || fail "agent hermes did not create project workspace /workspace/${hermes_project}"
 timeout 20 docker exec "${hermes_cid}" sh -lc 'command -v hermes >/dev/null' \
   || fail "agent hermes runtime is missing hermes CLI"
+timeout 20 docker exec "${hermes_cid}" sh -lc '
+  test -d /state/home &&
+  test -w /state/home &&
+  test -f /state/home/.hermes/config.yaml &&
+  grep -q "^  base_url: \"http://ollama-gate:11435/v1\"$" /state/home/.hermes/config.yaml &&
+  test -f /state/home/.hermes/.env &&
+  grep -q "^OPENAI_BASE_URL=http://ollama-gate:11435/v1$" /state/home/.hermes/.env &&
+  test -f /state/bootstrap/ollama-gate-defaults.env &&
+  . /state/bootstrap/ollama-gate-defaults.env &&
+  test "${OPENAI_BASE_URL}" = "http://ollama-gate:11435/v1" &&
+  test "${ANTHROPIC_BASE_URL}" = "http://ollama-gate:11435" &&
+  test -f /run/secrets/git-forge.password &&
+  test -r /run/secrets/git-forge.password
+' || fail "agent hermes runtime must have writable home, ollama-gate defaults, and readable git-forge secret"
 hermes_path="$(timeout 20 docker exec "${hermes_cid}" tmux display-message -p -t hermes '#{pane_current_path}')"
 [[ "${hermes_path}" == "/workspace/${hermes_project}" ]] \
   || fail "agent hermes tmux pane path mismatch (expected=/workspace/${hermes_project}, actual=${hermes_path})"
