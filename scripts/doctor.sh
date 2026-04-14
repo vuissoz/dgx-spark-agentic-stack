@@ -89,6 +89,7 @@ Environment:
   AGENTIC_DOCTOR_STREAM_MODEL=<model> (default: AGENTIC_DEFAULT_MODEL)
   AGENTIC_DOCTOR_STREAM_TIMEOUT_SEC=<seconds> (default: 90)
   AGENTIC_DOCTOR_STREAM_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 20)
+  AGENTIC_OLLAMA_GPU_EXPECTED=1|0 (default: 1)
 USAGE
 }
 
@@ -868,6 +869,235 @@ PY
   fi
 }
 
+check_gate_sticky_model_diagnostics() {
+  local sticky_file="${AGENTIC_ROOT}/gate/state/sticky_sessions.json"
+  local gate_log="${AGENTIC_ROOT}/gate/logs/gate.jsonl"
+  local default_model="${AGENTIC_DEFAULT_MODEL:-}"
+  local sticky_summary recent_mismatch gate_cid gate_started_at
+
+  if [[ -s "${sticky_file}" ]]; then
+    if ! sticky_summary="$(python3 - "${sticky_file}" "${default_model}" <<'PY' 2>&1
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+default_model = sys.argv[2]
+payload = json.loads(path.read_text(encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit("sticky state must be a JSON object")
+
+anonymous = payload.get("anonymous")
+count = sum(1 for value in payload.values() if isinstance(value, str) and value.strip())
+print(f"count={count}")
+if isinstance(anonymous, str) and anonymous.strip():
+    print(f"anonymous={anonymous.strip()}")
+    if default_model and anonymous.strip() != default_model:
+        print("anonymous_differs_from_default=1")
+PY
+    )"; then
+      doctor_fail_or_warn "ollama-gate sticky session state is invalid: ${sticky_summary}"
+    else
+      sticky_count="$(printf '%s\n' "${sticky_summary}" | sed -n 's/^count=//p' | head -n 1)"
+      sticky_anonymous="$(printf '%s\n' "${sticky_summary}" | sed -n 's/^anonymous=//p' | head -n 1)"
+      if [[ -n "${sticky_anonymous}" ]]; then
+        if printf '%s\n' "${sticky_summary}" | grep -q '^anonymous_differs_from_default=1$'; then
+          warn "ollama-gate anonymous sticky model is '${sticky_anonymous}' while AGENTIC_DEFAULT_MODEL='${default_model}'; explicit OpenAI-compatible model requests should now update it"
+        else
+          ok "ollama-gate anonymous sticky model matches AGENTIC_DEFAULT_MODEL (${sticky_anonymous})"
+        fi
+      else
+        ok "ollama-gate sticky session state is present (${sticky_count:-0} entr$( [[ "${sticky_count:-0}" == "1" ]] && printf 'y' || printf 'ies' ))"
+      fi
+    fi
+  else
+    warn "ollama-gate sticky session state is not present yet: ${sticky_file}"
+  fi
+
+  if [[ -s "${gate_log}" ]]; then
+    gate_cid="$(service_container_id ollama-gate)"
+    gate_started_at="$(docker inspect --format '{{.State.StartedAt}}' "${gate_cid}" 2>/dev/null || true)"
+    recent_mismatch="$(python3 - "${gate_log}" "${gate_started_at}" <<'PY' 2>/dev/null || true
+import collections
+import json
+import pathlib
+import sys
+from datetime import datetime
+
+path = pathlib.Path(sys.argv[1])
+started_raw = sys.argv[2] if len(sys.argv) > 2 else ""
+started_at = None
+if started_raw:
+    try:
+        started_at = datetime.fromisoformat(started_raw.replace("Z", "+00:00"))
+    except Exception:
+        started_at = None
+
+tail = collections.deque(maxlen=2000)
+with path.open("r", encoding="utf-8", errors="replace") as handle:
+    for line in handle:
+        tail.append(line)
+
+for raw in reversed(tail):
+    try:
+        event = json.loads(raw)
+    except Exception:
+        continue
+    if started_at is not None:
+        try:
+            event_ts = datetime.fromisoformat(str(event.get("ts") or "").replace("Z", "+00:00"))
+        except Exception:
+            event_ts = None
+        if event_ts is not None and event_ts < started_at:
+            continue
+    endpoint = str(event.get("endpoint") or "")
+    requested = event.get("model_requested")
+    served = event.get("model_served")
+    if not endpoint.startswith("/v1/"):
+        continue
+    if not isinstance(requested, str) or not requested:
+        continue
+    if not isinstance(served, str) or not served:
+        continue
+    if requested == served or event.get("model_switch") is True:
+        continue
+    session = event.get("session") or ""
+    status_code = event.get("status_code")
+    print(f"session={session} endpoint={endpoint} requested={requested} served={served} status={status_code}")
+    break
+PY
+    )"
+    if [[ -n "${recent_mismatch}" ]]; then
+      warn "ollama-gate recent OpenAI-compatible request served a different sticky model: ${recent_mismatch}"
+    else
+      ok "ollama-gate recent OpenAI-compatible logs show no silent sticky model override"
+    fi
+  else
+    warn "ollama-gate log is missing or empty: ${gate_log}"
+  fi
+}
+
+check_ollama_gpu_runtime() {
+  local cid="$1"
+  local expected_raw="${AGENTIC_OLLAMA_GPU_EXPECTED:-1}"
+  local expected_gpu=0
+  local default_model="${AGENTIC_DEFAULT_MODEL:-}"
+  local device_requests device_request_has_gpu=0
+  local ps_output ps_report ps_rc
+  local loaded processor cpu_only gpu_accelerated
+  local nvml_output recent_cuda_log
+
+  case "${expected_raw,,}" in
+    1|true|yes|on) expected_gpu=1 ;;
+    0|false|no|off|"") expected_gpu=0 ;;
+    *)
+      doctor_fail_or_warn "AGENTIC_OLLAMA_GPU_EXPECTED must be boolean-like (got: ${expected_raw})"
+      expected_gpu=1
+      ;;
+  esac
+
+  [[ -n "${default_model}" ]] || return 0
+
+  device_requests="$(docker inspect --format '{{json .HostConfig.DeviceRequests}}' "${cid}" 2>/dev/null || true)"
+  if [[ "${device_requests}" == *"gpu"* || "${device_requests}" == *"nvidia"* || "${device_requests}" == *"Capabilities"* ]]; then
+    device_request_has_gpu=1
+  fi
+
+  if [[ "${expected_gpu}" -eq 1 ]]; then
+    if [[ "${device_request_has_gpu}" -ne 1 ]]; then
+      doctor_fail_or_warn "ollama GPU is expected but Docker has no GPU device request; verify compose 'gpus: all'"
+    else
+      ok "ollama Docker GPU device request is present"
+    fi
+
+    if ! timeout 10 docker exec "${cid}" sh -lc 'ls /dev/nvidia* >/dev/null 2>&1'; then
+      doctor_fail_or_warn "ollama GPU is expected but /dev/nvidia* is not visible in the container"
+    fi
+
+    if timeout 10 docker exec "${cid}" sh -lc 'command -v nvidia-smi >/dev/null 2>&1'; then
+      if ! nvml_output="$(timeout 15 docker exec "${cid}" nvidia-smi 2>&1 >/dev/null)"; then
+        doctor_fail_or_warn "ollama GPU is expected but nvidia-smi fails in the container: ${nvml_output}"
+      else
+        ok "ollama container nvidia-smi is usable"
+      fi
+    else
+      warn "ollama container does not provide nvidia-smi; relying on Ollama processor diagnostics"
+    fi
+  fi
+
+  set +e
+  ps_output="$(timeout 15 docker exec "${cid}" ollama ps 2>&1)"
+  ps_rc=$?
+  set -e
+  if [[ "${ps_rc}" -ne 0 ]]; then
+    doctor_fail_or_warn "unable to query loaded Ollama models with 'ollama ps': ${ps_output}"
+    return 0
+  fi
+
+  if ! ps_report="$(python3 - "${default_model}" "${ps_output}" <<'PY' 2>&1
+import re
+import sys
+
+target = sys.argv[1]
+ps_output = sys.argv[2]
+loaded = False
+processor = ""
+for raw in ps_output.splitlines():
+    line = raw.rstrip("\n")
+    if not line.strip():
+        continue
+    if line.lstrip().startswith("NAME"):
+        continue
+    parts = [part.strip() for part in re.split(r"\t+|\s{2,}", line.strip()) if part.strip()]
+    if len(parts) < 4:
+        continue
+    name = parts[0]
+    if name != target:
+        continue
+    loaded = True
+    processor = parts[3]
+    break
+
+print(f"loaded={1 if loaded else 0}")
+if loaded:
+    print(f"processor={processor}")
+    normalized = processor.upper()
+    cpu_only = "CPU" in normalized and "GPU" not in normalized
+    gpu_accelerated = "GPU" in normalized and not normalized.startswith("0% GPU")
+    print(f"cpu_only={1 if cpu_only else 0}")
+    print(f"gpu_accelerated={1 if gpu_accelerated else 0}")
+PY
+  )"; then
+    doctor_fail_or_warn "unable to parse 'ollama ps' processor diagnostics: ${ps_report}"
+    return 0
+  fi
+
+  loaded="$(printf '%s\n' "${ps_report}" | sed -n 's/^loaded=//p' | head -n 1)"
+  processor="$(printf '%s\n' "${ps_report}" | sed -n 's/^processor=//p' | head -n 1)"
+  cpu_only="$(printf '%s\n' "${ps_report}" | sed -n 's/^cpu_only=//p' | head -n 1)"
+  gpu_accelerated="$(printf '%s\n' "${ps_report}" | sed -n 's/^gpu_accelerated=//p' | head -n 1)"
+
+  if [[ "${loaded}" != "1" ]]; then
+    ok "ollama default model '${default_model}' is not currently loaded; processor check skipped"
+    return 0
+  fi
+
+  if [[ "${expected_gpu}" -eq 1 && "${cpu_only}" == "1" ]]; then
+    doctor_fail_or_warn "ollama default model '${default_model}' is loaded with processor='${processor}' while GPU is expected; check container NVML/CUDA and lower context/timeouts until GPU offload is effective"
+  elif [[ "${gpu_accelerated}" == "1" ]]; then
+    ok "ollama default model '${default_model}' processor is GPU-capable (${processor})"
+  else
+    warn "ollama default model '${default_model}' processor is '${processor:-unknown}'"
+  fi
+
+  if [[ "${expected_gpu}" -eq 1 ]]; then
+    recent_cuda_log="$(docker logs --since 30m --tail 400 "${cid}" 2>&1 | grep -E 'ggml_cuda_init|no CUDA-capable device|offloaded 0/[0-9]+ layers to GPU|Failed to initialize NVML' | tail -n 1 || true)"
+    if [[ -n "${recent_cuda_log}" ]]; then
+      doctor_fail_or_warn "ollama recent CUDA/NVML diagnostic indicates GPU offload trouble: ${recent_cuda_log}"
+    fi
+  fi
+}
+
 doctor_stream_payload() {
   local model="$1"
   local tool_name="$2"
@@ -1356,6 +1586,7 @@ PY
     else
       ok "ollama context length is configured (${runtime_ctx} tokens)"
     fi
+    check_ollama_gpu_runtime "${cid}"
   fi
 
   if [[ "${service}" == "gate-mcp" ]]; then
@@ -1638,6 +1869,11 @@ PY
     fi
   fi
 done
+
+ollama_gate_cid="$(service_container_id ollama-gate)"
+if [[ -n "${ollama_gate_cid}" ]]; then
+  check_gate_sticky_model_diagnostics
+fi
 
 rag_retriever_cid="$(service_container_id rag-retriever)"
 if [[ -n "${rag_retriever_cid}" ]]; then

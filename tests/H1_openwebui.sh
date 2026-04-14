@@ -75,6 +75,16 @@ case "${gate_test_mode_raw,,}" in
 import json
 import urllib.request
 
+switch_req = urllib.request.Request(
+  'http://ollama-gate:11435/admin/sessions/${session}/switch',
+  data=json.dumps({'model': 'h1-stale-model'}).encode('utf-8'),
+  headers={'Content-Type': 'application/json', 'X-Agent-Project': 'openwebui'},
+  method='POST'
+)
+with urllib.request.urlopen(switch_req, timeout=10) as resp:
+  if resp.status != 200:
+    raise SystemExit(1)
+
 payload = {
   'model': 'h1-openwebui-model',
   'messages': [{'role': 'user', 'content': 'openwebui gate smoke'}]
@@ -93,6 +103,9 @@ req = urllib.request.Request(
 with urllib.request.urlopen(req, timeout=10) as resp:
   if resp.status != 200:
     raise SystemExit(1)
+  body = json.loads(resp.read().decode('utf-8'))
+  if body.get('model') != 'h1-openwebui-model':
+    raise SystemExit(f\"explicit OpenWebUI model was not served: {body.get('model')}\")
 PY" || fail "openwebui container failed to call ollama-gate /v1/chat/completions in dry-run mode"
     ;;
   *)

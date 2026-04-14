@@ -1603,11 +1603,16 @@ async def fetch_backend_models(backend: str) -> list[str]:
     return names
 
 
-async def resolve_model(session: str, requested: str | None, allow_switch: bool) -> Tuple[str, bool]:
+async def resolve_model(
+    session: str,
+    requested: str | None,
+    allow_switch: bool,
+    honor_explicit_requested: bool = False,
+) -> Tuple[str, bool]:
     existing = await state.get_sticky_model(session)
     if existing:
         if requested and requested != existing:
-            if allow_switch:
+            if allow_switch or honor_explicit_requested:
                 await state.set_sticky_model(session, requested)
                 return requested, True
             return existing, False
@@ -2753,6 +2758,7 @@ async def handle_chat_completion_endpoint(
                 session=session,
                 requested=requested_model if isinstance(requested_model, str) else None,
                 allow_switch=allow_switch,
+                honor_explicit_requested=True,
             )
         except BackendAuthError as exc:
             status_code = 503
@@ -4186,6 +4192,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
                 session=session,
                 requested=requested_model,
                 allow_switch=allow_switch,
+                honor_explicit_requested=True,
             )
         except BackendAuthError as exc:
             status_code = 503

@@ -58,10 +58,10 @@ served3="$(extract_model "${body3}")"
 
 [[ -n "${served1}" ]] || fail "first served model is empty"
 [[ "${served1}" == "${served2}" ]] || fail "sticky model drifted between first and second request"
-[[ "${served1}" == "${served3}" ]] || fail "model change without switch should be ignored/refused"
-ok "sticky model remains stable for same session without explicit switch"
+[[ "${served3}" == "sticky-model-b" ]] || fail "explicit OpenAI-compatible model must update sticky session without X-Model-Switch (got ${served3})"
+ok "explicit OpenAI-compatible model request updates sticky session"
 
-switch_resp="$(timeout 15 docker exec "${toolbox_cid}" sh -lc "curl -sS -H 'Content-Type: application/json' -H 'X-Agent-Project: d3' -d '{\"model\":\"sticky-model-b\"}' http://ollama-gate:11435/admin/sessions/${session}/switch -w '\n%{http_code}'")"
+switch_resp="$(timeout 15 docker exec "${toolbox_cid}" sh -lc "curl -sS -H 'Content-Type: application/json' -H 'X-Agent-Project: d3' -d '{\"model\":\"sticky-model-c\"}' http://ollama-gate:11435/admin/sessions/${session}/switch -w '\n%{http_code}'")"
 switch_code="$(extract_code "${switch_resp}")"
 switch_body="$(extract_body "${switch_resp}")"
 [[ "${switch_code}" == "200" ]] || {
@@ -70,18 +70,18 @@ switch_body="$(extract_body "${switch_resp}")"
 }
 ok "explicit switch endpoint accepted model change"
 
-resp4="$(call_chat "${session}" "sticky-model-b")"
+resp4="$(call_chat "${session}" "sticky-model-c")"
 code4="$(extract_code "${resp4}")"
 body4="$(extract_body "${resp4}")"
 [[ "${code4}" == "200" ]] || fail "post-switch request failed"
 served4="$(extract_model "${body4}")"
-[[ "${served4}" == "sticky-model-b" ]] || fail "post-switch model mismatch (expected sticky-model-b, got ${served4})"
+[[ "${served4}" == "sticky-model-c" ]] || fail "post-switch model mismatch (expected sticky-model-c, got ${served4})"
 ok "explicit model switch is applied"
 
 gate_log="${AGENTIC_ROOT:-/srv/agentic}/gate/logs/gate.jsonl"
 [[ -s "${gate_log}" ]] || fail "gate log file missing or empty: ${gate_log}"
 tail -n 40 "${gate_log}" | grep -q '"model_switch":true' \
-  || fail "gate logs do not contain model_switch=true after explicit switch"
+  || fail "gate logs do not contain model_switch=true after model changes"
 ok "gate logs include model_switch:true"
 
 ok "D3_gate_sticky passed"
