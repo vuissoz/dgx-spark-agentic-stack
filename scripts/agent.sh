@@ -3194,7 +3194,15 @@ USAGE
   fi
   if [[ "${failed}" == "0" ]]; then
     step="doctor"
-    run_first_up_step "${step}" "${dry_run}" "${doctor_cmd[@]}" || failed=1
+    if ! run_first_up_step "${step}" "${dry_run}" "${doctor_cmd[@]}"; then
+      if [[ "${dry_run}" == "0" ]]; then
+        warn "first-up doctor failed; retrying once after convergence delay"
+        sleep 20
+        run_first_up_step "doctor-retry" "${dry_run}" "${doctor_cmd[@]}" || failed=1
+      else
+        failed=1
+      fi
+    fi
   fi
 
   if [[ "${failed}" == "1" ]]; then

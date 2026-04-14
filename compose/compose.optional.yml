@@ -148,6 +148,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/pi-mono.password:/run/secrets/git-forge.password:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/pi-mono:/state/home/.ssh:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -225,6 +226,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/goose.password:/run/secrets/git-forge.password:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/goose:/state/home/.ssh:ro
     healthcheck:
       test:
         - CMD-SHELL

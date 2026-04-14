@@ -266,6 +266,9 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/optional/git/bootstrap"
 
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
+  install -d -m 0750 "${AGENTIC_ROOT}/secrets/ssh"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/ssh/openhands"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/ssh/comfyui"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
   install -d -m 0750 "${AGENTIC_ROOT}/secrets/runtime/git-forge"
 
@@ -316,6 +319,8 @@ main() {
       "${AGENTIC_ROOT}/comfyui/output" \
       "${AGENTIC_ROOT}/comfyui/user" \
       "${AGENTIC_ROOT}/comfyui/custom_nodes" \
+      "${AGENTIC_ROOT}/secrets/ssh/openhands" \
+      "${AGENTIC_ROOT}/secrets/ssh/comfyui" \
       "${AGENTIC_ROOT}/optional/git/state" \
       "${AGENTIC_ROOT}/optional/git/config" \
       "${AGENTIC_ROOT}/optional/git/bootstrap"
@@ -336,6 +341,8 @@ main() {
       "${AGENTIC_ROOT}/comfyui/output" \
       "${AGENTIC_ROOT}/comfyui/user" \
       "${AGENTIC_ROOT}/comfyui/custom_nodes" \
+      "${AGENTIC_ROOT}/secrets/ssh/openhands" \
+      "${AGENTIC_ROOT}/secrets/ssh/comfyui" \
       "${AGENTIC_ROOT}/optional/git/state" \
       "${AGENTIC_ROOT}/optional/git/config" \
       "${AGENTIC_ROOT}/optional/git/bootstrap"

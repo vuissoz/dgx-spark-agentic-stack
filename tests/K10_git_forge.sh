@@ -132,21 +132,29 @@ expected = {
 }
 assert branches == expected
 assert branch_policy.get("protected_branch") == "main"
+ssh_contract = payload.get("ssh_contract") or {}
+paths = ssh_contract.get("managed_paths") or {}
+assert ssh_contract.get("known_hosts_filename") == "known_hosts"
+assert paths.get("codex") == "/state/home/.ssh"
+assert paths.get("openhands") == "/.openhands/home/.ssh"
+assert paths.get("comfyui") == "/comfyui/user/.ssh"
 PY
 
 for mapping in \
-  "agentic-claude|claude" \
-  "agentic-codex|codex" \
-  "agentic-opencode|opencode" \
-  "agentic-vibestral|vibestral" \
-  "agentic-hermes|hermes" \
-  "openclaw|openclaw" \
-  "openhands|openhands" \
-  "comfyui|comfyui" \
-  "optional-pi-mono|pi-mono" \
-  "optional-goose|goose"; do
+  "agentic-claude|claude|/state/home/.ssh" \
+  "agentic-codex|codex|/state/home/.ssh" \
+  "agentic-opencode|opencode|/state/home/.ssh" \
+  "agentic-vibestral|vibestral|/state/home/.ssh" \
+  "agentic-hermes|hermes|/state/home/.ssh" \
+  "openclaw|openclaw|/state/cli/openclaw-home/.ssh" \
+  "openhands|openhands|/.openhands/home/.ssh" \
+  "comfyui|comfyui|/comfyui/user/.ssh" \
+  "optional-pi-mono|pi-mono|/state/home/.ssh" \
+  "optional-goose|goose|/state/home/.ssh"; do
   service="${mapping%%|*}"
-  account="${mapping#*|}"
+  rest="${mapping#*|}"
+  account="${rest%%|*}"
+  ssh_dir="${rest#*|}"
   cid="$(require_service_container "${service}")" || exit 1
   if ! timeout 30 docker exec "${cid}" sh -lc 'command -v git >/dev/null'; then
     fail "${service} does not expose git after git-forge bootstrap"
@@ -157,8 +165,17 @@ for mapping in \
   if ! timeout 30 docker exec "${cid}" sh -lc "test -n \"\$(git config --global user.name)\" && test \"\$(git config --global user.email)\" = \"${account}@forge.agentic.local\""; then
     fail "${service} git user.name is not configured"
   fi
+  if ! timeout 30 docker exec "${cid}" sh -lc "test -r '${ssh_dir}/id_ed25519' && test -r '${ssh_dir}/id_ed25519.pub' && test -r '${ssh_dir}/known_hosts'"; then
+    fail "${service} canonical SSH material is missing under ${ssh_dir}"
+  fi
+  if ! timeout 30 docker exec "${cid}" sh -lc "ssh_cmd=\"\$(git config core.sshCommand)\"; printf '%s\n' \"\${ssh_cmd}\" | grep -F -- '-i ${ssh_dir}/id_ed25519' >/dev/null && printf '%s\n' \"\${ssh_cmd}\" | grep -F -- 'UserKnownHostsFile=${ssh_dir}/known_hosts' >/dev/null"; then
+    fail "${service} git sshCommand does not use the canonical SSH path"
+  fi
   if ! timeout 45 docker exec "${cid}" sh -lc "GIT_TERMINAL_PROMPT=0 git ls-remote http://optional-forgejo:3000/${shared_namespace}/${shared_repository}.git HEAD >/dev/null"; then
     fail "${service} cannot access the shared forge repository"
+  fi
+  if ! timeout 45 docker exec "${cid}" sh -lc "GIT_SSH_COMMAND='ssh -F /dev/null -i ${ssh_dir}/id_ed25519 -o UserKnownHostsFile=${ssh_dir}/known_hosts -o StrictHostKeyChecking=yes' GIT_TERMINAL_PROMPT=0 git ls-remote ssh://git@optional-forgejo:2222/${shared_namespace}/${shared_repository}.git HEAD >/dev/null"; then
+    fail "${service} cannot access the shared forge repository through canonical SSH"
   fi
 done
 

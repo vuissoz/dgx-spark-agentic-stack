@@ -172,6 +172,7 @@ set_openclaw_runtime_permissions() {
   local openclaw_provider_slack_bot_token="${AGENTIC_ROOT}/secrets/runtime/slack.bot_token"
   local openclaw_provider_slack_app_token="${AGENTIC_ROOT}/secrets/runtime/slack.app_token"
   local openclaw_provider_slack_signing_secret="${AGENTIC_ROOT}/secrets/runtime/slack.signing_secret"
+  local openclaw_ssh_dir="${AGENTIC_ROOT}/secrets/ssh/openclaw"
 
   if [[ "${EUID}" -eq 0 ]]; then
     chmod 0750 "${openclaw_config_dir}" "${openclaw_config_immutable_dir}" "${openclaw_config_module_dir}"
@@ -186,7 +187,9 @@ set_openclaw_runtime_permissions() {
       "${openclaw_sandbox_workspaces_dir}" \
       "${openclaw_relay_state_dir}" \
       "${openclaw_relay_logs_dir}" \
-      "${openclaw_logs_dir}" || true
+      "${openclaw_logs_dir}" \
+      "${openclaw_ssh_dir}" || true
+    chmod 0700 "${openclaw_ssh_dir}" || true
     [[ -f "${openclaw_token}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_token}" || true
     [[ -f "${openclaw_webhook_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_webhook_secret}" || true
     [[ -f "${openclaw_relay_telegram_secret}" ]] && chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${openclaw_relay_telegram_secret}" || true
@@ -208,7 +211,8 @@ set_openclaw_runtime_permissions() {
     "${openclaw_sandbox_workspaces_dir}" \
     "${openclaw_relay_state_dir}" \
     "${openclaw_relay_logs_dir}" \
-    "${openclaw_logs_dir}"
+    "${openclaw_logs_dir}" \
+    "${openclaw_ssh_dir}"
   log "non-root runtime init: relaxed openclaw dirs permissions for userns compatibility"
 }
 
@@ -460,6 +464,8 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/sandbox/state"
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/sandbox/workspaces"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
+  install -d -m 0750 "${AGENTIC_ROOT}/secrets/ssh"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/ssh/openclaw"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
   install -d -m 0750 "${AGENTIC_ROOT}/secrets/runtime/git-forge"
 

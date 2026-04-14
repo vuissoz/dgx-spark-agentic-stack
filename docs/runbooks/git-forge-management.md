@@ -16,12 +16,12 @@ Provide one self-hosted Git forge inside the stack so:
 - host UI/API bind: `127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}`
 - agent access path: private Docker network service DNS, not public host networking
 - default transport: internal HTTP on the private Docker network with per-account password helpers
-- forge SSH: disabled by default
+- forge SSH: enabled only on loopback for the host and on the private Docker network for containers
 - deployment path: converged together with `./agent up ui`, `./agent up agents,ui,obs,rag`, and `./agent first-up` so agent Git bootstrap exists before `./agent doctor`
 
 Reason for the default transport choice:
 
-- it avoids a second exposed ingress surface;
+- it avoids a public ingress surface;
 - token rotation is easier to automate than SSH key management for many agent identities;
 - it matches the stack rule of minimizing exposed services and secrets sprawl.
 
@@ -42,6 +42,41 @@ Recommended secret files:
 - optional rotation metadata file if the implementation needs reconciliation timestamps
 
 Application/API secrets stay `chmod 600`; forge account password files stay `chmod 640` so the matching runtime group can read `/run/secrets/git-forge.password`.
+
+## SSH Contract
+
+Forgejo SSH is a stack-managed transport for Git operations, not a public remote
+entrypoint. The host bind stays loopback-only on
+`127.0.0.1:${GIT_FORGE_SSH_HOST_PORT:-2222}` and containers use
+`ssh://git@optional-forgejo:2222/<namespace>/<repo>`.
+
+Bootstrap owns one canonical in-container SSH directory per managed account:
+
+| Account | Service | Canonical SSH directory |
+| --- | --- | --- |
+| `claude` | `agentic-claude` | `/state/home/.ssh` |
+| `codex` | `agentic-codex` | `/state/home/.ssh` |
+| `opencode` | `agentic-opencode` | `/state/home/.ssh` |
+| `vibestral` | `agentic-vibestral` | `/state/home/.ssh` |
+| `hermes` | `agentic-hermes` | `/state/home/.ssh` |
+| `openclaw` | `openclaw` | `/state/cli/openclaw-home/.ssh` |
+| `openhands` | `openhands` | `/.openhands/home/.ssh` |
+| `comfyui` | `comfyui` | `/comfyui/user/.ssh` |
+| `pi-mono` | `optional-pi-mono` | `/state/home/.ssh` |
+| `goose` | `optional-goose` | `/state/home/.ssh` |
+
+Each directory is mounted read-only from
+`${AGENTIC_ROOT}/secrets/ssh/<account>` and contains exactly:
+
+- `id_ed25519`
+- `id_ed25519.pub`
+- `known_hosts`
+
+`known_hosts` is named `known_hosts` for every account. It is copied from
+`${AGENTIC_ROOT}/secrets/ssh/forgejo_known_hosts`, which bootstrap refreshes
+from the effective Forgejo SSH host key before it writes per-account files.
+The generated Git config sets `core.sshCommand` to the same key and
+`known_hosts` paths that Compose mounts and `doctor` probes.
 
 ## Onboarding Inputs
 

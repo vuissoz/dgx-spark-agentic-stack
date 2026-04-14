@@ -214,6 +214,9 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/deployments"
   install -d -m 0750 "${AGENTIC_ROOT}/deployments/optional"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
+  install -d -m 0750 "${AGENTIC_ROOT}/secrets/ssh"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/ssh/pi-mono"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/ssh/goose"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
   install -d -m 0750 "${AGENTIC_ROOT}/secrets/runtime/git-forge"
 
@@ -245,6 +248,8 @@ main() {
       "${AGENTIC_ROOT}/optional/goose/state" \
       "${AGENTIC_ROOT}/optional/goose/logs" \
       "${AGENTIC_GOOSE_WORKSPACES_DIR}" \
+      "${AGENTIC_ROOT}/secrets/ssh/pi-mono" \
+      "${AGENTIC_ROOT}/secrets/ssh/goose" \
       "${AGENTIC_ROOT}/optional/portainer/data" \
       "${AGENTIC_ROOT}/optional/portainer/logs"
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ]]; then
@@ -270,6 +275,8 @@ main() {
       "${AGENTIC_ROOT}/optional/goose/state" \
       "${AGENTIC_ROOT}/optional/goose/logs" \
       "${AGENTIC_GOOSE_WORKSPACES_DIR}" \
+      "${AGENTIC_ROOT}/secrets/ssh/pi-mono" \
+      "${AGENTIC_ROOT}/secrets/ssh/goose" \
       "${AGENTIC_ROOT}/optional/portainer/data" \
       "${AGENTIC_ROOT}/optional/portainer/logs"
     log "non-root runtime init: relaxed optional dirs permissions for userns compatibility"

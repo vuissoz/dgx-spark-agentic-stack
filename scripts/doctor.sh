@@ -147,11 +147,11 @@ service_allows_readwrite_rootfs() {
   esac
 }
 
-service_git_forge_ssh_private_key_candidates() {
+service_git_forge_ssh_private_key_path() {
   local service="$1"
   case "${service}" in
     agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|agentic-hermes|optional-pi-mono|optional-goose)
-      printf '%s\n' "/state/home/.ssh/id_ed25519" "/home/agent/.ssh/id_ed25519"
+      printf '%s\n' "/state/home/.ssh/id_ed25519"
       ;;
     openclaw)
       printf '%s\n' "/state/cli/openclaw-home/.ssh/id_ed25519"
@@ -1840,16 +1840,13 @@ PY
     if ! timeout 20 docker exec "${cid}" sh -lc 'helper="$(git config credential.helper 2>/dev/null || true)"; test -n "${helper}" && printf "%s\n" "${helper}" | grep -q git-forge-credential.sh'; then
       doctor_fail "${service} git credential helper bootstrap is missing"
     fi
-    ssh_key_path=""
-    while IFS= read -r ssh_key_candidate; do
-      [[ -n "${ssh_key_candidate}" ]] || continue
-      if timeout 20 docker exec "${cid}" sh -lc "test -f '${ssh_key_candidate}' && test -r '${ssh_key_candidate}'"; then
-        ssh_key_path="${ssh_key_candidate}"
-        break
-      fi
-    done < <(service_git_forge_ssh_private_key_candidates "${service}" 2>/dev/null || true)
+    ssh_key_path="$(service_git_forge_ssh_private_key_path "${service}" 2>/dev/null || true)"
     if [[ -z "${ssh_key_path}" ]]; then
-      doctor_fail "${service} SSH key is missing or not readable"
+      doctor_fail "${service} has no git-forge SSH path contract"
+      continue
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc "test -f '${ssh_key_path}' && test -r '${ssh_key_path}'"; then
+      doctor_fail "${service} SSH key is missing or not readable at canonical path ${ssh_key_path}"
     fi
     ssh_public_key_path="${ssh_key_path}.pub"
     ssh_known_hosts_path="$(service_git_forge_known_hosts_path "${ssh_key_path}")"
@@ -1858,6 +1855,9 @@ PY
     fi
     if ! timeout 20 docker exec "${cid}" sh -lc "test -f '${ssh_known_hosts_path}' && test -r '${ssh_known_hosts_path}'"; then
       doctor_fail "${service} SSH known_hosts file is missing or not readable"
+    fi
+    if ! timeout 20 docker exec "${cid}" sh -lc "ssh_cmd=\"\$(git config core.sshCommand 2>/dev/null || true)\"; test -n \"\${ssh_cmd}\" && printf '%s\n' \"\${ssh_cmd}\" | grep -F -- '-i ${ssh_key_path}' >/dev/null && printf '%s\n' \"\${ssh_cmd}\" | grep -F -- 'UserKnownHostsFile=${ssh_known_hosts_path}' >/dev/null && printf '%s\n' \"\${ssh_cmd}\" | grep -F -- 'StrictHostKeyChecking=yes' >/dev/null"; then
+      doctor_fail "${service} git core.sshCommand must use canonical key and known_hosts paths"
     fi
     if [[ -n "${optional_forgejo_cid}" ]]; then
       if ! timeout 25 docker exec "${cid}" sh -lc "GIT_TERMINAL_PROMPT=0 git ls-remote http://optional-forgejo:3000/${GIT_FORGE_SHARED_NAMESPACE}/${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}.git HEAD >/dev/null"; then
@@ -2689,6 +2689,8 @@ payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 reference_repo = str(payload.get("reference_repository", "")).strip()
 branch_policy = payload.get("reference_branch_policy") or {}
 branches = branch_policy.get("agent_branches") or []
+ssh_contract = payload.get("ssh_contract") or {}
+managed_paths = ssh_contract.get("managed_paths") or {}
 
 expected = {
     "agent/codex",
@@ -2706,9 +2708,15 @@ assert reference_repo == "eight-queens-agent-e2e"
 assert branch_policy.get("protected_branch") == "main"
 assert set(branches) == expected
 assert "system-manager" in (branch_policy.get("main_push_allowlist_users") or [])
+assert ssh_contract.get("host") == "optional-forgejo"
+assert str(ssh_contract.get("port")) == "2222"
+assert ssh_contract.get("known_hosts_filename") == "known_hosts"
+assert managed_paths.get("codex") == "/state/home/.ssh"
+assert managed_paths.get("openhands") == "/.openhands/home/.ssh"
+assert managed_paths.get("openclaw") == "/state/cli/openclaw-home/.ssh"
 PY
   then
-    doctor_fail "git-forge bootstrap state must describe the protected reference repository and agent branches"
+    doctor_fail "git-forge bootstrap state must describe the protected reference repository, agent branches, and SSH path contract"
   fi
   forgejo_status="$(curl -sS -o /tmp/doctor-forgejo.out -w '%{http_code}' "http://127.0.0.1:${git_forge_host_port}/" 2>/dev/null || true)"
   if [[ ! "${forgejo_status}" =~ ^(200|302|401|403)$ ]]; then

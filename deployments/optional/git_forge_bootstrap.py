@@ -21,6 +21,8 @@ REFERENCE_REPOSITORY = os.environ.get("GIT_FORGE_REFERENCE_REPOSITORY", "eight-q
 AGENTIC_ROOT = os.environ.get("AGENTIC_ROOT", "/srv/agentic")
 AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "compose")
 AGENTIC_NETWORK = os.environ.get("AGENTIC_NETWORK", "agentic")
+AGENT_RUNTIME_UID = int(os.environ.get("AGENT_RUNTIME_UID", "1000"))
+AGENT_RUNTIME_GID = int(os.environ.get("AGENT_RUNTIME_GID", "1000"))
 GIT_FORGE_HOST_PORT = os.environ.get("GIT_FORGE_HOST_PORT", "13010")
 GIT_FORGE_ADMIN_USER = os.environ.get("GIT_FORGE_ADMIN_USER", "system-manager")
 GIT_FORGE_SHARED_NAMESPACE = os.environ.get("GIT_FORGE_SHARED_NAMESPACE", "agentic")
@@ -43,6 +45,7 @@ MANAGED_ACCOUNTS = (
         "email": "openclaw@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "openclaw" / "state" / "cli" / "openclaw-home",
         "container_home": "/state/cli/openclaw-home",
+        "container_ssh_dir": "/state/cli/openclaw-home/.ssh",
     },
     {
         "username": "openhands",
@@ -50,6 +53,7 @@ MANAGED_ACCOUNTS = (
         "email": "openhands@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "openhands" / "state" / "home",
         "container_home": "/.openhands/home",
+        "container_ssh_dir": "/.openhands/home/.ssh",
         "ssh_reader_uids": (42420,),
     },
     {
@@ -58,6 +62,7 @@ MANAGED_ACCOUNTS = (
         "email": "comfyui@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "comfyui" / "user",
         "container_home": "/comfyui/user",
+        "container_ssh_dir": "/comfyui/user/.ssh",
     },
     {
         "username": "claude",
@@ -65,6 +70,7 @@ MANAGED_ACCOUNTS = (
         "email": "claude@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "claude" / "state" / "home",
         "container_home": "/state/home",
+        "container_ssh_dir": "/state/home/.ssh",
     },
     {
         "username": "codex",
@@ -72,6 +78,7 @@ MANAGED_ACCOUNTS = (
         "email": "codex@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "codex" / "state" / "home",
         "container_home": "/state/home",
+        "container_ssh_dir": "/state/home/.ssh",
     },
     {
         "username": "opencode",
@@ -79,6 +86,7 @@ MANAGED_ACCOUNTS = (
         "email": "opencode@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "opencode" / "state" / "home",
         "container_home": "/state/home",
+        "container_ssh_dir": "/state/home/.ssh",
     },
     {
         "username": "vibestral",
@@ -86,6 +94,7 @@ MANAGED_ACCOUNTS = (
         "email": "vibestral@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "vibestral" / "state" / "home",
         "container_home": "/state/home",
+        "container_ssh_dir": "/state/home/.ssh",
     },
     {
         "username": "hermes",
@@ -93,6 +102,7 @@ MANAGED_ACCOUNTS = (
         "email": "hermes@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "hermes" / "state" / "home",
         "container_home": "/state/home",
+        "container_ssh_dir": "/state/home/.ssh",
     },
     {
         "username": "pi-mono",
@@ -100,6 +110,7 @@ MANAGED_ACCOUNTS = (
         "email": "pi-mono@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "optional" / "pi-mono" / "state" / "home",
         "container_home": "/state/home",
+        "container_ssh_dir": "/state/home/.ssh",
     },
     {
         "username": "goose",
@@ -107,6 +118,7 @@ MANAGED_ACCOUNTS = (
         "email": "goose@forge.agentic.local",
         "host_home": pathlib.Path(AGENTIC_ROOT) / "optional" / "goose" / "state" / "home",
         "container_home": "/state/home",
+        "container_ssh_dir": "/state/home/.ssh",
     },
 )
 
@@ -295,6 +307,22 @@ def ensure_user(container_id: str, username: str, email: str, password: str, *, 
         fail(f"failed to update forge password for '{username}': {detail or f'exit status {exc.returncode}'}")
 
 
+def clear_must_change_password(container_id: str) -> None:
+    try:
+        docker_exec(
+            container_id,
+            "forgejo",
+            "admin",
+            "user",
+            "must-change-password",
+            "--unset",
+            "--all",
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        fail(f"failed to clear Forgejo must-change-password policy: {detail or f'exit status {exc.returncode}'}")
+
+
 def read_secret(secret_name: str) -> str:
     secret_path = SECRETS_ROOT / f"{secret_name}.password"
     if not secret_path.is_file():
@@ -317,6 +345,7 @@ def api_request(
     payload: dict[str, object] | None = None,
     expected: tuple[int, ...] = (200, 201, 204),
     allow_not_found: bool = False,
+    retried_must_change: bool = False,
 ) -> object | None:
     payload_text = json.dumps(payload) if payload is not None else ""
     script = r'''
@@ -362,6 +391,19 @@ cat "$response_file"
 
     if allow_not_found and status == 404:
         return None
+    if status == 403 and not retried_must_change and "must change" in body.lower():
+        clear_must_change_password(container_id)
+        return api_request(
+            container_id,
+            method,
+            path,
+            username=username,
+            password=password,
+            payload=payload,
+            expected=expected,
+            allow_not_found=allow_not_found,
+            retried_must_change=True,
+        )
     if status not in expected:
         fail(f"unexpected forge API status for {method} {path}: {status} {body}".strip())
     if not body.strip():
@@ -744,9 +786,14 @@ def ensure_gitconfig_value(gitconfig_path: pathlib.Path, key: str, value: str) -
     os.chmod(gitconfig_path, 0o660)
 
 
+def account_container_ssh_dir(account: dict[str, object]) -> str:
+    return str(account.get("container_ssh_dir") or f"{account['container_home']}/.ssh")
+
+
 def bootstrap_git_home(account: dict[str, object]) -> None:
     host_home = pathlib.Path(str(account["host_home"]))
     container_home = str(account["container_home"])
+    container_ssh_dir = account_container_ssh_dir(account)
     username = str(account["username"])
     display_name = str(account["display_name"])
     config_dir = host_home / ".config" / "agentic"
@@ -755,6 +802,8 @@ def bootstrap_git_home(account: dict[str, object]) -> None:
     include_path = config_dir / "git-forge.gitconfig"
     env_path = config_dir / "git-forge.env"
     gitconfig_path = host_home / ".gitconfig"
+    container_ssh_key_path = f"{container_ssh_dir}/id_ed25519"
+    container_known_hosts_path = f"{container_ssh_dir}/known_hosts"
     clone_url_internal = repo_clone_url(INTERNAL_BASE_URL, SHARED_REPOSITORY)
     clone_url_host = repo_clone_url(HOST_BASE_URL, SHARED_REPOSITORY)
     reference_clone_url_internal = repo_clone_url(INTERNAL_BASE_URL, REFERENCE_REPOSITORY)
@@ -804,7 +853,7 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
 [init]
 \tdefaultBranch = main
 [core]
-\tsshCommand = ssh -i {container_home}/.ssh/id_ed25519 -F /dev/null
+\tsshCommand = ssh -F /dev/null -i {container_ssh_key_path} -o UserKnownHostsFile={container_known_hosts_path} -o StrictHostKeyChecking=yes
 """
     env_content = (
         "# Managed by git_forge_bootstrap.py\n"
@@ -819,6 +868,8 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
         f"export AGENTIC_GIT_FORGE_REFERENCE_BRANCH='agent/{username}'\n"
         f"export AGENTIC_GIT_FORGE_SSH_URL='{repo_ssh_url(GIT_FORGE_INTERNAL_HOST, GIT_FORGE_INTERNAL_SSH_PORT, SHARED_REPOSITORY)}'\n"
         f"export AGENTIC_GIT_FORGE_SSH_REFERENCE_URL='{repo_ssh_url(GIT_FORGE_INTERNAL_HOST, GIT_FORGE_INTERNAL_SSH_PORT, REFERENCE_REPOSITORY)}'\n"
+        f"export AGENTIC_GIT_FORGE_SSH_KEY_PATH='{container_ssh_key_path}'\n"
+        f"export AGENTIC_GIT_FORGE_SSH_KNOWN_HOSTS='{container_known_hosts_path}'\n"
     )
 
     write_if_changed(helper_path, helper_content, 0o750)
@@ -831,30 +882,88 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
     ensure_gitconfig_value(gitconfig_path, "init.defaultBranch", "main")
 
 
+def forgejo_known_hosts_path() -> pathlib.Path:
+    return pathlib.Path(AGENTIC_ROOT) / "secrets" / "ssh" / "forgejo_known_hosts"
+
+
+def write_forgejo_known_hosts(container_id: str) -> None:
+    scan = docker_exec(
+        container_id,
+        "/bin/bash",
+        "--noprofile",
+        "--norc",
+        "-lc",
+        f"ssh-keyscan -p {shlex.quote(GIT_FORGE_INTERNAL_SSH_PORT)} -T 5 {shlex.quote(GIT_FORGE_INTERNAL_HOST)} 2>/dev/null",
+        check=False,
+    )
+    entries = [
+        line.strip()
+        for line in scan.stdout.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+    if not entries:
+        pub_keys = docker_exec(
+            container_id,
+            "/bin/bash",
+            "--noprofile",
+            "--norc",
+            "-lc",
+            "for f in /var/lib/gitea/ssh/*.pub /data/ssh/*.pub; do [ -f \"$f\" ] && cat \"$f\"; done",
+            check=False,
+        )
+        for line in pub_keys.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 2 or not parts[0].startswith("ssh-"):
+                continue
+            entries.append(f"[{GIT_FORGE_INTERNAL_HOST}]:{GIT_FORGE_INTERNAL_SSH_PORT} {parts[0]} {parts[1]}")
+
+    if not entries:
+        fail("could not discover Forgejo SSH host key for known_hosts")
+
+    path = forgejo_known_hosts_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o750)
+    write_if_changed(path, "\n".join(entries) + "\n", 0o644)
+
+
+def sync_agent_known_hosts(ssh_dir: pathlib.Path) -> None:
+    source = forgejo_known_hosts_path()
+    if not source.is_file():
+        fail(f"Forgejo known_hosts source is missing: {source}")
+    shutil.copy(str(source), str(ssh_dir / "known_hosts"))
+    os.chmod(ssh_dir / "known_hosts", 0o644)
+
+
+def chown_runtime(path: pathlib.Path) -> None:
+    if os.geteuid() != 0:
+        return
+    os.chown(path, AGENT_RUNTIME_UID, AGENT_RUNTIME_GID)
+
+
 def generate_ssh_key_pair(username: str) -> tuple[str, str]:
-    """Generate SSH key pair for an agent."""
+    """Generate or repair the stack-managed SSH key pair for an agent."""
     ssh_dir = pathlib.Path(AGENTIC_ROOT) / "secrets" / "ssh" / username
     ssh_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(ssh_dir, 0o700)
-    
+
     private_key_path = ssh_dir / "id_ed25519"
     public_key_path = ssh_dir / "id_ed25519.pub"
-    known_hosts_path = ssh_dir / "known_hosts"
-    
-    if private_key_path.exists() and public_key_path.exists():
-        return private_key_path.read_text(encoding="utf-8").strip(), public_key_path.read_text(encoding="utf-8").strip()
-    
-    run(["ssh-keygen", "-t", "ed25519", "-f", str(private_key_path), "-N", ""], check=True)
+
+    if not private_key_path.exists():
+        run(["ssh-keygen", "-t", "ed25519", "-f", str(private_key_path), "-N", ""], check=True)
+    if not public_key_path.exists():
+        public_key = run(["ssh-keygen", "-y", "-f", str(private_key_path)]).stdout.strip()
+        write_if_changed(public_key_path, public_key + "\n", 0o644)
+
     os.chmod(private_key_path, 0o600)
     os.chmod(public_key_path, 0o644)
-    
-    # Add Forgejo host key to known_hosts
-    forgejo_known_hosts = pathlib.Path(AGENTIC_ROOT) / "secrets" / "ssh" / "forgejo_known_hosts"
-    if forgejo_known_hosts.exists():
-        import shutil
-        shutil.copy(str(forgejo_known_hosts), str(known_hosts_path))
-        os.chmod(known_hosts_path, 0o644)
-    
+    sync_agent_known_hosts(ssh_dir)
+    chown_runtime(ssh_dir)
+    chown_runtime(private_key_path)
+    chown_runtime(public_key_path)
+    chown_runtime(ssh_dir / "known_hosts")
+
     return private_key_path.read_text(encoding="utf-8").strip(), public_key_path.read_text(encoding="utf-8").strip()
 
 
@@ -915,6 +1024,7 @@ def write_bootstrap_state() -> None:
     payload = {
         "host_url": HOST_BASE_URL,
         "internal_url": INTERNAL_BASE_URL,
+        "compose_project": AGENTIC_COMPOSE_PROJECT,
         "admin_user": GIT_FORGE_ADMIN_USER,
         "shared_namespace": GIT_FORGE_SHARED_NAMESPACE,
         "shared_team": SHARED_TEAM,
@@ -928,6 +1038,16 @@ def write_bootstrap_state() -> None:
             "protected_branch": "main",
             "main_push_allowlist_users": [GIT_FORGE_ADMIN_USER],
             "agent_branches": list(REFERENCE_AGENT_BRANCHES),
+        },
+        "ssh_contract": {
+            "host": GIT_FORGE_INTERNAL_HOST,
+            "port": GIT_FORGE_INTERNAL_SSH_PORT,
+            "known_hosts_filename": "known_hosts",
+            "key_filename": "id_ed25519",
+            "managed_paths": {
+                str(account["username"]): account_container_ssh_dir(account)
+                for account in MANAGED_ACCOUNTS
+            },
         },
         "managed_users": [account["username"] for account in MANAGED_ACCOUNTS],
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -960,6 +1080,8 @@ def main() -> None:
             admin=False,
         )
 
+    clear_must_change_password(container_id)
+    write_forgejo_known_hosts(container_id)
     ensure_org(GIT_FORGE_ADMIN_USER, admin_password)
     team_id = ensure_team(GIT_FORGE_ADMIN_USER, admin_password)
     for account in MANAGED_ACCOUNTS:
