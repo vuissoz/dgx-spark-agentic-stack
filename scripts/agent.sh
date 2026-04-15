@@ -1486,6 +1486,29 @@ run_compose_on_targets() {
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${profile_args[@]}" "${compose_args[@]}" "$action" "$@"
 }
 
+ensure_docker_bridge_network() {
+  local network_name="$1"
+  local internal_mode="${2:-0}"
+  local -a create_cmd=(docker network create --driver bridge)
+
+  if docker network inspect "${network_name}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ "${internal_mode}" == "1" ]]; then
+    create_cmd+=(--internal)
+  fi
+  create_cmd+=("${network_name}")
+
+  "${create_cmd[@]}" >/dev/null
+  printf 'INFO: created docker network %s\n' "${network_name}"
+}
+
+ensure_update_compose_networks() {
+  ensure_docker_bridge_network "${AGENTIC_NETWORK}" 0
+  ensure_docker_bridge_network "${AGENTIC_EGRESS_NETWORK}" 0
+}
+
 down_rag_compose_with_profiles() {
   local rag_compose_file
   rag_compose_file="$(stack_to_compose_file rag)"
@@ -4590,6 +4613,9 @@ cmd_update() {
   mapfile -t compose_files < <(existing_compose_files)
   [[ "${#compose_files[@]}" -gt 0 ]] || die "No compose files available to update"
 
+  printf 'update requested: profile=%s project=%s, resolving image digests and compose inputs\n' \
+    "${AGENTIC_PROFILE}" "${AGENTIC_COMPOSE_PROJECT}"
+
   local resolution_dir
   resolution_dir="$(mktemp -d)"
   cleanup_cmd_update_resolution() {
@@ -4599,6 +4625,7 @@ cmd_update() {
 
   resolve_update_latest_inputs "${resolution_dir}" "${compose_files[@]}"
   apply_resolved_runtime_env_file "${resolution_dir}/runtime.resolved.env"
+  ensure_update_compose_networks
 
   local -a compose_args=()
   local compose_file
