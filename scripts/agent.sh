@@ -3109,6 +3109,91 @@ run_first_up_step() {
   "${cmd[@]}"
 }
 
+first_up_env_file_sets_key() {
+  local env_file="$1"
+  local key="$2"
+  [[ -f "${env_file}" ]] || return 1
+  grep -Eq "^[[:space:]]*(export[[:space:]]+)?${key}=" "${env_file}"
+}
+
+refresh_first_up_runtime_defaults() {
+  local env_file="$1"
+  local key
+  local -a profile_derived_keys=(
+    AGENTIC_ROOT
+    AGENTIC_AGENT_WORKSPACES_ROOT
+    AGENTIC_CLAUDE_WORKSPACES_DIR
+    AGENTIC_CODEX_WORKSPACES_DIR
+    AGENTIC_OPENCODE_WORKSPACES_DIR
+    AGENTIC_VIBESTRAL_WORKSPACES_DIR
+    AGENTIC_HERMES_WORKSPACES_DIR
+    AGENTIC_OPENHANDS_WORKSPACES_DIR
+    AGENTIC_OPENCLAW_WORKSPACES_DIR
+    AGENTIC_PI_MONO_WORKSPACES_DIR
+    AGENTIC_GOOSE_WORKSPACES_DIR
+    AGENTIC_COMPOSE_PROJECT
+    AGENTIC_NETWORK
+    AGENTIC_LLM_NETWORK
+    AGENTIC_EGRESS_NETWORK
+    AGENTIC_DOCKER_USER_SOURCE_NETWORKS
+    AGENT_RUNTIME_UID
+    AGENT_RUNTIME_GID
+    QDRANT_CONTAINER_USER
+    GATE_CONTAINER_USER
+    OLLAMA_CONTAINER_USER
+    TRTLLM_CONTAINER_USER
+    PROMETHEUS_CONTAINER_USER
+    GRAFANA_CONTAINER_USER
+    LOKI_CONTAINER_USER
+    PROMTAIL_CONTAINER_USER
+    AGENTIC_OLLAMA_MODELS_LINK
+    AGENTIC_OLLAMA_MODELS_TARGET_DIR
+    OLLAMA_MODELS_DIR
+    OLLAMA_CONTAINER_MODELS_PATH
+    AGENTIC_OBS_RETENTION_TIME
+    AGENTIC_OBS_MAX_DISK
+    AGENTIC_PROMETHEUS_DISK_BUDGET
+    AGENTIC_LOKI_DISK_BUDGET
+    PROMETHEUS_RETENTION_TIME
+    PROMETHEUS_RETENTION_SIZE
+    LOKI_RETENTION_PERIOD
+    LOKI_MAX_QUERY_LOOKBACK
+    AGENTIC_LIMIT_DEFAULT_CPUS
+    AGENTIC_LIMIT_DEFAULT_MEM
+    AGENTIC_LIMIT_CORE_CPUS
+    AGENTIC_LIMIT_CORE_MEM
+    AGENTIC_LIMIT_OLLAMA_MEM
+    AGENTIC_LIMIT_AGENTS_CPUS
+    AGENTIC_LIMIT_AGENTS_MEM
+    AGENTIC_LIMIT_UI_CPUS
+    AGENTIC_LIMIT_UI_MEM
+    AGENTIC_LIMIT_OPENHANDS_MEM
+    AGENTIC_LIMIT_COMFYUI_MEM
+    AGENTIC_LIMIT_OBS_CPUS
+    AGENTIC_LIMIT_OBS_MEM
+    AGENTIC_LIMIT_RAG_CPUS
+    AGENTIC_LIMIT_RAG_MEM
+    AGENTIC_LIMIT_OPTIONAL_CPUS
+    AGENTIC_LIMIT_OPTIONAL_MEM
+    AGENTIC_SKIP_DOCKER_USER_APPLY
+    AGENTIC_SKIP_DOCKER_USER_CHECK
+    AGENTIC_SKIP_DOCTOR_PROXY_CHECK
+  )
+
+  for key in "${profile_derived_keys[@]}"; do
+    if ! first_up_env_file_sets_key "${env_file}" "${key}"; then
+      unset "${key}"
+    fi
+  done
+
+  # Re-evaluate profile-derived defaults after loading the onboarding env. Without
+  # this, a rootless first-up can inherit strict-prod defaults exported before the
+  # env file was sourced and then try to create /srv/agentic without privileges.
+  # shellcheck source=scripts/lib/runtime.sh
+  source "${SCRIPT_DIR}/lib/runtime.sh"
+  AGENT_RUNTIME_ENV_FILE="${AGENTIC_ROOT}/deployments/runtime.env"
+}
+
 cmd_first_up() {
   local env_file="${AGENTIC_ONBOARD_OUTPUT:-${AGENTIC_REPO_ROOT}/.runtime/env.generated.sh}"
   local use_env=1
@@ -3166,7 +3251,10 @@ USAGE
     if [[ -f "${env_file}" ]]; then
       # shellcheck disable=SC1090
       source "${env_file}"
+      refresh_first_up_runtime_defaults "${env_file}"
       printf 'first-up loaded_env=%s\n' "${env_file}"
+      printf 'first-up runtime profile=%s root=%s agent_workspaces_root=%s compose_project=%s\n' \
+        "${AGENTIC_PROFILE}" "${AGENTIC_ROOT}" "${AGENTIC_AGENT_WORKSPACES_ROOT}" "${AGENTIC_COMPOSE_PROJECT}"
     else
       warn "first-up: env file not found, continuing with current shell context: ${env_file}"
     fi

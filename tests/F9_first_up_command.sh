@@ -37,6 +37,8 @@ fi
 
 grep -Fq "first-up loaded_env=${env_file}" "${output_file}" \
   || fail "first-up should load AGENTIC_ONBOARD_OUTPUT when present"
+grep -Fq "first-up runtime profile=rootless-dev root=${runtime_root} agent_workspaces_root=${runtime_root}/agent-workspaces compose_project=agentic-first-up-test" "${output_file}" \
+  || fail "first-up should recompute rootless-dev profile-derived defaults after loading the env file"
 
 for step in profile init-fs up-core up-baseline doctor; do
   grep -Fq "first-up step=${step}" "${output_file}" \

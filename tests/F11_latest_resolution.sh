@@ -8,6 +8,8 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 resolver="${REPO_ROOT}/deployments/releases/resolve_latest.py"
 [[ -f "${resolver}" ]] || fail "resolver script is missing"
+validator="${REPO_ROOT}/deployments/releases/validate_latest_resolution.py"
+[[ -f "${validator}" ]] || fail "latest validator script is missing"
 
 tmpdir="$(mktemp -d)"
 bindir="${tmpdir}/bin"
@@ -164,5 +166,67 @@ grep -q '"requested": "@openai/codex@latest"' "${outdir}/latest-resolution.json"
   || fail "resolution manifest must keep the requested latest value"
 grep -q '"resolved": "@openai/codex@0.116.0"' "${outdir}/latest-resolution.json" \
   || fail "resolution manifest must keep the resolved codex version"
+
+release_dir="${tmpdir}/bootstrap-release"
+mkdir -p "${release_dir}"
+cat >"${release_dir}/images.json" <<'JSON'
+[
+  {
+    "service": "ollama",
+    "configured_image": "ollama/ollama:latest"
+  }
+]
+JSON
+cat >"${release_dir}/runtime.env" <<'EOF'
+AGENTIC_CODEX_CLI_NPM_SPEC=@openai/codex@latest
+EOF
+cat >"${release_dir}/release.meta" <<'EOF'
+release_id=bootstrap-test
+reason=up-auto-bootstrap
+EOF
+
+set +e
+python3 "${validator}" \
+  --images "${release_dir}/images.json" \
+  --runtime-env "${release_dir}/runtime.env" \
+  --latest-resolution "${release_dir}/latest-resolution.json" \
+  --release-meta "${release_dir}/release.meta" \
+  --profile rootless-dev >"${tmpdir}/validator-rootless-bootstrap.out" 2>&1
+validator_rc=$?
+set -e
+[[ "${validator_rc}" -eq 2 ]] \
+  || fail "rootless-dev up-auto-bootstrap release without latest-resolution.json should be a non-blocking validator warning"
+grep -q "rootless-dev first-up may continue" "${tmpdir}/validator-rootless-bootstrap.out" \
+  || fail "rootless bootstrap validator warning should tell the operator that first-up may continue"
+grep -q "run 'agent update'" "${tmpdir}/validator-rootless-bootstrap.out" \
+  || fail "rootless bootstrap validator warning should keep the post-start update action explicit"
+
+set +e
+python3 "${validator}" \
+  --images "${release_dir}/images.json" \
+  --runtime-env "${release_dir}/runtime.env" \
+  --latest-resolution "${release_dir}/latest-resolution.json" \
+  --release-meta "${release_dir}/release.meta" \
+  --profile strict-prod >"${tmpdir}/validator-strict-bootstrap.out" 2>&1
+validator_rc=$?
+set -e
+[[ "${validator_rc}" -eq 1 ]] \
+  || fail "strict-prod must keep unresolved bootstrap latest values blocking"
+
+cat >"${release_dir}/release.meta" <<'EOF'
+release_id=update-test
+reason=update
+EOF
+set +e
+python3 "${validator}" \
+  --images "${release_dir}/images.json" \
+  --runtime-env "${release_dir}/runtime.env" \
+  --latest-resolution "${release_dir}/latest-resolution.json" \
+  --release-meta "${release_dir}/release.meta" \
+  --profile rootless-dev >"${tmpdir}/validator-rootless-update.out" 2>&1
+validator_rc=$?
+set -e
+[[ "${validator_rc}" -eq 1 ]] \
+  || fail "rootless-dev update releases must keep unresolved latest values blocking"
 
 ok "F11_latest_resolution passed"

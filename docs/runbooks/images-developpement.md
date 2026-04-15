@@ -155,7 +155,8 @@ Note sur les images locales:
 
 Important:
 - `runtime.env` conserve l'intention operateur (`latest` peut y rester),
-- la release active est conforme seulement si `latest-resolution.json` existe et relie cette intention a des versions/digests concrets.
+- la release active est conforme seulement si `latest-resolution.json` existe et relie cette intention a des versions/digests concrets,
+- exception transitoire: en `rootless-dev`, une release initiale `up-auto-bootstrap` sans `latest-resolution.json` est acceptee par `doctor` avec warning pour laisser finir `first-up`; lancez ensuite `./agent update`.
 
 ## 6) Forcer un rebuild propre
 

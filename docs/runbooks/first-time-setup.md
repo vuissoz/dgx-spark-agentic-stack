@@ -502,6 +502,10 @@ In `remote` mode, you can free local GPU/RAM while keeping gate API stable:
 ## 7. Create First Tracked Release Snapshot
 
 `agent up` now creates an automatic bootstrap snapshot when no active release exists yet.
+In `rootless-dev`, `agent first-up` and the following `agent doctor` do not require a
+prior `agent update`; if the bootstrap snapshot still lacks `latest-resolution.json`,
+doctor reports a non-blocking first-run warning.
+
 For operational traceability after pulls/image refresh, run `agent update` once after first successful startup:
 
 ### `strict-prod`

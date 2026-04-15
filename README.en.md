@@ -225,6 +225,11 @@ Equivalent one-shot command:
 ./agent first-up
 ```
 
+In `rootless-dev`, `first-up` does not require a prior `agent update`. If the first
+bootstrap release does not have `latest-resolution.json` yet, `doctor` emits a
+non-blocking warning and lets the first startup complete; run `./agent update` after
+that first success to pin auditable digests/versions.
+
 Cleanup for `rootless-dev` runtime (back to a "fresh" state):
 
 ```bash
