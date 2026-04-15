@@ -72,7 +72,7 @@ If you are unsure, use these defaults:
 
 Practical note:
 - In `rootless-dev`, baseline agent workspaces are rooted under `AGENTIC_AGENT_WORKSPACES_ROOT=${AGENTIC_ROOT}/agent-workspaces`.
-- So the effective default paths become `${AGENTIC_ROOT}/agent-workspaces/<tool>/workspaces` for `claude`, `codex`, `opencode`, and `vibestral`.
+- So the effective default paths become `${AGENTIC_ROOT}/agent-workspaces/<tool>/workspaces` for `claude`, `codex`, `opencode`, `vibestral`, and `hermes`.
 
 ## 3.2 Stack Selection and Compose Profiles
 
@@ -254,6 +254,7 @@ Other useful operational variables:
 - `AGENTIC_CODEX_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-codex`)
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-opencode`)
 - `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-vibestral`)
+- `AGENTIC_HERMES_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-hermes`)
 - `AGENTIC_OPENHANDS_WORKSPACES_DIR` (host path mounted to `/workspace` for `openhands`)
 - `AGENTIC_OPENCLAW_WORKSPACES_DIR` (host path mounted to `/workspace` for `openclaw`)
 - `AGENTIC_PI_MONO_WORKSPACES_DIR` (host path mounted to `/workspace` for `optional-pi-mono`)
@@ -295,6 +296,10 @@ Host firewall/egress advanced options:
 | `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT` | installer script URL | `https://openclaw.ai/install-cli.sh` | shell, `runtime.env` |
 | `AGENTIC_OPENCLAW_INSTALL_VERSION` | OpenClaw CLI version | `latest` | shell, `runtime.env` |
 | `AGENTIC_VIBE_INSTALL_SCRIPT` | installer script URL | `https://mistral.ai/vibe/install.sh` | shell, `runtime.env` |
+| `AGENTIC_HERMES_AGENT_GIT_URL` | Git URL | `https://github.com/NousResearch/hermes-agent.git` | shell, `runtime.env` |
+| `AGENTIC_HERMES_AGENT_GIT_REF` | Git ref | `v2026.4.3` | shell, `runtime.env` |
+| `AGENTIC_HERMES_AGENT_GIT_SHA` | Git commit SHA | `abf1e98f6253f6984479fe03d1098173a9b065a7` | shell, `runtime.env` |
+| `AGENTIC_HERMES_PIP_EXTRAS` | comma list of pip extras | `pty,cli` | shell, `runtime.env` |
 | `GRAFANA_ADMIN_USER` | non-empty string | `admin` | shell/secret manager |
 | `GRAFANA_ADMIN_PASSWORD` | non-empty string | `change-me` | shell/secret manager |
 
@@ -302,7 +307,7 @@ Notes:
 - `GRAFANA_ADMIN_*` are read directly by Compose for `grafana`; they are not managed as file secrets by runtime init scripts.
 - `./agent onboard` now writes `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` into the generated onboarding env output (`.runtime/env.generated.sh`) and accepts `--grafana-admin-user` / `--grafana-admin-password` overrides.
 - Prefer injecting `GRAFANA_ADMIN_PASSWORD` from a local secret manager (or one-shot shell export), not from a tracked file.
-- `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false` enables in-container `sudo` mode for `agentic-{claude,codex,opencode,vibestral}` (`./agent sudo-mode on`) with an explicit hardening tradeoff.
+- `AGENTIC_AGENT_NO_NEW_PRIVILEGES=false` enables in-container `sudo` mode for `agentic-{claude,codex,opencode,vibestral,hermes}` (`./agent sudo-mode on`) with an explicit hardening tradeoff.
 
 ## 3.10 RAG Runtime Variables
 

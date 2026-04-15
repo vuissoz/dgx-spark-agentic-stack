@@ -5,6 +5,8 @@ It is not a service-by-service reference; it is the "why" and "how to think abou
 
 If you only read one runbook before operating the platform, read this one first.
 
+Current implementation status matters here: the repo is operated day to day in `rootless-dev`, while `strict-prod` remains the prod-like validation path and the CDC acceptance target.
+
 ## What This Stack Optimizes For
 
 The stack is designed for a practical balance:
@@ -17,6 +19,7 @@ In plain terms:
 - developers/operators should be able to move fast in `rootless-dev`,
 - acceptance and production-like confidence should be established in `strict-prod`,
 - each deployment should be explainable after the fact (what changed, when, and how to revert).
+- the documentation should describe the current rootless-dev-first workflow honestly instead of pretending strict-prod is the common daily path.
 
 ## Core Philosophy
 
@@ -88,7 +91,7 @@ Think in planes, not individual containers:
 - tmux-backed agent runtimes with isolated state/log/workspaces.
 
 3. Interaction Plane (`ui`)
-- OpenWebUI, OpenHands, ComfyUI (+ loopback bridge).
+- Forgejo, OpenWebUI, OpenHands, ComfyUI (+ loopback bridges).
 
 4. Observability Plane (`obs`)
 - Prometheus/Grafana/Loki/Promtail + host/container/GPU exporters.

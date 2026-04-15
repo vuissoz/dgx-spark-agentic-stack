@@ -6,13 +6,15 @@ Goal: start and verify the stack in `strict-prod` without reading the full opera
 ## 1) One-sentence summary
 
 `strict-prod` is the "serious operations" mode: runtime under `/srv/agentic`, commands usually run with `sudo`, and compliance checks are stricter.
+In the current repo state, it is mainly the final prod-like validation path rather than the fastest daily workflow.
 
 ## 2) What to remember
 
 1. Persistent data lives under `/srv/agentic`.
 2. Services still bind to `127.0.0.1` only.
 3. `core` also includes OpenClaw and `gate-mcp`.
-4. `./agent doctor` must pass before you consider the deployment healthy.
+4. `ui` also converges Forgejo, even though the Compose service names still use `optional-forgejo*`.
+5. `./agent doctor` must pass before you consider the deployment healthy.
 
 ## 3) Minimum commands
 

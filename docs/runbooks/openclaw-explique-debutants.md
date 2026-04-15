@@ -6,6 +6,8 @@ Il est destine aux debutants qui veulent comprendre:
 - comment il est configure,
 - comment l'executer de maniere sure.
 
+Contexte actuel du depot: le parcours operateur courant est `rootless-dev`, et OpenClaw fait partie du `core` demarre par `./agent first-up` ou `./agent up core`.
+
 Pour la procedure operationnelle complete en `rootless-dev`, voir:
 - `docs/runbooks/openclaw-onboarding-rootless-dev.md`
 
@@ -31,6 +33,10 @@ Chemin recommande pour les debutants:
 
 Cette commande sert uniquement a lire un resume d'etat sans quitter le chat.
 Elle n'ajoute aucun droit d'administration.
+
+Verification rapide cote operateur:
+- `./agent openclaw status`
+- `./agent openclaw status --json`
 
 Modele mental simple:
 1. une requete arrive sur OpenClaw,
@@ -255,9 +261,11 @@ C'est normal et souhaite.
 source .runtime/env.generated.sh
 ```
 
-2. Demarrer la stack core:
+2. Demarrer la stack core (ou toute la baseline):
 ```bash
 ./agent up core
+# ou:
+# ./agent first-up
 ```
 
 3. Verifier l'etat:

@@ -3,15 +3,17 @@
 Pubblico: persone completamente non tecniche.
 Obiettivo: capire la piattaforma ed eseguire le azioni base in sicurezza.
 
+Questo quickstart riflette il percorso quotidiano attuale del repo: `rootless-dev`.
+
 ## 1) Riassunto in una frase
 
 Questa piattaforma esegue AI locale, interfacce web e monitoraggio con impostazione sicura (accesso solo locale + traffico in uscita controllato).
 
 ## 2) I 6 blocchi principali
 
-1. `core` = cuore tecnico (AI + DNS + proxy).
+1. `core` = cuore tecnico (AI + DNS + proxy + superfici di controllo interne come OpenClaw e `gate-mcp`).
 2. `agents` = assistenti con spazi di lavoro separati.
-3. `ui` = schermate web.
+3. `ui` = schermate web, incluso Forgejo come forge Git locale.
 4. `obs` = dashboard (salute, log, metriche).
 5. `rag` = memoria documentale (ricerca semantica).
 6. `optional` = moduli extra attivati solo se servono.
@@ -22,17 +24,25 @@ Questa piattaforma esegue AI locale, interfacce web e monitoraggio con impostazi
 - OpenHands: `http://127.0.0.1:3000`
 - ComfyUI: `http://127.0.0.1:8188`
 - Grafana: `http://127.0.0.1:13000`
+- Forgejo: `http://127.0.0.1:13010`
 
 Importante: sono indirizzi locali. Da un altro computer serve tunnel SSH/Tailscale.
 
 ## 4) Comandi minimi
 
 ```bash
+export AGENTIC_PROFILE=rootless-dev
 ./agent profile
-./agent up core
-./agent up agents,ui,obs,rag
+./agent first-up
 ./agent ps
 ./agent doctor
+```
+
+Se preferisci il percorso esplicito:
+
+```bash
+./agent up core
+./agent up agents,ui,obs,rag
 ```
 
 Per fermare in modo pulito:

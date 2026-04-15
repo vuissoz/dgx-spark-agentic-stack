@@ -202,15 +202,15 @@ Links:
 
 ## 4) `agents` Plane (agent execution)
 
-The 4 services below share the same model:
+The 5 baseline services below share the same model:
 - by default they run on `agentic/agent-cli-base:local` (override available via `AGENTIC_AGENT_BASE_*`),
 - they use `tmux` for long-lived sessions,
 - each has separate `state/logs/workspaces` folders.
-- the shared image includes `codex`, `claude`, `opencode`, `vibe` CLIs (plus `openhands` and `openclaw` for cross-agent CLI workflows).
+- the shared image includes `codex`, `claude`, `opencode`, `vibe`, and `hermes` CLIs (plus `openhands` and `openclaw` for cross-agent CLI workflows).
 
 Paths to remember:
-- in `strict-prod`, default workspaces live under `${AGENTIC_ROOT}/{claude,codex,opencode,vibestral}/workspaces`.
-- in `rootless-dev`, they live under `${AGENTIC_ROOT}/agent-workspaces/{claude,codex,opencode,vibestral}/workspaces`.
+- in `strict-prod`, default workspaces live under `${AGENTIC_ROOT}/{claude,codex,opencode,vibestral,hermes}/workspaces`.
+- in `rootless-dev`, they live under `${AGENTIC_ROOT}/agent-workspaces/{claude,codex,opencode,vibestral,hermes}/workspaces`.
 
 ### Service `agentic-claude`
 
@@ -263,7 +263,34 @@ Key idea:
 Useful links:
 - tmux: https://github.com/tmux/tmux
 
+### Service `agentic-hermes`
+
+Simple role:
+- Dedicated agent session for `hermes`.
+
+Key idea:
+- Same hardened persistent runtime model as the other baseline agents, but configured through the repo-managed Hermes adapter.
+
+Useful links:
+- Hermes Agent repo: https://github.com/NousResearch/hermes-agent
+- tmux: https://github.com/tmux/tmux
+
 ## 5) `ui` Plane (user interfaces)
+
+The current baseline UI also includes a local Forgejo service, even though its Compose service names still start with `optional-`.
+
+### Service `optional-forgejo`
+
+Simple role:
+- Private Git forge used by the stack.
+
+For beginners:
+- Think of it as the local place where agents and operators can push, clone, and share repositories without leaving the host.
+
+Inputs/outputs:
+- Host web URL: `http://127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}`.
+- Host SSH URL base: `ssh://git@127.0.0.1:${GIT_FORGE_SSH_HOST_PORT:-2222}`.
+- Data path: `${AGENTIC_ROOT}/optional/git/...`.
 
 ### Service `openwebui`
 

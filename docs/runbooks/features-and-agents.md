@@ -22,6 +22,8 @@ For baseline agent workspace paths, prefer the `AGENTIC_*_WORKSPACES_DIR` variab
 - `strict-prod` defaults to `${AGENTIC_ROOT}/{claude,codex,opencode,vibestral,hermes}/workspaces`
 - `rootless-dev` defaults to `${AGENTIC_ROOT}/agent-workspaces/{claude,codex,opencode,vibestral,hermes}/workspaces`
 
+The UI baseline also includes Forgejo, even though its Compose service names keep the historical `optional-forgejo*` prefix.
+
 ## Platform Features (Cross-Cutting)
 
 ### Loopback-only host exposure
@@ -238,6 +240,24 @@ Primary CLI contract per baseline service:
   - allows agents to consume D7 runtime MCP tools over the internal network only.
 
 ## UI Stack (`./agent up ui`)
+
+Running `./agent up ui` also converges the baseline Forgejo pair before `doctor`.
+
+### `optional-forgejo`
+- Internal service endpoint: `optional-forgejo:3000`
+- Role: baseline private Git forge for the stack.
+- Persistence:
+  - `${AGENTIC_ROOT}/optional/git/config`
+  - `${AGENTIC_ROOT}/optional/git/state`
+- Why it exists:
+  - gives agents, OpenHands, and operators a local forge target with stack-managed credentials and SSH keys.
+
+### `optional-forgejo-loopback`
+- Host URL: `http://127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}`
+- Host SSH endpoint: `ssh://git@127.0.0.1:${GIT_FORGE_SSH_HOST_PORT:-2222}`
+- Role: loopback-only publication layer for Forgejo.
+- Why it exists:
+  - keeps the forge host exposure local while preserving a clean rootless/rootful runtime contract.
 
 ### `openwebui`
 - Host URL: `http://127.0.0.1:${OPENWEBUI_HOST_PORT:-8080}`

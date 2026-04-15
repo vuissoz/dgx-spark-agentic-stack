@@ -7,12 +7,14 @@ This repository provides a containerized agentic services stack for DGX Spark, w
 - release snapshots + rollback,
 - orchestration through a single command: `./agent`.
 
+Current repo state: the primary day-to-day operating mode is `rootless-dev`. `strict-prod` remains the production-like validation path and the CDC acceptance profile.
+
 ## Compose Stacks
 
 Compose files are located in `compose/`:
 - `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `trtllm` (`trt` profile), `unbound`, `egress-proxy`, `toolbox`
-- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
-- `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
+- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`
+- `compose/compose.ui.yml`: `optional-forgejo`, `optional-forgejo-loopback`, `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (`rag-lexical` profile)
 - `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
@@ -22,6 +24,8 @@ Compose files are located in `compose/`:
 The profile is controlled by `AGENTIC_PROFILE`:
 - `strict-prod` (default): runtime under `/srv/agentic`, host `DOCKER-USER` checks enabled.
 - `rootless-dev`: runtime under `${HOME}/.local/share/agentic`, root-only host checks degraded.
+
+In practice, start in `rootless-dev` unless you are explicitly running a prod-like validation cycle.
 
 Check with:
 
@@ -90,9 +94,9 @@ Key persistent folders:
 - `openhands/{config,state,logs,workspaces}/`
 - `comfyui/{models,input,output,user}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
-- `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
+- `{claude,codex,opencode,vibestral,hermes}/{state,logs,workspaces}/`
 - `openclaw/{config/{immutable,overlay},state,logs,relay/{state,logs},sandbox/state,workspaces}/`
-- `optional/{mcp,pi-mono,goose,portainer}/...`
+- `optional/{git,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
 - `shared-ro/`, `shared-rw/`
@@ -125,11 +129,11 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 ## Agent Base Image Override (E1b)
 
-Agent services (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`) share a common runtime-configurable base image.
+Agent services (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`) share a common runtime-configurable base image.
 
 By default, `deployments/images/agent-cli-base/Dockerfile` builds a CUDA-based (NVIDIA) development image with a multi-language toolchain (C/C++, Python, Node, Go, Rust).
 
-This shared image also installs these agent CLIs: `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`.
+This shared image also installs these agent CLIs: `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`, `hermes`.
 - default mode: `AGENT_CLI_INSTALL_MODE=best-effort` (explicit wrappers if an install fails),
 - strict mode: `AGENT_CLI_INSTALL_MODE=required` (build fails when a CLI install is missing).
 
@@ -145,6 +149,7 @@ Supported variables:
 - `AGENTIC_AGENT_NO_NEW_PRIVILEGES` (`true` by default; set to `false` to enable in-container sudo mode for agent services)
 - `AGENTIC_CODEX_CLI_NPM_SPEC`, `AGENTIC_CLAUDE_CODE_NPM_SPEC`, `AGENTIC_OPENCODE_NPM_SPEC`, `AGENTIC_PI_CODING_AGENT_NPM_SPEC`
 - `AGENTIC_OPENHANDS_INSTALL_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_VERSION`, `AGENTIC_VIBE_INSTALL_SCRIPT`
+- `AGENTIC_HERMES_AGENT_GIT_URL`, `AGENTIC_HERMES_AGENT_GIT_REF`, `AGENTIC_HERMES_AGENT_GIT_SHA`, `AGENTIC_HERMES_PIP_EXTRAS`
 
 Minimal custom Dockerfile contract:
 - non-root default user,

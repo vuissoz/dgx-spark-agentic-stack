@@ -6,6 +6,8 @@ It is designed for beginners who want to understand:
 - how it is configured,
 - how to run it safely.
 
+Current repo context: the normal operator path is `rootless-dev`, and OpenClaw is part of `core`, started by `./agent first-up` or `./agent up core`.
+
 For the full operational procedure in `rootless-dev`, see:
 - `docs/runbooks/openclaw-onboarding-rootless-dev.md`
 
@@ -25,6 +27,10 @@ Recommended beginner command:
   - without an argument, uses `AGENTIC_OPENCLAW_INIT_PROJECT` (default: `openclaw-default`),
   - can reuse Telegram/Discord/Slack secrets already collected by `./agent onboard`,
   - keeps the upstream wizard as expert fallback instead of the primary path.
+
+Quick operator visibility:
+- `./agent openclaw status`
+- `./agent openclaw status --json`
 
 Simple mental model:
 1. a request reaches OpenClaw,
@@ -136,9 +142,11 @@ This is normal and desirable.
 source .runtime/env.generated.sh
 ```
 
-2. Start the core stack:
+2. Start the core stack (or the full baseline):
 ```bash
 ./agent up core
+# or:
+# ./agent first-up
 ```
 
 3. Check status:

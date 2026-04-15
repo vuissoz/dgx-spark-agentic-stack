@@ -6,13 +6,15 @@ But: demarrer et verifier la stack en mode `strict-prod` sans se perdre dans les
 ## 1) En une phrase
 
 `strict-prod` est le mode "serieusement exploitable": runtime sous `/srv/agentic`, commandes en pratique avec `sudo`, et controles de conformite plus stricts.
+Dans l'etat actuel du depot, ce n'est pas le chemin quotidien le plus rapide: il sert surtout a la validation prod-like finale.
 
 ## 2) Ce qu'il faut retenir
 
 1. Les donnees vivent sous `/srv/agentic`.
 2. Les services restent exposes en `127.0.0.1` seulement.
 3. `core` inclut aussi OpenClaw et `gate-mcp`.
-4. `./agent doctor` doit etre vert avant de considerer le deploiement sain.
+4. `ui` converge aussi Forgejo, meme si les services Compose s'appellent `optional-forgejo*`.
+5. `./agent doctor` doit etre vert avant de considerer le deploiement sain.
 
 ## 3) Les commandes minimales
 

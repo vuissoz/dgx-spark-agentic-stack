@@ -7,12 +7,14 @@ Ce dépôt fournit une stack de services agentiques conteneurisés pour DGX Spar
 - snapshots de release + rollback,
 - orchestration via une seule commande: `./agent`.
 
+Etat actuel du dépôt: le chemin opérateur quotidien est `rootless-dev`. `strict-prod` reste le profil de validation prod-like et la cible d'acceptation CDC.
+
 ## Stacks Compose
 
 Les fichiers Compose sont dans `compose/`:
 - `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `trtllm` (profile `trt`), `unbound`, `egress-proxy`, `toolbox`
-- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`
-- `compose/compose.ui.yml`: `openwebui`, `openhands`, `comfyui`
+- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`
+- `compose/compose.ui.yml`: `optional-forgejo`, `optional-forgejo-loopback`, `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (profile `rag-lexical`)
 - `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
@@ -22,6 +24,8 @@ Les fichiers Compose sont dans `compose/`:
 Le profil est piloté par `AGENTIC_PROFILE`:
 - `strict-prod` (défaut): runtime sous `/srv/agentic`, contrôles host `DOCKER-USER` actifs.
 - `rootless-dev`: runtime sous `${HOME}/.local/share/agentic`, checks host root-only dégradés.
+
+En pratique, commencez en `rootless-dev` sauf si vous menez explicitement une campagne de validation prod-like.
 
 Vérification:
 
@@ -92,9 +96,9 @@ Dossiers persistants clés:
 - `openhands/{config,state,logs,workspaces}/`
 - `comfyui/` (runtime root unique; contient `models/`, `input/`, `output/`, `user/`, `custom_nodes/`)
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
-- `{claude,codex,opencode,vibestral}/{state,logs,workspaces}/`
+- `{claude,codex,opencode,vibestral,hermes}/{state,logs,workspaces}/`
 - `openclaw/{config/{immutable,overlay},state,logs,relay/{state,logs},sandbox/{state,workspaces},workspaces}/`
-- `optional/{mcp,pi-mono,goose,portainer}/...`
+- `optional/{git,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
 - `shared-ro/`, `shared-rw/`
@@ -127,11 +131,11 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 ## Override de l'image de base des agents (E1b)
 
-Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`) partagent une image commune configurable à runtime.
+Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`) partagent une image commune configurable à runtime.
 
 Par défaut, `deployments/images/agent-cli-base/Dockerfile` construit une image de développement basée sur CUDA (NVIDIA) avec une toolchain multi-langages (C/C++, Python, Node, Go, Rust).
 
-Cette image commune installe aussi les CLIs agents suivants: `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`.
+Cette image commune installe aussi les CLIs agents suivants: `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`, `hermes`.
 - mode par défaut: `AGENT_CLI_INSTALL_MODE=best-effort` (wrappers explicites si un install échoue),
 - mode strict: `AGENT_CLI_INSTALL_MODE=required` (build en échec si un CLI manque).
 
@@ -147,6 +151,7 @@ Variables supportées:
 - `AGENTIC_AGENT_NO_NEW_PRIVILEGES` (`true` par défaut; passer à `false` active le mode sudo intra-conteneur des agents)
 - `AGENTIC_CODEX_CLI_NPM_SPEC`, `AGENTIC_CLAUDE_CODE_NPM_SPEC`, `AGENTIC_OPENCODE_NPM_SPEC`, `AGENTIC_PI_CODING_AGENT_NPM_SPEC`
 - `AGENTIC_OPENHANDS_INSTALL_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT`, `AGENTIC_OPENCLAW_INSTALL_VERSION`, `AGENTIC_VIBE_INSTALL_SCRIPT`
+- `AGENTIC_HERMES_AGENT_GIT_URL`, `AGENTIC_HERMES_AGENT_GIT_REF`, `AGENTIC_HERMES_AGENT_GIT_SHA`, `AGENTIC_HERMES_PIP_EXTRAS`
 
 Contrat minimal du Dockerfile custom:
 - utilisateur par défaut non-root,

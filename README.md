@@ -2,6 +2,8 @@
 
 Turn a DGX Spark into a local-first agent platform: multiple coding agents, shared local models, hardened containers, controlled egress, rollbackable releases, and one operator entrypoint: `./agent`.
 
+Current repo reality: the day-to-day green path is `rootless-dev`. `strict-prod` remains the production-like validation and CDC acceptance profile.
+
 This repository is built for people who want serious agent infrastructure on a single machine without turning that machine into an accidental public service.
 
 ## Why This Exists
@@ -14,14 +16,14 @@ This repository is built for people who want serious agent infrastructure on a s
 ## What You Get
 
 - Core model/runtime services: Ollama, `ollama-gate`, OpenClaw, DNS, egress proxy
-- Agent containers: Claude, Codex, OpenCode, Vibestral
-- UIs: OpenWebUI, OpenHands, ComfyUI
+- Agent containers: Claude, Codex, OpenCode, Vibestral, Hermes
+- UIs: Forgejo, OpenWebUI, OpenHands, ComfyUI
 - Optional observability and RAG stacks
 - Release snapshots with deterministic rollback support
 
 ## Fast Start
 
-Forgejo is part of the baseline stack: `./agent up ui`, `./agent up agents,ui,obs,rag`, and `./agent first-up` all converge it before `./agent doctor`.
+Forgejo is part of the baseline UI stack: `./agent up ui`, `./agent up agents,ui,obs,rag`, and `./agent first-up` all converge it before `./agent doctor`.
 
 `rootless-dev`:
 

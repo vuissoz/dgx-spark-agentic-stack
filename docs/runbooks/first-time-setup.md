@@ -6,10 +6,12 @@ It explains:
 - the order to initialize the runtime,
 - how to start the full baseline stack for the first time.
 
+Current operating reality: the quickest green bootstrap path is `rootless-dev`. Use `strict-prod` when you are running a prod-like validation or acceptance cycle.
+
 The baseline "whole stack" in this guide is:
 - `core`
 - `agents`
-- `ui`
+- `ui` (including baseline Forgejo bootstrap)
 - `obs`
 - `rag`
 

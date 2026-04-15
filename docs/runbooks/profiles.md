@@ -3,6 +3,8 @@
 This stack exposes two runtime profiles controlled by `AGENTIC_PROFILE`.
 The profile changes host paths, permission expectations, and compliance strictness.
 
+As implemented today, `rootless-dev` is the normal development and documentation path. `strict-prod` is still maintained as the explicit prod-like validation profile.
+
 ## Why Profiles Exist
 
 The CDC expects a production-like deployment rooted in `/srv/agentic` with host-level egress guardrails.
@@ -24,6 +26,8 @@ For local iteration, testing, or CI where root privileges are limited, `rootless
   - release validation,
   - production-like smoke tests,
   - final compliance checks before declaring a deployment healthy.
+- Current status:
+  - documented and exercised as the validation lane, not the fastest day-to-day onboarding path.
 - Current baseline expectation:
   - `core` includes `ollama`, `ollama-gate`, `gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `unbound`, `egress-proxy`, and `toolbox`.
   - most operational commands should be run as `sudo ./agent ...` or `sudo -E ./agent ...` once `AGENTIC_PROFILE=strict-prod` is selected.
@@ -42,6 +46,8 @@ For local iteration, testing, or CI where root privileges are limited, `rootless
   - local documentation/testing iterations,
   - validating compose wiring and service behavior,
   - preparing changes before strict acceptance in `strict-prod`.
+- Current status:
+  - this is the current green path for day-to-day operation of the repo.
 
 ## How To Select
 
@@ -81,6 +87,8 @@ For a full variable/secrets catalog (values, storage, and beginner guidance), se
 2. Validate changes with `./agent doctor` and targeted tests.
 3. Re-run the same scenario in `strict-prod`.
 4. Only consider the result acceptance-grade after strict profile checks pass.
+
+That sequence reflects the current stack reality better than starting every operator guide from `strict-prod`.
 
 ### How To Run A `strict-prod` Validation Cycle
 Use one shell session with explicit profile export, then run privileged commands consistently:
