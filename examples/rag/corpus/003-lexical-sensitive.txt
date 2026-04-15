@@ -1,0 +1,5 @@
+Hybrid retrieval lexical regression corpus.
+The canonical J4 sentinel is RAG_J4_SENTINEL with CLI flag --rag-index and release marker v4.2.17.
+Operators use ./agent rag index to reindex this corpus through rag-worker.
+OpenSearch BM25 should preserve exact technical signals such as docker.sock, DOCKER-USER, DGX_RAG_PIPELINE, and RAG_J4_SENTINEL.
+This document is intentionally rich in identifiers, acronyms, filenames, versions, and flags for lexical-sensitive assertions.

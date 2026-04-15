@@ -308,13 +308,20 @@ Notes:
 | `RAG_LEXICAL_INDEX` | nom d'index | `agentic_docs` | shell |
 | `RAG_EMBED_MODEL` | identifiant modele | `qwen3-embedding:0.6b` | shell, `runtime.env` |
 | `RAG_GATE_DRY_RUN` | `0` ou `1` | `1` | shell |
-| `RAG_LEXICAL_BACKEND` | `disabled` ou `opensearch` | `disabled` | shell |
+| `RAG_LEXICAL_BACKEND` | `disabled` ou `opensearch` | `disabled` (`opensearch` si `rag-lexical`) | shell, `runtime.env` |
 | `RAG_FUSION_METHOD` | actuellement `rrf` | `rrf` | shell |
 | `RAG_RRF_K` | entier `>= 1` | `60` | shell |
+| `RAG_RERANK_ENABLED` | `0` ou `1` | `0` | shell, `runtime.env` |
+| `RAG_RERANK_BACKEND` | actuellement `lexical` | `lexical` | shell, `runtime.env` |
+| `RAG_RERANK_CANDIDATES` | entier `>= 1` | `16` | shell, `runtime.env` |
+| `RAG_RERANK_TOP_N` | entier `>= 1` | `8` | shell, `runtime.env` |
+| `RAG_OPENSEARCH_BOOTSTRAP` | `0` ou `1` | `1` | shell, `runtime.env` |
 | `RAG_WORKER_BOOTSTRAP_INDEX` | `0` ou `1` | `1` | shell |
 
 Notes:
-- `RAG_LEXICAL_BACKEND=opensearch` est pertinent seulement si `COMPOSE_PROFILES=rag-lexical` est actif.
+- `COMPOSE_PROFILES=rag-lexical` active OpenSearch et selectionne `RAG_LEXICAL_BACKEND=opensearch` par defaut.
+- `./agent rag bootstrap-lexical` applique explicitement le mapping OpenSearch; `./agent rag index --wait` reindexe le corpus.
+- Le reranker local est optionnel et ajoute une etape de tri apres la fusion `rrf`.
 - `RAG_DENSE_BACKEND` existe dans le code service, mais le baseline Compose le fixe a `qdrant`.
 
 ## 3.11 Variables onboarding/scripts specifiques

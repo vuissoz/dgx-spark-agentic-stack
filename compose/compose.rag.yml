@@ -64,6 +64,11 @@ services:
       RAG_LEXICAL_BACKEND: ${RAG_LEXICAL_BACKEND:-disabled}
       RAG_FUSION_METHOD: ${RAG_FUSION_METHOD:-rrf}
       RAG_RRF_K: ${RAG_RRF_K:-60}
+      RAG_RERANK_ENABLED: ${RAG_RERANK_ENABLED:-0}
+      RAG_RERANK_BACKEND: ${RAG_RERANK_BACKEND:-lexical}
+      RAG_RERANK_MODEL: ${RAG_RERANK_MODEL:-lexical-token-overlap-v1}
+      RAG_RERANK_CANDIDATES: ${RAG_RERANK_CANDIDATES:-16}
+      RAG_RERANK_TOP_N: ${RAG_RERANK_TOP_N:-8}
     volumes:
       - ../deployments/rag/retriever_api.py:/app/retriever_api.py:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/rag/config:/config:ro
@@ -116,6 +121,8 @@ services:
       RAG_EMBED_MODEL: ${RAG_EMBED_MODEL:-qwen3-embedding:0.6b}
       RAG_GATE_DRY_RUN: ${RAG_GATE_DRY_RUN:-1}
       RAG_LEXICAL_BACKEND: ${RAG_LEXICAL_BACKEND:-disabled}
+      RAG_OPENSEARCH_BOOTSTRAP: ${RAG_OPENSEARCH_BOOTSTRAP:-1}
+      RAG_OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC: ${RAG_OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC:-60}
       RAG_WORKER_BOOTSTRAP_INDEX: ${RAG_WORKER_BOOTSTRAP_INDEX:-1}
       RAG_WORKER_POLL_INTERVAL_SEC: "10"
     volumes:

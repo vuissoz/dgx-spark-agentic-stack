@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENT_INVOCATION_COMPOSE_PROFILES="${COMPOSE_PROFILES:-}"
+AGENT_INVOCATION_RAG_LEXICAL_BACKEND="${RAG_LEXICAL_BACKEND:-}"
 # shellcheck source=scripts/lib/runtime.sh
 source "${SCRIPT_DIR}/lib/runtime.sh"
 
@@ -61,6 +63,10 @@ Usage:
   agent llm mode [local|hybrid|mixed|remote]
   agent llm backend [ollama|trtllm|both|remote]
   agent llm test-mode [on|off]
+  agent rag index [--docs-dir <path>] [--wait|--sync|--no-wait] [--timeout-sec <seconds>] [--json]
+  agent rag task <task_id> [--json]
+  agent rag bootstrap-lexical [--json]
+  agent rag config [--json]
   agent tunnel list [--all|--enabled|--surface <id> ...] [--json]
   agent tunnel generate <linux|macos|windows|iphone> --ssh-target <user@host> [--all|--enabled|--surface <id> ...] [--output <path>] [--name <alias>]
   agent tunnel check [--all|--surface <id> ...] [--json]
@@ -1114,7 +1120,14 @@ load_runtime_env() {
           export "${key}=${value}"
         fi
         ;;
-      COMPOSE_PROFILES|AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_LLM_BACKEND|AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|AGENTIC_AGENT_WORKSPACES_ROOT|AGENTIC_CLAUDE_WORKSPACES_DIR|AGENTIC_CODEX_WORKSPACES_DIR|AGENTIC_OPENCODE_WORKSPACES_DIR|AGENTIC_VIBESTRAL_WORKSPACES_DIR|AGENTIC_HERMES_WORKSPACES_DIR|AGENTIC_OPENHANDS_WORKSPACES_DIR|AGENTIC_OPENCLAW_WORKSPACES_DIR|AGENTIC_PI_MONO_WORKSPACES_DIR|AGENTIC_GOOSE_WORKSPACES_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_HOST_PORT|OPENWEBUI_HOST_PORT|OPENHANDS_HOST_PORT|COMFYUI_HOST_PORT|PROMETHEUS_HOST_PORT|GRAFANA_HOST_PORT|LOKI_HOST_PORT|GIT_FORGE_HOST_PORT|GIT_FORGE_SSH_HOST_PORT|PORTAINER_HOST_PORT|OPENCLAW_WEBHOOK_HOST_PORT|OPENCLAW_GATEWAY_HOST_PORT|OPENCLAW_RELAY_HOST_PORT|AGENTIC_DEFAULT_MODEL|AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|AGENTIC_GOOSE_CONTEXT_LIMIT|AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT|AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT|AGENTIC_CONTEXT_BUDGET_TOKENS|AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS|AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS|OLLAMA_CONTEXT_LENGTH|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|TRTLLM_MODELS|TRTLLM_NATIVE_MODEL_POLICY|TRTLLM_NVFP4_LOCAL_MODEL_DIR|TRTLLM_NVFP4_HF_REPO|TRTLLM_NVFP4_HF_REVISION|TRTLLM_NVFP4_PREPARE_ENABLED|AGENTIC_OBS_RETENTION_TIME|AGENTIC_OBS_MAX_DISK|AGENTIC_PROMETHEUS_DISK_BUDGET|AGENTIC_LOKI_DISK_BUDGET|PROMETHEUS_RETENTION_TIME|PROMETHEUS_RETENTION_SIZE|LOKI_RETENTION_PERIOD|LOKI_MAX_QUERY_LOOKBACK|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_AGENT_NO_NEW_PRIVILEGES|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_PI_CODING_AGENT_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_HERMES_AGENT_GIT_URL|AGENTIC_HERMES_AGENT_GIT_REF|AGENTIC_HERMES_AGENT_GIT_SHA|AGENTIC_HERMES_PIP_EXTRAS|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
+      COMPOSE_PROFILES)
+        if [[ -n "${AGENT_INVOCATION_COMPOSE_PROFILES}" ]]; then
+          export COMPOSE_PROFILES="${AGENT_INVOCATION_COMPOSE_PROFILES}"
+        else
+          export "${key}=${value}"
+        fi
+        ;;
+      AGENTIC_LLM_NETWORK|AGENTIC_LLM_MODE|AGENTIC_LLM_BACKEND|AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS|GATE_ENABLE_TEST_MODE|AGENTIC_OPENAI_DAILY_TOKENS|AGENTIC_OPENAI_MONTHLY_TOKENS|AGENTIC_OPENAI_DAILY_REQUESTS|AGENTIC_OPENAI_MONTHLY_REQUESTS|AGENTIC_OPENROUTER_DAILY_TOKENS|AGENTIC_OPENROUTER_MONTHLY_TOKENS|AGENTIC_OPENROUTER_DAILY_REQUESTS|AGENTIC_OPENROUTER_MONTHLY_REQUESTS|GATE_MCP_RATE_LIMIT_RPS|GATE_MCP_RATE_LIMIT_BURST|GATE_MCP_HTTP_TIMEOUT_SEC|AGENTIC_DOCKER_USER_SOURCE_NETWORKS|AGENTIC_OLLAMA_MODELS_LINK|AGENTIC_OLLAMA_MODELS_TARGET_DIR|AGENTIC_AGENT_WORKSPACES_ROOT|AGENTIC_CLAUDE_WORKSPACES_DIR|AGENTIC_CODEX_WORKSPACES_DIR|AGENTIC_OPENCODE_WORKSPACES_DIR|AGENTIC_VIBESTRAL_WORKSPACES_DIR|AGENTIC_HERMES_WORKSPACES_DIR|AGENTIC_OPENHANDS_WORKSPACES_DIR|AGENTIC_OPENCLAW_WORKSPACES_DIR|AGENTIC_PI_MONO_WORKSPACES_DIR|AGENTIC_GOOSE_WORKSPACES_DIR|OLLAMA_MODELS_DIR|OLLAMA_CONTAINER_USER|QDRANT_CONTAINER_USER|GATE_CONTAINER_USER|TRTLLM_CONTAINER_USER|PROMETHEUS_CONTAINER_USER|GRAFANA_CONTAINER_USER|LOKI_CONTAINER_USER|PROMTAIL_CONTAINER_USER|OLLAMA_HOST_PORT|OPENWEBUI_HOST_PORT|OPENHANDS_HOST_PORT|COMFYUI_HOST_PORT|PROMETHEUS_HOST_PORT|GRAFANA_HOST_PORT|LOKI_HOST_PORT|GIT_FORGE_HOST_PORT|GIT_FORGE_SSH_HOST_PORT|PORTAINER_HOST_PORT|OPENCLAW_WEBHOOK_HOST_PORT|OPENCLAW_GATEWAY_HOST_PORT|OPENCLAW_RELAY_HOST_PORT|AGENTIC_DEFAULT_MODEL|AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|AGENTIC_GOOSE_CONTEXT_LIMIT|AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT|AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT|AGENTIC_CONTEXT_BUDGET_TOKENS|AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS|AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS|OLLAMA_CONTEXT_LENGTH|OLLAMA_MODELS_MOUNT_MODE|OLLAMA_PRELOAD_GENERATE_MODEL|OLLAMA_PRELOAD_EMBED_MODEL|OLLAMA_MODEL_STORE_BUDGET_GB|RAG_EMBED_MODEL|RAG_LEXICAL_BACKEND|RAG_RERANK_ENABLED|RAG_RERANK_BACKEND|RAG_RERANK_MODEL|RAG_RERANK_CANDIDATES|RAG_RERANK_TOP_N|RAG_OPENSEARCH_BOOTSTRAP|RAG_OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC|TRTLLM_MODELS|TRTLLM_NATIVE_MODEL_POLICY|TRTLLM_NVFP4_LOCAL_MODEL_DIR|TRTLLM_NVFP4_HF_REPO|TRTLLM_NVFP4_HF_REVISION|TRTLLM_NVFP4_PREPARE_ENABLED|AGENTIC_OBS_RETENTION_TIME|AGENTIC_OBS_MAX_DISK|AGENTIC_PROMETHEUS_DISK_BUDGET|AGENTIC_LOKI_DISK_BUDGET|PROMETHEUS_RETENTION_TIME|PROMETHEUS_RETENTION_SIZE|LOKI_RETENTION_PERIOD|LOKI_MAX_QUERY_LOOKBACK|PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|PROMTAIL_HOST_LOG_PATH|NODE_EXPORTER_HOST_ROOT_PATH|CADVISOR_HOST_ROOT_PATH|CADVISOR_DOCKER_LIB_HOST_PATH|CADVISOR_SYS_HOST_PATH|CADVISOR_DEV_DISK_HOST_PATH|AGENTIC_AGENT_BASE_BUILD_CONTEXT|AGENTIC_AGENT_BASE_DOCKERFILE|AGENTIC_AGENT_BASE_IMAGE|AGENTIC_AGENT_CLI_INSTALL_MODE|AGENTIC_AGENT_NO_NEW_PRIVILEGES|AGENTIC_CODEX_CLI_NPM_SPEC|AGENTIC_CLAUDE_CODE_NPM_SPEC|AGENTIC_OPENCODE_NPM_SPEC|AGENTIC_PI_CODING_AGENT_NPM_SPEC|AGENTIC_OPENHANDS_INSTALL_SCRIPT|AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|AGENTIC_OPENCLAW_INSTALL_VERSION|AGENTIC_VIBE_INSTALL_SCRIPT|AGENTIC_HERMES_AGENT_GIT_URL|AGENTIC_HERMES_AGENT_GIT_REF|AGENTIC_HERMES_AGENT_GIT_SHA|AGENTIC_HERMES_PIP_EXTRAS|AGENTIC_LIMIT_DEFAULT_CPUS|AGENTIC_LIMIT_DEFAULT_MEM|AGENTIC_LIMIT_CORE_CPUS|AGENTIC_LIMIT_CORE_MEM|AGENTIC_LIMIT_AGENTS_CPUS|AGENTIC_LIMIT_AGENTS_MEM|AGENTIC_LIMIT_UI_CPUS|AGENTIC_LIMIT_UI_MEM|AGENTIC_LIMIT_OBS_CPUS|AGENTIC_LIMIT_OBS_MEM|AGENTIC_LIMIT_RAG_CPUS|AGENTIC_LIMIT_RAG_MEM|AGENTIC_LIMIT_OPTIONAL_CPUS|AGENTIC_LIMIT_OPTIONAL_MEM|AGENTIC_LIMIT_*)
         export "${key}=${value}"
         ;;
       *)
@@ -1134,6 +1147,12 @@ load_runtime_env() {
     warn "invalid AGENTIC_AGENT_NO_NEW_PRIVILEGES='${AGENTIC_AGENT_NO_NEW_PRIVILEGES}', defaulting to true"
     AGENTIC_AGENT_NO_NEW_PRIVILEGES="true"
     export AGENTIC_AGENT_NO_NEW_PRIVILEGES
+  fi
+  if [[ -n "${AGENT_INVOCATION_COMPOSE_PROFILES}" ]] \
+    && [[ -z "${AGENT_INVOCATION_RAG_LEXICAL_BACKEND}" ]] \
+    && agentic_csv_contains "rag-lexical" "${AGENT_INVOCATION_COMPOSE_PROFILES}"; then
+    RAG_LEXICAL_BACKEND="opensearch"
+    export RAG_LEXICAL_BACKEND
   fi
 
   local legacy_openclaw_workspaces_dir="${AGENTIC_ROOT}/optional/openclaw/workspaces"
@@ -1256,6 +1275,14 @@ ensure_runtime_env() {
     "OLLAMA_PRELOAD_EMBED_MODEL=${OLLAMA_PRELOAD_EMBED_MODEL}"
     "OLLAMA_MODEL_STORE_BUDGET_GB=${OLLAMA_MODEL_STORE_BUDGET_GB}"
     "RAG_EMBED_MODEL=${RAG_EMBED_MODEL}"
+    "RAG_LEXICAL_BACKEND=${RAG_LEXICAL_BACKEND}"
+    "RAG_RERANK_ENABLED=${RAG_RERANK_ENABLED}"
+    "RAG_RERANK_BACKEND=${RAG_RERANK_BACKEND}"
+    "RAG_RERANK_MODEL=${RAG_RERANK_MODEL}"
+    "RAG_RERANK_CANDIDATES=${RAG_RERANK_CANDIDATES}"
+    "RAG_RERANK_TOP_N=${RAG_RERANK_TOP_N}"
+    "RAG_OPENSEARCH_BOOTSTRAP=${RAG_OPENSEARCH_BOOTSTRAP}"
+    "RAG_OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC=${RAG_OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC}"
     "TRTLLM_MODELS=${TRTLLM_MODELS}"
     "TRTLLM_NATIVE_MODEL_POLICY=${TRTLLM_NATIVE_MODEL_POLICY}"
     "TRTLLM_NVFP4_LOCAL_MODEL_DIR=${TRTLLM_NVFP4_LOCAL_MODEL_DIR}"
@@ -1384,6 +1411,13 @@ cmd_profile() {
   printf 'ollama_preload_embed_model=%s\n' "${OLLAMA_PRELOAD_EMBED_MODEL}"
   printf 'ollama_model_store_budget_gb=%s\n' "${OLLAMA_MODEL_STORE_BUDGET_GB}"
   printf 'rag_embed_model=%s\n' "${RAG_EMBED_MODEL}"
+  printf 'rag_lexical_backend=%s\n' "${RAG_LEXICAL_BACKEND}"
+  printf 'rag_rerank_enabled=%s\n' "${RAG_RERANK_ENABLED}"
+  printf 'rag_rerank_backend=%s\n' "${RAG_RERANK_BACKEND}"
+  printf 'rag_rerank_model=%s\n' "${RAG_RERANK_MODEL}"
+  printf 'rag_rerank_candidates=%s\n' "${RAG_RERANK_CANDIDATES}"
+  printf 'rag_rerank_top_n=%s\n' "${RAG_RERANK_TOP_N}"
+  printf 'rag_opensearch_bootstrap=%s\n' "${RAG_OPENSEARCH_BOOTSTRAP}"
   printf 'trtllm_models=%s\n' "${TRTLLM_MODELS}"
   printf 'trtllm_native_model_policy=%s\n' "${TRTLLM_NATIVE_MODEL_POLICY}"
   printf 'trtllm_nvfp4_local_model_dir=%s\n' "${TRTLLM_NVFP4_LOCAL_MODEL_DIR}"
@@ -2041,6 +2075,295 @@ cmd_stack() {
       "${0}" down "${target}"
     fi
   done
+}
+
+rag_usage() {
+  cat <<USAGE
+Usage:
+  agent rag index [--docs-dir <path>] [--wait|--sync|--no-wait] [--timeout-sec <seconds>] [--json]
+  agent rag task <task_id> [--json]
+  agent rag bootstrap-lexical [--json]
+  agent rag config [--json]
+USAGE
+}
+
+rag_worker_container() {
+  local cid
+  require_cmd docker
+  cid="$(service_container_id rag-worker)"
+  [[ -n "${cid}" ]] || die "rag-worker is not running; start it with: ./agent up rag"
+  printf '%s\n' "${cid}"
+}
+
+rag_container_docs_dir() {
+  local requested="$1"
+  local docs_root="${AGENTIC_ROOT}/rag/docs"
+  local docs_root_real requested_real relative
+
+  if [[ -z "${requested}" ]]; then
+    printf '%s\n' "/docs"
+    return 0
+  fi
+  if [[ "${requested}" == /docs || "${requested}" == /docs/* ]]; then
+    printf '%s\n' "${requested}"
+    return 0
+  fi
+
+  requested_real="$(readlink -f "${requested}" 2>/dev/null || printf '%s\n' "${requested}")"
+  docs_root_real="$(readlink -f "${docs_root}" 2>/dev/null || printf '%s\n' "${docs_root}")"
+  case "${requested_real}" in
+    "${docs_root_real}")
+      printf '%s\n' "/docs"
+      ;;
+    "${docs_root_real}"/*)
+      relative="${requested_real#"${docs_root_real}"/}"
+      printf '%s\n' "/docs/${relative}"
+      ;;
+    *)
+      die "--docs-dir must be /docs inside rag-worker or a host path under ${docs_root}; mount another corpus there before indexing"
+      ;;
+  esac
+}
+
+rag_worker_request() {
+  local method="$1"
+  local path="$2"
+  local payload="${3:-}"
+  local timeout_sec="${4:-120}"
+  local cid
+
+  cid="$(rag_worker_container)"
+  docker exec -i "${cid}" python3 - "${method}" "${path}" "${payload}" "${timeout_sec}" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+method, path, payload, timeout_raw = sys.argv[1:5]
+timeout = float(timeout_raw)
+body = payload.encode("utf-8") if payload else None
+headers = {"Content-Type": "application/json"}
+request = urllib.request.Request(
+    "http://127.0.0.1:7112" + path,
+    data=body,
+    headers=headers,
+    method=method,
+)
+try:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        print(response.read().decode("utf-8"))
+except urllib.error.HTTPError as exc:
+    detail = exc.read().decode("utf-8", errors="replace")
+    print(json.dumps({"error": "http_error", "status_code": exc.code, "detail": detail}, ensure_ascii=True))
+    raise SystemExit(22)
+except Exception as exc:
+    print(json.dumps({"error": "request_failed", "detail": str(exc)}, ensure_ascii=True))
+    raise SystemExit(1)
+PY
+}
+
+rag_print_index_response() {
+  local response="$1"
+  local json_output="$2"
+  if [[ "${json_output}" == "1" ]]; then
+    printf '%s\n' "${response}"
+    return 0
+  fi
+
+  python3 - "${response}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+status = payload.get("status")
+task = payload.get("task") if isinstance(payload.get("task"), dict) else {}
+task_id = task.get("task_id") or payload.get("task_id") or ""
+task_status = task.get("status") or status or "unknown"
+result = task.get("result") if isinstance(task.get("result"), dict) else {}
+error = task.get("error") or payload.get("error") or ""
+
+parts = [f"rag index status={status or task_status}"]
+if task_id:
+    parts.append(f"task_id={task_id}")
+if task_status:
+    parts.append(f"task_status={task_status}")
+for key in ("collection", "indexed", "lexical_backend", "lexical_indexed", "vector_size", "docs_dir"):
+    if key in result:
+        parts.append(f"{key}={result[key]}")
+bootstrap = result.get("lexical_bootstrap") if isinstance(result.get("lexical_bootstrap"), dict) else {}
+if bootstrap:
+    parts.append(f"lexical_bootstrap={bootstrap.get('status', 'unknown')}")
+if error:
+    parts.append(f"error={error}")
+print(" ".join(parts))
+PY
+}
+
+rag_print_task_response() {
+  local response="$1"
+  local json_output="$2"
+  if [[ "${json_output}" == "1" ]]; then
+    printf '%s\n' "${response}"
+    return 0
+  fi
+
+  python3 - "${response}" <<'PY'
+import json
+import sys
+
+task = json.loads(sys.argv[1])
+result = task.get("result") if isinstance(task.get("result"), dict) else {}
+parts = [
+    f"rag task task_id={task.get('task_id', '')}",
+    f"status={task.get('status', 'unknown')}",
+    f"type={task.get('type', '')}",
+]
+if "indexed" in result:
+    parts.append(f"indexed={result['indexed']}")
+if "lexical_indexed" in result:
+    parts.append(f"lexical_indexed={result['lexical_indexed']}")
+if task.get("error"):
+    parts.append(f"error={task['error']}")
+print(" ".join(part for part in parts if part and not part.endswith("=")))
+PY
+}
+
+cmd_rag() {
+  local action="${1:-}"
+  shift || true
+
+  case "${action}" in
+    index)
+      local docs_dir="" container_docs_dir="" wait_flag=1 json_output=0 timeout_sec=120 payload response
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --docs-dir)
+            [[ $# -ge 2 ]] || die "--docs-dir requires a path"
+            docs_dir="$2"
+            shift 2
+            ;;
+          --wait|--sync)
+            wait_flag=1
+            shift
+            ;;
+          --no-wait|--async)
+            wait_flag=0
+            shift
+            ;;
+          --timeout-sec)
+            [[ $# -ge 2 ]] || die "--timeout-sec requires a number"
+            timeout_sec="$2"
+            shift 2
+            ;;
+          --json)
+            json_output=1
+            shift
+            ;;
+          -h|--help)
+            rag_usage
+            return 0
+            ;;
+          *)
+            die "Unknown rag index option: $1"
+            ;;
+        esac
+      done
+
+      require_cmd python3
+      container_docs_dir="$(rag_container_docs_dir "${docs_dir}")"
+      payload="$(python3 - "${container_docs_dir}" "${wait_flag}" <<'PY'
+import json
+import sys
+print(json.dumps({"docs_dir": sys.argv[1], "sync": sys.argv[2] == "1"}, ensure_ascii=True))
+PY
+)"
+      if ! response="$(rag_worker_request POST /v1/index "${payload}" "${timeout_sec}")"; then
+        die "rag index request failed: ${response}"
+      fi
+      rag_print_index_response "${response}" "${json_output}"
+      if python3 - "${response}" <<'PY'
+import json
+import sys
+payload = json.loads(sys.argv[1])
+task = payload.get("task") if isinstance(payload.get("task"), dict) else {}
+if payload.get("status") == "error" or task.get("status") == "error":
+    raise SystemExit(1)
+PY
+      then
+        return 0
+      fi
+      return 1
+      ;;
+    task)
+      [[ $# -ge 1 ]] || die "Usage: agent rag task <task_id> [--json]"
+      local task_id="$1" json_output=0 response
+      shift
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --json) json_output=1; shift ;;
+          *) die "Unknown rag task option: $1" ;;
+        esac
+      done
+      response="$(rag_worker_request GET "/v1/tasks/${task_id}" "" 30)" || die "rag task request failed: ${response}"
+      rag_print_task_response "${response}" "${json_output}"
+      ;;
+    bootstrap-lexical)
+      local json_output=0 response
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --json) json_output=1; shift ;;
+          -h|--help) rag_usage; return 0 ;;
+          *) die "Unknown rag bootstrap-lexical option: $1" ;;
+        esac
+      done
+      response="$(rag_worker_request POST /v1/bootstrap "{}" 120)" || die "rag lexical bootstrap failed: ${response}"
+      if [[ "${json_output}" == "1" ]]; then
+        printf '%s\n' "${response}"
+      else
+        python3 - "${response}" <<'PY'
+import json
+import sys
+payload = json.loads(sys.argv[1])
+result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+print(
+    "rag bootstrap-lexical "
+    f"status={payload.get('status', 'unknown')} "
+    f"backend={result.get('backend', '')} "
+    f"index={result.get('index', '')} "
+    f"bootstrap_status={result.get('status', '')}"
+)
+PY
+      fi
+      ;;
+    config)
+      local json_output=0 response
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --json) json_output=1; shift ;;
+          -h|--help) rag_usage; return 0 ;;
+          *) die "Unknown rag config option: $1" ;;
+        esac
+      done
+      response="$(rag_worker_request GET /v1/config "" 30)" || die "rag config request failed: ${response}"
+      if [[ "${json_output}" == "1" ]]; then
+        printf '%s\n' "${response}"
+      else
+        python3 - "${response}" <<'PY'
+import json
+import sys
+payload = json.loads(sys.argv[1])
+print(" ".join(f"{key}={value}" for key, value in payload.items()))
+PY
+      fi
+      ;;
+    ""|-h|--help)
+      rag_usage
+      ;;
+    *)
+      rag_usage
+      die "Unknown rag command: ${action}"
+      ;;
+  esac
 }
 
 forget_target_paths() {
@@ -4619,6 +4942,10 @@ case "$cmd" in
   llm)
     shift
     cmd_llm "$@"
+    ;;
+  rag)
+    shift
+    cmd_rag "$@"
     ;;
   tunnel)
     shift

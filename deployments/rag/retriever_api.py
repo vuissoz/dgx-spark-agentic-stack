@@ -15,6 +15,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
+def is_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 HOST = os.environ.get("RAG_RETRIEVER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("RAG_RETRIEVER_PORT", "7111"))
 SCHEMA_PATH = Path(os.environ.get("RAG_SCHEMA_PATH", "/config/document.schema.json"))
@@ -33,12 +39,11 @@ EMBED_MODEL = os.environ.get("RAG_EMBED_MODEL", "qwen3-embedding:0.6b")
 REQUEST_TIMEOUT_SEC = float(os.environ.get("RAG_HTTP_TIMEOUT_SEC", "10"))
 TOP_K_MAX = int(os.environ.get("RAG_TOP_K_MAX", "32"))
 DRY_RUN_VECTOR_SIZE = max(16, int(os.environ.get("RAG_DRY_RUN_VECTOR_SIZE", "32")))
-
-
-def is_truthy(value: str | None) -> bool:
-    if value is None:
-        return False
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+RERANK_ENABLED_DEFAULT = is_truthy(os.environ.get("RAG_RERANK_ENABLED", "0"))
+RERANK_BACKEND_DEFAULT = os.environ.get("RAG_RERANK_BACKEND", "lexical")
+RERANK_MODEL_DEFAULT = os.environ.get("RAG_RERANK_MODEL", "lexical-token-overlap-v1")
+RERANK_CANDIDATES_DEFAULT = max(1, int(os.environ.get("RAG_RERANK_CANDIDATES", "16")))
+RERANK_TOP_N_DEFAULT = max(1, int(os.environ.get("RAG_RERANK_TOP_N", "8")))
 
 
 GATE_DRY_RUN = is_truthy(os.environ.get("RAG_GATE_DRY_RUN", "1"))
@@ -300,6 +305,7 @@ def retrieve_lexical(query: str, top_k: int) -> dict:
     result: dict[str, object] = {
         "backend": LEXICAL_BACKEND,
         "status": "disabled",
+        "index": LEXICAL_INDEX,
         "hits": [],
     }
 
@@ -322,6 +328,7 @@ def retrieve_lexical(query: str, top_k: int) -> dict:
     except Exception as exc:
         result["status"] = "error"
         result["error"] = str(exc)
+        result["hint"] = "verify opensearch is healthy, RAG_LEXICAL_BACKEND=opensearch is set, and run: ./agent rag bootstrap-lexical && ./agent rag index --wait"
         return result
 
     raw_hits = response.get("hits", {}).get("hits", [])
@@ -365,10 +372,125 @@ def fuse_rrf(dense_hits: list[dict], lexical_hits: list[dict], top_k: int) -> li
     apply_rrf(dense_hits, "dense")
     apply_rrf(lexical_hits, "lexical")
 
-    fused = sorted(by_key.values(), key=lambda item: float(item.get("rrf_score", 0.0)), reverse=True)
+    fused = sorted(
+        by_key.values(),
+        key=lambda item: (
+            -float(item.get("rrf_score", 0.0)),
+            str(item.get("source_path", "")),
+            str(item.get("chunk_id", "")),
+            str(item.get("id", "")),
+        ),
+    )
     for rank, entry in enumerate(fused[:top_k], start=1):
         entry["rank"] = rank
     return fused[:top_k]
+
+
+def parse_rerank_options(payload: dict, top_k: int) -> dict:
+    raw_options = payload.get("rerank")
+    options = raw_options if isinstance(raw_options, dict) else {}
+
+    enabled = RERANK_ENABLED_DEFAULT
+    if "enabled" in options:
+        enabled = bool(options.get("enabled"))
+
+    backend = str(options.get("backend") or RERANK_BACKEND_DEFAULT).strip().lower()
+    model = str(options.get("model") or RERANK_MODEL_DEFAULT).strip()
+
+    try:
+        candidates = int(options.get("candidates", RERANK_CANDIDATES_DEFAULT) or RERANK_CANDIDATES_DEFAULT)
+    except Exception:
+        candidates = RERANK_CANDIDATES_DEFAULT
+    try:
+        top_n = int(options.get("top_n", RERANK_TOP_N_DEFAULT) or RERANK_TOP_N_DEFAULT)
+    except Exception:
+        top_n = RERANK_TOP_N_DEFAULT
+
+    return {
+        "enabled": enabled,
+        "backend": backend,
+        "model": model,
+        "candidates": max(1, min(candidates, TOP_K_MAX)),
+        "top_n": max(1, min(top_n, top_k)),
+    }
+
+
+def tokenize_for_rank(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9_][a-z0-9_.:-]*", text.lower())
+
+
+def lexical_rerank_score(query_tokens: list[str], candidate: dict) -> float:
+    searchable = " ".join(
+        str(candidate.get(key, ""))
+        for key in ("doc_id", "chunk_id", "source_path", "text_excerpt")
+    ).lower()
+    candidate_tokens = set(tokenize_for_rank(searchable))
+    if not query_tokens:
+        return 0.0
+
+    score = 0.0
+    for token in query_tokens:
+        if token in candidate_tokens:
+            score += 3.0
+        elif token and token in searchable:
+            score += 1.0
+
+    # Preserve the fused signal as a small deterministic tie-breaker.
+    score += float(candidate.get("rrf_score", 0.0) or 0.0)
+    if "lexical" in candidate.get("sources", []):
+        score += 0.25
+    if "dense" in candidate.get("sources", []):
+        score += 0.10
+    return score
+
+
+def rerank_results(query: str, fused: list[dict], top_k: int, options: dict) -> dict:
+    enabled = bool(options.get("enabled"))
+    backend = str(options.get("backend") or "lexical")
+    model = str(options.get("model") or RERANK_MODEL_DEFAULT)
+    candidate_count = int(options.get("candidates") or RERANK_CANDIDATES_DEFAULT)
+    top_n = int(options.get("top_n") or min(top_k, RERANK_TOP_N_DEFAULT))
+
+    base = {
+        "enabled": enabled,
+        "backend": backend,
+        "model": model,
+        "candidate_count": min(candidate_count, len(fused)),
+        "top_n": min(top_n, top_k),
+        "status": "disabled",
+        "results": [],
+    }
+    if not enabled:
+        return base
+
+    if backend != "lexical":
+        base["status"] = "degraded"
+        base["error"] = f"unsupported reranker backend: {backend}"
+        base["hint"] = "set RAG_RERANK_BACKEND=lexical or disable reranking"
+        return base
+
+    query_tokens = tokenize_for_rank(query)
+    pool = [dict(candidate) for candidate in fused[:candidate_count]]
+    for candidate in pool:
+        candidate["rerank_score"] = lexical_rerank_score(query_tokens, candidate)
+
+    ranked = sorted(
+        pool,
+        key=lambda item: (
+            -float(item.get("rerank_score", 0.0)),
+            -float(item.get("rrf_score", 0.0)),
+            str(item.get("source_path", "")),
+            str(item.get("chunk_id", "")),
+            str(item.get("id", "")),
+        ),
+    )
+    results = ranked[:top_n]
+    for rank, candidate in enumerate(results, start=1):
+        candidate["rank"] = rank
+
+    base["status"] = "ok"
+    base["results"] = results
+    return base
 
 
 def backend_up(url: str, path: str = "/healthz") -> bool:
@@ -440,6 +562,13 @@ class Handler(BaseHTTPRequestHandler):
                     "rrf_k": RRF_K,
                     "embed_model": EMBED_MODEL,
                     "gate_dry_run": GATE_DRY_RUN,
+                    "rerank": {
+                        "enabled": RERANK_ENABLED_DEFAULT,
+                        "backend": RERANK_BACKEND_DEFAULT,
+                        "model": RERANK_MODEL_DEFAULT,
+                        "candidates": RERANK_CANDIDATES_DEFAULT,
+                        "top_n": RERANK_TOP_N_DEFAULT,
+                    },
                 },
             )
             return
@@ -475,6 +604,11 @@ class Handler(BaseHTTPRequestHandler):
             fused = fuse_rrf(dense_hits, lexical_hits, top_k)
         else:
             fused = dense_hits[:top_k]
+        rerank_options = parse_rerank_options(payload, top_k)
+        rerank = rerank_results(query, fused, top_k, rerank_options)
+        final_results = rerank.get("results") if rerank.get("status") == "ok" else fused
+        if not isinstance(final_results, list):
+            final_results = fused
 
         response_status = "ok"
         if not fused:
@@ -493,7 +627,8 @@ class Handler(BaseHTTPRequestHandler):
             "dense": dense,
             "lexical": lexical,
             "fusion": {"method": FUSION_METHOD, "rrf_k": RRF_K, "results": fused},
-            "rerank": {"enabled": False, "results": []},
+            "rerank": rerank,
+            "results": final_results[:top_k],
             "ts": utc_now(),
         }
 
@@ -509,6 +644,8 @@ class Handler(BaseHTTPRequestHandler):
                 "lexical_status": lexical.get("status"),
                 "lexical_hits": len(lexical_hits),
                 "fusion_hits": len(fused),
+                "rerank_status": rerank.get("status"),
+                "rerank_hits": len(rerank.get("results", [])) if isinstance(rerank.get("results"), list) else 0,
                 "dense_backend": DENSE_BACKEND,
                 "lexical_backend": LEXICAL_BACKEND,
                 "fusion_method": FUSION_METHOD,

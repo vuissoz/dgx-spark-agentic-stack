@@ -348,6 +348,10 @@ agent ps
 agent llm mode [local|hybrid|mixed|remote]
 agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
+agent rag index [--docs-dir <path>] [--wait|--sync|--no-wait] [--timeout-sec <secondes>] [--json]
+agent rag task <task_id> [--json]
+agent rag bootstrap-lexical [--json]
+agent rag config [--json]
 agent trtllm [status|prepare|start|stop]
 agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
 agent logs <service>
@@ -381,6 +385,25 @@ agent vm cleanup [--name ... --yes --dry-run]
 agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all> [--skip-d5-tests]
 agent doctor [--fix-net] [--check-tool-stream-e2e]
 ```
+
+### RAG operateur
+
+Le corpus par defaut vit dans `${AGENTIC_ROOT}/rag/docs` et est indexe via le worker interne, sans port publie sur l'hote:
+
+```bash
+./agent up rag
+./agent rag index --wait
+```
+
+Pour le mode lexical OpenSearch, activez le profile et relancez l'indexation:
+
+```bash
+COMPOSE_PROFILES=rag-lexical ./agent up rag
+./agent rag bootstrap-lexical
+./agent rag index --wait
+```
+
+`RAG_LEXICAL_BACKEND` passe automatiquement a `opensearch` quand `COMPOSE_PROFILES` contient `rag-lexical`, sauf surcharge explicite. Le reranker reste desactive par defaut; activez-le avec `RAG_RERANK_ENABLED=1` (backend local `lexical`) si vous acceptez une etape de tri supplementaire apres la fusion `rrf`.
 
 Exemples:
 

@@ -356,7 +356,7 @@ Primary CLI contract per baseline service:
 - Why it exists:
   - executes dense retrieval through `qdrant`,
   - executes lexical retrieval through `opensearch` when profile `rag-lexical` is enabled,
-  - applies fusion (`rrf`) and emits retrieval audit events.
+  - applies fusion (`rrf`), optional local lexical reranking, and emits retrieval audit events.
 
 ### `rag-worker`
 - Role: async indexing worker for retrieval pipelines.
@@ -367,12 +367,20 @@ Primary CLI contract per baseline service:
   - `${AGENTIC_ROOT}/rag/worker/logs`
 - Why it exists:
   - processes indexing tasks (`/v1/index`) against local corpus docs,
+  - bootstraps the OpenSearch lexical index explicitly (`/v1/bootstrap`) when lexical mode is active,
   - keeps retrieval/indexing flow operational without exposing RAG internals on host ports.
+
+Operator commands:
+- `./agent rag index --wait`: index `${AGENTIC_ROOT}/rag/docs` through `rag-worker`.
+- `./agent rag index --docs-dir ${AGENTIC_ROOT}/rag/docs/<subdir> --wait`: index a mounted corpus subdirectory.
+- `./agent rag task <task_id>`: inspect an async indexing task.
+- `./agent rag bootstrap-lexical`: create/update the OpenSearch lexical index mapping when `rag-lexical` is active.
 
 ### `opensearch` (optional `rag-lexical` profile)
 - Role: lexical BM25 backend for hybrid retrieval.
 - Activation:
   - `COMPOSE_PROFILES=rag-lexical ./agent up rag`
+  - `RAG_LEXICAL_BACKEND` defaults to `opensearch` when that profile is present.
 - Access path:
   - internal-only: `opensearch:9200`
 - Persistence:
@@ -380,6 +388,12 @@ Primary CLI contract per baseline service:
   - `${AGENTIC_ROOT}/rag/opensearch-logs`
 - Why it exists:
   - provides lexical retrieval signals fused with dense results in `rag-retriever`.
+
+Operational notes:
+- Run `./agent rag bootstrap-lexical` before the first lexical reindex if you want to fail fast on OpenSearch readiness or mapping errors.
+- Run `./agent rag index --wait` after adding or changing corpus files.
+- The lexical index uses explicit settings and mappings for text, keyword, date, and integer provenance fields.
+- `RAG_RERANK_ENABLED=1` enables the optional local lexical reranker after `rrf`; unsupported reranker backends degrade and keep fused results.
 
 ## Optional Stack (`./agent up optional`)
 

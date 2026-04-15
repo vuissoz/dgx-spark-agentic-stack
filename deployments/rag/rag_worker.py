@@ -36,6 +36,7 @@ POLL_INTERVAL_SEC = float(os.environ.get("RAG_WORKER_POLL_INTERVAL_SEC", "10"))
 TASK_WAIT_TIMEOUT_SEC = float(os.environ.get("RAG_WORKER_SYNC_TIMEOUT_SEC", "120"))
 REQUEST_TIMEOUT_SEC = float(os.environ.get("RAG_HTTP_TIMEOUT_SEC", "12"))
 DRY_RUN_VECTOR_SIZE = max(16, int(os.environ.get("RAG_DRY_RUN_VECTOR_SIZE", "32")))
+OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC = float(os.environ.get("RAG_OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC", "60"))
 
 
 def is_truthy(value: str | None) -> bool:
@@ -46,6 +47,7 @@ def is_truthy(value: str | None) -> bool:
 
 GATE_DRY_RUN = is_truthy(os.environ.get("RAG_GATE_DRY_RUN", "1"))
 BOOTSTRAP_INDEX = is_truthy(os.environ.get("RAG_WORKER_BOOTSTRAP_INDEX", "1"))
+OPENSEARCH_BOOTSTRAP = is_truthy(os.environ.get("RAG_OPENSEARCH_BOOTSTRAP", "1"))
 STATE_WRITE_WARNED: set[str] = set()
 
 TASK_QUEUE: queue.Queue[str] = queue.Queue()
@@ -254,6 +256,109 @@ def upsert_qdrant(payload: dict, vector: list[float]) -> None:
     )
 
 
+def opensearch_index_mapping() -> dict:
+    text_field = {
+        "type": "text",
+        "fields": {
+            "keyword": {
+                "type": "keyword",
+                "ignore_above": 512,
+            }
+        },
+    }
+    keyword_field = {"type": "keyword", "ignore_above": 512}
+    return {
+        "dynamic": True,
+        "properties": {
+            "doc_id": keyword_field,
+            "chunk_id": keyword_field,
+            "text": {"type": "text"},
+            "source_type": keyword_field,
+            "source_path": text_field,
+            "file_path": text_field,
+            "path": text_field,
+            "section": text_field,
+            "title": text_field,
+            "language": keyword_field,
+            "version": keyword_field,
+            "timestamp": {"type": "date"},
+            "repo": keyword_field,
+            "branch": keyword_field,
+            "commit_sha": keyword_field,
+            "authors": keyword_field,
+            "doi": keyword_field,
+            "page": {"type": "integer"},
+            "start_line": {"type": "integer"},
+            "end_line": {"type": "integer"},
+        },
+    }
+
+
+def opensearch_index_settings() -> dict:
+    return {
+        "index": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "refresh_interval": "1s",
+        }
+    }
+
+
+def opensearch_index_exists() -> bool:
+    request = urllib.request.Request(f"{OPENSEARCH_URL}/{LEXICAL_INDEX}", method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SEC):
+            return True
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code} while checking opensearch index '{LEXICAL_INDEX}': {detail[:400]}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"cannot check opensearch index '{LEXICAL_INDEX}': {exc}") from exc
+
+
+def wait_for_opensearch() -> None:
+    deadline = time.time() + OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC
+    last_error = ""
+    while time.time() < deadline:
+        try:
+            request_json(f"{OPENSEARCH_URL}/_cluster/health", method="GET", timeout=REQUEST_TIMEOUT_SEC)
+            return
+        except Exception as exc:
+            last_error = str(exc)
+            time.sleep(1)
+    raise RuntimeError(f"opensearch did not become healthy within {OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC:.0f}s: {last_error}")
+
+
+def ensure_opensearch_index() -> dict:
+    if LEXICAL_BACKEND != "opensearch":
+        return {"backend": LEXICAL_BACKEND, "status": "disabled", "index": LEXICAL_INDEX}
+    if not OPENSEARCH_BOOTSTRAP:
+        return {"backend": LEXICAL_BACKEND, "status": "skipped", "index": LEXICAL_INDEX}
+
+    wait_for_opensearch()
+    mapping = opensearch_index_mapping()
+    if opensearch_index_exists():
+        request_json(
+            f"{OPENSEARCH_URL}/{LEXICAL_INDEX}/_mapping",
+            payload={"properties": mapping["properties"]},
+            method="PUT",
+        )
+        result = {"backend": LEXICAL_BACKEND, "status": "exists", "index": LEXICAL_INDEX, "mapping_applied": True}
+    else:
+        request_json(
+            f"{OPENSEARCH_URL}/{LEXICAL_INDEX}",
+            payload={"settings": opensearch_index_settings(), "mappings": mapping},
+            method="PUT",
+        )
+        result = {"backend": LEXICAL_BACKEND, "status": "created", "index": LEXICAL_INDEX, "mapping_applied": True}
+
+    write_state("opensearch_index", json.dumps(result, ensure_ascii=True))
+    append_log({"ts": utc_now(), "event": "opensearch_bootstrap", "result": result})
+    return result
+
+
 def upsert_opensearch(payload: dict) -> None:
     if LEXICAL_BACKEND != "opensearch":
         return
@@ -279,6 +384,7 @@ def ingest_docs(docs_dir: str) -> dict:
     indexed = 0
     lexical_indexed = 0
     vector_size = 0
+    lexical_bootstrap = ensure_opensearch_index()
 
     for doc_path in doc_paths:
         text = doc_path.read_text(encoding="utf-8").strip()
@@ -319,6 +425,7 @@ def ingest_docs(docs_dir: str) -> dict:
         "indexed": indexed,
         "lexical_backend": LEXICAL_BACKEND,
         "lexical_indexed": lexical_indexed,
+        "lexical_bootstrap": lexical_bootstrap,
         "vector_size": vector_size,
     }
 
@@ -467,6 +574,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, payload)
             return
 
+        if self.path == "/v1/config":
+            self._json(
+                200,
+                {
+                    "collection": COLLECTION,
+                    "lexical_backend": LEXICAL_BACKEND,
+                    "lexical_index": LEXICAL_INDEX,
+                    "embed_model": EMBED_MODEL,
+                    "gate_dry_run": GATE_DRY_RUN,
+                    "opensearch_bootstrap": OPENSEARCH_BOOTSTRAP,
+                },
+            )
+            return
+
         if self.path.startswith("/v1/tasks/"):
             task_id = self.path.split("/v1/tasks/", 1)[1].strip()
             if not task_id:
@@ -482,6 +603,21 @@ class Handler(BaseHTTPRequestHandler):
         self._json(404, {"error": "not_found", "path": self.path})
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/v1/bootstrap":
+            try:
+                result = ensure_opensearch_index()
+            except Exception as exc:
+                error = {
+                    "status": "error",
+                    "error": str(exc),
+                    "hint": "start rag with COMPOSE_PROFILES=rag-lexical and RAG_LEXICAL_BACKEND=opensearch, then retry",
+                }
+                append_log({"ts": utc_now(), "event": "opensearch_bootstrap_error", "error": str(exc)})
+                self._json(500, error)
+                return
+            self._json(200, {"status": "ok", "result": result})
+            return
+
         if self.path != "/v1/index":
             self._json(404, {"error": "not_found", "path": self.path})
             return
