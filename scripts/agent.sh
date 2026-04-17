@@ -22,6 +22,7 @@ AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch.sh"
 AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_drift_watch_schedule.sh"
+AGENT_OLLAMA_CHAT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_chat_benchmark.py"
 AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
 AGENT_TUNNEL_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/tunnel_matrix.py"
 AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py"
@@ -83,6 +84,7 @@ Usage:
   agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
   agent ollama unload <model>
+  agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]
   agent trtllm [status|prepare|start|stop]
   agent ollama-link
   agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
@@ -3197,6 +3199,114 @@ USAGE
   printf 'ollama unload backend=ollama model=%s result=unloaded\n' "${model}"
 }
 
+cmd_ollama_bench() {
+  local chapter_file="${AGENTIC_REPO_ROOT}/examples/benchmarks/vingt-mille-lieues-sous-les-mers-ch01.txt"
+  local output_dir="${AGENTIC_ROOT}/deployments/test-reports/ollama-chat-bench/$(date -u +%Y%m%dT%H%M%SZ)"
+  local request_timeout_sec="900"
+  local limit="0"
+  local sort_key="name"
+  local emit_json=0
+  local skip_unload=0
+  local -a models=()
+  local -a extra_args=()
+  local ollama_cid=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --model)
+        [[ $# -ge 2 ]] || die "missing value for --model"
+        models+=("$2")
+        shift 2
+        ;;
+      --chapter-file)
+        [[ $# -ge 2 ]] || die "missing value for --chapter-file"
+        chapter_file="$2"
+        shift 2
+        ;;
+      --output-dir)
+        [[ $# -ge 2 ]] || die "missing value for --output-dir"
+        output_dir="$2"
+        shift 2
+        ;;
+      --request-timeout-sec)
+        [[ $# -ge 2 ]] || die "missing value for --request-timeout-sec"
+        request_timeout_sec="$2"
+        shift 2
+        ;;
+      --limit)
+        [[ $# -ge 2 ]] || die "missing value for --limit"
+        limit="$2"
+        shift 2
+        ;;
+      --sort)
+        [[ $# -ge 2 ]] || die "missing value for --sort"
+        sort_key="$2"
+        shift 2
+        ;;
+      --skip-unload)
+        skip_unload=1
+        shift
+        ;;
+      --json)
+        emit_json=1
+        shift
+        ;;
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]
+
+Description:
+  Discover installed Ollama completion/chat models, cold-load each model with a
+  "Hello" prompt, then send the stored "Vingt mille lieues sous les mers"
+  chapter-1 corpus and capture:
+  - load_duration for the Hello request
+  - Hello completion tokens/second
+  - chapter prompt preload duration and prompt tokens/second
+  - summary completion tokens/second
+
+  Default corpus:
+    examples/benchmarks/vingt-mille-lieues-sous-les-mers-ch01.txt
+USAGE
+        return 0
+        ;;
+      *)
+        die "Unknown ollama bench argument: $1"
+        ;;
+    esac
+  done
+
+  ensure_runtime_env
+  ensure_core_runtime
+  [[ -x "${AGENT_OLLAMA_CHAT_BENCH_SCRIPT}" ]] || die "benchmark script missing or not executable: ${AGENT_OLLAMA_CHAT_BENCH_SCRIPT}"
+
+  ollama_cid="$(service_container_id "ollama" || true)"
+  [[ -n "${ollama_cid}" ]] || die "Ollama backend is not running. Start it with: agent up core"
+
+  extra_args=(
+    --ollama-container "${ollama_cid}"
+    --chapter-file "${chapter_file}"
+    --output-dir "${output_dir}"
+    --request-timeout-sec "${request_timeout_sec}"
+    --limit "${limit}"
+    --sort "${sort_key}"
+  )
+  if [[ "${skip_unload}" == "1" ]]; then
+    extra_args+=(--skip-unload)
+  fi
+  if [[ "${emit_json}" == "1" ]]; then
+    extra_args+=(--json)
+  fi
+  if [[ "${#models[@]}" -gt 0 ]]; then
+    local model
+    for model in "${models[@]}"; do
+      extra_args+=(--model "${model}")
+    done
+  fi
+
+  python3 "${AGENT_OLLAMA_CHAT_BENCH_SCRIPT}" "${extra_args[@]}"
+}
+
 cmd_ollama() {
   local action="${1:-}"
   shift || true
@@ -3205,14 +3315,17 @@ cmd_ollama() {
     unload)
       cmd_ollama_unload "$@"
       ;;
+    bench)
+      cmd_ollama_bench "$@"
+      ;;
     help|-h|--help)
-      printf '%s\n' "Usage: agent ollama unload <model>"
+      printf '%s\n' "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]"
       ;;
     "")
-      die "Usage: agent ollama unload <model>"
+      die "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]"
       ;;
     *)
-      die "Usage: agent ollama unload <model>"
+      die "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]"
       ;;
   esac
 }

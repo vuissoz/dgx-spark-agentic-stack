@@ -42,6 +42,10 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - profils de configuration par agent versionnés ;
   - chemins explicites `/v1/chat/completions`, `/v1/responses`, `/v1/messages` ;
   - variables/env générées de manière déterministe.
+- Le repo embarque désormais aussi un benchmark opérateur `agent ollama bench`
+  qui découvre les modèles Ollama `completion`, envoie un `Hello`, précharge un
+  corpus versionné du chapitre 1 de _Vingt mille lieues sous les mers_, puis
+  retourne par modèle les métriques de chargement et de débit demandées.
 - Les écarts majeurs de compat couverts incluent :
   - `tools` / `tool_choice` / `tool_calls` ;
   - `usage` / tokens réels ;
@@ -83,6 +87,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-p1i` : bootstrap Claude aligné sur `ANTHROPIC_AUTH_TOKEN`.
   - `dgx-spark-agentic-stack-m3z` : OpenWebUI gate-only par défaut.
   - `dgx-spark-agentic-stack-ygu` : veille automatisée de drift upstream Ollama.
+  - `dgx-spark-agentic-stack-djri` : benchmark live des modèles Ollama chat/agent avec corpus chapitre versionné, métriques de chargement/débit et smoke test rootless-dev borné au plus petit modèle disponible.
   - `dgx-spark-agentic-stack-1r0` : commande opérateur `agent ollama unload <model>` pour décharger explicitement un modèle local avec traçabilité.
   - `dgx-spark-agentic-stack-7gw` : matrice d’intégration `opencode/openclaw/openhands/vibestral`.
   - `dgx-spark-agentic-stack-a5m` : enforcement opencode/vibestral via `ollama-gate`.
