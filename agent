@@ -3,6 +3,64 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+runtime_env_has_lines() {
+  local env_file="$1"
+  [[ -f "${env_file}" ]] || return 1
+  grep -Eq '^[A-Za-z_][A-Za-z0-9_]*=' "${env_file}"
+}
+
+runtime_project_running() {
+  local project="$1"
+  command -v docker >/dev/null 2>&1 || return 1
+  docker ps \
+    --filter "label=com.docker.compose.project=${project}" \
+    --format '{{.Names}}' 2>/dev/null | grep -q .
+}
+
+load_runtime_env_file() {
+  local env_file="$1"
+  runtime_env_has_lines "${env_file}" || return 1
+  set -a
+  # shellcheck disable=SC1090
+  source "${env_file}"
+  set +a
+}
+
+auto_select_runtime_profile() {
+  local rootless_env="${HOME}/.local/share/agentic/deployments/runtime.env"
+  local strict_env="/srv/agentic/deployments/runtime.env"
+  local rootless_running=0
+  local strict_running=0
+
+  if runtime_project_running "agentic-dev"; then
+    rootless_running=1
+  fi
+  if runtime_project_running "agentic"; then
+    strict_running=1
+  fi
+
+  if (( rootless_running == 1 && strict_running == 1 )); then
+    echo "ERROR: both rootless-dev and strict-prod stacks appear active; rerun with explicit profile" >&2
+    return 2
+  fi
+  if (( rootless_running == 1 && strict_running == 0 )); then
+    load_runtime_env_file "${rootless_env}" && return 0
+  fi
+  if (( strict_running == 1 && rootless_running == 0 )); then
+    load_runtime_env_file "${strict_env}" && return 0
+  fi
+  if [[ -f "${rootless_env}" && -f "${strict_env}" ]]; then
+    echo "ERROR: both rootless-dev and strict-prod runtime env files exist; rerun with explicit profile" >&2
+    return 2
+  fi
+  if [[ -f "${rootless_env}" && ! -f "${strict_env}" ]]; then
+    load_runtime_env_file "${rootless_env}" && return 0
+  fi
+  if [[ -f "${strict_env}" && ! -f "${rootless_env}" ]]; then
+    load_runtime_env_file "${strict_env}" && return 0
+  fi
+}
+
 if [[ $# -gt 0 ]]; then
   case "$1" in
     strict-prod|rootless-dev)
@@ -10,8 +68,13 @@ if [[ $# -gt 0 ]]; then
       shift
       ;;
     *)
+      if [[ -z "${AGENTIC_PROFILE:-}" && -z "${AGENTIC_ROOT:-}" && -z "${AGENTIC_COMPOSE_PROJECT:-}" ]]; then
+        auto_select_runtime_profile
+      fi
       ;;
   esac
+elif [[ -z "${AGENTIC_PROFILE:-}" && -z "${AGENTIC_ROOT:-}" && -z "${AGENTIC_COMPOSE_PROJECT:-}" ]]; then
+  auto_select_runtime_profile
 fi
 
 exec "${REPO_ROOT}/scripts/agent.sh" "$@"
