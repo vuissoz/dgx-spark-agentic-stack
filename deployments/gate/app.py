@@ -2765,6 +2765,8 @@ async def handle_chat_completion_endpoint(
             reason = "backend_auth_error"
             return backend_auth_response(backend, provider, str(exc))
         backend = state.resolve_backend(model_served)
+        backend_cfg = state.backend_config(backend) or {}
+        protocol = str(backend_cfg.get("protocol", "")).strip().lower()
         provider = backend_provider_name(backend)
         is_external_provider = provider_is_external(provider)
         llm_mode = state.get_llm_mode()
@@ -2811,7 +2813,7 @@ async def handle_chat_completion_endpoint(
                         "total_tokens": external_tokens_used,
                     }
         else:
-            if stream and backend == "trtllm":
+            if stream and protocol == "ollama":
                 try:
                     upstream_status, upstream_stream, upstream_text = await backend_chat_completion_stream(
                         backend,
@@ -2975,8 +2977,6 @@ async def handle_chat_completion_endpoint(
                     },
                 )
 
-            backend_cfg = state.backend_config(backend) or {}
-            protocol = str(backend_cfg.get("protocol", ""))
             effective_upstream_json = upstream_json
             content = chat_content_from_upstream(protocol, upstream_json)
             response_tool_calls = chat_tool_calls_from_upstream(upstream_json)
