@@ -157,6 +157,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 | `dgx-spark-agentic-stack-5ahj` | open | stabiliser la preuve `ollama-gate` de `tests/H2_openhands.sh` maintenant que la toolchain OpenHands est alignée sur le Python runtime exposé |
 | `dgx-spark-agentic-stack-r1my` | open | aligner les assertions rootless-dev restantes de `tests/E2_agents_confinement.sh` et `tests/K5_goose.sh` avec les contrats runtime actuels (workspace rootless et bannière Goose) |
 | `dgx-spark-agentic-stack-m00n` | open | intégrer Hermes Agent (`NousResearch/hermes-agent`) comme nouvel agent core stack-managed avec service dédié, état persistant, surface opérateur et couverture doctor/tests |
+| `dgx-spark-agentic-stack-vonj` | open | aligner `agentic-hermes` sur le contrat upstream `ollama launch hermes` (schema `ollama-launch`, migration config legacy, tests/docs/doctor/drift-watch) |
 
 ## Profils d’exécution (obligatoires)
 

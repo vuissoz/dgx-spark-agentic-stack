@@ -2,6 +2,8 @@
 import argparse
 import json
 import os
+import re
+import shlex
 import subprocess
 import sys
 import textwrap
@@ -17,38 +19,95 @@ def die(message: str) -> None:
     raise SystemExit(1)
 
 
-def post_json(base_url: str, endpoint: str, payload: dict, timeout_sec: int) -> dict:
-    data = json.dumps(payload).encode("utf-8")
+def request_json(
+    base_url: str,
+    endpoint: str,
+    method: str,
+    timeout_sec: int,
+    payload: dict | None = None,
+    toolbox_container: str | None = None,
+) -> dict:
+    full_url = f"{base_url.rstrip('/')}{endpoint}"
+    if toolbox_container:
+        curl_cmd = [
+            "curl",
+            "-sS",
+            "-H",
+            "Content-Type: application/json",
+            "-X",
+            method.upper(),
+            "--connect-timeout",
+            "5",
+            "--max-time",
+            str(timeout_sec),
+            "-w",
+            "\n__HTTP_CODE__:%{http_code}",
+        ]
+        if payload is not None:
+            curl_cmd.extend(["--data-binary", "@-"])
+        curl_cmd.append(full_url)
+        script = " ".join(shlex.quote(part) for part in curl_cmd)
+        proc = subprocess.run(
+            ["docker", "exec", "-i", toolbox_container, "sh", "-lc", script],
+            input=(json.dumps(payload) if payload is not None else None),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip()
+            raise RuntimeError(f"{endpoint} request via toolbox failed: {detail or f'docker exec returned {proc.returncode}'}")
+        marker = "__HTTP_CODE__:"
+        body, sep, code_str = proc.stdout.rpartition(marker)
+        if not sep:
+            raise RuntimeError(f"{endpoint} request via toolbox returned no HTTP status marker")
+        status = int((code_str or "").strip() or "0")
+        body = body.rstrip()
+        if status < 200 or status >= 300:
+            raise RuntimeError(f"{endpoint} returned HTTP {status}: {body}")
+        try:
+            return json.loads(body or "{}")
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"{endpoint} response is not valid JSON: {body[:300]}") from exc
+
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
-        f"{base_url.rstrip('/')}{endpoint}",
+        full_url,
         data=data,
         headers={"Content-Type": "application/json"},
+        method=method.upper(),
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_sec) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"{endpoint} returned HTTP {exc.code}: {body}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"{endpoint} request failed: {exc}") from exc
+
+
+def post_json(
+    base_url: str, endpoint: str, payload: dict, timeout_sec: int, toolbox_container: str | None = None
+) -> dict:
+    return request_json(
+        base_url=base_url,
+        endpoint=endpoint,
         method="POST",
+        payload=payload,
+        timeout_sec=timeout_sec,
+        toolbox_container=toolbox_container,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_sec) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{endpoint} returned HTTP {exc.code}: {body}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"{endpoint} request failed: {exc}") from exc
 
 
-def get_json(base_url: str, endpoint: str, timeout_sec: int) -> dict:
-    request = urllib.request.Request(
-        f"{base_url.rstrip('/')}{endpoint}",
-        headers={"Content-Type": "application/json"},
+def get_json(base_url: str, endpoint: str, timeout_sec: int, toolbox_container: str | None = None) -> dict:
+    return request_json(
+        base_url=base_url,
+        endpoint=endpoint,
         method="GET",
+        timeout_sec=timeout_sec,
+        toolbox_container=toolbox_container,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_sec) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{endpoint} returned HTTP {exc.code}: {body}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"{endpoint} request failed: {exc}") from exc
 
 
 def ns_to_s(value) -> float:
@@ -96,15 +155,122 @@ def unload_model(container_name: str, model: str) -> dict:
     return {"result": "error", "detail": output or f"docker exec returned {proc.returncode}"}
 
 
-def discover_models(base_url: str, timeout_sec: int) -> list[dict]:
-    tags = get_json(base_url, "/api/tags", timeout_sec).get("models", [])
+def list_loaded_models(base_url: str, timeout_sec: int, toolbox_container: str | None) -> list[str]:
+    payload = get_json(base_url, "/api/ps", timeout_sec, toolbox_container=toolbox_container)
+    loaded = []
+    for entry in payload.get("models", []):
+        name = entry.get("name")
+        if name:
+            loaded.append(name)
+    return loaded
+
+
+def list_loaded_models_backend(container_name: str) -> list[str]:
+    proc = subprocess.run(
+        ["docker", "exec", container_name, "ollama", "ps"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(detail or f"docker exec returned {proc.returncode}")
+    lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    if not lines:
+        return []
+    loaded = []
+    # First line is usually a table header (NAME ...).
+    for line in lines[1:]:
+        name = line.split()[0] if line.split() else ""
+        if name:
+            loaded.append(name)
+    return loaded
+
+
+def wait_model_unloaded(
+    base_url: str,
+    timeout_sec: int,
+    model: str,
+    container_name: str,
+    toolbox_container: str | None,
+    wait_sec: float = 20.0,
+) -> dict:
+    deadline = time.time() + max(wait_sec, 1.0)
+    last_loaded = []
+    while time.time() < deadline:
+        try:
+            last_loaded = list_loaded_models(base_url, timeout_sec, toolbox_container=toolbox_container)
+            check_backend = False
+        except Exception as exc:  # noqa: BLE001
+            if "HTTP 404" not in str(exc):
+                return {"result": "error", "detail": f"unable to query /api/ps for unload verification: {exc}"}
+            check_backend = True
+        if check_backend:
+            try:
+                last_loaded = list_loaded_models_backend(container_name)
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "result": "error",
+                    "detail": f"unable to verify unload from backend container '{container_name}': {exc}",
+                }
+        if model not in last_loaded:
+            return {"result": "verified-unloaded", "detail": "model absent from loaded-model list"}
+        time.sleep(0.4)
+    return {
+        "result": "still-loaded",
+        "detail": f"model still present in /api/ps after {wait_sec:.1f}s: {', '.join(last_loaded) if last_loaded else '<none>'}",
+    }
+
+
+def ensure_gate_url(url: str) -> str:
+    normalized = (url or "").strip()
+    if not normalized:
+        raise ValueError("empty ollama URL")
+    gate_hosts = {"127.0.0.1", "localhost", "ollama-gate"}
+    gate_port = "11435"
+    match = re.match(r"^https?://([^/:]+)(?::([0-9]+))?(?:/.*)?$", normalized, flags=re.IGNORECASE)
+    if not match:
+        raise ValueError(f"invalid URL format: {normalized}")
+    host = (match.group(1) or "").lower()
+    port = match.group(2) or ("443" if normalized.lower().startswith("https://") else "80")
+    if host not in gate_hosts or port != gate_port:
+        raise ValueError(
+            f"ollama bench must target ollama-gate (accepted: http://127.0.0.1:11435, http://localhost:11435, http://ollama-gate:11435). Got: {normalized}"
+        )
+    return normalized
+
+
+def ensure_non_empty_url(url: str, label: str) -> str:
+    normalized = (url or "").strip()
+    if not normalized:
+        raise ValueError(f"empty {label} URL")
+    match = re.match(r"^https?://([^/:]+)(?::([0-9]+))?(?:/.*)?$", normalized, flags=re.IGNORECASE)
+    if not match:
+        raise ValueError(f"invalid {label} URL format: {normalized}")
+    return normalized.rstrip("/")
+
+
+def discover_models(base_url: str, timeout_sec: int, toolbox_container: str | None) -> list[dict]:
+    tags = get_json(base_url, "/api/tags", timeout_sec, toolbox_container=toolbox_container).get("models", [])
     discovered = []
     for entry in tags:
         name = entry.get("name")
         if not name:
             continue
-        show = post_json(base_url, "/api/show", {"model": name, "verbose": False}, timeout_sec)
-        capabilities = show.get("capabilities") or []
+        show = {}
+        show_error = ""
+        capabilities = []
+        try:
+            show = post_json(
+                base_url,
+                "/api/show",
+                {"model": name, "verbose": False},
+                timeout_sec,
+                toolbox_container=toolbox_container,
+            )
+            capabilities = show.get("capabilities") or []
+        except Exception as exc:  # noqa: BLE001
+            show_error = str(exc)
         discovered.append(
             {
                 "name": name,
@@ -114,6 +280,7 @@ def discover_models(base_url: str, timeout_sec: int) -> list[dict]:
                 "details": entry.get("details") or show.get("details") or {},
                 "capabilities": capabilities,
                 "show": show,
+                "show_error": show_error,
             }
         )
     return discovered
@@ -123,9 +290,14 @@ def filter_models(models: list[dict], selected_models: list[str]) -> list[dict]:
     selected_set = {item for item in selected_models if item}
     filtered = []
     for entry in models:
-        if "completion" not in (entry.get("capabilities") or []):
-            continue
         if selected_set and entry["name"] not in selected_set:
+            continue
+        capabilities = entry.get("capabilities") or []
+        # If /api/show is unavailable for this model/backend, we cannot assert it is
+        # benchmarkable over native Ollama endpoints; skip by default unless explicitly selected.
+        if not capabilities and entry.get("show_error") and not selected_set:
+            continue
+        if capabilities and "completion" not in capabilities:
             continue
         filtered.append(entry)
     return filtered
@@ -139,21 +311,107 @@ def sort_models(models: list[dict], sort_key: str) -> list[dict]:
     return sorted(models, key=lambda item: item["name"])
 
 
-def run_generate(base_url: str, timeout_sec: int, payload: dict) -> dict:
+def run_generate(base_url: str, timeout_sec: int, payload: dict, toolbox_container: str | None) -> dict:
     started_at = time.time()
-    response = post_json(base_url, "/api/generate", payload, timeout_sec)
+    response = post_json(
+        base_url,
+        "/api/generate",
+        payload,
+        timeout_sec,
+        toolbox_container=toolbox_container,
+    )
     finished_at = time.time()
     response["_wall_clock_seconds"] = round(finished_at - started_at, 6)
     return response
 
 
+def run_model_sequence(
+    *,
+    base_url: str,
+    timeout_sec: int,
+    toolbox_container: str | None,
+    model: str,
+    chapter_text: str,
+) -> dict:
+    hello_response = run_generate(
+        base_url,
+        timeout_sec,
+        {
+            "model": model,
+            "prompt": "Hello",
+            "stream": False,
+            "options": {"num_predict": 64},
+        },
+        toolbox_container=toolbox_container,
+    )
+    hello = {
+        "load_duration_seconds": round(ns_to_s(hello_response.get("load_duration")), 6),
+        "total_duration_seconds": round(ns_to_s(hello_response.get("total_duration")), 6),
+        "prompt_eval_count": hello_response.get("prompt_eval_count", 0),
+        "prompt_eval_duration_seconds": round(ns_to_s(hello_response.get("prompt_eval_duration")), 6),
+        "eval_count": hello_response.get("eval_count", 0),
+        "eval_duration_seconds": round(ns_to_s(hello_response.get("eval_duration")), 6),
+        "tokens_per_second": round(
+            tps(hello_response.get("eval_count", 0), hello_response.get("eval_duration", 0)),
+            3,
+        ),
+        "wall_clock_seconds": hello_response["_wall_clock_seconds"],
+        "response_preview": preview(hello_response.get("response", "")),
+    }
+
+    summary_prompt = textwrap.dedent(
+        f"""\
+        Voici le premier chapitre complet de "Vingt mille lieues sous les mers".
+        Resume-le en 5 phrases maximum.
+
+        {chapter_text}
+        """
+    ).strip()
+    summary_response = run_generate(
+        base_url,
+        timeout_sec,
+        {
+            "model": model,
+            "prompt": summary_prompt,
+            "stream": False,
+            "options": {"num_predict": 256},
+        },
+        toolbox_container=toolbox_container,
+    )
+    chapter_summary = {
+        "chapter_characters": len(chapter_text),
+        "load_duration_seconds": round(ns_to_s(summary_response.get("load_duration")), 6),
+        "total_duration_seconds": round(ns_to_s(summary_response.get("total_duration")), 6),
+        "prompt_eval_count": summary_response.get("prompt_eval_count", 0),
+        "prompt_eval_duration_seconds": round(ns_to_s(summary_response.get("prompt_eval_duration")), 6),
+        "prompt_tokens_per_second": round(
+            tps(
+                summary_response.get("prompt_eval_count", 0),
+                summary_response.get("prompt_eval_duration", 0),
+            ),
+            3,
+        ),
+        "eval_count": summary_response.get("eval_count", 0),
+        "eval_duration_seconds": round(ns_to_s(summary_response.get("eval_duration")), 6),
+        "summary_tokens_per_second": round(
+            tps(summary_response.get("eval_count", 0), summary_response.get("eval_duration", 0)),
+            3,
+        ),
+        "wall_clock_seconds": summary_response["_wall_clock_seconds"],
+        "response_preview": preview(summary_response.get("response", "")),
+    }
+    return {"hello": hello, "chapter_summary": chapter_summary}
+
+
 def benchmark_model(
     base_url: str,
+    direct_ollama_url: str,
     timeout_sec: int,
     container_name: str,
     chapter_text: str,
     model_entry: dict,
     unload_before_each: bool,
+    toolbox_container: str | None,
 ) -> dict:
     model = model_entry["name"]
     record = {
@@ -163,8 +421,10 @@ def benchmark_model(
         "modified_at": model_entry.get("modified_at"),
         "capabilities": model_entry.get("capabilities") or [],
         "details": model_entry.get("details") or {},
+        "discovery_warning": model_entry.get("show_error") or "",
         "status": "ok",
         "unload_before_each": unload_before_each,
+        "diagnostics": {},
     }
 
     if unload_before_each:
@@ -174,81 +434,102 @@ def benchmark_model(
             record["status"] = "error"
             record["error"] = f"unable to cold-unload model before benchmark: {unload_info['detail']}"
             return record
+        verify_pre = wait_model_unloaded(
+            base_url,
+            timeout_sec,
+            model,
+            container_name=container_name,
+            toolbox_container=toolbox_container,
+        )
+        record["pre_run_unload_verify"] = verify_pre
+        if verify_pre["result"] != "verified-unloaded":
+            record["status"] = "error"
+            record["error"] = f"unable to verify model unload before benchmark: {verify_pre['detail']}"
+            return record
 
     try:
-        hello_response = run_generate(
-            base_url,
-            timeout_sec,
-            {
-                "model": model,
-                "prompt": "Hello",
-                "stream": False,
-                "options": {"num_predict": 64},
-            },
+        gate_result = run_model_sequence(
+            base_url=base_url,
+            timeout_sec=timeout_sec,
+            toolbox_container=toolbox_container,
+            model=model,
+            chapter_text=chapter_text,
         )
-        record["hello"] = {
-            "load_duration_seconds": round(ns_to_s(hello_response.get("load_duration")), 6),
-            "total_duration_seconds": round(ns_to_s(hello_response.get("total_duration")), 6),
-            "prompt_eval_count": hello_response.get("prompt_eval_count", 0),
-            "prompt_eval_duration_seconds": round(ns_to_s(hello_response.get("prompt_eval_duration")), 6),
-            "eval_count": hello_response.get("eval_count", 0),
-            "eval_duration_seconds": round(ns_to_s(hello_response.get("eval_duration")), 6),
-            "tokens_per_second": round(
-                tps(hello_response.get("eval_count", 0), hello_response.get("eval_duration", 0)),
-                3,
-            ),
-            "wall_clock_seconds": hello_response["_wall_clock_seconds"],
-            "response_preview": preview(hello_response.get("response", "")),
-        }
-
-        summary_prompt = textwrap.dedent(
-            f"""\
-            Voici le premier chapitre complet de "Vingt mille lieues sous les mers".
-            Resume-le en 5 phrases maximum.
-
-            {chapter_text}
-            """
-        ).strip()
-
-        summary_response = run_generate(
-            base_url,
-            timeout_sec,
-            {
-                "model": model,
-                "prompt": summary_prompt,
-                "stream": False,
-                "options": {"num_predict": 256},
-            },
-        )
-        record["chapter_summary"] = {
-            "chapter_characters": len(chapter_text),
-            "load_duration_seconds": round(ns_to_s(summary_response.get("load_duration")), 6),
-            "total_duration_seconds": round(ns_to_s(summary_response.get("total_duration")), 6),
-            "prompt_eval_count": summary_response.get("prompt_eval_count", 0),
-            "prompt_eval_duration_seconds": round(ns_to_s(summary_response.get("prompt_eval_duration")), 6),
-            "prompt_tokens_per_second": round(
-                tps(
-                    summary_response.get("prompt_eval_count", 0),
-                    summary_response.get("prompt_eval_duration", 0),
-                ),
-                3,
-            ),
-            "eval_count": summary_response.get("eval_count", 0),
-            "eval_duration_seconds": round(ns_to_s(summary_response.get("eval_duration")), 6),
-            "summary_tokens_per_second": round(
-                tps(summary_response.get("eval_count", 0), summary_response.get("eval_duration", 0)),
-                3,
-            ),
-            "wall_clock_seconds": summary_response["_wall_clock_seconds"],
-            "response_preview": preview(summary_response.get("response", "")),
-        }
+        record["hello"] = gate_result["hello"]
+        record["chapter_summary"] = gate_result["chapter_summary"]
     except Exception as exc:  # noqa: BLE001
-        record["status"] = "error"
-        record["error"] = str(exc)
+        gate_error = str(exc)
+        record["diagnostics"]["gate_error"] = gate_error
+        try:
+            direct_result = run_model_sequence(
+                base_url=direct_ollama_url,
+                timeout_sec=timeout_sec,
+                toolbox_container=toolbox_container,
+                model=model,
+                chapter_text=chapter_text,
+            )
+            record["diagnostics"]["direct_fallback"] = {
+                "status": "ok",
+                "ollama_url": direct_ollama_url,
+                "note": "gate failed but direct Ollama generate succeeded",
+            }
+            record["diagnostics"]["gate_root_cause_confirmed"] = True
+            record["status"] = "error"
+            record["error"] = (
+                "ollama-gate request failed but direct Ollama fallback succeeded; "
+                f"gate error: {gate_error}"
+            )
+            # Keep direct metrics for troubleshooting without hiding gate failure.
+            record["hello"] = direct_result["hello"]
+            record["chapter_summary"] = direct_result["chapter_summary"]
+        except Exception as direct_exc:  # noqa: BLE001
+            record["diagnostics"]["direct_fallback"] = {
+                "status": "error",
+                "ollama_url": direct_ollama_url,
+                "error": str(direct_exc),
+            }
+            record["diagnostics"]["gate_root_cause_confirmed"] = False
+            record["status"] = "error"
+            record["error"] = (
+                "ollama-gate request failed and direct Ollama fallback also failed; "
+                f"gate error: {gate_error}; direct error: {direct_exc}"
+            )
     finally:
         record["post_run_unload"] = unload_model(container_name, model)
+        record["post_run_unload_verify"] = wait_model_unloaded(
+            base_url,
+            timeout_sec,
+            model,
+            container_name=container_name,
+            toolbox_container=toolbox_container,
+        )
+        if (
+            record.get("status") == "ok"
+            and record["post_run_unload_verify"].get("result") != "verified-unloaded"
+        ):
+            record["status"] = "error"
+            record["error"] = (
+                "model did not unload cleanly after benchmark: "
+                f"{record['post_run_unload_verify'].get('detail', 'unknown error')}"
+            )
 
     return record
+
+
+def format_model_terminal_line(item: dict) -> str:
+    error = item.get("error") or "-"
+    unload_status = (item.get("post_run_unload_verify") or {}).get("result", "unknown")
+    direct_status = ((item.get("diagnostics") or {}).get("direct_fallback") or {}).get("status", "n/a")
+    gate_confirmed = (item.get("diagnostics") or {}).get("gate_root_cause_confirmed")
+    gate_note = "yes" if gate_confirmed else "no" if gate_confirmed is False else "n/a"
+    return (
+        f"ollama_bench model={item.get('model', '<unknown>')} "
+        f"status={item.get('status', 'unknown')} "
+        f"unload_verify={unload_status} "
+        f"direct_fallback={direct_status} "
+        f"gate_issue_confirmed={gate_note} "
+        f"error={error}"
+    )
 
 
 def format_text_summary(report: dict) -> str:
@@ -288,7 +569,18 @@ def parse_args() -> argparse.Namespace:
             "and a chapter-summary request."
         )
     )
-    parser.add_argument("--ollama-url", default=os.environ.get("OLLAMA_API_URL", "http://127.0.0.1:11434"))
+    parser.add_argument(
+        "--ollama-url",
+        default=os.environ.get(
+            "AGENTIC_OLLAMA_GATE_BASE_URL",
+            os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11435"),
+        ),
+    )
+    parser.add_argument(
+        "--direct-ollama-url",
+        default=os.environ.get("OLLAMA_API_URL", "http://ollama:11434"),
+        help="Direct Ollama base URL used only as fallback diagnostics when gate requests fail.",
+    )
     parser.add_argument("--ollama-container", required=True)
     parser.add_argument("--chapter-file", required=True)
     parser.add_argument("--output-dir", required=True)
@@ -298,11 +590,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--json", action="store_true", dest="emit_json")
     parser.add_argument("--skip-unload", action="store_true")
     parser.add_argument("--model", action="append", default=[], help="Benchmark only the named model; repeatable.")
+    parser.add_argument("--toolbox-container", default="", help="Optional toolbox container used to reach internal gate URL.")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    try:
+        args.ollama_url = ensure_gate_url(args.ollama_url)
+    except ValueError as exc:
+        die(str(exc))
+    try:
+        args.direct_ollama_url = ensure_non_empty_url(args.direct_ollama_url, "direct Ollama")
+    except ValueError as exc:
+        die(str(exc))
+
     chapter_path = Path(args.chapter_file)
     if not chapter_path.is_file():
         die(f"chapter file not found: {chapter_path}")
@@ -314,7 +616,11 @@ def main() -> None:
     if not chapter_text:
         die(f"chapter file is empty: {chapter_path}")
 
-    discovered = discover_models(args.ollama_url, args.request_timeout_sec)
+    toolbox_container = (args.toolbox_container or "").strip() or None
+    try:
+        discovered = discover_models(args.ollama_url, args.request_timeout_sec, toolbox_container=toolbox_container)
+    except Exception as exc:  # noqa: BLE001
+        die(f"unable to discover models via {args.ollama_url}: {exc}")
     completion_models = sort_models(filter_models(discovered, args.model), args.sort)
     if args.limit > 0:
         completion_models = completion_models[: args.limit]
@@ -327,6 +633,7 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "profile": os.environ.get("AGENTIC_PROFILE", "unknown"),
         "ollama_url": args.ollama_url,
+        "direct_ollama_url": args.direct_ollama_url,
         "ollama_container": args.ollama_container,
         "chapter_file": str(chapter_path),
         "model_selection": args.model,
@@ -337,16 +644,18 @@ def main() -> None:
     }
 
     for entry in completion_models:
-        report["models"].append(
-            benchmark_model(
-                base_url=args.ollama_url,
-                timeout_sec=args.request_timeout_sec,
-                container_name=args.ollama_container,
-                chapter_text=chapter_text,
-                model_entry=entry,
-                unload_before_each=not args.skip_unload,
-            )
+        model_result = benchmark_model(
+            base_url=args.ollama_url,
+            direct_ollama_url=args.direct_ollama_url,
+            timeout_sec=args.request_timeout_sec,
+            container_name=args.ollama_container,
+            chapter_text=chapter_text,
+            model_entry=entry,
+            unload_before_each=not args.skip_unload,
+            toolbox_container=toolbox_container,
         )
+        report["models"].append(model_result)
+        print(format_model_terminal_line(model_result), flush=True)
 
     report_path = output_dir / "report.json"
     text_path = output_dir / "summary.tsv"

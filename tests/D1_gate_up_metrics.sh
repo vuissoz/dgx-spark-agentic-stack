@@ -30,4 +30,9 @@ printf '%s\n' "${tags_payload}" | grep -q '"models"' \
   || fail "gate /api/tags response does not contain models field"
 ok "gate /api/tags responds with Ollama-compatible payload"
 
+ps_payload="$(timeout 15 docker exec "${toolbox_cid}" sh -lc 'curl -fsS http://ollama-gate:11435/api/ps')"
+printf '%s\n' "${ps_payload}" | grep -q '"models"' \
+  || fail "gate /api/ps response does not contain models field"
+ok "gate /api/ps responds with Ollama-compatible payload"
+
 ok "D1_gate_up_metrics passed"

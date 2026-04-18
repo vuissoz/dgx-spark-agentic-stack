@@ -84,7 +84,7 @@ Usage:
   agent cleanup [--yes] [--backup|--no-backup]
   agent net apply
   agent ollama unload <model>
-  agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]
+  agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--direct-ollama-url <url>] [--skip-unload] [--json]
   agent trtllm [status|prepare|start|stop]
   agent ollama-link
   agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
@@ -3203,6 +3203,8 @@ cmd_ollama_bench() {
   local chapter_file="${AGENTIC_REPO_ROOT}/examples/benchmarks/vingt-mille-lieues-sous-les-mers-ch01.txt"
   local output_dir="${AGENTIC_ROOT}/deployments/test-reports/ollama-chat-bench/$(date -u +%Y%m%dT%H%M%SZ)"
   local request_timeout_sec="900"
+  local ollama_url="${AGENTIC_OLLAMA_GATE_BASE_URL:-http://ollama-gate:11435}"
+  local direct_ollama_url="${OLLAMA_API_URL:-http://ollama:11434}"
   local limit="0"
   local sort_key="name"
   local emit_json=0
@@ -3210,6 +3212,7 @@ cmd_ollama_bench() {
   local -a models=()
   local -a extra_args=()
   local ollama_cid=""
+  local toolbox_cid=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -3233,6 +3236,11 @@ cmd_ollama_bench() {
         request_timeout_sec="$2"
         shift 2
         ;;
+      --direct-ollama-url)
+        [[ $# -ge 2 ]] || die "missing value for --direct-ollama-url"
+        direct_ollama_url="$2"
+        shift 2
+        ;;
       --limit)
         [[ $# -ge 2 ]] || die "missing value for --limit"
         limit="$2"
@@ -3254,7 +3262,7 @@ cmd_ollama_bench() {
       -h|--help|help)
         cat <<USAGE
 Usage:
-  agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]
+  agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--direct-ollama-url <url>] [--skip-unload] [--json]
 
 Description:
   Discover installed Ollama completion/chat models, cold-load each model with a
@@ -3282,9 +3290,14 @@ USAGE
 
   ollama_cid="$(service_container_id "ollama" || true)"
   [[ -n "${ollama_cid}" ]] || die "Ollama backend is not running. Start it with: agent up core"
+  toolbox_cid="$(service_container_id "toolbox" || true)"
+  [[ -n "${toolbox_cid}" ]] || die "Toolbox service is not running. Start it with: agent up core"
 
   extra_args=(
+    --ollama-url "${ollama_url}"
+    --direct-ollama-url "${direct_ollama_url}"
     --ollama-container "${ollama_cid}"
+    --toolbox-container "${toolbox_cid}"
     --chapter-file "${chapter_file}"
     --output-dir "${output_dir}"
     --request-timeout-sec "${request_timeout_sec}"
@@ -3319,13 +3332,13 @@ cmd_ollama() {
       cmd_ollama_bench "$@"
       ;;
     help|-h|--help)
-      printf '%s\n' "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]"
+      printf '%s\n' "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--direct-ollama-url <url>] [--skip-unload] [--json]"
       ;;
     "")
-      die "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]"
+      die "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--direct-ollama-url <url>] [--skip-unload] [--json]"
       ;;
     *)
-      die "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--skip-unload] [--json]"
+      die "Usage: agent ollama unload <model> | agent ollama bench [--model <name> ...] [--limit <n>] [--sort name|size-asc|size-desc] [--chapter-file <path>] [--output-dir <path>] [--request-timeout-sec <sec>] [--direct-ollama-url <url>] [--skip-unload] [--json]"
       ;;
   esac
 }
