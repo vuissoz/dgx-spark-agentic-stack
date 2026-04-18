@@ -243,7 +243,9 @@ def build_bridge_config() -> tuple[dict[str, Any], dict[str, Any]]:
     status["providers"]["whatsapp"] = whatsapp_status
 
     normalized_channels = {key: value for key, value in channels.items() if isinstance(value, dict)}
-    payload: dict[str, Any] = {"_agentic": {"generated_at": status["synced_at"], "managed_by": "openclaw-provider-bridge"}}
+    # Keep the bridge payload stable across sync loops so gateway config watchers
+    # only reload when channel config actually changes.
+    payload: dict[str, Any] = {"_agentic": {"managed_by": "openclaw-provider-bridge"}}
     if normalized_channels:
         payload["channels"] = normalized_channels
     return payload, status

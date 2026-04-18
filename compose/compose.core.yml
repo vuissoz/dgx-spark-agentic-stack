@@ -386,6 +386,7 @@ services:
         condition: service_healthy
     ports:
       - 127.0.0.1:${OPENCLAW_GATEWAY_HOST_PORT:-18789}:8114
+      - 127.0.0.1:${OPENCLAW_GATEWAY_PROXY_METRICS_PORT:-9114}:9114
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config/bridge:/config/bridge:ro

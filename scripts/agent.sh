@@ -697,6 +697,10 @@ core_service_build_inputs() {
       printf '%s\n' \
         "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_provider_bridge.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_managed_init.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_operator.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_wrapper.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_config_layers.py" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_gateway_entrypoint.sh" \
