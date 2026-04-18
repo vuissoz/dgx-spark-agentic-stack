@@ -1865,6 +1865,8 @@ async def proxy_ollama_api(
     payload: Dict[str, Any] | None,
     session_default: str,
     sticky_model: bool = False,
+    raw_body: bytes | None = None,
+    raw_content_type: str | None = None,
 ) -> Response:
     queue_wait_timeout_seconds = extract_queue_timeout_seconds(request)
     session = request.headers.get("X-Agent-Session", session_default)
@@ -1913,7 +1915,7 @@ async def proxy_ollama_api(
         )
 
     try:
-        if sticky_model and endpoint in ("/api/chat", "/api/generate", "/api/embeddings"):
+        if sticky_model and endpoint in ("/api/chat", "/api/generate", "/api/embeddings", "/api/embed"):
             model_served, model_switch = await resolve_model(
                 session=session,
                 requested=requested_model,
@@ -1986,13 +1988,20 @@ async def proxy_ollama_api(
                 upstream_payload = dict(upstream_payload)
                 upstream_payload["name"] = model_served
 
+        request_kwargs: Dict[str, Any] = {"params": dict(request.query_params)}
+        if upstream_payload is not None:
+            request_kwargs["json"] = upstream_payload
+        elif raw_body is not None:
+            request_kwargs["content"] = raw_body
+            if raw_content_type:
+                request_kwargs["headers"] = {"Content-Type": raw_content_type}
+
         try:
             async with httpx.AsyncClient(timeout=90, trust_env=True) as client:
                 upstream = await client.request(
                     request.method,
                     f"{cfg['base_url']}{endpoint}",
-                    json=upstream_payload,
-                    params=dict(request.query_params),
+                    **request_kwargs,
                 )
         except httpx.RequestError as exc:
             status_code = 503
@@ -2066,6 +2075,17 @@ async def api_tags(request: Request) -> Response:
     )
 
 
+@app.get("/api/ps")
+async def api_ps(request: Request) -> Response:
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/ps",
+        payload=None,
+        session_default="ps",
+        sticky_model=False,
+    )
+
+
 @app.post("/api/show")
 async def api_show(request: Request) -> Response:
     payload, error = await read_json_body(request)
@@ -2119,6 +2139,114 @@ async def api_embeddings_ollama(request: Request) -> Response:
         payload=payload,
         session_default="embeddings",
         sticky_model=True,
+    )
+
+
+@app.post("/api/embed")
+async def api_embed_ollama(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/embed",
+        payload=payload,
+        session_default="embed",
+        sticky_model=True,
+    )
+
+
+@app.post("/api/pull")
+async def api_pull(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/pull",
+        payload=payload,
+        session_default="pull",
+        sticky_model=False,
+    )
+
+
+@app.post("/api/push")
+async def api_push(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/push",
+        payload=payload,
+        session_default="push",
+        sticky_model=False,
+    )
+
+
+@app.post("/api/create")
+async def api_create(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/create",
+        payload=payload,
+        session_default="create",
+        sticky_model=False,
+    )
+
+
+@app.delete("/api/delete")
+async def api_delete(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/delete",
+        payload=payload,
+        session_default="delete",
+        sticky_model=False,
+    )
+
+
+@app.post("/api/copy")
+async def api_copy(request: Request) -> Response:
+    payload, error = await read_json_body(request)
+    if error is not None:
+        return error
+    return await proxy_ollama_api(
+        request=request,
+        endpoint="/api/copy",
+        payload=payload,
+        session_default="copy",
+        sticky_model=False,
+    )
+
+
+@app.api_route("/api/blobs/{digest:path}", methods=["GET", "HEAD", "POST"])
+async def api_blobs_digest(request: Request, digest: str) -> Response:
+    if not digest:
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"message": "blob digest is required", "type": "invalid_request_error"}},
+        )
+    endpoint = f"/api/blobs/{digest}"
+    raw_body = None
+    raw_content_type = None
+    if request.method == "POST":
+        raw_body = await request.body()
+        raw_content_type = request.headers.get("content-type")
+    return await proxy_ollama_api(
+        request=request,
+        endpoint=endpoint,
+        payload=None,
+        session_default="blobs",
+        sticky_model=False,
+        raw_body=raw_body,
+        raw_content_type=raw_content_type,
     )
 
 
