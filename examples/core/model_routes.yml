@@ -52,6 +52,10 @@ routes:
       - "*nvfp4*"
       - "trtllm/*"
       - "trt-*"
+  - name: gpt-oss-local
+    backend: ollama
+    match:
+      - "*gpt-oss*"
   - name: openai-chat
     backend: openai
     match:
