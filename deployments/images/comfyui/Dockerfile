@@ -16,6 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    aria2 \
     ca-certificates \
     gcc \
     git \
@@ -35,6 +36,7 @@ WORKDIR ${COMFYUI_HOME}
 
 RUN python3 -m pip install --upgrade pip setuptools wheel \
   && python3 -m pip install -r requirements.txt \
+  && python3 -m pip install comfy-cli \
   && if [ "${COMFYUI_ENABLE_CUDA_TORCH}" = "1" ]; then \
     python3 -m pip install --index-url "${COMFYUI_TORCH_INDEX_URL}" torch torchvision torchaudio; \
   fi \

@@ -145,8 +145,19 @@ ensure_manager_log_compat_symlink() {
   fi
 }
 
+ensure_comfy_cli_default_workspace() {
+  if ! command -v comfy >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! comfy set-default /opt/comfyui >/dev/null 2>&1; then
+    echo "WARN: failed to set comfy-cli default workspace to /opt/comfyui" >&2
+  fi
+}
+
 ensure_runtime_tree
 seed_custom_nodes
+ensure_comfy_cli_default_workspace
 
 if [[ "${1:-}" == "python3" && "${2:-}" == "main.py" ]]; then
   comfyui_port="$(resolve_comfyui_port "$@")"

@@ -492,6 +492,15 @@ Remote download (Hugging Face):
 ./agent comfyui flux-1-dev --download --hf-token-file /path/to/hf_token
 ```
 
+Comfy CLI direct model download example (from inside `./agent comfyui` shell):
+
+```bash
+comfy model download \
+  --url "https://huggingface.co/Comfy-Org/FLUX.1-Krea-dev_ComfyUI/resolve/main/split_files/diffusion_models/flux1-krea-dev_fp8_scaled.safetensors" \
+  --relative-path models/diffusion_models \
+  --filename flux1-krea-dev_fp8_scaled.safetensors
+```
+
 Without `--hf-token-file`, the helper automatically reads `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` when present.
 
 Notes:

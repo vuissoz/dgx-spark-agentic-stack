@@ -34,7 +34,7 @@ AGENT_REPO_E2E_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/agent_repo_e2e.
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
-AGENT_TOOLS=(claude codex opencode vibestral hermes openclaw pi-mono goose)
+AGENT_TOOLS=(claude codex opencode vibestral hermes openclaw pi-mono goose comfyui)
 AGENT_STATUS_TARGETS=(claude codex opencode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
 STOP_START_TARGETS=(claude codex opencode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
 OPTIONAL_MODULES=(mcp pi-mono goose portainer)
@@ -51,7 +51,7 @@ Usage:
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-  agent <claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose> [project]
+  agent <claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose|comfyui> [project]
   agent openclaw init [project]
   agent openclaw status [--json]
   agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
@@ -243,6 +243,7 @@ tool_to_service() {
     openclaw) echo "openclaw" ;;
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "optional-goose" ;;
+    comfyui) echo "comfyui" ;;
     *) return 1 ;;
   esac
 }
@@ -251,6 +252,7 @@ tool_session_mode() {
   case "$1" in
     openclaw) echo "openclaw-shell" ;;
     goose) echo "goose-direct" ;;
+    comfyui) echo "comfyui-shell" ;;
     *) echo "tmux" ;;
   esac
 }
@@ -268,7 +270,7 @@ service_start_hint() {
     openclaw|openclaw-gateway) echo "agent up core" ;;
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
-    optional-forgejo) echo "agent up ui" ;;
+    optional-forgejo|comfyui) echo "agent up ui" ;;
     *) echo "agent up agents" ;;
   esac
 }
@@ -967,6 +969,56 @@ build_agents_local_images() {
   fi
 
   assert_agent_base_image_contract "${image_ref}"
+}
+
+comfyui_build_fingerprint() {
+  local -a files=(
+    "${AGENTIC_REPO_ROOT}/deployments/images/comfyui/Dockerfile"
+    "${AGENTIC_REPO_ROOT}/deployments/images/comfyui/entrypoint.sh"
+  )
+  local file
+
+  require_cmd sha256sum
+  for file in "${files[@]}"; do
+    [[ -f "${file}" ]] || die "comfyui build input missing: ${file}"
+  done
+
+  {
+    for file in "${files[@]}"; do
+      sha256sum "${file}"
+    done
+  } | sha256sum | awk '{print $1}'
+}
+
+build_ui_local_images() {
+  local ui_compose_file="$1"
+  local image_ref="agentic/comfyui:local"
+  local stamp_dir
+  local stamp_path
+  local stamp_value
+  local fingerprint
+
+  [[ "${AGENTIC_SKIP_UI_IMAGE_BUILD:-0}" == "1" ]] && {
+    warn "skipping ui local image build because AGENTIC_SKIP_UI_IMAGE_BUILD=1"
+    return 0
+  }
+
+  stamp_dir="${AGENTIC_ROOT}/deployments/image-build-stamps"
+  install -d -m 0750 "${stamp_dir}"
+  stamp_path="${stamp_dir}/comfyui.sha256"
+  stamp_value="$(cat "${stamp_path}" 2>/dev/null || true)"
+
+  require_cmd docker
+  fingerprint="$(comfyui_build_fingerprint)"
+
+  if ! docker image inspect "${image_ref}" >/dev/null 2>&1 \
+    || [[ -z "${stamp_value}" ]] \
+    || [[ "${stamp_value}" != "${fingerprint}" ]]; then
+    docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+      -f "${ui_compose_file}" build comfyui
+    printf '%s\n' "${fingerprint}" >"${stamp_path}"
+    chmod 0640 "${stamp_path}" || true
+  fi
 }
 
 resolve_update_latest_inputs() {
@@ -1693,6 +1745,10 @@ prepare_tool_session() {
       workspace="/workspace/${project}"
       docker exec "${container_id}" sh -lc "mkdir -p '${workspace}'"
       ;;
+    comfyui-shell)
+      workspace="/comfyui"
+      docker exec "${container_id}" sh -lc "mkdir -p '${workspace}'"
+      ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
       ;;
@@ -1714,6 +1770,8 @@ prepare_tool_session() {
         || die "openclaw CLI is missing in openclaw container"
       bootstrap_container_bash_home "${container_id}" "/state/cli/openclaw-home"
       ;;
+    comfyui-shell)
+      ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
       ;;
@@ -1734,6 +1792,8 @@ cmd_tool_attach() {
     workspace="/workspace/${project}"
   elif [[ "${session_mode}" == "openclaw-shell" ]]; then
     workspace="/workspace/${project}"
+  elif [[ "${session_mode}" == "comfyui-shell" ]]; then
+    workspace="/comfyui"
   fi
 
   case "${session_mode}" in
@@ -1759,6 +1819,11 @@ cmd_tool_attach() {
       printf 'INFO: OpenClaw onboarding SecretRef expects OPENCLAW_GATEWAY_TOKEN to be set in this shell.\n'
       printf 'INFO: run: export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\\''\\n'\\'' </run/secrets/openclaw.token)"\n'
       ;;
+    comfyui-shell)
+      printf 'INFO: comfyui uses the ComfyUI container shell.\n'
+      printf 'INFO: session workspace is %s.\n' "${workspace}"
+      printf 'INFO: host UI endpoint is http://127.0.0.1:%s.\n' "${COMFYUI_HOST_PORT:-8188}"
+      ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
       ;;
@@ -1778,6 +1843,9 @@ cmd_tool_attach() {
       ;;
     openclaw-shell)
       exec docker exec -it "${container_id}" sh -lc "export HOME='/state/cli/openclaw-home'; cd '${workspace}' && exec bash -l"
+      ;;
+    comfyui-shell)
+      exec docker exec -it "${container_id}" sh -lc "export HOME='/comfyui/user'; cd '${workspace}' && exec bash -l"
       ;;
     *)
       die "Unknown session mode '${session_mode}' for tool '${tool}'"
@@ -4770,6 +4838,9 @@ cmd_update() {
   if [[ -f "$(stack_to_compose_file agents)" ]]; then
     build_agents_local_images "$(stack_to_compose_file agents)"
   fi
+  if [[ -f "$(stack_to_compose_file ui)" ]]; then
+    build_ui_local_images "$(stack_to_compose_file ui)"
+  fi
 
   local -a pull_cmd=(
     docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${compose_args[@]}" pull --ignore-pull-failures
@@ -4939,6 +5010,7 @@ case "$cmd" in
     fi
     if targets_include "ui" "${targets[@]}"; then
       ensure_ui_runtime
+      build_ui_local_images "$(stack_to_compose_file ui)"
     fi
     if targets_include "rag" "${targets[@]}"; then
       ensure_rag_runtime
@@ -5110,8 +5182,16 @@ case "$cmd" in
     exec python3 "${AGENT_TUNNEL_SCRIPT}" "$@"
     ;;
   comfyui)
-    shift
-    cmd_comfyui "$@"
+    case "${2:-}" in
+      flux-1-dev|flux1-dev|flux-dev)
+        shift
+        cmd_comfyui "$@"
+        ;;
+      *)
+        shift
+        cmd_tool_attach "${cmd}" "${1:-}"
+        ;;
+    esac
     ;;
   logs)
     [[ $# -ge 2 ]] || die "Usage: agent logs <service>"
