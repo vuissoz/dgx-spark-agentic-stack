@@ -16,7 +16,7 @@ Flux nodes (`diffusion_models/`, `text_encoders/`).
 
 ## Decision
 
-- Raise the dedicated `rootless-dev` ComfyUI memory default from `4g` to `64g`.
+- Raise the dedicated `rootless-dev` ComfyUI memory default from `4g` to `110g`.
 - Keep the generic `AGENTIC_LIMIT_UI_MEM` rootless default unchanged; the Flux
   requirement is specific to ComfyUI, not all UI services.
 - Align the Flux bootstrap helper with actual ComfyUI runtime targets:
