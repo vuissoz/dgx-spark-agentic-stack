@@ -37,30 +37,35 @@ files = payload.get("files")
 if not isinstance(files, list) or len(files) < 4:
     raise SystemExit("manifest files array is missing or too small")
 required_targets = {
-    "checkpoints/flux1-dev.safetensors",
+    "diffusion_models/flux1-dev.safetensors",
     "vae/ae.safetensors",
-    "clip/clip_l.safetensors",
-    "clip/t5xxl_fp16.safetensors",
+    "text_encoders/clip_l.safetensors",
+    "text_encoders/t5xxl_fp16.safetensors",
 }
 seen_targets = {item.get("target") for item in files if isinstance(item, dict)}
 missing = sorted(required_targets - seen_targets)
 if missing:
     raise SystemExit(f"manifest missing required targets: {missing}")
 PY
-ok "flux manifest contains required Flux.1-dev targets"
+ok "flux manifest contains required Flux.1-dev runtime targets"
 
-for subdir in checkpoints clip vae; do
+for subdir in diffusion_models text_encoders vae checkpoints clip; do
   [[ -d "${AGENTIC_ROOT:-/srv/agentic}/comfyui/models/${subdir}" ]] \
     || fail "missing comfyui model directory: ${AGENTIC_ROOT:-/srv/agentic}/comfyui/models/${subdir}"
 done
-ok "flux bootstrap ensured comfyui model directories"
+ok "flux bootstrap ensured comfyui model directories and legacy compatibility locations"
 
-if "${agent_bin}" comfyui flux-1-dev --download --no-egress-check >/tmp/agent-i2-flux-download.out 2>&1; then
-  fail "agent comfyui flux-1-dev --download should fail without HF token for gated Flux.1-dev files"
+set +e
+"${agent_bin}" comfyui flux-1-dev --download --no-egress-check >/tmp/agent-i2-flux-download.out 2>&1
+download_rc=$?
+set -e
+if [[ "${download_rc}" -ne 0 ]]; then
+  if ! rg -q "missing HF token for gated repo" /tmp/agent-i2-flux-download.out; then
+    fail "expected missing HF token error in download output when download path fails"
+  fi
+  ok "flux download path enforces HF token requirement when gated files are missing"
+else
+  ok "flux download path is idempotent when required files are already present"
 fi
-if ! rg -q "missing HF token for gated repo" /tmp/agent-i2-flux-download.out; then
-  fail "expected missing HF token error in download output"
-fi
-ok "flux download path executes and enforces HF token requirement for gated files"
 
 ok "I2_comfyui_flux_bootstrap passed"

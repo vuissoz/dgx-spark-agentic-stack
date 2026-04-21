@@ -115,6 +115,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 - UI / ComfyUI / docs / onboarding :
   - `dgx-spark-agentic-stack-3yi` : garde-fou OpenHands contre restart/OOM au démarrage de nouvelles conversations.
   - `dgx-spark-agentic-stack-8cx` : proxy WebSocket ComfyUI et bootstrap Flux.1-dev clarifiés.
+  - `dgx-spark-agentic-stack-hz0n` : test e2e rootless-dev Flux.1-dev avec préparation/téléchargement des assets requis, garde-fou sur restart backend et validation d'image PNG produite.
   - `dgx-spark-agentic-stack-p94` : secret `huggingface.token` dans l’onboarding.
   - `dgx-spark-agentic-stack-s0m` : runbook `rootless-dev` OpenClaw.
   - `dgx-spark-agentic-stack-0ik` : persistance ComfyUI sur mount hôte unique.

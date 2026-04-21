@@ -79,7 +79,12 @@ comfy_cid="$(docker ps \
 
 models_root="${AGENTIC_ROOT}/comfyui/models"
 manifest_file="${models_root}/flux1-dev.manifest.json"
-mkdir -p "${models_root}/checkpoints" "${models_root}/clip" "${models_root}/vae"
+mkdir -p \
+  "${models_root}/diffusion_models" \
+  "${models_root}/text_encoders" \
+  "${models_root}/vae" \
+  "${models_root}/checkpoints" \
+  "${models_root}/clip"
 
 cat >"${manifest_file}" <<'JSON'
 {
@@ -87,27 +92,44 @@ cat >"${manifest_file}" <<'JSON'
   "updated_by": "agent comfyui flux-1-dev",
   "files": [
     {
-      "target": "checkpoints/flux1-dev.safetensors",
+      "target": "diffusion_models/flux1-dev.safetensors",
+      "relative_path": "models/diffusion_models",
       "repo_id": "black-forest-labs/FLUX.1-dev",
       "filename": "flux1-dev.safetensors",
+      "url": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors",
+      "legacy_targets": [
+        "checkpoints/flux1-dev.safetensors"
+      ],
       "gated": true
     },
     {
       "target": "vae/ae.safetensors",
+      "relative_path": "models/vae",
       "repo_id": "black-forest-labs/FLUX.1-dev",
       "filename": "ae.safetensors",
+      "url": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors",
       "gated": true
     },
     {
-      "target": "clip/clip_l.safetensors",
+      "target": "text_encoders/clip_l.safetensors",
+      "relative_path": "models/text_encoders",
       "repo_id": "comfyanonymous/flux_text_encoders",
       "filename": "clip_l.safetensors",
+      "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors",
+      "legacy_targets": [
+        "clip/clip_l.safetensors"
+      ],
       "gated": false
     },
     {
-      "target": "clip/t5xxl_fp16.safetensors",
+      "target": "text_encoders/t5xxl_fp16.safetensors",
+      "relative_path": "models/text_encoders",
       "repo_id": "comfyanonymous/flux_text_encoders",
       "filename": "t5xxl_fp16.safetensors",
+      "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors",
+      "legacy_targets": [
+        "clip/t5xxl_fp16.safetensors"
+      ],
       "gated": false
     }
   ],
@@ -119,6 +141,34 @@ cat >"${manifest_file}" <<'JSON'
   ]
 }
 JSON
+
+python3 - "${manifest_file}" "${models_root}" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+models_root = pathlib.Path(sys.argv[2])
+payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+for item in payload.get("files", []):
+    if not isinstance(item, dict):
+        continue
+    target = item.get("target")
+    if not target:
+        continue
+    target_path = models_root / target
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_targets = item.get("legacy_targets") or []
+    for legacy_target in legacy_targets:
+        legacy_path = models_root / legacy_target
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        if target_path.exists() and not legacy_path.exists():
+            legacy_path.symlink_to(os.path.relpath(target_path, legacy_path.parent))
+        elif legacy_path.exists() and not target_path.exists():
+            target_path.symlink_to(os.path.relpath(legacy_path, target_path.parent))
+PY
 
 if [[ "${egress_check}" == "1" ]]; then
   if [[ "${dry_run}" == "1" ]]; then
@@ -162,40 +212,61 @@ if [[ "${download_models}" == "1" ]]; then
     docker exec -i \
       -e HF_TOKEN="${hf_token}" \
       -e FLUX_FORCE_DOWNLOAD="${force_download}" \
+      -e FLUX_MANIFEST_FILE="/comfyui/models/flux1-dev.manifest.json" \
       "${comfy_cid}" \
       python3 - <<'PY'
+import json
 import os
-from huggingface_hub import hf_hub_download
+import pathlib
+import subprocess
+import sys
 
 force = os.getenv("FLUX_FORCE_DOWNLOAD", "0") == "1"
 token = os.getenv("HF_TOKEN") or None
-base = "/comfyui/models"
-specs = [
-    ("black-forest-labs/FLUX.1-dev", "flux1-dev.safetensors", "checkpoints", True),
-    ("black-forest-labs/FLUX.1-dev", "ae.safetensors", "vae", True),
-    ("comfyanonymous/flux_text_encoders", "clip_l.safetensors", "clip", False),
-    ("comfyanonymous/flux_text_encoders", "t5xxl_fp16.safetensors", "clip", False),
-]
-for repo_id, filename, subdir, gated in specs:
-    local_dir = os.path.join(base, subdir)
-    os.makedirs(local_dir, exist_ok=True)
-    target_path = os.path.join(local_dir, filename)
-    if os.path.exists(target_path) and not force:
+manifest_file = pathlib.Path(os.getenv("FLUX_MANIFEST_FILE", "/comfyui/models/flux1-dev.manifest.json"))
+models_root = manifest_file.parent
+payload = json.loads(manifest_file.read_text(encoding="utf-8"))
+
+for item in payload.get("files", []):
+    if not isinstance(item, dict):
+        continue
+    target = item.get("target")
+    url = item.get("url")
+    relative_path = item.get("relative_path")
+    filename = item.get("filename")
+    repo_id = item.get("repo_id")
+    gated = bool(item.get("gated"))
+    if not target or not url or not relative_path or not filename:
+        raise SystemExit(f"invalid manifest entry: {item!r}")
+
+    target_path = models_root / target
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    if target_path.exists() and not force:
         print(f"skip existing: {target_path}")
         continue
     if gated and not token:
         raise SystemExit(
             f"missing HF token for gated repo {repo_id}; set HF_TOKEN or use --hf-token-file"
         )
-    print(f"download: {repo_id}/{filename} -> {target_path}")
-    hf_hub_download(
-        repo_id=repo_id,
-        filename=filename,
-        local_dir=local_dir,
-        local_dir_use_symlinks=False,
-        token=token,
-        resume_download=True,
-    )
+
+    cmd = [
+        "comfy",
+        "--workspace",
+        "/opt/comfyui",
+        "model",
+        "download",
+        "--url",
+        url,
+        "--relative-path",
+        relative_path,
+        "--filename",
+        filename,
+    ]
+    if token:
+        cmd.extend(["--set-hf-api-token", token])
+
+    print(f"download: {url} -> {target_path}")
+    subprocess.run(cmd, check=True)
 PY
   fi
 fi
@@ -217,6 +288,10 @@ for item in files:
         present.append(target)
     else:
         missing.append(target)
+    for legacy_target in item.get("legacy_targets", []):
+        legacy_absolute_path = os.path.join(models_root, legacy_target)
+        if os.path.exists(legacy_absolute_path) and legacy_target not in present:
+            present.append(legacy_target)
 
 print(f"flux manifest: {manifest_path}")
 print(f"present_files={len(present)} missing_files={len(missing)}")

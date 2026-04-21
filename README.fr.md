@@ -504,6 +504,14 @@ Téléchargement distant (Hugging Face):
 ./agent comfyui flux-1-dev --download --hf-token-file /chemin/token_hf
 ```
 
+Le helper aligne maintenant les assets Flux sur les chemins runtime réellement
+consommés par les noeuds Flux de ComfyUI :
+
+- `models/diffusion_models/flux1-dev.safetensors`
+- `models/vae/ae.safetensors`
+- `models/text_encoders/clip_l.safetensors`
+- `models/text_encoders/t5xxl_fp16.safetensors`
+
 Sans `--hf-token-file`, le script lit automatiquement `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` si present.
 
 Notes:
@@ -511,6 +519,7 @@ Notes:
 - Le Journal ComfyUI passe par WebSocket `/ws` via `comfyui-loopback`.
 - Le runtime ComfyUI est persistant via un mount hôte unique `${AGENTIC_ROOT}/comfyui:/comfyui`.
 - En `rootless-dev` sur `arm64`, la stack publie un diagnostic explicite dans `${AGENTIC_ROOT}/comfyui/user/agentic-runtime/torch-runtime.json`; si aucun backend CUDA effectif n'est détecté, ComfyUI démarre volontairement en `--cpu`.
+- Smoke test e2e Flux : `bash tests/I3_comfyui_flux_generate.sh`
 
 Test e2e du modèle par défaut (Ollama, gate, agents, OpenWebUI, OpenHands):
 

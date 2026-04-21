@@ -492,6 +492,14 @@ Remote download (Hugging Face):
 ./agent comfyui flux-1-dev --download --hf-token-file /path/to/hf_token
 ```
 
+The helper now aligns the Flux assets with the ComfyUI runtime paths actually used
+by Flux nodes:
+
+- `models/diffusion_models/flux1-dev.safetensors`
+- `models/vae/ae.safetensors`
+- `models/text_encoders/clip_l.safetensors`
+- `models/text_encoders/t5xxl_fp16.safetensors`
+
 Comfy CLI direct model download example (from inside `./agent comfyui` shell):
 
 ```bash
@@ -506,6 +514,7 @@ Without `--hf-token-file`, the helper automatically reads `${AGENTIC_ROOT}/secre
 Notes:
 - Flux.1-dev is a gated repository (HF license acceptance + token required).
 - ComfyUI Journal uses `/ws` websocket through `comfyui-loopback`.
+- End-to-end Flux smoke test: `bash tests/I3_comfyui_flux_generate.sh`
 
 Default-model e2e probe (Ollama, gate, agents, OpenWebUI, OpenHands):
 
