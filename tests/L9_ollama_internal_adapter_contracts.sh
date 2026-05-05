@@ -46,9 +46,10 @@ checks = {
         "vars": {"AGENTIC_OLLAMA_GATE_V1_URL", "AGENTIC_DEFAULT_MODEL"},
     },
     "hermes": {
-        "support": "adapter-internal",
+        "support": "launch-supported",
         "endpoint": "http://ollama-gate:11435/v1",
-        "vars": {"HERMES_HOME", "OPENAI_BASE_URL", "OPENAI_API_KEY", "AGENTIC_DEFAULT_MODEL"},
+        "vars": {"HERMES_HOME", "OPENAI_API_KEY", "AGENTIC_DEFAULT_MODEL", "AGENTIC_OLLAMA_GATE_V1_URL"},
+        "upstream_doc_url": "https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/hermes.mdx",
     },
 }
 
@@ -60,15 +61,18 @@ for agent, expected in checks.items():
         raise SystemExit(f"{agent}: unexpected upstream_launch_support={entry.get('upstream_launch_support')!r}")
     if entry.get("target_endpoint") != expected["endpoint"]:
         raise SystemExit(f"{agent}: unexpected target_endpoint={entry.get('target_endpoint')!r}")
+    source = entry.get("contract_source") or {}
+    if "upstream_doc_url" in expected and source.get("upstream_doc_url") != expected["upstream_doc_url"]:
+        raise SystemExit(f"{agent}: unexpected upstream_doc_url={source.get('upstream_doc_url')!r}")
     vars_declared = set(entry.get("required_variables") or [])
     if not expected["vars"].issubset(vars_declared):
         raise SystemExit(f"{agent}: required variables missing (expected subset {sorted(expected['vars'])}, got {sorted(vars_declared)})")
     tests = entry.get("contract_tests") or []
     if "tests/L9_ollama_internal_adapter_contracts.sh" not in tests:
         raise SystemExit(f"{agent}: contract_tests must include L9")
-print("matrix internal adapter entries validated")
+print("matrix managed adapter entries validated")
 PY
-ok "matrix adapter-internal entries are versioned for openhands/vibestral/hermes"
+ok "matrix managed entries are versioned for openhands/vibestral/hermes"
 
 rg -n '^[[:space:]]*LLM_BASE_URL:[[:space:]]*http://ollama-gate:11435/v1[[:space:]]*$' "${compose_ui}" >/dev/null \
   || fail "compose.ui must pin openhands LLM_BASE_URL to ollama-gate /v1"
@@ -94,9 +98,13 @@ rg -n '^  provider: custom$' "${entrypoint}" >/dev/null \
   || fail "hermes adapter must use the custom OpenAI-compatible provider"
 rg -nF 'local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"' "${entrypoint}" >/dev/null \
   || fail "hermes adapter must derive gate_v1_url from AGENTIC_OLLAMA_GATE_V1_URL default"
-rg -nF 'OPENAI_BASE_URL=${gate_v1_url}' "${entrypoint}" >/dev/null \
-  || fail "hermes adapter must persist OPENAI_BASE_URL through gate_v1_url in managed .env"
-ok "hermes adapter contract is pinned in entrypoint"
+rg -n '^  - web$' "${entrypoint}" >/dev/null \
+  || fail "hermes adapter must enable the web toolset for launch parity"
+! rg -n '^  api_key:' "${entrypoint}" >/dev/null \
+  || fail "hermes adapter must not persist API keys in config.yaml"
+! rg -nF 'OPENAI_BASE_URL=${gate_v1_url}' "${entrypoint}" >/dev/null \
+  || fail "hermes adapter must not persist OPENAI_BASE_URL in managed .env"
+ok "hermes launch-compatible adapter contract is pinned in entrypoint"
 
 rg -n '^openhands_llm_base_url=\"http://ollama-gate:11435/v1\"$' "${onboarding}" >/dev/null \
   || fail "onboarding must default openhands llm_base_url to ollama-gate /v1"
@@ -166,10 +174,14 @@ if command -v docker >/dev/null 2>&1; then
       || fail "hermes runtime config must target ollama-gate /v1"
     grep -q "^  default: \"${hermes_default_model}\"$" "${hermes_cfg}" \
       || fail "hermes runtime config model must match AGENTIC_DEFAULT_MODEL (${hermes_default_model})"
-    grep -q '^OPENAI_BASE_URL=http://ollama-gate:11435/v1$' "${hermes_env}" \
-      || fail "hermes runtime env must persist OPENAI_BASE_URL on ollama-gate /v1"
+    grep -q '^  - web$' "${hermes_cfg}" \
+      || fail "hermes runtime config must enable the web toolset"
+    ! grep -q '^  api_key:' "${hermes_cfg}" \
+      || fail "hermes runtime config must not store API keys in config.yaml"
     grep -q '^OPENAI_API_KEY=local-ollama$' "${hermes_env}" \
       || fail "hermes runtime env must persist local gate API key placeholder"
+    ! grep -q '^OPENAI_BASE_URL=' "${hermes_env}" \
+      || fail "hermes runtime env must not persist OPENAI_BASE_URL when config.yaml already pins base_url"
     rm -f "${hermes_cfg}" "${hermes_env}" >/dev/null 2>&1 || true
     timeout 60 docker exec "${hermes_cid}" sh -lc 'hermes config path >/dev/null' \
       || fail "hermes CLI must resolve its config path in the managed runtime"

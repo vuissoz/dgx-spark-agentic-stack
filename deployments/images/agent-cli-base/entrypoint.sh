@@ -36,6 +36,47 @@ write_if_changed() {
   mv "${source_path}" "${target_path}"
 }
 
+preserve_yaml_without_top_level_sections() {
+  local input_path="$1"
+  local output_path="$2"
+  local managed_csv="$3"
+
+  python3 - "${input_path}" "${output_path}" "${managed_csv}" <<'PY'
+import pathlib
+import re
+import sys
+
+input_path = pathlib.Path(sys.argv[1])
+output_path = pathlib.Path(sys.argv[2])
+managed = {item for item in sys.argv[3].split(",") if item}
+
+if not input_path.exists():
+    output_path.write_text("", encoding="utf-8")
+    raise SystemExit(0)
+
+top_level_key = re.compile(r"^([A-Za-z0-9_-]+):(?:\s.*)?$")
+skip = False
+kept = []
+
+for line in input_path.read_text(encoding="utf-8").splitlines(keepends=True):
+    if line.startswith((" ", "\t")):
+        if not skip:
+            kept.append(line)
+        continue
+
+    match = top_level_key.match(line.rstrip("\n"))
+    if match:
+        skip = match.group(1) in managed
+        if skip:
+            continue
+
+    if not skip:
+        kept.append(line)
+
+output_path.write_text("".join(kept), encoding="utf-8")
+PY
+}
+
 agentic_context_effective_budget() {
   local candidate=0
   local budget=0
@@ -453,10 +494,18 @@ bootstrap_hermes_config() {
   local api_key="${OPENAI_API_KEY:-local-ollama}"
   local tmp_config
   local tmp_env
+  local preserved_config
+  local preserved_env
 
   export HERMES_HOME="${hermes_home}"
   mkdir -p "${hermes_home}" "${hermes_home}/cron" "${hermes_home}/sessions" "${hermes_home}/logs" "${hermes_home}/memories" "${hermes_home}/skills"
   chmod 0700 "${hermes_home}" "${hermes_home}/cron" "${hermes_home}/sessions" "${hermes_home}/logs" "${hermes_home}/memories" "${hermes_home}/skills" 2>/dev/null || true
+
+  preserved_config="$(mktemp)"
+  preserve_yaml_without_top_level_sections \
+    "${hermes_config}" \
+    "${preserved_config}" \
+    "model,providers,custom_providers,toolsets,terminal,logging"
 
   tmp_config="$(mktemp)"
   cat >"${tmp_config}" <<EOF
@@ -464,9 +513,9 @@ model:
   default: "${default_model}"
   provider: custom
   base_url: "${gate_v1_url}"
-  api_key: "${api_key}"
 toolsets:
   - hermes-cli
+  - web
 terminal:
   backend: local
   cwd: /workspace
@@ -476,14 +525,28 @@ logging:
   max_size_mb: 5
   backup_count: 3
 EOF
+  if [[ -s "${preserved_config}" ]]; then
+    printf '\n' >>"${tmp_config}"
+    cat "${preserved_config}" >>"${tmp_config}"
+  fi
   write_if_changed "${hermes_config}" "${tmp_config}"
   chmod 0600 "${hermes_config}" || true
+
+  preserved_env="$(mktemp)"
+  if [[ -f "${hermes_env}" ]]; then
+    grep -Ev '^(OPENAI_API_KEY|OPENAI_BASE_URL)=' "${hermes_env}" >"${preserved_env}" || true
+  else
+    : >"${preserved_env}"
+  fi
 
   tmp_env="$(mktemp)"
   cat >"${tmp_env}" <<EOF
 OPENAI_API_KEY=${api_key}
-OPENAI_BASE_URL=${gate_v1_url}
 EOF
+  if [[ -s "${preserved_env}" ]]; then
+    printf '\n' >>"${tmp_env}"
+    cat "${preserved_env}" >>"${tmp_env}"
+  fi
   write_if_changed "${hermes_env}" "${tmp_env}"
   chmod 0600 "${hermes_env}" || true
 

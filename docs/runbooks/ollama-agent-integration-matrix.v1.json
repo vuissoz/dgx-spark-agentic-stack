@@ -1,5 +1,5 @@
 {
-  "matrix_version": "2026-04-07.stepE2.hermes.v1",
+  "matrix_version": "2026-05-05.stepE2.hermes-launch.v2",
   "scope": [
     "rootless-dev",
     "strict-prod"
@@ -164,16 +164,18 @@
     },
     {
       "agent": "hermes",
-      "upstream_launch_support": "adapter-internal",
+      "upstream_launch_support": "launch-supported",
       "contract_source": {
-        "kind": "stack-internal-adapter",
-        "source_id": "hermes-adapter",
-        "stack_contract_files": [
-          "deployments/images/agent-cli-base/entrypoint.sh",
-          "compose/compose.agents.yml"
+        "kind": "upstream-ollama",
+        "source_id": "hermes",
+        "upstream_doc_url": "https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/hermes.mdx",
+        "upstream_launch_commands": [
+          "ollama launch hermes",
+          "hermes gateway setup",
+          "hermes setup"
         ]
       },
-      "config_mode": "hermes-managed-config-openai-compatible",
+      "config_mode": "launch-compatible-managed-hermes-config",
       "target_endpoint": "http://ollama-gate:11435/v1",
       "target_protocol_paths": [
         "/v1/chat/completions",
@@ -181,22 +183,24 @@
       ],
       "required_variables": [
         "HERMES_HOME",
-        "OPENAI_BASE_URL",
         "OPENAI_API_KEY",
-        "AGENTIC_DEFAULT_MODEL"
+        "AGENTIC_DEFAULT_MODEL",
+        "AGENTIC_OLLAMA_GATE_V1_URL"
       ],
       "stack_sources": [
         "deployments/images/agent-cli-base/entrypoint.sh",
         "compose/compose.agents.yml"
       ],
       "contract_tests": [
+        "tests/L8_ollama_launch_alignment_contracts.sh",
         "tests/L9_ollama_internal_adapter_contracts.sh",
         "tests/E2_agents_confinement.sh",
-        "tests/F1_agent_cli.sh"
+        "tests/F1_agent_cli.sh",
+        "tests/F10_ollama_drift_watch.sh"
       ],
       "assumed_gaps": [
-        "No upstream 'ollama launch hermes' contract is available.",
-        "Compatibility is guaranteed by the internal adapter contract and tests."
+        "The stack applies the upstream Hermes launch contract through a managed non-interactive bootstrap instead of running 'ollama launch hermes' directly.",
+        "Upstream manual setup still uses a custom OpenAI-compatible endpoint, so the managed runtime keeps provider=custom while preserving launch-visible behavior."
       ]
     },
     {

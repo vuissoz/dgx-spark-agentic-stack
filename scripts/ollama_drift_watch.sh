@@ -13,7 +13,7 @@ Usage:
 Description:
   Watch upstream Ollama contract drift for launch/integrations/API compatibility docs.
   --sources limits verification to a comma-separated subset among:
-  cli,codex,claude,opencode,openclaw,openai,anthropic
+  cli,codex,claude,opencode,openclaw,hermes,openai,anthropic
 
 Exit codes:
   0  no drift detected
@@ -57,6 +57,9 @@ source_url() {
       ;;
     openclaw)
       printf '%s\n' 'https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/openclaw.mdx'
+      ;;
+    hermes)
+      printf '%s\n' 'https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/hermes.mdx'
       ;;
     openai)
       printf '%s\n' 'https://raw.githubusercontent.com/ollama/ollama/main/docs/api/openai-compatibility.mdx'
@@ -114,6 +117,14 @@ openclaw configure --section channels
 openclaw gateway stop
 EOF_PATTERNS
       ;;
+    hermes)
+      cat <<'EOF_PATTERNS'
+ollama launch hermes
+http://127.0.0.1:11434/v1
+hermes gateway setup
+hermes setup
+EOF_PATTERNS
+      ;;
     openai)
       cat <<'EOF_PATTERNS'
 /v1/chat/completions
@@ -147,13 +158,14 @@ parse_sources_csv() {
     [claude]=1
     [opencode]=1
     [openclaw]=1
+    [hermes]=1
     [openai]=1
     [anthropic]=1
   )
   local -A seen=()
 
   if [[ -z "${raw_csv}" ]]; then
-    printf '%s\n' cli codex claude opencode openclaw openai anthropic
+    printf '%s\n' cli codex claude opencode openclaw hermes openai anthropic
     return 0
   fi
 
@@ -162,7 +174,7 @@ parse_sources_csv() {
     normalized="${token// /}"
     [[ -n "${normalized}" ]] || continue
     if [[ -z "${allowed[${normalized}]:-}" ]]; then
-      die "unknown source id for --sources: ${normalized} (allowed: cli,codex,claude,opencode,openclaw,openai,anthropic)"
+      die "unknown source id for --sources: ${normalized} (allowed: cli,codex,claude,opencode,openclaw,hermes,openai,anthropic)"
     fi
     if [[ -n "${seen[${normalized}]:-}" ]]; then
       continue

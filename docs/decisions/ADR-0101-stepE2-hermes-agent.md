@@ -31,5 +31,5 @@ The stack must keep deterministic routing through `ollama-gate`, persist Hermes 
 
 ## Consequences
 - `agentic-hermes` becomes a first-class agent surface with `agent ls`, `agent hermes`, `agent stop hermes`, doctor coverage, and Git-forge bootstrap parity.
-- Hermes configuration is stack-managed and deterministic; local unmanaged edits under `HERMES_HOME` are overwritten on startup.
+- Hermes configuration keeps stack-managed sections deterministic while preserving non-managed user sections under `HERMES_HOME`.
 - Release traceability now includes pinned Hermes upstream source inputs inside the agent base image build fingerprint.

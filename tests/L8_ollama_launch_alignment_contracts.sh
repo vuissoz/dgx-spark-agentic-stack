@@ -39,6 +39,7 @@ index = {entry.get("agent"): entry for entry in entries if isinstance(entry, dic
 required = {
     "opencode": "https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/opencode.mdx",
     "openclaw": "https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/openclaw.mdx",
+    "hermes": "https://raw.githubusercontent.com/ollama/ollama/main/docs/integrations/hermes.mdx",
 }
 
 for agent, upstream_url in required.items():
@@ -58,7 +59,7 @@ for agent, upstream_url in required.items():
         raise SystemExit(f"{agent}: contract_tests must include L8")
 print("matrix launch entries validated")
 PY
-ok "matrix launch-supported entries are versioned for opencode/openclaw"
+ok "matrix launch-supported entries are versioned for opencode/openclaw/hermes"
 
 rg -nF 'bootstrap_opencode_config() {' "${entrypoint}" >/dev/null \
   || fail "entrypoint must define opencode bootstrap adapter"
@@ -91,37 +92,38 @@ cp -R "${fixture_src}/." "${fixture_tmp}/"
 set +e
 "${agent_bin}" ollama-drift watch \
   --no-beads \
-  --sources opencode,openclaw \
+  --sources opencode,openclaw,hermes \
   --sources-dir "${fixture_tmp}" \
   --state-dir "${state_dir}" >/tmp/agent-l8-run1.out 2>&1
 rc1=$?
 set -e
 [[ "${rc1}" -eq 0 ]] || {
   cat /tmp/agent-l8-run1.out >&2
-  fail "launch alignment watch should pass for opencode/openclaw fixtures"
+  fail "launch alignment watch should pass for opencode/openclaw/hermes fixtures"
 }
 grep -q 'no drift detected' /tmp/agent-l8-run1.out || fail "expected explicit no-drift output"
 grep -q '\[source:opencode\]' "${state_dir}/latest-report.txt" || fail "report must include source:opencode"
 grep -q '\[source:openclaw\]' "${state_dir}/latest-report.txt" || fail "report must include source:openclaw"
-ok "launch-supported subset watch passes for opencode/openclaw"
+grep -q '\[source:hermes\]' "${state_dir}/latest-report.txt" || fail "report must include source:hermes"
+ok "launch-supported subset watch passes for opencode/openclaw/hermes"
 
-sed -i '/ollama launch openclaw --config/d' "${fixture_tmp}/openclaw.mdx"
+sed -i '/hermes gateway setup/d' "${fixture_tmp}/hermes.mdx"
 
 set +e
 "${agent_bin}" ollama-drift watch \
   --no-beads \
-  --sources opencode,openclaw \
+  --sources opencode,openclaw,hermes \
   --sources-dir "${fixture_tmp}" \
   --state-dir "${state_dir}" >/tmp/agent-l8-run2.out 2>&1
 rc2=$?
 set -e
 [[ "${rc2}" -eq 2 ]] || {
   cat /tmp/agent-l8-run2.out >&2
-  fail "launch alignment watch must fail (exit=2) when openclaw invariant drifts"
+  fail "launch alignment watch must fail (exit=2) when hermes invariant drifts"
 }
-grep -q 'openclaw:missing:ollama launch openclaw --config' "${state_dir}/latest-report.txt" \
-  || fail "drift report must include missing openclaw launch invariant"
-ok "launch invariant regression is detected explicitly for openclaw"
+grep -q 'hermes:missing:hermes gateway setup' "${state_dir}/latest-report.txt" \
+  || fail "drift report must include missing hermes launch invariant"
+ok "launch invariant regression is detected explicitly for hermes"
 
 if command -v docker >/dev/null 2>&1; then
   opencode_cid="$(service_container_id agentic-opencode || true)"

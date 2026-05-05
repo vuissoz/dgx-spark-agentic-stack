@@ -1944,7 +1944,9 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral a
       test -d /state/home/.hermes &&
       test -f /state/home/.hermes/config.yaml &&
       grep -q "^  base_url: \"http://ollama-gate:11435/v1\"$" /state/home/.hermes/config.yaml &&
-      grep -q "^OPENAI_BASE_URL=http://ollama-gate:11435/v1$" /state/home/.hermes/.env &&
+      grep -q "^  - web$" /state/home/.hermes/config.yaml &&
+      ! grep -q "^  api_key:" /state/home/.hermes/config.yaml &&
+      ! grep -q "^OPENAI_BASE_URL=" /state/home/.hermes/.env &&
       grep -q "^OPENAI_API_KEY=local-ollama$" /state/home/.hermes/.env
     '; then
       doctor_fail "agent '${service}' Hermes config must be reconciled to ollama-gate"

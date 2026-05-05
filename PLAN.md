@@ -148,7 +148,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 
 | Issue | Status | Remaining work |
 | --- | --- | --- |
-| `dgx-spark-agentic-stack-vonj` | open | aligner `agentic-hermes` sur le contrat upstream `ollama launch hermes` (schema `ollama-launch`, migration config legacy, tests/docs/doctor/drift-watch) |
+| `dgx-spark-agentic-stack-vonj` | closed | `agentic-hermes` aligne sur le contrat upstream `ollama launch hermes` via matrice/drift-watch `launch-supported`, bootstrap non destructif, `web` toolset, et secrets Hermes confines a `.env` ; le runtime conserve `provider: custom` conformement au setup manuel upstream |
 | `dgx-spark-agentic-stack-vb7p` | open | valider un premier `hello` TRT-LLM natif Nemotron-3-Nano abouti de bout en bout via `ollama-gate` |
 
 ### Closed since former `Plan.md` snapshot

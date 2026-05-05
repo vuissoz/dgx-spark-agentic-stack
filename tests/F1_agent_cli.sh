@@ -93,8 +93,11 @@ timeout 20 docker exec "${hermes_cid}" sh -lc '
   test -w /state/home &&
   test -f /state/home/.hermes/config.yaml &&
   grep -q "^  base_url: \"http://ollama-gate:11435/v1\"$" /state/home/.hermes/config.yaml &&
+  grep -q "^  - web$" /state/home/.hermes/config.yaml &&
+  ! grep -q "^  api_key:" /state/home/.hermes/config.yaml &&
   test -f /state/home/.hermes/.env &&
-  grep -q "^OPENAI_BASE_URL=http://ollama-gate:11435/v1$" /state/home/.hermes/.env &&
+  ! grep -q "^OPENAI_BASE_URL=" /state/home/.hermes/.env &&
+  grep -q "^OPENAI_API_KEY=local-ollama$" /state/home/.hermes/.env &&
   test -f /state/bootstrap/ollama-gate-defaults.env &&
   . /state/bootstrap/ollama-gate-defaults.env &&
   test "${OPENAI_BASE_URL}" = "http://ollama-gate:11435/v1" &&
