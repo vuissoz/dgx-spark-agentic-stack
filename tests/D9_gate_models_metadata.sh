@@ -97,8 +97,12 @@ record = model_map[selected]
 metadata = record.get("metadata")
 assert isinstance(metadata, dict), record
 assert metadata.get("source") == "ollama:/api/tags", metadata
-assert metadata.get("backend") == "ollama", metadata
-assert metadata.get("provider") == "local", metadata
+backend = metadata.get("backend")
+assert backend in {"ollama", "trtllm"}, metadata
+if backend == "ollama":
+    assert metadata.get("provider") == "local", metadata
+else:
+    assert metadata.get("provider") == "trtllm", metadata
 
 tag_entry = tags_map[selected]
 digest = tag_entry.get("digest")

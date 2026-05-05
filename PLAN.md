@@ -17,7 +17,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 ### Canonical tracking merge
 
 - L’ancien fichier `Plan.md` est absorbé ici.
-- Les statuts Beads ci-dessous sont normalisés d’après le tracker local au `2026-03-28`.
+- Les statuts Beads ci-dessous sont normalisés d’après le tracker local au `2026-05-05`.
 - Quand un ancien addendum de `Plan.md` indiquait `[OPEN]` mais que Beads est désormais `closed`, le statut canonique est celui de Beads.
 
 ### Active umbrella merged from former `Plan.md`
@@ -36,7 +36,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 - `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` ajouté et propagé vers `OLLAMA_CONTEXT_LENGTH`.
 - `agent doctor` vérifie la cohérence contexte/capacité modèle/mémoire.
 - `tests/L7_default_model_tool_call_fs_ops.sh` couvre les opérations fichier sur `claude`, `codex`, `opencode`, `vibestral`, `openhands`.
-- Suivi ouvert `dgx-spark-agentic-stack-yzk0` : ajouter un test d’intégration end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, collecte d’artefacts et doctor final.
+- Suivi livré `dgx-spark-agentic-stack-yzk0` : test d’intégration end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, collecte d’artefacts et doctor final.
 - Suivi livré `dgx-spark-agentic-stack-i4o2` : tous les conteneurs agents ciblés par `repo-e2e` embarquent désormais la toolchain `git/python3/pytest` dès leur création, avec fallback runtime `codex` quand `bwrap`/user namespaces ne sont pas disponibles.
 - La compatibilité agents inspirée des contrats Ollama inclut :
   - profils de configuration par agent versionnés ;
@@ -111,7 +111,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-irt` : commande in-chat de statut OpenClaw.
   - `dgx-spark-agentic-stack-433` : vrai Control UI OpenClaw sur `127.0.0.1:18789`.
   - `dgx-spark-agentic-stack-qik` : provider bridges stack-managed pour Telegram/Slack/Discord + bootstrap WhatsApp.
-  - `dgx-spark-agentic-stack-u326` reste ouvert : `agent openclaw init` stack-managed et réparation idempotente ne sont pas encore clos.
+  - `dgx-spark-agentic-stack-u326` : `agent openclaw init` livré comme chemin stack-managed d’onboarding/réparation, réexécutable en mode réparation idempotente.
 - UI / ComfyUI / docs / onboarding :
   - `dgx-spark-agentic-stack-3yi` : garde-fou OpenHands contre restart/OOM au démarrage de nouvelles conversations.
   - `dgx-spark-agentic-stack-8cx` : proxy WebSocket ComfyUI et bootstrap Flux.1-dev clarifiés.
@@ -122,8 +122,8 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-6nn` : contrat CUDA arm64/rootless-dev explicité.
   - `dgx-spark-agentic-stack-mvzt` : `README.md` devenu landing page anglaise concise, références EN/FR préservées.
 - Observabilité / policy:
-  - `dgx-spark-agentic-stack-im5` reste ouvert : politique de rétention et d’occupation disque à intégrer à l’onboarding/runtime.
-  - `dgx-spark-agentic-stack-wlx` est `in_progress` : métriques Prometheus natives pour forwarders TCP OpenClaw.
+  - `dgx-spark-agentic-stack-im5` : politique de rétention et d’occupation disque intégrée à l’onboarding/runtime.
+  - `dgx-spark-agentic-stack-wlx` : métriques Prometheus natives pour forwarders TCP OpenClaw exposées et scrappées.
   - `dgx-spark-agentic-stack-cx9` est resolu : l'onboarding exporte maintenant `COMPOSE_PROFILES` et `TRTLLM_MODELS`, avec prompt explicite d'activation TRT.
   - `dgx-spark-agentic-stack-wav3` : le défaut `agent onboard` pour `TRTLLM_MODELS` pointe maintenant vers le slug Hugging Face `NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, avec fallback runtime cohérent et vérification `agent doctor` exécutée sur le profil actif.
   - `dgx-spark-agentic-stack-vb7p` reste ouvert : valider un premier `hello` complet Nemotron-3-Nano après warm-up initial du backend TRT-LLM natif.
@@ -148,17 +148,23 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 
 | Issue | Status | Remaining work |
 | --- | --- | --- |
-| `dgx-spark-agentic-stack-wj3` | closed | publier des seuils de compaction “soft” / “danger” dérivés du budget de contexte et les exposer aux agents |
-| `dgx-spark-agentic-stack-u326` | open | livrer `agent openclaw init` comme chemin stack-managed d’onboarding/réparation |
-| `dgx-spark-agentic-stack-im5` | open | demander rétention max + budget disque max en onboarding et les appliquer au runtime |
-| `dgx-spark-agentic-stack-wlx` | in_progress | exposer et scrapper des métriques Prometheus pour les forwarders TCP OpenClaw |
-| `dgx-spark-agentic-stack-zu7n` | open | ajouter une forge Git interne loopback-only avec comptes dédiés pour chaque agent et gestion opérateur documentée |
-| `dgx-spark-agentic-stack-yzk0` | open | livrer un test de stack end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, artefacts unifiés et doctor final |
-| `dgx-spark-agentic-stack-i4o2` | closed | conteneurs agents `repo-e2e` autonomes dès leur création avec toolchain Python/Git/pytest et fallback runtime `codex` quand `bwrap`/user namespaces ne sont pas disponibles |
-| `dgx-spark-agentic-stack-5ahj` | open | stabiliser la preuve `ollama-gate` de `tests/H2_openhands.sh` maintenant que la toolchain OpenHands est alignée sur le Python runtime exposé |
-| `dgx-spark-agentic-stack-r1my` | open | aligner les assertions rootless-dev restantes de `tests/E2_agents_confinement.sh` et `tests/K5_goose.sh` avec les contrats runtime actuels (workspace rootless et bannière Goose) |
-| `dgx-spark-agentic-stack-m00n` | open | intégrer Hermes Agent (`NousResearch/hermes-agent`) comme nouvel agent core stack-managed avec service dédié, état persistant, surface opérateur et couverture doctor/tests |
+| `dgx-spark-agentic-stack-m00n` | open | finaliser la clôture tracker de l’intégration Hermes déjà largement livrée dans la stack (service dédié, surface opérateur, persistance, doctor/tests/docs) |
 | `dgx-spark-agentic-stack-vonj` | open | aligner `agentic-hermes` sur le contrat upstream `ollama launch hermes` (schema `ollama-launch`, migration config legacy, tests/docs/doctor/drift-watch) |
+| `dgx-spark-agentic-stack-vb7p` | open | valider un premier `hello` TRT-LLM natif Nemotron-3-Nano abouti de bout en bout via `ollama-gate` |
+
+### Closed since former `Plan.md` snapshot
+
+| Issue | Status | Delivered scope |
+| --- | --- | --- |
+| `dgx-spark-agentic-stack-wj3` | closed | seuils de compaction `soft` / `danger` dérivés du budget de contexte et exposés aux agents |
+| `dgx-spark-agentic-stack-u326` | closed | `agent openclaw init` stack-managed d’onboarding/réparation |
+| `dgx-spark-agentic-stack-im5` | closed | rétention max + budget disque max collectés en onboarding et appliqués au runtime |
+| `dgx-spark-agentic-stack-wlx` | closed | métriques Prometheus pour les forwarders TCP OpenClaw |
+| `dgx-spark-agentic-stack-zu7n` | closed | forge Git interne loopback-only avec comptes dédiés et gestion opérateur documentée |
+| `dgx-spark-agentic-stack-yzk0` | closed | test de stack end-to-end piloté par dépôt avec runner commun, artefacts unifiés et doctor final |
+| `dgx-spark-agentic-stack-i4o2` | closed | conteneurs agents `repo-e2e` autonomes avec toolchain Python/Git/pytest et fallback runtime `codex` |
+| `dgx-spark-agentic-stack-5ahj` | closed | stabilisation de la preuve `ollama-gate` de `tests/H2_openhands.sh` |
+| `dgx-spark-agentic-stack-r1my` | closed | alignement des assertions `rootless-dev` de `tests/E2_agents_confinement.sh` et `tests/K5_goose.sh` |
 
 ## Profils d’exécution (obligatoires)
 

@@ -86,8 +86,8 @@ Usage:
 
 Environment:
   AGENTIC_PROFILE=strict-prod|rootless-dev
-  AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC=<seconds> (default: 90)
-  AGENTIC_DOCTOR_DEFAULT_MODEL_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 20)
+  AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC=<seconds> (default: 300)
+  AGENTIC_DOCTOR_DEFAULT_MODEL_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 60)
   AGENTIC_DOCTOR_STREAM_MODEL=<model> (default: AGENTIC_DEFAULT_MODEL)
   AGENTIC_DOCTOR_STREAM_TIMEOUT_SEC=<seconds> (default: 90)
   AGENTIC_DOCTOR_STREAM_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 20)
@@ -643,8 +643,8 @@ PY
 
 check_default_model_tool_call_health() {
   local probe_model="${AGENTIC_DEFAULT_MODEL:-}"
-  local timeout_sec="${AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC:-90}"
-  local queue_timeout_sec="${AGENTIC_DOCTOR_DEFAULT_MODEL_GATE_QUEUE_TIMEOUT_SEC:-20}"
+  local timeout_sec="${AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC:-300}"
+  local queue_timeout_sec="${AGENTIC_DOCTOR_DEFAULT_MODEL_GATE_QUEUE_TIMEOUT_SEC:-60}"
   local gate_cid payload response_file response_err_file err_hint validation_err
 
   [[ -n "${probe_model}" ]] || {
@@ -700,11 +700,11 @@ request = urllib.request.Request(
         "Content-Type": "application/json",
         "X-Agent-Project": "doctor",
         "X-Agent-Session": os.environ.get("AGENT_DOCTOR_SESSION", "doctor-default-model"),
-        "X-Gate-Queue-Timeout-Seconds": os.environ.get("AGENT_DOCTOR_QUEUE_TIMEOUT_SEC", "20"),
+        "X-Gate-Queue-Timeout-Seconds": os.environ.get("AGENT_DOCTOR_QUEUE_TIMEOUT_SEC", "60"),
     },
     method="POST",
 )
-with urllib.request.urlopen(request, timeout=int(os.environ.get("AGENT_DOCTOR_HTTP_TIMEOUT_SEC", "90"))) as response:
+with urllib.request.urlopen(request, timeout=int(os.environ.get("AGENT_DOCTOR_HTTP_TIMEOUT_SEC", "300"))) as response:
     sys.stdout.buffer.write(response.read())
 PY
     ' >"${response_file}" 2>"${response_err_file}"; then

@@ -27,18 +27,77 @@ wait_for_container_ready "${trt_cid}" 120 || fail "trtllm is not ready"
 
 gate_log="${AGENTIC_ROOT:-/srv/agentic}/gate/logs/gate.jsonl"
 [[ -e "${gate_log}" ]] || fail "gate log file missing: ${gate_log}"
+backend_runtime_file="${AGENTIC_ROOT:-/srv/agentic}/gate/state/llm_backend_runtime.json"
+
+trt_model="$(timeout 30 docker exec -i "${toolbox_cid}" python3 - <<'PY'
+import json
+import urllib.request
+
+request = urllib.request.Request(
+    "http://ollama-gate:11435/v1/models",
+    headers={
+        "X-Agent-Project": "d11",
+        "X-Agent-Session": "d11-models",
+        "X-Gate-Queue-Timeout-Seconds": "25",
+    },
+)
+with urllib.request.urlopen(request, timeout=25) as response:
+    payload = json.loads(response.read().decode("utf-8"))
+
+for item in payload.get("data", []):
+    if not isinstance(item, dict):
+        continue
+    model_id = item.get("id")
+    metadata = item.get("metadata")
+    if (
+        isinstance(model_id, str)
+        and model_id.startswith("trtllm/")
+        and isinstance(metadata, dict)
+        and metadata.get("backend") == "trtllm"
+    ):
+        print(model_id)
+        raise SystemExit(0)
+
+raise SystemExit("no published trtllm model alias found in /v1/models")
+PY
+)"
+[[ -n "${trt_model}" ]] || fail "unable to discover a published trtllm model alias"
+
+if [[ -f "${backend_runtime_file}" ]]; then
+  python3 - "${backend_runtime_file}" <<'PY'
+import json
+import sys
+import time
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+effective = str(payload.get("effective_backend", "")).strip().lower()
+cooldown_until_epoch = int(payload.get("cooldown_until_epoch", 0) or 0)
+sleep_seconds = 0.0
+if effective and effective != "trtllm" and cooldown_until_epoch > 0:
+    remaining = cooldown_until_epoch - int(time.time())
+    if remaining >= 0:
+        sleep_seconds = remaining + 1
+
+if sleep_seconds > 0:
+    time.sleep(sleep_seconds)
+PY
+fi
 
 chat_session="d11-chat-$$"
 responses_session="d11-responses-$$"
 
-chat_output="$(timeout 30 docker exec -i "${toolbox_cid}" python3 - "${chat_session}" <<'PY'
+chat_output="$(timeout 30 docker exec -i "${toolbox_cid}" python3 - "${chat_session}" "${trt_model}" <<'PY'
 import json
 import sys
 import urllib.request
 
 session = sys.argv[1]
+model = sys.argv[2]
 payload = {
-    "model": "trtllm/nemotron-cascade-2:30b",
+    "model": model,
     "messages": [
         {"role": "user", "content": "Use the read_file tool once for /workspace/README.md and stop."}
     ],
@@ -84,14 +143,15 @@ PY
 )"
 [[ "${chat_output}" == "ok" ]] || fail "chat completion tool-call probe failed"
 
-responses_output="$(timeout 30 docker exec -i "${toolbox_cid}" python3 - "${responses_session}" <<'PY'
+responses_output="$(timeout 30 docker exec -i "${toolbox_cid}" python3 - "${responses_session}" "${trt_model}" <<'PY'
 import json
 import sys
 import urllib.request
 
 session = sys.argv[1]
+model = sys.argv[2]
 payload = {
-    "model": "trtllm/nemotron-cascade-2:30b",
+    "model": model,
     "input": "Use the read_file tool once for /workspace/README.md and stop.",
     "tools": [
         {
@@ -146,5 +206,5 @@ responses_line="$(grep "\"session\":\"${responses_session}\"" "${gate_log}" | ta
 printf '%s\n' "${responses_line}" | grep -q '"backend":"trtllm"' \
   || fail "responses probe was not routed to trtllm (line=${responses_line})"
 
-ok "trtllm backend returns tool calls for routed nemotron-cascade-2:30b requests"
+ok "trtllm backend returns tool calls for published routed model aliases"
 ok "D11_trtllm_tool_calls passed"

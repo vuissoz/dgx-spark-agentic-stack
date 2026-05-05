@@ -158,15 +158,20 @@ class GateState:
         self.backend_switch_cooldown_seconds = max(
             0, env_int("GATE_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS", 3)
         )
+        self.model_catalog_cache_ttl_seconds = max(
+            1.0, env_float("GATE_MODEL_CATALOG_CACHE_TTL_SECONDS", 15.0)
+        )
         self.llm_mode = self.default_llm_mode
         self.llm_backend = self.default_llm_backend
         self.backend_runtime: Dict[str, Any] = {}
         self._llm_mode_mtime = 0.0
         self._llm_backend_mtime = 0.0
         self._backend_runtime_mtime = 0.0
+        self._model_catalog_cache_loaded_at = 0.0
 
         self.sem = asyncio.Semaphore(self.concurrency)
         self.lock = asyncio.Lock()
+        self.model_catalog_lock = asyncio.Lock()
         self.queue_depth = 0
         self.active_requests = 0
         self.requests_total = 0
@@ -178,6 +183,7 @@ class GateState:
         self.default_backend = "ollama"
         self.backends: Dict[str, Dict[str, Any]] = {}
         self.model_routes: list[Tuple[str, str]] = []
+        self.model_catalog_cache: Dict[str, set[str]] = {}
         self.provider_quota_limits: Dict[str, Dict[str, int]] = {}
         self.quotas: Dict[str, Any] = {"version": 1, "providers": {}}
         self._quotas_dirty = False
@@ -674,6 +680,19 @@ class GateState:
             ordered.append(self.default_backend)
         return ordered
 
+    def backend_catalog_priority(self, backends: list[str]) -> list[str]:
+        ordered: list[str] = []
+        for candidate in ("trtllm", "ollama"):
+            if candidate in backends and candidate not in ordered:
+                ordered.append(candidate)
+        for candidate in backends:
+            if candidate not in ordered:
+                ordered.append(candidate)
+        return ordered
+
+    def routing_inventory_backends(self) -> list[str]:
+        return self.backend_catalog_priority([backend for backend in self.backends if backend in KNOWN_LOCAL_BACKENDS])
+
     def _blank_window(self, period: str) -> Dict[str, Any]:
         return {"period": period, "requests": 0, "tokens": 0}
 
@@ -1020,7 +1039,7 @@ class GateState:
             await self.flush_quotas_if_dirty()
         return snapshot
 
-    def resolve_backend(self, model_name: str | None) -> str:
+    def resolve_backend_by_routes(self, model_name: str | None) -> str:
         if not isinstance(model_name, str) or not model_name:
             return self.default_backend
 
@@ -1030,6 +1049,52 @@ class GateState:
                 return backend
 
         return self.default_backend
+
+    async def refresh_model_catalog_cache(self, *, force: bool = False) -> Dict[str, set[str]]:
+        now = time.monotonic()
+        if (
+            not force
+            and self.model_catalog_cache
+            and now - self._model_catalog_cache_loaded_at < self.model_catalog_cache_ttl_seconds
+        ):
+            return self.model_catalog_cache
+
+        async with self.model_catalog_lock:
+            now = time.monotonic()
+            if (
+                not force
+                and self.model_catalog_cache
+                and now - self._model_catalog_cache_loaded_at < self.model_catalog_cache_ttl_seconds
+            ):
+                return self.model_catalog_cache
+
+            cache: Dict[str, set[str]] = {}
+            for backend in self.routing_inventory_backends():
+                try:
+                    records = await fetch_backend_model_catalog(backend)
+                except Exception:
+                    continue
+                aliases: set[str] = set()
+                for record in records:
+                    for alias in backend_record_aliases(record, backend):
+                        aliases.add(alias.lower())
+                if aliases:
+                    cache[backend] = aliases
+
+            self.model_catalog_cache = cache
+            self._model_catalog_cache_loaded_at = time.monotonic()
+            return self.model_catalog_cache
+
+    async def resolve_backend(self, model_name: str | None) -> str:
+        if isinstance(model_name, str) and model_name:
+            cache = await self.refresh_model_catalog_cache()
+            lowered = model_name.lower()
+            for backend in ("trtllm", "ollama"):
+                aliases = cache.get(backend)
+                if aliases and lowered in aliases:
+                    return backend
+
+        return self.resolve_backend_by_routes(model_name)
 
     def backend_config(self, backend_name: str) -> Dict[str, Any] | None:
         cfg = self.backends.get(backend_name)
@@ -1550,6 +1615,54 @@ def normalize_openai_model_record(item: Dict[str, Any], backend: str, provider: 
     return record
 
 
+def backend_record_aliases(record: Dict[str, Any], backend: str) -> list[str]:
+    aliases: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: Any) -> None:
+        if not isinstance(value, str):
+            return
+        candidate = value.strip()
+        if not candidate or candidate in seen:
+            return
+        seen.add(candidate)
+        aliases.append(candidate)
+
+    add(record.get("id"))
+    metadata = record.get("metadata")
+    if isinstance(metadata, dict):
+        for key in ("canonical_model", "parent_model", "serve_handle"):
+            add(metadata.get(key))
+
+    if backend == "trtllm":
+        for candidate in list(aliases):
+            if not candidate.startswith("trtllm/"):
+                add(f"trtllm/{candidate}")
+
+    return aliases
+
+
+def published_backend_model_records(record: Dict[str, Any], backend: str) -> list[Dict[str, Any]]:
+    metadata = record.get("metadata")
+    base_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    primary_id = record.get("id")
+    published: list[Dict[str, Any]] = []
+
+    for alias in backend_record_aliases(record, backend):
+        alias_record = dict(record)
+        alias_record["id"] = alias
+        alias_metadata = dict(base_metadata)
+        if isinstance(primary_id, str) and primary_id and alias != primary_id:
+            alias_metadata.setdefault("canonical_model", primary_id)
+        if alias_metadata:
+            alias_record["metadata"] = alias_metadata
+        elif "metadata" in alias_record:
+            alias_record.pop("metadata", None)
+        published.append(alias_record)
+
+    return published
+
+
 async def fetch_backend_model_catalog(backend: str) -> list[Dict[str, Any]]:
     cfg = state.backend_config(backend)
     if cfg is None:
@@ -1922,7 +2035,7 @@ async def proxy_ollama_api(
                 allow_switch=allow_switch,
             )
 
-        backend = state.resolve_backend(model_served)
+        backend = await state.resolve_backend(model_served)
         provider = backend_provider_name(backend)
         llm_mode = state.get_llm_mode()
         llm_backend = state.get_llm_backend()
@@ -2296,7 +2409,7 @@ async def v1_models(request: Request) -> JSONResponse:
     try:
         records: list[Dict[str, Any]] = []
         seen_ids: set[str] = set()
-        backends = state.catalog_backends(llm_mode=llm_mode, llm_backend=llm_backend)
+        backends = state.backend_catalog_priority(state.catalog_backends(llm_mode=llm_mode, llm_backend=llm_backend))
         if backends:
             backend = backends[0]
             provider = backend_provider_name(backend)
@@ -2308,11 +2421,12 @@ async def v1_models(request: Request) -> JSONResponse:
             except BackendAuthError:
                 continue
             for record in backend_records:
-                record_id = record.get("id")
-                if not isinstance(record_id, str) or not record_id or record_id in seen_ids:
-                    continue
-                seen_ids.add(record_id)
-                records.append(record)
+                for published in published_backend_model_records(record, backend_name):
+                    record_id = published.get("id")
+                    if not isinstance(record_id, str) or not record_id or record_id in seen_ids:
+                        continue
+                    seen_ids.add(record_id)
+                    records.append(published)
         response = {
             "object": "list",
             "data": records,
@@ -2892,7 +3006,7 @@ async def handle_chat_completion_endpoint(
             status_code = 503
             reason = "backend_auth_error"
             return backend_auth_response(backend, provider, str(exc))
-        backend = state.resolve_backend(model_served)
+        backend = await state.resolve_backend(model_served)
         backend_cfg = state.backend_config(backend) or {}
         protocol = str(backend_cfg.get("protocol", "")).strip().lower()
         provider = backend_provider_name(backend)
@@ -4326,7 +4440,7 @@ async def v1_embeddings(request: Request) -> JSONResponse:
             status_code = 503
             reason = "backend_auth_error"
             return backend_auth_response(backend, provider, str(exc))
-        backend = state.resolve_backend(model_served)
+        backend = await state.resolve_backend(model_served)
         provider = backend_provider_name(backend)
         is_external_provider = provider_is_external(provider)
         llm_mode = state.get_llm_mode()
@@ -4512,7 +4626,7 @@ async def admin_switch(session_id: str, request: Request) -> JSONResponse:
     if not isinstance(model, str) or not model:
         return JSONResponse(status_code=400, content={"error": "model is required"})
     await state.set_sticky_model(session_id, model)
-    backend = state.resolve_backend(model)
+    backend = await state.resolve_backend(model)
     provider = backend_provider_name(backend)
     state.write_log(
         event_base(
@@ -4544,7 +4658,7 @@ async def admin_switch(session_id: str, request: Request) -> JSONResponse:
 @app.get("/admin/sessions/{session_id}")
 async def admin_session(session_id: str) -> JSONResponse:
     model = await state.get_sticky_model(session_id)
-    backend = state.resolve_backend(model)
+    backend = await state.resolve_backend(model)
     provider = backend_provider_name(backend)
     return JSONResponse(
         status_code=200,
