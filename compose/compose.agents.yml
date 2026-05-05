@@ -424,4 +424,4 @@ services:
 networks:
   agentic:
     external: true
-    name: ${AGENTIC_NETWORK:-agentic}
+    name: ${AGENTIC_NETWORK:?AGENTIC_NETWORK must be set (use ./agent or source scripts/lib/runtime.sh)}

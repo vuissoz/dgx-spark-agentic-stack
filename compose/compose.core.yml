@@ -742,13 +742,13 @@ services:
 
 networks:
   agentic:
-    name: ${AGENTIC_NETWORK:-agentic}
+    name: ${AGENTIC_NETWORK:?AGENTIC_NETWORK must be set (use ./agent or source scripts/lib/runtime.sh)}
     driver: bridge
     internal: true
   agentic-llm:
-    name: ${AGENTIC_LLM_NETWORK:-agentic-llm}
+    name: ${AGENTIC_LLM_NETWORK:?AGENTIC_LLM_NETWORK must be set (use ./agent or source scripts/lib/runtime.sh)}
     driver: bridge
     internal: true
   agentic-egress:
-    name: ${AGENTIC_EGRESS_NETWORK:-agentic-egress}
+    name: ${AGENTIC_EGRESS_NETWORK:?AGENTIC_EGRESS_NETWORK must be set (use ./agent or source scripts/lib/runtime.sh)}
     driver: bridge

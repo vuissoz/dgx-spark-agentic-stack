@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
-AGENTIC_COMPOSE_PROJECT="${AGENTIC_COMPOSE_PROJECT:-agentic}"
-AGENTIC_NETWORK="${AGENTIC_NETWORK:-agentic}"
+AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
+if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
+  AGENTIC_ROOT="${AGENTIC_ROOT:-${HOME}/.local/share/agentic}"
+  AGENTIC_COMPOSE_PROJECT="${AGENTIC_COMPOSE_PROJECT:-agentic-dev}"
+  AGENTIC_NETWORK="${AGENTIC_NETWORK:-agentic-dev}"
+else
+  AGENTIC_ROOT="${AGENTIC_ROOT:-/srv/agentic}"
+  AGENTIC_COMPOSE_PROJECT="${AGENTIC_COMPOSE_PROJECT:-agentic}"
+  AGENTIC_NETWORK="${AGENTIC_NETWORK:-agentic}"
+fi
 RAG_DOCS_DIR="${RAG_DOCS_DIR:-${AGENTIC_ROOT}/rag/docs}"
 RAG_COLLECTION="${RAG_COLLECTION:-agentic_docs}"
 RAG_EMBED_MODEL="${RAG_EMBED_MODEL:-qwen3-embedding:0.6b}"

@@ -18,9 +18,18 @@ SERVICE_NAME = "optional-forgejo"
 SHARED_TEAM = "agents"
 SHARED_REPOSITORY = os.environ.get("GIT_FORGE_SHARED_REPOSITORY", "shared-workbench")
 REFERENCE_REPOSITORY = os.environ.get("GIT_FORGE_REFERENCE_REPOSITORY", "eight-queens-agent-e2e")
-AGENTIC_ROOT = os.environ.get("AGENTIC_ROOT", "/srv/agentic")
-AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "compose")
-AGENTIC_NETWORK = os.environ.get("AGENTIC_NETWORK", "agentic")
+AGENTIC_PROFILE = os.environ.get("AGENTIC_PROFILE", "strict-prod")
+if AGENTIC_PROFILE == "rootless-dev":
+    _default_root = pathlib.Path.home() / ".local" / "share" / "agentic"
+    _default_compose_project = "agentic-dev"
+    _default_network = "agentic-dev"
+else:
+    _default_root = pathlib.Path("/srv/agentic")
+    _default_compose_project = "agentic"
+    _default_network = "agentic"
+AGENTIC_ROOT = os.environ.get("AGENTIC_ROOT", str(_default_root))
+AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", _default_compose_project)
+AGENTIC_NETWORK = os.environ.get("AGENTIC_NETWORK", _default_network)
 AGENT_RUNTIME_UID = int(os.environ.get("AGENT_RUNTIME_UID", "1000"))
 AGENT_RUNTIME_GID = int(os.environ.get("AGENT_RUNTIME_GID", "1000"))
 GIT_FORGE_HOST_PORT = os.environ.get("GIT_FORGE_HOST_PORT", "13010")

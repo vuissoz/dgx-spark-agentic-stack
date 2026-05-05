@@ -15,10 +15,17 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+AGENTIC_PROFILE = os.environ.get("AGENTIC_PROFILE", "strict-prod")
+if AGENTIC_PROFILE == "rootless-dev":
+    _default_root = pathlib.Path.home() / ".local" / "share" / "agentic"
+    _default_compose_project = "agentic-dev"
+else:
+    _default_root = pathlib.Path("/srv/agentic")
+    _default_compose_project = "agentic"
 
-AGENTIC_ROOT = pathlib.Path(os.environ.get("AGENTIC_ROOT", "/srv/agentic"))
+AGENTIC_ROOT = pathlib.Path(os.environ.get("AGENTIC_ROOT", str(_default_root)))
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", "agentic")
+AGENTIC_COMPOSE_PROJECT = os.environ.get("AGENTIC_COMPOSE_PROJECT", _default_compose_project)
 BOOTSTRAP_STATE = AGENTIC_ROOT / "optional" / "git" / "bootstrap" / "git-forge-bootstrap.json"
 DEFAULT_ARTIFACTS_ROOT = AGENTIC_ROOT / "deployments" / "validation" / "agent-repo-e2e"
 OPENHANDS_HOST_PORT = os.environ.get("OPENHANDS_HOST_PORT", "3000")

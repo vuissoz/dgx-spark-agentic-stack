@@ -183,6 +183,6 @@ services:
 
 networks:
   agentic:
-    name: ${AGENTIC_NETWORK:-agentic}
+    name: ${AGENTIC_NETWORK:?AGENTIC_NETWORK must be set (use ./agent or source scripts/lib/runtime.sh)}
     driver: bridge
     internal: true
