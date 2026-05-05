@@ -207,6 +207,7 @@ services:
       AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS: ${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}
       HOME: /state/cli/openclaw-home
       OPENCLAW_HOME: /state/cli/openclaw-home
+      OPENCLAW_STATE_DIR: /state/cli/openclaw-home/.openclaw
       OPENCLAW_CONFIG_PATH: /tmp/openclaw.effective.json
       OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw.stack-config.v1.json
       OPENCLAW_PROVIDER_BRIDGE_FILE: /config/bridge/openclaw.provider-bridge.json
@@ -285,6 +286,7 @@ services:
     environment:
       HOME: /state/cli/openclaw-home
       OPENCLAW_HOME: /state/cli/openclaw-home
+      OPENCLAW_STATE_DIR: /state/cli/openclaw-home/.openclaw
       OPENCLAW_CONFIG_PATH: /tmp/openclaw.effective.json
       OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw.stack-config.v1.json
       OPENCLAW_PROVIDER_BRIDGE_FILE: /config/bridge/openclaw.provider-bridge.json

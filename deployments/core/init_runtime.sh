@@ -97,16 +97,15 @@ sync_runtime_file() {
 ensure_openclaw_chat_status_plugin() {
   local plugin_src_dir="${OPTIONAL_TEMPLATE_DIR}/openclaw-chat-status-plugin"
   local plugin_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
-  local plugin_runtime_dir="/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
   local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 
   install -d -m 0770 "${plugin_dst_dir}" "${plugin_dst_dir}/skills/openclaw"
   sync_runtime_file "${plugin_src_dir}/package.json" "${plugin_dst_dir}/package.json" 0644
   sync_runtime_file "${plugin_src_dir}/openclaw.plugin.json" "${plugin_dst_dir}/openclaw.plugin.json" 0644
-  sync_runtime_file "${plugin_src_dir}/index.ts" "${plugin_dst_dir}/index.ts" 0644
+  sync_runtime_file "${plugin_src_dir}/index.js" "${plugin_dst_dir}/index.js" 0644
   sync_runtime_file "${plugin_src_dir}/skills/openclaw/SKILL.md" "${plugin_dst_dir}/skills/openclaw/SKILL.md" 0644
 
-  python3 - "${state_file}" "${plugin_runtime_dir}" <<'PY'
+  python3 - "${state_file}" "${plugin_dst_dir}" <<'PY'
 import json
 import pathlib
 import sys
@@ -131,7 +130,7 @@ entry = entries.setdefault("openclaw-chat-status", {})
 if not isinstance(entry, dict):
     entry = {}
     entries["openclaw-chat-status"] = entry
-entry.setdefault("enabled", True)
+entry["enabled"] = True
 
 installs = plugins.setdefault("installs", {})
 if not isinstance(installs, dict):

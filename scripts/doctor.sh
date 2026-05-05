@@ -2024,6 +2024,7 @@ optional_openclaw_state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/o
 optional_openclaw_chat_status_plugin_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
 optional_openclaw_chat_status_runtime_dir="/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
 optional_openclaw_chat_status_manifest_file="${optional_openclaw_chat_status_plugin_dir}/openclaw.plugin.json"
+optional_openclaw_chat_status_entry_file="${optional_openclaw_chat_status_plugin_dir}/index.js"
 optional_openclaw_chat_status_skill_file="${optional_openclaw_chat_status_plugin_dir}/skills/openclaw/SKILL.md"
 optional_openclaw_approvals_dir="${AGENTIC_ROOT}/openclaw/state/approvals"
 optional_openclaw_sandbox_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
@@ -2110,6 +2111,9 @@ PY
   if ! grep -q '^OPENCLAW_STATE_CONFIG_FILE=/state/cli/openclaw-home/openclaw.state.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_STATE_CONFIG_FILE=/state/cli/openclaw-home/openclaw.state.json"
   fi
+  if ! grep -q '^OPENCLAW_STATE_DIR=/state/cli/openclaw-home/.openclaw$' <<<"${optional_openclaw_env}"; then
+    doctor_fail "openclaw must set OPENCLAW_STATE_DIR=/state/cli/openclaw-home/.openclaw"
+  fi
   if ! grep -q '^OPENCLAW_CONFIG_PATH=/tmp/openclaw.effective.json$' <<<"${optional_openclaw_env}"; then
     doctor_fail "openclaw must set OPENCLAW_CONFIG_PATH=/tmp/openclaw.effective.json"
   fi
@@ -2185,6 +2189,9 @@ PY
   if [[ ! -s "${optional_openclaw_chat_status_manifest_file}" ]]; then
     doctor_fail "managed openclaw chat-status plugin manifest is missing: ${optional_openclaw_chat_status_manifest_file}"
   fi
+  if [[ ! -s "${optional_openclaw_chat_status_entry_file}" ]]; then
+    doctor_fail "managed openclaw chat-status plugin entrypoint is missing: ${optional_openclaw_chat_status_entry_file}"
+  fi
   if [[ ! -s "${optional_openclaw_chat_status_skill_file}" ]]; then
     doctor_fail "managed openclaw slash-command skill is missing: ${optional_openclaw_chat_status_skill_file}"
   fi
@@ -2227,7 +2234,25 @@ if install.get("installPath") != plugin_dir:
     raise SystemExit(1)
 PY
   then
-    doctor_fail "openclaw writable state must pin-trust, enable, and record path provenance for the managed /openclaw status plugin"
+    doctor_fail "openclaw runtime must enable the managed /openclaw status plugin and record upstream install provenance"
+  fi
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw plugins list --json >/tmp/openclaw-doctor-plugins.json 2>/tmp/openclaw-doctor-plugins.err && python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('/tmp/openclaw-doctor-plugins.json').read_text(encoding='utf-8'))
+for plugin in payload.get('plugins', []):
+    if plugin.get('id') != 'openclaw-chat-status':
+        continue
+    if not (plugin.get('enabled') is True or plugin.get('explicitlyEnabled') is True):
+        raise SystemExit(1)
+    status = str(plugin.get('status') or '').strip().lower()
+    if status in {'disabled', 'error'}:
+        raise SystemExit(1)
+    raise SystemExit(0)
+raise SystemExit(1)
+PY"; then
+    doctor_fail "openclaw plugins list must expose an enabled managed openclaw-chat-status plugin"
   fi
 fi
 
@@ -2260,6 +2285,9 @@ if [[ -n "${optional_openclaw_gateway_cid}" ]]; then
   fi
   if ! grep -q '^OPENCLAW_STATE_CONFIG_FILE=/state/cli/openclaw-home/openclaw.state.json$' <<<"${optional_openclaw_gateway_env}"; then
     doctor_fail "openclaw-gateway must set OPENCLAW_STATE_CONFIG_FILE=/state/cli/openclaw-home/openclaw.state.json"
+  fi
+  if ! grep -q '^OPENCLAW_STATE_DIR=/state/cli/openclaw-home/.openclaw$' <<<"${optional_openclaw_gateway_env}"; then
+    doctor_fail "openclaw-gateway must set OPENCLAW_STATE_DIR=/state/cli/openclaw-home/.openclaw"
   fi
 
   if ! timeout 15 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'command -v openclaw >/dev/null'; then

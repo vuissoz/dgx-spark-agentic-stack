@@ -291,6 +291,8 @@ docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/openclaw.
   || fail "openclaw state layer must persist under OPENCLAW_STATE_CONFIG_FILE"
 docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status/openclaw.plugin.json' \
   || fail "managed openclaw chat-status plugin manifest must persist under OPENCLAW_HOME"
+docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status/index.js' \
+  || fail "managed openclaw chat-status plugin entrypoint must persist under OPENCLAW_HOME"
 docker exec "${openclaw_cid}" sh -lc 'test -f /state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status/skills/openclaw/SKILL.md' \
   || fail "managed openclaw slash-command skill must persist under OPENCLAW_HOME"
 
@@ -371,6 +373,24 @@ timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw plugins list >/tmp/age
   || fail "openclaw plugins list must succeed with the managed chat-status plugin present"
 docker exec "${openclaw_cid}" sh -lc "grep -q 'openclaw-chat-status' /tmp/agent-k6-openclaw-plugins-list.out" \
   || fail "openclaw plugins list must expose the managed openclaw-chat-status plugin"
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw plugins list --json >/tmp/agent-k6-openclaw-plugins-list.json 2>/tmp/agent-k6-openclaw-plugins-list-json.err' \
+  || fail "openclaw plugins list --json must succeed with the managed chat-status plugin present"
+docker exec "${openclaw_cid}" sh -lc "python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('/tmp/agent-k6-openclaw-plugins-list.json').read_text(encoding='utf-8'))
+for plugin in payload.get('plugins', []):
+    if plugin.get('id') != 'openclaw-chat-status':
+        continue
+    if not (plugin.get('enabled') is True or plugin.get('explicitlyEnabled') is True):
+        raise SystemExit(1)
+    status = str(plugin.get('status') or '').strip().lower()
+    if status in {'disabled', 'error'}:
+        raise SystemExit(1)
+    raise SystemExit(0)
+raise SystemExit(1)
+PY" || fail "managed openclaw chat-status plugin must be enabled in openclaw plugins list --json"
 if docker exec "${openclaw_cid}" sh -lc "grep -q 'loaded without install/load-path provenance' /tmp/agent-k6-openclaw-plugins-list.err"; then
   fail "managed openclaw chat-status plugin must not emit provenance warnings once installs metadata is recorded"
 fi

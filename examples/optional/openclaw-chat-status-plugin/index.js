@@ -1,9 +1,8 @@
-import { definePluginEntry } from "/opt/openclaw/lib/node_modules/openclaw/dist/plugin-sdk/plugin-entry.js";
+import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
-const STATUS_URL =
-  process.env.OPENCLAW_CHAT_STATUS_URL || "http://openclaw:8111/v1/dashboard/status";
+const STATUS_URL = "http://openclaw:8111/v1/dashboard/status";
 
-function textValue(value: unknown, fallback = "-"): string {
+function textValue(value, fallback = "-") {
   if (typeof value !== "string") {
     return fallback;
   }
@@ -11,11 +10,11 @@ function textValue(value: unknown, fallback = "-"): string {
   return normalized || fallback;
 }
 
-function intValue(value: unknown): number {
+function intValue(value) {
   return Number.isInteger(value) ? Number(value) : 0;
 }
 
-function renderStatus(payload: any): string {
+function renderStatus(payload) {
   const runtime = payload && typeof payload === "object" ? payload.runtime || {} : {};
   const execution = payload && typeof payload === "object" ? payload.execution_plane || {} : {};
   const relay = payload && typeof payload === "object" ? payload.relay || {} : {};
