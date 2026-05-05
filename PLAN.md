@@ -148,7 +148,6 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 
 | Issue | Status | Remaining work |
 | --- | --- | --- |
-| `dgx-spark-agentic-stack-m00n` | open | finaliser la clôture tracker de l’intégration Hermes déjà largement livrée dans la stack (service dédié, surface opérateur, persistance, doctor/tests/docs) |
 | `dgx-spark-agentic-stack-vonj` | open | aligner `agentic-hermes` sur le contrat upstream `ollama launch hermes` (schema `ollama-launch`, migration config legacy, tests/docs/doctor/drift-watch) |
 | `dgx-spark-agentic-stack-vb7p` | open | valider un premier `hello` TRT-LLM natif Nemotron-3-Nano abouti de bout en bout via `ollama-gate` |
 
@@ -156,6 +155,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 
 | Issue | Status | Delivered scope |
 | --- | --- | --- |
+| `dgx-spark-agentic-stack-m00n` | closed | intégration Hermes déjà livrée comme surface core managée (`agentic-hermes`, commandes opérateur, persistance, doctor/tests/docs/ADR) ; le reliquat upstream est suivi dans `dgx-spark-agentic-stack-vonj` |
 | `dgx-spark-agentic-stack-wj3` | closed | seuils de compaction `soft` / `danger` dérivés du budget de contexte et exposés aux agents |
 | `dgx-spark-agentic-stack-u326` | closed | `agent openclaw init` stack-managed d’onboarding/réparation |
 | `dgx-spark-agentic-stack-im5` | closed | rétention max + budget disque max collectés en onboarding et appliqués au runtime |
