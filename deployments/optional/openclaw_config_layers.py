@@ -18,6 +18,7 @@ ALLOWED_OVERLAY_PATHS = {
 }
 
 IMMUTABLE_TOKEN_SENTINEL = "__OPENCLAW_GATEWAY_TOKEN__"
+MANAGED_PLUGIN_ID = "openclaw-chat-status"
 
 
 def load_json(path: pathlib.Path, *, default: Any | None = None) -> Any:
@@ -203,6 +204,48 @@ def strip_paths(payload: dict[str, Any], paths: set[tuple[str, ...]]) -> dict[st
     return prune_empty(result)
 
 
+def reconcile_managed_plugin_state(
+    state: dict[str, Any], plugin_dir: pathlib.Path | str
+) -> dict[str, Any]:
+    normalized = deep_copy(state) if isinstance(state, dict) else {}
+    plugins = normalized.setdefault("plugins", {})
+    if not isinstance(plugins, dict):
+        plugins = {}
+        normalized["plugins"] = plugins
+
+    allow = plugins.setdefault("allow", [])
+    if not isinstance(allow, list):
+        allow = []
+        plugins["allow"] = allow
+    if MANAGED_PLUGIN_ID not in allow:
+        allow.append(MANAGED_PLUGIN_ID)
+
+    entries = plugins.setdefault("entries", {})
+    if not isinstance(entries, dict):
+        entries = {}
+        plugins["entries"] = entries
+    entry = entries.setdefault(MANAGED_PLUGIN_ID, {})
+    if not isinstance(entry, dict):
+        entry = {}
+        entries[MANAGED_PLUGIN_ID] = entry
+    entry["enabled"] = True
+
+    installs = plugins.setdefault("installs", {})
+    if not isinstance(installs, dict):
+        installs = {}
+        plugins["installs"] = installs
+    install_record = installs.setdefault(MANAGED_PLUGIN_ID, {})
+    if not isinstance(install_record, dict):
+        install_record = {}
+        installs[MANAGED_PLUGIN_ID] = install_record
+
+    plugin_dir_str = str(plugin_dir)
+    install_record["source"] = "path"
+    install_record["sourcePath"] = plugin_dir_str
+    install_record["installPath"] = plugin_dir_str
+    return prune_empty(normalized)
+
+
 def extract_overlay(payload: dict[str, Any]) -> dict[str, Any]:
     overlay: dict[str, Any] = {}
     for path in sorted(ALLOWED_OVERLAY_PATHS):
@@ -260,6 +303,10 @@ def capture_layers(
     immutable_paths = collect_leaf_paths(immutable)
     bridge_paths = collect_leaf_paths(bridge)
     state = strip_paths(effective, immutable_paths | bridge_paths | ALLOWED_OVERLAY_PATHS)
+    state = reconcile_managed_plugin_state(
+        state,
+        pathlib.Path("/state/cli/openclaw-home/.openclaw/extensions") / MANAGED_PLUGIN_ID,
+    )
 
     write_json(overlay_file, overlay, mode=0o640)
     write_json(state_file, state, mode=0o600)
