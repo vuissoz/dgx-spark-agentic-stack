@@ -3,6 +3,7 @@ services:
     image: alpine:3.20
     profiles:
       - optional
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     command:
       - /bin/sh
       - -lc
