@@ -371,6 +371,7 @@ agent cleanup [--yes] [--backup|--no-backup] [--purge-models]
 agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
+agent gpu-clock [status|low|reset]
 agent ollama unload <model>
 agent ollama-link
 agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
@@ -440,6 +441,7 @@ Notes:
 - `agent openclaw init [project]` est le chemin d'onboarding/réparation OpenClaw stack-managed: il corrige le workspace par défaut vers `/workspace/...`, démarre le bundle core si nécessaire, applique le bootstrap local sûr, puis imprime les next steps providers/channels. Sans argument, il utilise `AGENTIC_OPENCLAW_INIT_PROJECT` (défaut: `openclaw-default`). `agent onboard` peut désormais collecter ce projet par défaut ainsi que les secrets provider bridge Telegram/Discord/Slack pour qu'un `agent openclaw init` ultérieur soit automatique. `openclaw onboard`, `openclaw configure --section channels` et `openclaw gateway run` restent des fallbacks experts.
 - `agent ls` expose aussi un résumé runtime pour OpenClaw (`sandboxes=<n>;sessions=<n>;current=<id>;...`), dérivé du registre persistant opérateur de l'execution-plane.
 - `agent sudo-mode on` active `sudo` dans les conteneurs agents (en relachant uniquement `no-new-privileges` pour ces services); `agent sudo-mode off` revient au mode durci.
+- `agent gpu-clock low` applique le preset conservateur `2000,2000` pour l'horloge graphique GPU de l'hote via `nvidia-smi -lgc`; `agent gpu-clock reset` supprime ce verrou avec `nvidia-smi -rgc`; `agent gpu-clock status` affiche la cible persistante (`AGENTIC_GPU_CLOCK_LOCK`) ainsi que la vue live du driver. La commande utilise `sudo` automatiquement si necessaire car le changement se fait au niveau hote, pas dans les conteneurs.
 - `agent rollback all` exige un `release_id`.
 - Utiliser `--skip-d5-tests` (ou `AGENTIC_SKIP_D5_TESTS=1`) pour ignorer uniquement `D5_gate_external_providers.sh` avec un warning si l'accès API externe n'est pas disponible.
 - `agent cleanup` supprime aussi les images Docker locales de la stack et purge l'état sans suivre les symlinks, mais conserve par défaut les répertoires de modèles locaux; utiliser `--purge-models` pour les effacer explicitement.

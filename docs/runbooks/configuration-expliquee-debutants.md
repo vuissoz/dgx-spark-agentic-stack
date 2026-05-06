@@ -21,7 +21,7 @@ La configuration vient de 5 sources:
 
 3. Fichier runtime gere par `agent`
 - Fichier: `${AGENTIC_ROOT}/deployments/runtime.env`
-- Mis a jour automatiquement par `agent up`, `agent llm mode`, `agent llm test-mode`, `agent ollama-models`, `agent ollama-preload`, etc.
+- Mis a jour automatiquement par `agent up`, `agent llm mode`, `agent llm test-mode`, `agent ollama-models`, `agent ollama-preload`, `agent gpu-clock`, etc.
 
 4. Fichiers de configuration sous `${AGENTIC_ROOT}`
 - Exemple: `${AGENTIC_ROOT}/proxy/allowlist.txt`
@@ -52,6 +52,11 @@ Point important:
 - Montage des modeles Ollama:
   - `rw` pour preload/mise a jour,
   - `ro` pour smoke tests deterministes.
+
+- Verrou d'horloge GPU:
+  - `default` si l'hote est stable et que vous voulez le comportement NVIDIA normal.
+  - `2000,2000` via `./agent gpu-clock low` si vous cherchez une enveloppe thermique plus basse et plus stable.
+  - retour au mode par defaut avec `./agent gpu-clock reset`.
 
 ## 3. Catalogue des variables
 

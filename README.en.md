@@ -367,6 +367,7 @@ agent cleanup [--yes] [--backup|--no-backup] [--purge-models]
 agent strict-prod cleanup [--yes] [--backup|--no-backup]
 agent rootless-dev cleanup [--yes] [--backup|--no-backup]
 agent net apply
+agent gpu-clock [status|low|reset]
 agent ollama unload <model>
 agent ollama-link
 agent ollama-drift watch [--ack-baseline] [--no-beads] [--issue-id <id>] [--state-dir <path>] [--sources-dir <path>] [--sources <csv>] [--timeout-sec <int>] [--quiet]
@@ -435,6 +436,7 @@ Notes:
 - `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|vibestral|hermes|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in the core `openclaw` service with loopback API, Web UI (`18789`), and Gateway WS reminders.
 - `agent openclaw init [project]` is the stack-managed OpenClaw onboarding/repair path: it repairs the default workspace back under `/workspace/...`, starts the core bundle if needed, applies the safe local bootstrap, then prints the exact provider/channel next steps. Without an argument it uses `AGENTIC_OPENCLAW_INIT_PROJECT` (default: `openclaw-default`). `agent onboard` can now collect that default project plus Telegram/Discord/Slack provider-bridge secrets so a later `agent openclaw init` can run without extra flags. `openclaw onboard`, `openclaw configure --section channels`, and `openclaw gateway run` remain expert fallbacks only.
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.
+- `agent gpu-clock low` applies the conservative host GPU graphics clock preset `2000,2000` via `nvidia-smi -lgc`; `agent gpu-clock reset` removes that lock with `nvidia-smi -rgc`; `agent gpu-clock status` reports the persisted target (`AGENTIC_GPU_CLOCK_LOCK`) plus the live driver view. The command uses `sudo` automatically when needed because the clock change is host-level, not container-local.
 - `agent rollback all` requires a `release_id`.
 - Use `--skip-d5-tests` (or `AGENTIC_SKIP_D5_TESTS=1`) to skip only `D5_gate_external_providers.sh` with a warning when external API access is unavailable.
 - `agent cleanup` also removes local stack Docker images and purges state without following symlinks, but it preserves local model directories by default; use `--purge-models` to remove them explicitly.

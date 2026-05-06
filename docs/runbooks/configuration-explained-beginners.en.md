@@ -23,7 +23,7 @@ Configuration comes from 5 places:
 
 3. Runtime state file (managed by `agent`)
 - File: `${AGENTIC_ROOT}/deployments/runtime.env`
-- Updated automatically by commands like `agent up`, `agent llm mode`, `agent llm test-mode`, `agent ollama-models`, `agent ollama-preload`.
+- Updated automatically by commands like `agent up`, `agent llm mode`, `agent llm test-mode`, `agent ollama-models`, `agent ollama-preload`, `agent gpu-clock`.
 
 4. Service config files under `${AGENTIC_ROOT}`
 - Example: `${AGENTIC_ROOT}/proxy/allowlist.txt`
@@ -56,6 +56,11 @@ If you are unsure, use these defaults:
 - Model store mount mode:
   - `rw` while preloading/updating models.
   - `ro` for deterministic smoke tests.
+
+- GPU clock lock:
+  - `default` if the host is stable and you want NVIDIA's normal behavior.
+  - `2000,2000` through `./agent gpu-clock low` if you need a lower, steadier thermal envelope.
+  - return to default with `./agent gpu-clock reset`.
 
 ## 3. Variable Catalog
 
