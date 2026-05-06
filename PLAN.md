@@ -126,7 +126,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-wlx` : métriques Prometheus natives pour forwarders TCP OpenClaw exposées et scrappées.
   - `dgx-spark-agentic-stack-cx9` est resolu : l'onboarding exporte maintenant `COMPOSE_PROFILES` et `TRTLLM_MODELS`, avec prompt explicite d'activation TRT.
   - `dgx-spark-agentic-stack-wav3` : le défaut `agent onboard` pour `TRTLLM_MODELS` pointe maintenant vers le slug Hugging Face `NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, avec fallback runtime cohérent et vérification `agent doctor` exécutée sur le profil actif.
-  - `dgx-spark-agentic-stack-vb7p` reste ouvert : valider un premier `hello` complet Nemotron-3-Nano après warm-up initial du backend TRT-LLM natif.
+  - `dgx-spark-agentic-stack-vb7p` est resolu : test hermetique `C10_trtllm_native_hello_gate_warmup` prouvant le warm-up natif TRT, `trtllm /healthz` avec `native_ready=true`, puis un premier `Hello` reussi via `ollama-gate` avec log `backend=trtllm`.
   - `dgx-spark-agentic-stack-c8n` : ajout d'un mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` pour DGX Spark, avec répertoire local NVFP4 imposé et absence de fallback silencieux vers HF/FP8.
   - `dgx-spark-agentic-stack-z6r` : bootstrap automatique du snapshot NVFP4 vers `${AGENTIC_ROOT}/trtllm/models/super_fp4` pendant `agent up core` quand TRT + token HF + modèle Nemotron par défaut sont présents.
   - `dgx-spark-agentic-stack-eut5` : catalogue local TRT NVFP4 (`nemotron-super-120b`, `nemotron-cascade-30b`) + commandes `agent trtllm prepare|load|unload` pour ne garder qu'un seul modèle actif en mémoire.
