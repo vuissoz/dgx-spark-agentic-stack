@@ -11,6 +11,7 @@ AGENT_RUNTIME_ENV_FILE="${AGENTIC_ROOT}/deployments/runtime.env"
 AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapshot.sh"
 AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
 AGENT_RELEASE_RESOLVE_LATEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/resolve_latest.py"
+AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/write_release_integrity.py"
 AGENT_BACKUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/backups/time_machine.sh"
 AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
@@ -1081,6 +1082,10 @@ capture_update_resolution_artifacts() {
     [[ -f "${resolution_dir}/${artifact}" ]] || continue
     install -m 0640 "${resolution_dir}/${artifact}" "${release_dir}/${artifact}"
   done
+
+  [[ -f "${AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT}" ]] \
+    || die "release integrity writer is missing: ${AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT}"
+  python3 "${AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT}" --release-dir "${release_dir}"
 }
 
 service_container_id() {

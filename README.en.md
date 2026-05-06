@@ -233,7 +233,9 @@ Equivalent one-shot command:
 In `rootless-dev`, `first-up` does not require a prior `agent update`. If the first
 bootstrap release does not have `latest-resolution.json` yet, `doctor` emits a
 non-blocking warning and lets the first startup complete; run `./agent update` after
-that first success to pin auditable digests/versions.
+that first success to pin auditable digests/versions. Fresh releases are now also
+sealed with `artifact-integrity.json`; `doctor` validates those checksums and ensures
+that release artifacts do not contain plaintext secret material from `${AGENTIC_ROOT}/secrets`.
 
 Cleanup for `rootless-dev` runtime (back to a "fresh" state):
 

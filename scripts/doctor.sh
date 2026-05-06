@@ -12,6 +12,7 @@ source "${SCRIPT_DIR}/lib/model_compat.sh"
 source "${AGENTIC_REPO_ROOT}/tests/lib/common.sh"
 
 AGENT_RELEASE_VALIDATE_LATEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/validate_latest_resolution.py"
+AGENT_RELEASE_VALIDATE_ARTIFACTS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/validate_release_artifacts.py"
 
 status=0
 fix_net=0
@@ -2816,6 +2817,31 @@ else
         printf '%s\n' "${latest_validation_output}" >&2
       fi
       doctor_fail "active release contains mutable 'latest' values that were not resolved deterministically; run 'agent update'"
+    fi
+  fi
+
+  if [[ ! -f "${AGENT_RELEASE_VALIDATE_ARTIFACTS_SCRIPT}" ]]; then
+    doctor_fail "release artifact validator is missing: ${AGENT_RELEASE_VALIDATE_ARTIFACTS_SCRIPT}"
+  else
+    set +e
+    release_artifact_validation_output="$(
+      python3 "${AGENT_RELEASE_VALIDATE_ARTIFACTS_SCRIPT}" \
+        --release-dir "${current_release_dir}" \
+        --secrets-dir "${AGENTIC_ROOT}/secrets" 2>&1
+    )"
+    release_artifact_validation_rc=$?
+    set -e
+
+    if [[ "${release_artifact_validation_rc}" -eq 0 ]]; then
+      ok "active release artifact integrity and secret hygiene are valid"
+    elif [[ "${release_artifact_validation_rc}" -eq 2 ]]; then
+      [[ -n "${release_artifact_validation_output}" ]] && warn "${release_artifact_validation_output}"
+      ok "active release artifact integrity validation is temporarily waived for legacy releases"
+    else
+      if [[ -n "${release_artifact_validation_output}" ]]; then
+        printf '%s\n' "${release_artifact_validation_output}" >&2
+      fi
+      doctor_fail "active release artifact integrity or secret hygiene validation failed; run 'agent update' and inspect the release snapshot"
     fi
   fi
 fi

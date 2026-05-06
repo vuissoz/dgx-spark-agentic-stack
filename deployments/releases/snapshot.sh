@@ -25,6 +25,13 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
+seal_release_artifacts() {
+  local release_dir="$1"
+  local integrity_script="${SCRIPT_DIR}/write_release_integrity.py"
+  [[ -f "${integrity_script}" ]] || die "release integrity writer is missing: ${integrity_script}"
+  python3 "${integrity_script}" --release-dir "${release_dir}"
+}
+
 existing_compose_files() {
   local -a ordered_targets=(core agents ui obs rag optional)
   local target compose_file
@@ -194,6 +201,8 @@ PY
   chmod 0640 "${changes_log}"
   printf '%s action=snapshot release=%s reason=%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${release_id}" "${reason}" >>"${changes_log}"
+
+  seal_release_artifacts "${release_dir}"
 
   if [[ -d "${current_link}" && ! -L "${current_link}" ]]; then
     rm -rf "${current_link}"
