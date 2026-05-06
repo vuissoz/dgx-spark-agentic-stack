@@ -38,18 +38,25 @@ main() {
   local release_dir="${AGENTIC_ROOT}/deployments/releases/${release_id}"
   [[ -d "${release_dir}" ]] || die "release not found: ${release_dir}"
   [[ -f "${release_dir}/images.json" ]] || die "missing release images manifest: ${release_dir}/images.json"
-  [[ -f "${release_dir}/compose.files" ]] || die "missing compose file list: ${release_dir}/compose.files"
 
+  local compose_effective_file="${release_dir}/compose.effective.yml"
+  local compose_files_manifest="${release_dir}/compose.files"
   local -a compose_files=()
-  mapfile -t compose_files < <(grep -Ev '^\s*$' "${release_dir}/compose.files")
-  [[ "${#compose_files[@]}" -gt 0 ]] || die "release ${release_id} contains no compose files"
-
-  local compose_file
   local -a compose_args=()
-  for compose_file in "${compose_files[@]}"; do
-    [[ -f "${compose_file}" ]] || die "compose file from release is missing: ${compose_file}"
-    compose_args+=("-f" "${compose_file}")
-  done
+
+  if [[ -s "${compose_effective_file}" ]]; then
+    compose_args=("-f" "${compose_effective_file}")
+  else
+    [[ -f "${compose_files_manifest}" ]] || die "missing release compose snapshot: ${compose_effective_file} (legacy fallback also missing ${compose_files_manifest})"
+    mapfile -t compose_files < <(grep -Ev '^\s*$' "${compose_files_manifest}")
+    [[ "${#compose_files[@]}" -gt 0 ]] || die "release ${release_id} contains no compose files"
+
+    local compose_file
+    for compose_file in "${compose_files[@]}"; do
+      [[ -f "${compose_file}" ]] || die "compose file from legacy release is missing: ${compose_file}"
+      compose_args+=("-f" "${compose_file}")
+    done
+  fi
 
   local override_file services_file
   override_file="$(mktemp)"
