@@ -9,6 +9,9 @@ source "${SCRIPT_DIR}/lib/common.sh"
 agent_bin="${REPO_ROOT}/agent"
 [[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
 
+tmp_root="$(mktemp -d)"
+trap 'rm -rf "${tmp_root}"' EXIT
+
 profile_output="$(
   COMPOSE_PROFILES='trt,optional-goose' \
   TRTLLM_MODELS='https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' \
@@ -17,6 +20,8 @@ profile_output="$(
   TRTLLM_NVFP4_HF_REPO='nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' \
   TRTLLM_NVFP4_HF_REVISION='main' \
   TRTLLM_NVFP4_PREPARE_ENABLED='true' \
+  AGENTIC_PROFILE='rootless-dev' \
+  AGENTIC_ROOT="${tmp_root}/runtime" \
   "${agent_bin}" profile
 )"
 printf '%s\n' "${profile_output}" | grep -q '^compose_profiles=trt,optional-goose$' \
@@ -34,7 +39,7 @@ printf '%s\n' "${profile_output}" | grep -q '^trtllm_nvfp4_hf_revision=main$' \
 printf '%s\n' "${profile_output}" | grep -q '^trtllm_nvfp4_prepare_enabled=true$' \
   || fail "agent profile must print trtllm_nvfp4_prepare_enabled"
 
-empty_output="$(env -u COMPOSE_PROFILES "${agent_bin}" profile)"
+empty_output="$(env -u COMPOSE_PROFILES AGENTIC_PROFILE=rootless-dev AGENTIC_ROOT="${tmp_root}/runtime-empty" "${agent_bin}" profile)"
 printf '%s\n' "${empty_output}" | grep -q '^compose_profiles=$' \
   || fail "agent profile must print compose_profiles even when it is empty"
 

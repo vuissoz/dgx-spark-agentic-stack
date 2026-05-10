@@ -12,6 +12,192 @@ agentic_repo_root() {
 AGENTIC_REPO_ROOT="$(agentic_repo_root)"
 AGENTIC_PROFILE="${AGENTIC_PROFILE:-strict-prod}"
 
+agentic_csv_contains() {
+  local needle="$1"
+  local raw="$2"
+  local item
+
+  IFS=',' read -r -a _agentic_csv_items <<<"${raw}"
+  for item in "${_agentic_csv_items[@]}"; do
+    item="${item#"${item%%[![:space:]]*}"}"
+    item="${item%"${item##*[![:space:]]}"}"
+    [[ -n "${item}" ]] || continue
+    [[ "${item}" == "${needle}" ]] && return 0
+  done
+  return 1
+}
+
+agentic_runtime_schema() {
+  cat <<'EOF'
+AGENTIC_PROFILE|profile|persist,profile
+AGENTIC_ROOT|root|persist,profile
+AGENTIC_AGENT_WORKSPACES_ROOT|agent_workspaces_root|persist,load,profile
+AGENTIC_CLAUDE_WORKSPACES_DIR|claude_workspaces_dir|persist,load,profile
+AGENTIC_CODEX_WORKSPACES_DIR|codex_workspaces_dir|persist,load,profile
+AGENTIC_OPENCODE_WORKSPACES_DIR|opencode_workspaces_dir|persist,load,profile
+AGENTIC_VIBESTRAL_WORKSPACES_DIR|vibestral_workspaces_dir|persist,load,profile
+AGENTIC_HERMES_WORKSPACES_DIR|hermes_workspaces_dir|persist,load,profile
+AGENTIC_OPENHANDS_WORKSPACES_DIR|openhands_workspaces_dir|persist,load,profile
+AGENTIC_OPENCLAW_WORKSPACES_DIR|openclaw_workspaces_dir|persist,load,profile
+AGENTIC_OPENCLAW_INIT_PROJECT|openclaw_init_project|persist,load,profile
+AGENTIC_PI_MONO_WORKSPACES_DIR|pi_mono_workspaces_dir|persist,load,profile
+AGENTIC_GOOSE_WORKSPACES_DIR|goose_workspaces_dir|persist,load,profile
+AGENTIC_COMPOSE_PROJECT|compose_project|persist,profile
+COMPOSE_PROFILES|compose_profiles|persist,load,profile
+AGENTIC_NETWORK|network|persist,load,profile
+AGENTIC_LLM_NETWORK|llm_network|persist,load,profile
+AGENTIC_EGRESS_NETWORK|egress_network|persist,load,profile
+AGENTIC_DOCKER_USER_SOURCE_NETWORKS|docker_user_source_networks|persist,load,profile
+OLLAMA_HOST_PORT|ollama_host_port|persist,load,profile
+OPENWEBUI_HOST_PORT|openwebui_host_port|persist,load,profile
+OPENHANDS_HOST_PORT|openhands_host_port|persist,load,profile
+COMFYUI_HOST_PORT|comfyui_host_port|persist,load,profile
+PROMETHEUS_HOST_PORT|prometheus_host_port|persist,load,profile
+GRAFANA_HOST_PORT|grafana_host_port|persist,load,profile
+LOKI_HOST_PORT|loki_host_port|persist,load,profile
+GIT_FORGE_HOST_PORT|git_forge_host_port|persist,load,profile
+GIT_FORGE_SSH_HOST_PORT|git_forge_ssh_host_port|persist,load,profile
+PORTAINER_HOST_PORT|portainer_host_port|persist,load,profile
+OPENCLAW_WEBHOOK_HOST_PORT|openclaw_webhook_host_port|persist,load,profile
+OPENCLAW_GATEWAY_HOST_PORT|openclaw_gateway_host_port|persist,load,profile
+OPENCLAW_RELAY_HOST_PORT|openclaw_relay_host_port|persist,load,profile
+AGENTIC_AGENT_BASE_BUILD_CONTEXT|agent_base_build_context|persist,load,profile
+AGENTIC_AGENT_BASE_DOCKERFILE|agent_base_dockerfile|persist,load,profile
+AGENTIC_AGENT_BASE_IMAGE|agent_base_image|persist,load,profile
+AGENTIC_GPU_CLOCK_LOCK|gpu_clock_lock|persist,load,profile
+AGENTIC_AGENT_CLI_INSTALL_MODE|agent_cli_install_mode|persist,load,profile
+AGENTIC_AGENT_NO_NEW_PRIVILEGES|agent_no_new_privileges|persist,load,profile
+AGENTIC_CODEX_CLI_NPM_SPEC|codex_cli_npm_spec|persist,load,profile
+AGENTIC_CLAUDE_CODE_NPM_SPEC|claude_code_npm_spec|persist,load,profile
+AGENTIC_OPENCODE_NPM_SPEC|opencode_npm_spec|persist,load,profile
+AGENTIC_PI_CODING_AGENT_NPM_SPEC|pi_coding_agent_npm_spec|persist,load,profile
+AGENTIC_OPENHANDS_INSTALL_SCRIPT|openhands_install_script|persist,load,profile
+AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT|openclaw_install_cli_script|persist,load,profile
+AGENTIC_OPENCLAW_INSTALL_VERSION|openclaw_install_version|persist,load,profile
+AGENTIC_VIBE_INSTALL_SCRIPT|vibe_install_script|persist,load,profile
+AGENTIC_HERMES_AGENT_GIT_URL|hermes_agent_git_url|persist,load,profile
+AGENTIC_HERMES_AGENT_GIT_REF|hermes_agent_git_ref|persist,load,profile
+AGENTIC_HERMES_AGENT_GIT_SHA|hermes_agent_git_sha|persist,load,profile
+AGENTIC_HERMES_PIP_EXTRAS|hermes_pip_extras|persist,load,profile
+AGENTIC_LLM_MODE|llm_mode|persist,load,profile
+AGENTIC_LLM_BACKEND|llm_backend|persist,load,profile
+AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS|llm_backend_switch_cooldown_seconds|persist,load,profile
+GATE_ENABLE_TEST_MODE|gate_test_mode|persist,load,profile
+AGENTIC_OPENAI_DAILY_TOKENS|openai_daily_tokens|persist,load,profile
+AGENTIC_OPENAI_MONTHLY_TOKENS|openai_monthly_tokens|persist,load,profile
+AGENTIC_OPENAI_DAILY_REQUESTS|openai_daily_requests|persist,load,profile
+AGENTIC_OPENAI_MONTHLY_REQUESTS|openai_monthly_requests|persist,load,profile
+AGENTIC_OPENROUTER_DAILY_TOKENS|openrouter_daily_tokens|persist,load,profile
+AGENTIC_OPENROUTER_MONTHLY_TOKENS|openrouter_monthly_tokens|persist,load,profile
+AGENTIC_OPENROUTER_DAILY_REQUESTS|openrouter_daily_requests|persist,load,profile
+AGENTIC_OPENROUTER_MONTHLY_REQUESTS|openrouter_monthly_requests|persist,load,profile
+GATE_MCP_RATE_LIMIT_RPS|gate_mcp_rate_limit_rps|persist,load,profile
+GATE_MCP_RATE_LIMIT_BURST|gate_mcp_rate_limit_burst|persist,load,profile
+GATE_MCP_HTTP_TIMEOUT_SEC|gate_mcp_http_timeout_sec|persist,load,profile
+AGENTIC_OLLAMA_MODELS_LINK|ollama_models_link|persist,load,profile
+AGENTIC_OLLAMA_MODELS_TARGET_DIR|ollama_models_target_dir|persist,load,profile
+OLLAMA_MODELS_DIR|ollama_models_dir|persist,load,profile
+OLLAMA_CONTAINER_MODELS_PATH|ollama_container_models_path|persist,load,profile
+OLLAMA_CONTAINER_USER|ollama_container_user|persist,load,profile
+QDRANT_CONTAINER_USER|qdrant_container_user|persist,load,profile
+GATE_CONTAINER_USER|gate_container_user|persist,load,profile
+TRTLLM_CONTAINER_USER|trtllm_container_user|persist,load,profile
+PROMETHEUS_CONTAINER_USER|prometheus_container_user|persist,load,profile
+GRAFANA_CONTAINER_USER|grafana_container_user|persist,load,profile
+LOKI_CONTAINER_USER|loki_container_user|persist,load,profile
+PROMTAIL_CONTAINER_USER|promtail_container_user|persist,load,profile
+AGENTIC_DEFAULT_MODEL|default_model|persist,load,profile
+AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW|default_model_context_window|persist,load,profile
+AGENTIC_GOOSE_CONTEXT_LIMIT|goose_context_limit|persist,load,profile
+AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT|context_compaction_soft_percent|persist,load,profile
+AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT|context_compaction_danger_percent|persist,load,profile
+AGENTIC_CONTEXT_BUDGET_TOKENS|context_budget_tokens|persist,load,profile
+AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS|context_compaction_soft_tokens|persist,load,profile
+AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS|context_compaction_danger_tokens|persist,load,profile
+OLLAMA_CONTEXT_LENGTH|ollama_context_length|persist,load,profile
+OLLAMA_MODELS_MOUNT_MODE|ollama_models_mount_mode|persist,load,profile
+OLLAMA_PRELOAD_GENERATE_MODEL|ollama_preload_generate_model|persist,load,profile
+OLLAMA_PRELOAD_EMBED_MODEL|ollama_preload_embed_model|persist,load,profile
+OLLAMA_MODEL_STORE_BUDGET_GB|ollama_model_store_budget_gb|persist,load,profile
+RAG_EMBED_MODEL|rag_embed_model|persist,load,profile
+RAG_LEXICAL_BACKEND|rag_lexical_backend|persist,load,profile
+RAG_RERANK_ENABLED|rag_rerank_enabled|persist,load,profile
+RAG_RERANK_BACKEND|rag_rerank_backend|persist,load,profile
+RAG_RERANK_MODEL|rag_rerank_model|persist,load,profile
+RAG_RERANK_CANDIDATES|rag_rerank_candidates|persist,load,profile
+RAG_RERANK_TOP_N|rag_rerank_top_n|persist,load,profile
+RAG_OPENSEARCH_BOOTSTRAP|rag_opensearch_bootstrap|persist,load,profile
+RAG_OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC|rag_opensearch_bootstrap_timeout_sec|persist,load,profile
+TRTLLM_MODELS|trtllm_models|persist,load,profile
+TRTLLM_NATIVE_MODEL_POLICY|trtllm_native_model_policy|persist,load,profile
+TRTLLM_NVFP4_LOCAL_MODEL_DIR|trtllm_nvfp4_local_model_dir|persist,load,profile
+TRTLLM_NVFP4_HF_REPO|trtllm_nvfp4_hf_repo|persist,load,profile
+TRTLLM_NVFP4_HF_REVISION|trtllm_nvfp4_hf_revision|persist,load,profile
+TRTLLM_NVFP4_PREPARE_ENABLED|trtllm_nvfp4_prepare_enabled|persist,load,profile
+AGENTIC_OBS_RETENTION_TIME|obs_retention_time|persist,load,profile
+AGENTIC_OBS_MAX_DISK|obs_max_disk|persist,load,profile
+AGENTIC_PROMETHEUS_DISK_BUDGET|prometheus_disk_budget|persist,load,profile
+AGENTIC_LOKI_DISK_BUDGET|loki_disk_budget|persist,load,profile
+PROMETHEUS_RETENTION_TIME|prometheus_retention_time|persist,load,profile
+PROMETHEUS_RETENTION_SIZE|prometheus_retention_size|persist,load,profile
+LOKI_RETENTION_PERIOD|loki_retention_period|persist,load,profile
+LOKI_MAX_QUERY_LOOKBACK|loki_max_query_lookback|persist,load,profile
+PROMTAIL_DOCKER_CONTAINERS_HOST_PATH|promtail_docker_containers_host_path|persist,load,profile
+PROMTAIL_HOST_LOG_PATH|promtail_host_log_path|persist,load,profile
+NODE_EXPORTER_HOST_ROOT_PATH|node_exporter_host_root_path|persist,load,profile
+CADVISOR_HOST_ROOT_PATH|cadvisor_host_root_path|persist,load,profile
+CADVISOR_DOCKER_LIB_HOST_PATH|cadvisor_docker_lib_host_path|persist,load,profile
+CADVISOR_SYS_HOST_PATH|cadvisor_sys_host_path|persist,load,profile
+CADVISOR_DEV_DISK_HOST_PATH|cadvisor_dev_disk_host_path|persist,load,profile
+AGENTIC_LIMIT_DEFAULT_CPUS|limit_default_cpus|persist,load,profile
+AGENTIC_LIMIT_DEFAULT_MEM|limit_default_mem|persist,load,profile
+AGENTIC_LIMIT_CORE_CPUS|limit_core_cpus|persist,load,profile
+AGENTIC_LIMIT_CORE_MEM|limit_core_mem|persist,load,profile
+AGENTIC_LIMIT_OLLAMA_MEM|limit_ollama_mem|persist,load,profile
+AGENTIC_LIMIT_AGENTS_CPUS|limit_agents_cpus|persist,load,profile
+AGENTIC_LIMIT_AGENTS_MEM|limit_agents_mem|persist,load,profile
+AGENTIC_LIMIT_UI_CPUS|limit_ui_cpus|persist,load,profile
+AGENTIC_LIMIT_UI_MEM|limit_ui_mem|persist,load,profile
+AGENTIC_LIMIT_OPENHANDS_MEM|limit_openhands_mem|persist,load,profile
+AGENTIC_LIMIT_COMFYUI_MEM|limit_comfyui_mem|persist,load,profile
+AGENTIC_LIMIT_OBS_CPUS|limit_obs_cpus|persist,load,profile
+AGENTIC_LIMIT_OBS_MEM|limit_obs_mem|persist,load,profile
+AGENTIC_LIMIT_RAG_CPUS|limit_rag_cpus|persist,load,profile
+AGENTIC_LIMIT_RAG_MEM|limit_rag_mem|persist,load,profile
+AGENTIC_LIMIT_OPTIONAL_CPUS|limit_optional_cpus|persist,load,profile
+AGENTIC_LIMIT_OPTIONAL_MEM|limit_optional_mem|persist,load,profile
+AGENTIC_SKIP_DOCKER_USER_APPLY|skip_docker_user_apply|persist,load,profile
+AGENTIC_SKIP_DOCKER_USER_CHECK|skip_docker_user_check|persist,load,profile
+AGENTIC_SKIP_DOCTOR_PROXY_CHECK|skip_doctor_proxy_check|persist,load,profile
+EOF
+}
+
+agentic_runtime_schema_iter_role() {
+  local role="$1"
+  local key label roles
+
+  while IFS='|' read -r key label roles; do
+    [[ -n "${key}" ]] || continue
+    if agentic_csv_contains "${role}" "${roles}"; then
+      printf '%s|%s\n' "${key}" "${label}"
+    fi
+  done < <(agentic_runtime_schema)
+}
+
+agentic_runtime_schema_has_role() {
+  local key_name="$1"
+  local role="$2"
+  local key label roles
+
+  while IFS='|' read -r key label roles; do
+    [[ "${key}" == "${key_name}" ]] || continue
+    agentic_csv_contains "${role}" "${roles}"
+    return $?
+  done < <(agentic_runtime_schema)
+
+  return 1
+}
+
 trtllm_strip_hf_url() {
   local candidate="${1:-}"
   candidate="${candidate%/}"
@@ -256,20 +442,6 @@ else
   OLLAMA_CONTAINER_MODELS_PATH="${OLLAMA_CONTAINER_MODELS_PATH:-/root/.ollama/models}"
 fi
 OLLAMA_MODELS_MOUNT_MODE="${OLLAMA_MODELS_MOUNT_MODE:-rw}"
-agentic_csv_contains() {
-  local needle="$1"
-  local raw="$2"
-  local item
-
-  IFS=',' read -r -a _agentic_csv_items <<<"${raw}"
-  for item in "${_agentic_csv_items[@]}"; do
-    item="${item#"${item%%[![:space:]]*}"}"
-    item="${item%"${item##*[![:space:]]}"}"
-    [[ -n "${item}" ]] || continue
-    [[ "${item}" == "${needle}" ]] && return 0
-  done
-  return 1
-}
 
 agentic_trtllm_nvfp4_host_dir() {
   local container_dir="$1"

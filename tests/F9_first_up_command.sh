@@ -61,7 +61,8 @@ if grep -Fq "first-up loaded_env=" "${output_no_env_file}"; then
   fail "first-up --no-env must not source the env file"
 fi
 
-if "${agent_bin}" first-up --does-not-exist >"${invalid_file}" 2>&1; then
+if AGENTIC_PROFILE=rootless-dev AGENTIC_ROOT="${runtime_root}" \
+  "${agent_bin}" first-up --does-not-exist >"${invalid_file}" 2>&1; then
   cat "${invalid_file}" >&2 || true
   fail "agent first-up should reject unknown flags"
 fi
