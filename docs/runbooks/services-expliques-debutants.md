@@ -235,6 +235,10 @@ Role simple:
 
 A retenir:
 - Meme mecanique que `agentic-claude`, mais outillage OpenAI/Codex.
+- La stack publie aussi l'etat sandbox effectif de Codex:
+  - `sandbox=native-userns` si le sandbox namespace natif fonctionne dans le conteneur,
+  - `sandbox=outer-container-bypass` si Codex s'appuie sur le confinement externe du conteneur.
+- Ce statut se voit dans `./agent ls` et `./agent doctor`; `outer-container-bypass` n'est pas un incident baseline tant que les workflows repo fonctionnent.
 
 Liens officiels:
 - Codex CLI (OpenAI Help): https://help.openai.com/en/articles/11096431
@@ -588,6 +592,7 @@ Ce qu'il faut verifier en premier:
 - le service est-il `Up` ?
 - le healthcheck est-il `healthy` ?
 - le port est-il bien en `127.0.0.1` ?
+- pour `codex`, la colonne `runtime` de `./agent ls` et les warnings de `./agent doctor` indiquent aussi si le sandbox interne natif est disponible ou si le fallback conteneurise est utilise.
 - les volumes attendus existent-ils sous `${AGENTIC_ROOT}` ?
 
 ## 11) Resume ultra-court pour debuter

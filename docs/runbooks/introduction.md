@@ -55,6 +55,11 @@ The stack also enforces explicit policy boundaries:
 - host-level egress control in strict mode,
 - secrets outside git and with restrictive file permissions.
 
+For Codex specifically, the current contract is explicit rather than implicit:
+- native unprivileged user namespaces may be unavailable inside the managed container,
+- when that happens, the stack treats outer container confinement as the accepted current baseline,
+- operators can see that posture directly through `./agent ls` and `./agent doctor` instead of discovering it only after a failed Codex run.
+
 ### 4) Profile-aware truth, not one-size-fits-all fiction
 
 Two execution profiles are first-class:
@@ -72,7 +77,8 @@ Observability is treated as an operational requirement, not optional decoration:
 - metrics (Prometheus exporters),
 - logs (Loki + Promtail),
 - proxy logs as egress ground truth,
-- `agent doctor` as a structured compliance probe.
+- `agent doctor` as a structured compliance probe,
+- `agent ls` as a target-oriented runtime summary, including stack-generated signals such as OpenClaw sandbox counts and the effective Codex sandbox posture.
 
 Reasoning:
 - debugging should start from facts, not guesses,

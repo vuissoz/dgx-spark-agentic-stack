@@ -50,9 +50,10 @@ docker ps -a --filter "label=com.docker.compose.project=$(./agent profile | sed 
   --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
 ```
 
-- `./agent ls` shows agent tool runtime (`up/down`, tmux session state).
+- `./agent ls` shows target runtime state (`running/exited/mixed`), tmux session state, and selected runtime summaries such as the effective Codex sandbox posture.
 - `./agent ps` shows currently running containers for the active compose project.
 - `docker ps -a ...` also shows exited/stopped containers in that same project.
+- for `codex`, `./agent ls` can now show `sandbox=native-userns` or `sandbox=outer-container-bypass` in the `runtime` column.
 
 ### 0.3 Restart baseline services
 
@@ -611,6 +612,7 @@ Before activation:
   - `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
   - `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
 - run `./agent doctor` with the right privilege level for your profile and confirm baseline readiness.
+- if `./agent doctor` warns about `agentic-codex ... outer-container-bypass`, treat that as the currently accepted stack posture, not as a baseline blocker; only a future workflow that truly requires native inner user namespaces should reopen that topic.
 
 See:
 - `docs/runbooks/optional-modules.md`

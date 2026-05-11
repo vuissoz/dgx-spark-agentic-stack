@@ -1419,7 +1419,7 @@ Suivi Beads :
 - `dgx-spark-agentic-stack-2ld` — enrichir `/v1/models` dans `ollama-gate` avec des métadonnées de modèles non sensibles (issues des backends, notamment Ollama `/api/tags`) pour améliorer l’interopérabilité client.
 - `dgx-spark-agentic-stack-41m` — introduire `AGENTIC_AGENT_WORKSPACES_ROOT` (onboarding/runtime + defaults `rootless-dev`) pour isoler proprement les workspaces agents.
 - `dgx-spark-agentic-stack-zs0` — onboarding/runtime : ajouter des chemins persistants `/workspace` dédiés par conteneur (`AGENTIC_{CLAUDE,CODEX,OPENCODE,VIBESTRAL,OPENHANDS}_WORKSPACES_DIR`) pour montage explicite service par service.
-- `dgx-spark-agentic-stack-7g8k` — clarifier puis traiter le support des user namespaces non privilégiés dans les conteneurs agents : le fallback runtime Codex absorbe déjà une partie de l’impact, donc le sujet n’est plus un blocker baseline, mais reste ouvert pour les workflows qui exigent un sandbox namespace natif plutôt que l’isolation externe du conteneur.
+- `dgx-spark-agentic-stack-7g8k` — fermé après clarification et instrumentation opérateur: le fallback runtime Codex + le confinement externe du conteneur sont désormais explicitement exposés via `agent ls` / `agent doctor`; toute suite doit partir d’un workflow concret encore cassé sans sandbox namespace natif.
 - `dgx-spark-agentic-stack-ssh-push` — activer la configuration SSH pour les agents afin de permettre les pushes vers Forgejo via SSH. La configuration SSH doit être préparée lors du premier démarrage de la stack (`first-up`), incluant la génération et la distribution des clés SSH pour chaque agent.
 
 Objectif :
