@@ -131,6 +131,8 @@ grep -q "^export AGENTIC_CODEX_WORKSPACES_DIR='${root_dir}/agent-workspaces/code
   || fail "full setup onboarding env must export AGENTIC_CODEX_WORKSPACES_DIR"
 grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${root_dir}/agent-workspaces/opencode/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_OPENCODE_WORKSPACES_DIR"
+grep -q "^export AGENTIC_KILOCODE_WORKSPACES_DIR='${root_dir}/agent-workspaces/kilocode/workspaces'$" "${env_file}" \
+  || fail "full setup onboarding env must export AGENTIC_KILOCODE_WORKSPACES_DIR"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${root_dir}/agent-workspaces/vibestral/workspaces'$" "${env_file}" \
   || fail "full setup onboarding env must export AGENTIC_VIBESTRAL_WORKSPACES_DIR"
 grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='${root_dir}/agent-workspaces/hermes/workspaces'$" "${env_file}" \
@@ -232,7 +234,7 @@ done
 [[ "$(tr -d '\n' <"${slack_signing_secret_file}")" == "${slack_signing_secret}" ]] \
   || fail "slack signing secret content was not written"
 
-for git_forge_account in openclaw openhands comfyui claude codex opencode vibestral hermes pi-mono goose; do
+for git_forge_account in openclaw openhands comfyui claude codex opencode kilocode vibestral hermes pi-mono goose; do
   account_secret="${root_dir}/secrets/runtime/git-forge/${git_forge_account}.password"
   [[ -s "${account_secret}" ]] || fail "git-forge account secret missing: ${account_secret}"
   perm="$(stat -c '%a' "${account_secret}")"

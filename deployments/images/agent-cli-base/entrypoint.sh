@@ -13,8 +13,8 @@ default_context_window_fallback="50909"
 
 export HOME="${agent_home}"
 mkdir -p "${workspace}" "${state_dir}" "${logs_dir}" "${agent_home}" \
-  "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes"
-chmod 0700 "${agent_home}" "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes" 2>/dev/null || true
+  "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes" "${agent_home}/.kilo"
+chmod 0700 "${agent_home}" "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes" "${agent_home}/.kilo" 2>/dev/null || true
 if [[ -n "${TMPDIR:-}" ]]; then
   mkdir -p "${TMPDIR}"
   chmod 0700 "${TMPDIR}" 2>/dev/null || true
@@ -700,6 +700,72 @@ PY
   log "INFO: opencode defaults config reconciled (${opencode_config})"
 }
 
+bootstrap_kilocode_config() {
+  [[ "${tool}" == "kilocode" ]] || return 0
+
+  local kilocode_config="${agent_home}/.config/kilo/opencode.json"
+  local tmp_config
+  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+  local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
+
+  mkdir -p "$(dirname "${kilocode_config}")"
+  tmp_config="$(mktemp)"
+  python3 - "${kilocode_config}" "${default_model}" "${gate_v1_url}" >"${tmp_config}" <<'PY'
+import json
+import pathlib
+import sys
+
+config_path = pathlib.Path(sys.argv[1])
+default_model = sys.argv[2]
+gate_v1_url = sys.argv[3]
+
+base = {}
+if config_path.exists():
+    try:
+        with config_path.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+        if isinstance(payload, dict):
+            base = payload
+    except Exception:
+        base = {}
+
+providers = base.get("provider")
+if not isinstance(providers, dict):
+    providers = {}
+
+ollama_provider = providers.get("ollama")
+if not isinstance(ollama_provider, dict):
+    ollama_provider = {}
+
+options = ollama_provider.get("options")
+if not isinstance(options, dict):
+    options = {}
+options["baseURL"] = gate_v1_url
+
+models = ollama_provider.get("models")
+if not isinstance(models, dict):
+    models = {}
+models[default_model] = {"name": default_model}
+
+ollama_provider["npm"] = "@ai-sdk/openai-compatible"
+ollama_provider["name"] = "Ollama (agentic stack)"
+ollama_provider["options"] = options
+ollama_provider["models"] = models
+providers["ollama"] = ollama_provider
+
+base["$schema"] = "https://app.kilo.ai/config.json"
+base["provider"] = providers
+base["model"] = f"ollama/{default_model}"
+base["small_model"] = f"ollama/{default_model}"
+
+json.dump(base, sys.stdout, indent=2)
+sys.stdout.write("\n")
+PY
+  write_if_changed "${kilocode_config}" "${tmp_config}"
+  chmod 0600 "${kilocode_config}" || true
+  log "INFO: kilocode defaults config reconciled (${kilocode_config})"
+}
+
 bootstrap_pi_config() {
   [[ "${tool}" == "pi-mono" || "${AGENT_PRIMARY_CLI:-}" == "pi" ]] || return 0
 
@@ -873,6 +939,7 @@ bootstrap_ollama_gate_defaults
 bootstrap_codex_sandbox_status
 bootstrap_codex_config
 bootstrap_opencode_config
+bootstrap_kilocode_config
 bootstrap_pi_config
 bootstrap_vibestral_config
 bootstrap_hermes_config

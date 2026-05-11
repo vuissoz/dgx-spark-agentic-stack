@@ -106,6 +106,14 @@ rg -n '^  - web$' "${entrypoint}" >/dev/null \
   || fail "hermes adapter must not persist OPENAI_BASE_URL in managed .env"
 ok "hermes launch-compatible adapter contract is pinned in entrypoint"
 
+rg -nF 'bootstrap_kilocode_config() {' "${entrypoint}" >/dev/null \
+  || fail "entrypoint must define kilocode bootstrap adapter"
+rg -nF 'local kilocode_config="${agent_home}/.config/kilo/opencode.json"' "${entrypoint}" >/dev/null \
+  || fail "kilocode adapter must target ~/.config/kilo/opencode.json"
+rg -nF 'base["$schema"] = "https://app.kilo.ai/config.json"' "${entrypoint}" >/dev/null \
+  || fail "kilocode adapter must set the Kilo config schema"
+ok "kilocode adapter contract is pinned in entrypoint"
+
 rg -n '^openhands_llm_base_url=\"http://ollama-gate:11435/v1\"$' "${onboarding}" >/dev/null \
   || fail "onboarding must default openhands llm_base_url to ollama-gate /v1"
 ok "onboarding contract keeps openhands default LLM endpoint on gate"
@@ -120,6 +128,34 @@ if command -v docker >/dev/null 2>&1; then
     ok "running openhands container keeps adapter endpoint contract"
   else
     warn "openhands container not running; runtime adapter assertion skipped"
+  fi
+
+  kilocode_cid="$(service_container_id agentic-kilocode || true)"
+  if [[ -n "${kilocode_cid}" ]]; then
+    wait_for_container_ready "${kilocode_cid}" 120 || fail "agentic-kilocode container is not ready"
+    kilocode_default_model="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${kilocode_cid}" \
+      | awk -F= '$1=="AGENTIC_DEFAULT_MODEL"{print substr($0, index($0, "=")+1); exit}')"
+    [[ -n "${kilocode_default_model}" ]] || fail "agentic-kilocode env is missing AGENTIC_DEFAULT_MODEL"
+    kilocode_cfg="$(mktemp)"
+    docker exec "${kilocode_cid}" sh -lc 'cat /state/home/.config/kilo/opencode.json' >"${kilocode_cfg}" \
+      || fail "unable to read kilocode runtime config"
+    python3 - "${kilocode_cfg}" "${kilocode_default_model}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+model = sys.argv[2]
+
+assert payload.get("$schema") == "https://app.kilo.ai/config.json"
+assert payload.get("model") == f"ollama/{model}"
+provider = (payload.get("provider") or {}).get("ollama") or {}
+assert (provider.get("options") or {}).get("baseURL") == "http://ollama-gate:11435/v1"
+assert model in (provider.get("models") or {})
+PY
+    rm -f "${kilocode_cfg}" >/dev/null 2>&1 || true
+    ok "running kilocode container keeps adapter endpoint contract"
+  else
+    warn "agentic-kilocode container not running; runtime adapter assertion skipped"
   fi
 
   vibestral_cid="$(service_container_id agentic-vibestral || true)"

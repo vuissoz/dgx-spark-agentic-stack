@@ -11,6 +11,7 @@ ARG OPENCLAW_PREFIX=/opt/agentic/openclaw
 ARG CODEX_CLI_NPM_SPEC=@openai/codex@latest
 ARG CLAUDE_CODE_NPM_SPEC=@anthropic-ai/claude-code@latest
 ARG OPENCODE_NPM_SPEC=opencode-ai@latest
+ARG KILOCODE_CLI_NPM_SPEC=@kilocode/cli@latest
 ARG PI_CODING_AGENT_NPM_SPEC=@mariozechner/pi-coding-agent@latest
 ARG OPENHANDS_INSTALL_SCRIPT=https://install.openhands.dev/install.sh
 ARG OPENCLAW_INSTALL_CLI_SCRIPT=https://openclaw.ai/install-cli.sh
@@ -115,6 +116,7 @@ RUN chmod 0755 /usr/local/bin/install-agent-clis /usr/local/bin/agent-entrypoint
     CODEX_CLI_NPM_SPEC="${CODEX_CLI_NPM_SPEC}" \
     CLAUDE_CODE_NPM_SPEC="${CLAUDE_CODE_NPM_SPEC}" \
     OPENCODE_NPM_SPEC="${OPENCODE_NPM_SPEC}" \
+    KILOCODE_CLI_NPM_SPEC="${KILOCODE_CLI_NPM_SPEC}" \
     PI_CODING_AGENT_NPM_SPEC="${PI_CODING_AGENT_NPM_SPEC}" \
     OPENHANDS_INSTALL_SCRIPT="${OPENHANDS_INSTALL_SCRIPT}" \
     OPENCLAW_INSTALL_CLI_SCRIPT="${OPENCLAW_INSTALL_CLI_SCRIPT}" \
@@ -130,6 +132,7 @@ RUN chmod 0755 /usr/local/bin/vibe \
   && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/codex \
   && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/claude \
   && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/opencode \
+  && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/kilo \
   && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/pi \
   && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/openhands \
   && ln -sf /usr/local/bin/agent-cli-wrapper /usr/local/bin/openclaw

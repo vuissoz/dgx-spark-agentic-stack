@@ -16,7 +16,7 @@ This repository is built for people who want serious agent infrastructure on a s
 ## What You Get
 
 - Core model/runtime services: Ollama, `ollama-gate`, OpenClaw, DNS, egress proxy
-- Agent containers: Claude, Codex, OpenCode, Vibestral, Hermes
+- Agent containers: Claude, Codex, OpenCode, KiloCode, Vibestral, Hermes
 - UIs: Forgejo, OpenWebUI, OpenHands, ComfyUI
 - Optional observability and RAG stacks
 - Release snapshots with deterministic rollback support

@@ -20,6 +20,7 @@ agent_workspaces_root_override=""
 claude_workspaces_dir_override=""
 codex_workspaces_dir_override=""
 opencode_workspaces_dir_override=""
+kilocode_workspaces_dir_override=""
 vibestral_workspaces_dir_override=""
 hermes_workspaces_dir_override=""
 openhands_workspaces_dir_override=""
@@ -105,6 +106,7 @@ Runtime options:
   --claude-workspaces-dir <path>
   --codex-workspaces-dir <path>
   --opencode-workspaces-dir <path>
+  --kilocode-workspaces-dir <path>
   --vibestral-workspaces-dir <path>
   --hermes-workspaces-dir <path>
   --openhands-workspaces-dir <path>
@@ -1508,6 +1510,7 @@ export AGENTIC_AGENT_WORKSPACES_ROOT=$(shell_quote "${agent_workspaces_root}")
 export AGENTIC_CLAUDE_WORKSPACES_DIR=$(shell_quote "${claude_workspaces_dir}")
 export AGENTIC_CODEX_WORKSPACES_DIR=$(shell_quote "${codex_workspaces_dir}")
 export AGENTIC_OPENCODE_WORKSPACES_DIR=$(shell_quote "${opencode_workspaces_dir}")
+export AGENTIC_KILOCODE_WORKSPACES_DIR=$(shell_quote "${kilocode_workspaces_dir}")
 export AGENTIC_VIBESTRAL_WORKSPACES_DIR=$(shell_quote "${vibestral_workspaces_dir}")
 export AGENTIC_HERMES_WORKSPACES_DIR=$(shell_quote "${hermes_workspaces_dir}")
 export AGENTIC_OPENHANDS_WORKSPACES_DIR=$(shell_quote "${openhands_workspaces_dir}")
@@ -1791,6 +1794,11 @@ while [[ $# -gt 0 ]]; do
     --opencode-workspaces-dir)
       [[ $# -ge 2 ]] || die "missing value for --opencode-workspaces-dir"
       opencode_workspaces_dir_override="$2"
+      shift 2
+      ;;
+    --kilocode-workspaces-dir)
+      [[ $# -ge 2 ]] || die "missing value for --kilocode-workspaces-dir"
+      kilocode_workspaces_dir_override="$2"
       shift 2
       ;;
     --vibestral-workspaces-dir)
@@ -2156,10 +2164,11 @@ else
 fi
 
 collect_path_value agent_workspaces_root "AGENTIC_AGENT_WORKSPACES_ROOT" "${profile}" "$(default_agent_workspaces_root_for_profile "${profile}" "${root_path}")" "${agent_workspaces_root_override}" "AGENTIC_AGENT_WORKSPACES_ROOT controls where per-agent /workspace host folders are stored."
-collect_path_value claude_workspaces_dir "AGENTIC_CLAUDE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "claude")" "${claude_workspaces_dir_override}" "AGENTIC_CLAUDE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-claude."
-collect_path_value codex_workspaces_dir "AGENTIC_CODEX_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "codex")" "${codex_workspaces_dir_override}" "AGENTIC_CODEX_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-codex."
-collect_path_value opencode_workspaces_dir "AGENTIC_OPENCODE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "opencode")" "${opencode_workspaces_dir_override}" "AGENTIC_OPENCODE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-opencode."
-collect_path_value vibestral_workspaces_dir "AGENTIC_VIBESTRAL_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "vibestral")" "${vibestral_workspaces_dir_override}" "AGENTIC_VIBESTRAL_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-vibestral."
+  collect_path_value claude_workspaces_dir "AGENTIC_CLAUDE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "claude")" "${claude_workspaces_dir_override}" "AGENTIC_CLAUDE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-claude."
+  collect_path_value codex_workspaces_dir "AGENTIC_CODEX_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "codex")" "${codex_workspaces_dir_override}" "AGENTIC_CODEX_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-codex."
+  collect_path_value opencode_workspaces_dir "AGENTIC_OPENCODE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "opencode")" "${opencode_workspaces_dir_override}" "AGENTIC_OPENCODE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-opencode."
+  collect_path_value kilocode_workspaces_dir "AGENTIC_KILOCODE_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "kilocode")" "${kilocode_workspaces_dir_override}" "AGENTIC_KILOCODE_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-kilocode."
+  collect_path_value vibestral_workspaces_dir "AGENTIC_VIBESTRAL_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "vibestral")" "${vibestral_workspaces_dir_override}" "AGENTIC_VIBESTRAL_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-vibestral."
 collect_path_value hermes_workspaces_dir "AGENTIC_HERMES_WORKSPACES_DIR" "${profile}" "$(default_agent_workspace_dir_for_tool "${agent_workspaces_root}" "hermes")" "${hermes_workspaces_dir_override}" "AGENTIC_HERMES_WORKSPACES_DIR controls the host path mounted as /workspace in agentic-hermes."
 collect_path_value openhands_workspaces_dir "AGENTIC_OPENHANDS_WORKSPACES_DIR" "${profile}" "$(default_openhands_workspaces_dir "${root_path}")" "${openhands_workspaces_dir_override}" "AGENTIC_OPENHANDS_WORKSPACES_DIR controls the host path mounted as /workspace in openhands."
 collect_path_value openclaw_workspaces_dir "AGENTIC_OPENCLAW_WORKSPACES_DIR" "${profile}" "$(default_optional_workspace_dir_for_tool "${root_path}" "openclaw")" "${openclaw_workspaces_dir_override}" "AGENTIC_OPENCLAW_WORKSPACES_DIR controls the host path mounted as /workspace in openclaw."
@@ -2599,6 +2608,7 @@ git_forge_accounts=(
   claude
   codex
   opencode
+  kilocode
   vibestral
   hermes
   pi-mono

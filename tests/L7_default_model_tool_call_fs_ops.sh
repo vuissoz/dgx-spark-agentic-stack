@@ -17,7 +17,7 @@ assert_cmd python3
 default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-nemotron-cascade-2:30b}}"
 tool_timeout="${AGENTIC_DEFAULT_MODEL_TOOL_SMOKE_TIMEOUT_SECONDS:-360}"
 
-services=(agentic-claude agentic-codex agentic-opencode agentic-vibestral agentic-hermes openhands)
+services=(agentic-claude agentic-codex agentic-opencode agentic-kilocode agentic-vibestral agentic-hermes openhands)
 
 run_tool_call_matrix_for_service() {
   local service="$1"

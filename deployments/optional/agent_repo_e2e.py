@@ -48,6 +48,7 @@ AGENT_MATRIX = {
     "openclaw": {"service": "openclaw", "branch": "agent/openclaw", "mode": "openclaw"},
     "claude": {"service": "agentic-claude", "branch": "agent/claude", "mode": "claude"},
     "opencode": {"service": "agentic-opencode", "branch": "agent/opencode", "mode": "opencode"},
+    "kilocode": {"service": "agentic-kilocode", "branch": "agent/kilocode", "mode": "kilo"},
     "openhands": {"service": "openhands", "branch": "agent/openhands", "mode": "openhands"},
     "pi-mono": {"service": "optional-pi-mono", "branch": "agent/pi-mono", "mode": "pi"},
     "goose": {"service": "optional-goose", "branch": "agent/goose", "mode": "goose"},
@@ -664,6 +665,8 @@ def build_agent_command(mode: str, workspace: str, prompt: str, branch: str) -> 
         )
     if mode == "opencode":
         return f"cd {quoted_workspace} && opencode run --format json --dir {quoted_workspace} {quoted_prompt}"
+    if mode == "kilo":
+        return f"cd {quoted_workspace} && kilo run --auto {quoted_prompt}"
     if mode == "vibe":
         return f"cd {quoted_workspace} && vibe -p {quoted_prompt} --output json --workdir {quoted_workspace} --max-turns 40"
     if mode == "hermes":

@@ -13,7 +13,7 @@ Etat actuel du dépôt: le chemin opérateur quotidien est `rootless-dev`. `stri
 
 Les fichiers Compose sont dans `compose/`:
 - `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `trtllm` (profile `trt`), `unbound`, `egress-proxy`, `toolbox`
-- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`
+- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-kilocode`, `agentic-vibestral`, `agentic-hermes`
 - `compose/compose.ui.yml`: `optional-forgejo`, `optional-forgejo-loopback`, `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (profile `rag-lexical`)
@@ -96,7 +96,7 @@ Dossiers persistants clés:
 - `openhands/{config,state,logs,workspaces}/`
 - `comfyui/` (runtime root unique; contient `models/`, `input/`, `output/`, `user/`, `custom_nodes/`)
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
-- `{claude,codex,opencode,vibestral,hermes}/{state,logs,workspaces}/`
+- `{claude,codex,opencode,kilocode,vibestral,hermes}/{state,logs,workspaces}/`
 - `openclaw/{config/{immutable,overlay},state,logs,relay/{state,logs},sandbox/{state,workspaces},workspaces}/`
 - `optional/{git,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
@@ -131,11 +131,11 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 ## Override de l'image de base des agents (E1b)
 
-Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`) partagent une image commune configurable à runtime.
+Les services agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-kilocode`, `agentic-vibestral`, `agentic-hermes`) partagent une image commune configurable à runtime.
 
 Par défaut, `deployments/images/agent-cli-base/Dockerfile` construit une image de développement basée sur CUDA (NVIDIA) avec une toolchain multi-langages (C/C++, Python, Node, Go, Rust).
 
-Cette image commune installe aussi les CLIs agents suivants: `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`, `hermes`.
+Cette image commune installe aussi les CLIs agents suivants: `codex`, `claude`, `opencode`, `kilo`, `pi`, `vibe`, `openhands`, `openclaw`, `hermes`.
 - mode par défaut: `AGENT_CLI_INSTALL_MODE=best-effort` (wrappers explicites si un install échoue),
 - mode strict: `AGENT_CLI_INSTALL_MODE=required` (build en échec si un CLI manque).
 
@@ -349,7 +349,7 @@ agent first-up [--env-file <path>] [--no-env] [--dry-run]
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
 agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-agent <claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose> [project]
+agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose> [project]
 agent openclaw init [project]
 agent ls
 agent ps
@@ -436,12 +436,12 @@ Exemples:
 ```
 
 Notes:
-- `agent stop` et `agent start` gèrent les cibles `claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose|openwebui|openhands|comfyui`.
+- `agent stop` et `agent start` gèrent les cibles `claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|openwebui|openhands|comfyui`.
 - `agent stop/start openclaw` pilote tout le bundle OpenClaw control/execution-plane; `agent stop/start comfyui` pilote `comfyui` et `comfyui-loopback` ensemble.
 - `agent trtllm stop` arrête proprement uniquement le service `trtllm`; `agent trtllm start` le remonte et attend son healthcheck.
 - `agent ls` lit maintenant l’état via `docker ps -a`, donc une cible stoppée remonte `exited` ou `mixed` au lieu d’un simple `down`; `agent status` liste chaque conteneur du projet avec son état et sa santé exacte.
 - pour `codex`, `agent ls` expose aussi le mode sandbox effectif dans la colonne `runtime`: `sandbox=native-userns` si le sandbox namespace natif est disponible, ou `sandbox=outer-container-bypass` si le wrapper Codex s'appuie sur le confinement externe du conteneur.
-- `agent <tool> [project]` attache une session persistante: `claude|codex|opencode|vibestral|hermes|pi-mono` utilisent tmux (`Ctrl-b d` pour détacher), `goose` lance directement la CLI Goose dans `/workspace/<project>` (pas de tmux dans l'image upstream), et `openclaw` ouvre un shell opérateur dans le service core `openclaw` avec rappel des endpoints API loopback, Web UI (`18789`) et Gateway WS (`ws://127.0.0.1:18789`).
+- `agent <tool> [project]` attache une session persistante: `claude|codex|opencode|kilocode|vibestral|hermes|pi-mono` utilisent tmux (`Ctrl-b d` pour détacher), `goose` lance directement la CLI Goose dans `/workspace/<project>` (pas de tmux dans l'image upstream), et `openclaw` ouvre un shell opérateur dans le service core `openclaw` avec rappel des endpoints API loopback, Web UI (`18789`) et Gateway WS (`ws://127.0.0.1:18789`).
 - `agent openclaw init [project]` est le chemin d'onboarding/réparation OpenClaw stack-managed: il corrige le workspace par défaut vers `/workspace/...`, démarre le bundle core si nécessaire, applique le bootstrap local sûr, puis imprime les next steps providers/channels. Sans argument, il utilise `AGENTIC_OPENCLAW_INIT_PROJECT` (défaut: `openclaw-default`). `agent onboard` peut désormais collecter ce projet par défaut ainsi que les secrets provider bridge Telegram/Discord/Slack pour qu'un `agent openclaw init` ultérieur soit automatique. `openclaw onboard`, `openclaw configure --section channels` et `openclaw gateway run` restent des fallbacks experts.
 - `agent ls` expose aussi un résumé runtime pour OpenClaw (`sandboxes=<n>;sessions=<n>;current=<id>;...`), dérivé du registre persistant opérateur de l'execution-plane.
 - `agent doctor` valide aussi la posture sandbox effective de `agentic-codex`: `native-userns` est signalé comme état nominal, `outer-container-bypass` comme warning explicite non bloquant tant que les workflows repo restent couverts, et `hard-fail` comme erreur.

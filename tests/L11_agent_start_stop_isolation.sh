@@ -31,7 +31,7 @@ export AGENTIC_DOCTOR_CRITICAL_PORTS="${OLLAMA_HOST_PORT},${OPENCLAW_WEBHOOK_HOS
 export AGENTIC_DOCTOR_DEFAULT_MODEL_TIMEOUT_SEC=10
 export GATE_ENABLE_TEST_MODE=1
 
-agent_services=(agentic-claude agentic-codex agentic-opencode agentic-vibestral agentic-hermes)
+agent_services=(agentic-claude agentic-codex agentic-opencode agentic-kilocode agentic-vibestral agentic-hermes)
 core_services=(ollama ollama-gate gate-mcp egress-proxy unbound)
 
 cleanup() {
@@ -140,7 +140,7 @@ for service in "${core_services[@]}" "${agent_services[@]}"; do
   wait_for_container_ready "${cid}" 120 || fail "service '${service}' did not become ready"
 done
 
-for tool in claude codex opencode vibestral hermes; do
+for tool in claude codex opencode kilocode vibestral hermes; do
   prepare_agent_session "${tool}" "agentic-${tool}"
 done
 
@@ -183,6 +183,18 @@ wait_for_container_ready "$(require_service_container agentic-opencode)" 90 || f
 assert_unrelated_services_healthy ""
 assert_ls_status "opencode" "running" "up"
 prepare_agent_session "opencode" "agentic-opencode"
+
+"${agent_bin}" stop kilocode >/tmp/agent-l11-stop-kilocode.out \
+  || fail "agent stop kilocode failed"
+assert_service_state "agentic-kilocode" "exited"
+assert_unrelated_services_healthy "agentic-kilocode"
+assert_ls_status "kilocode" "down" "-"
+"${agent_bin}" start service agentic-kilocode >/tmp/agent-l11-start-kilocode.out \
+  || fail "agent start service agentic-kilocode failed"
+wait_for_container_ready "$(require_service_container agentic-kilocode)" 90 || fail "agentic-kilocode did not recover after restart"
+assert_unrelated_services_healthy ""
+assert_ls_status "kilocode" "running" "up"
+prepare_agent_session "kilocode" "agentic-kilocode"
 
 "${agent_bin}" stop vibestral >/tmp/agent-l11-stop-vibestral.out \
   || fail "agent stop vibestral failed"

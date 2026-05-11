@@ -124,6 +124,7 @@ expected = {
     "agent/openclaw",
     "agent/claude",
     "agent/opencode",
+    "agent/kilocode",
     "agent/openhands",
     "agent/pi-mono",
     "agent/goose",
@@ -144,6 +145,7 @@ for mapping in \
   "agentic-claude|claude|/state/home/.ssh" \
   "agentic-codex|codex|/state/home/.ssh" \
   "agentic-opencode|opencode|/state/home/.ssh" \
+  "agentic-kilocode|kilocode|/state/home/.ssh" \
   "agentic-vibestral|vibestral|/state/home/.ssh" \
   "agentic-hermes|hermes|/state/home/.ssh" \
   "openclaw|openclaw|/state/cli/openclaw-home/.ssh" \

@@ -295,6 +295,7 @@ assert_cmd docker
 claude_cid="$(require_service_container agentic-claude)" || exit 1
 codex_cid="$(require_service_container agentic-codex)" || exit 1
 opencode_cid="$(require_service_container agentic-opencode)" || exit 1
+kilocode_cid="$(require_service_container agentic-kilocode)" || exit 1
 vibestral_cid="$(require_service_container agentic-vibestral)" || exit 1
 hermes_cid="$(require_service_container agentic-hermes)" || exit 1
 proxy_cid="$(require_service_container egress-proxy)" || exit 1
@@ -303,6 +304,7 @@ gate_cid="$(require_service_container ollama-gate)" || exit 1
 wait_for_container_ready "${claude_cid}" 60 || fail "agentic-claude is not ready"
 wait_for_container_ready "${codex_cid}" 60 || fail "agentic-codex is not ready"
 wait_for_container_ready "${opencode_cid}" 60 || fail "agentic-opencode is not ready"
+wait_for_container_ready "${kilocode_cid}" 60 || fail "agentic-kilocode is not ready"
 wait_for_container_ready "${vibestral_cid}" 60 || fail "agentic-vibestral is not ready"
 wait_for_container_ready "${hermes_cid}" 60 || fail "agentic-hermes is not ready"
 wait_for_container_ready "${proxy_cid}" 60 || fail "egress-proxy is not ready"
@@ -311,23 +313,26 @@ wait_for_container_ready "${gate_cid}" 60 || fail "ollama-gate is not ready"
 assert_tmux_session "${claude_cid}" "claude"
 assert_tmux_session "${codex_cid}" "codex"
 assert_tmux_session "${opencode_cid}" "opencode"
+assert_tmux_session "${kilocode_cid}" "kilocode"
 assert_tmux_session "${vibestral_cid}" "vibestral"
 assert_tmux_session "${hermes_cid}" "hermes"
 
 assert_primary_cli "${claude_cid}" "claude"
 assert_primary_cli "${codex_cid}" "codex"
 assert_primary_cli "${opencode_cid}" "opencode"
+assert_primary_cli "${kilocode_cid}" "kilo"
 assert_primary_cli "${vibestral_cid}" "vibe"
 assert_primary_cli "${hermes_cid}" "hermes"
 assert_repo_task_toolchain "${claude_cid}" "claude"
 assert_repo_task_toolchain "${codex_cid}" "codex"
 assert_repo_task_toolchain "${opencode_cid}" "opencode"
+assert_repo_task_toolchain "${kilocode_cid}" "kilocode"
 assert_repo_task_toolchain "${vibestral_cid}" "vibestral"
 assert_repo_task_toolchain "${hermes_cid}" "hermes"
 assert_codex_sandbox_status_file "${codex_cid}"
 assert_codex_wrapper_bypass_fallback "${codex_cid}"
 
-for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}" "${hermes_cid}"; do
+for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${kilocode_cid}" "${vibestral_cid}" "${hermes_cid}"; do
   if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES:-true}" == "false" ]]; then
     assert_agent_sudo_mode_security "${cid}"
   else
@@ -346,9 +351,11 @@ for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}" "
 done
 
 assert_runtime_gate_routing "${opencode_cid}" "opencode"
+assert_runtime_gate_routing "${kilocode_cid}" "kilocode"
 assert_runtime_gate_routing "${vibestral_cid}" "vibestral"
 assert_runtime_gate_routing "${hermes_cid}" "hermes"
 assert_gate_log_traffic_proof "${opencode_cid}" "opencode" "${gate_cid}"
+assert_gate_log_traffic_proof "${kilocode_cid}" "kilocode" "${gate_cid}"
 assert_gate_log_traffic_proof "${vibestral_cid}" "vibestral" "${gate_cid}"
 assert_gate_log_traffic_proof "${hermes_cid}" "hermes" "${gate_cid}"
 
@@ -364,6 +371,7 @@ fi
 claude_workspaces_dir="${AGENTIC_CLAUDE_WORKSPACES_DIR:-${agent_workspaces_root}/claude/workspaces}"
 codex_workspaces_dir="${AGENTIC_CODEX_WORKSPACES_DIR:-${agent_workspaces_root}/codex/workspaces}"
 opencode_workspaces_dir="${AGENTIC_OPENCODE_WORKSPACES_DIR:-${agent_workspaces_root}/opencode/workspaces}"
+kilocode_workspaces_dir="${AGENTIC_KILOCODE_WORKSPACES_DIR:-${agent_workspaces_root}/kilocode/workspaces}"
 vibestral_workspaces_dir="${AGENTIC_VIBESTRAL_WORKSPACES_DIR:-${agent_workspaces_root}/vibestral/workspaces}"
 hermes_workspaces_dir="${AGENTIC_HERMES_WORKSPACES_DIR:-${agent_workspaces_root}/hermes/workspaces}"
 assert_mount_source "${claude_cid}" "/state" "${agentic_root}/claude/state"
@@ -375,6 +383,9 @@ assert_mount_source "${codex_cid}" "/workspace" "${codex_workspaces_dir}"
 assert_mount_source "${opencode_cid}" "/state" "${agentic_root}/opencode/state"
 assert_mount_source "${opencode_cid}" "/logs" "${agentic_root}/opencode/logs"
 assert_mount_source "${opencode_cid}" "/workspace" "${opencode_workspaces_dir}"
+assert_mount_source "${kilocode_cid}" "/state" "${agentic_root}/kilocode/state"
+assert_mount_source "${kilocode_cid}" "/logs" "${agentic_root}/kilocode/logs"
+assert_mount_source "${kilocode_cid}" "/workspace" "${kilocode_workspaces_dir}"
 assert_mount_source "${vibestral_cid}" "/state" "${agentic_root}/vibestral/state"
 assert_mount_source "${vibestral_cid}" "/logs" "${agentic_root}/vibestral/logs"
 assert_mount_source "${vibestral_cid}" "/workspace" "${vibestral_workspaces_dir}"

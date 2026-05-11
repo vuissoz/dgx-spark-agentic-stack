@@ -117,7 +117,7 @@ compaction_danger_tokens_expected="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}
 service_requires_proxy_env() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|agentic-hermes|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-kilocode|agentic-vibestral|agentic-hermes|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
       return 0
       ;;
     *)
@@ -153,7 +153,7 @@ service_allows_readwrite_rootfs() {
 service_git_forge_ssh_private_key_path() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|agentic-hermes|optional-pi-mono|optional-goose)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-kilocode|agentic-vibestral|agentic-hermes|optional-pi-mono|optional-goose)
       printf '%s\n' "/state/home/.ssh/id_ed25519"
       ;;
     openclaw)
@@ -181,7 +181,7 @@ service_git_forge_known_hosts_path() {
 service_is_agent_cli() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-vibestral|agentic-hermes)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-kilocode|agentic-vibestral|agentic-hermes)
       return 0
       ;;
     *)
@@ -196,6 +196,7 @@ service_git_forge_account() {
     agentic-claude) printf '%s\n' "claude" ;;
     agentic-codex) printf '%s\n' "codex" ;;
     agentic-opencode) printf '%s\n' "opencode" ;;
+    agentic-kilocode) printf '%s\n' "kilocode" ;;
     agentic-vibestral) printf '%s\n' "vibestral" ;;
     agentic-hermes) printf '%s\n' "hermes" ;;
     openclaw) printf '%s\n' "openclaw" ;;
@@ -1897,7 +1898,7 @@ if [[ -n "${opensearch_cid}" ]]; then
 fi
 
 agents_found=0
-for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral agentic-hermes; do
+for service in agentic-claude agentic-codex agentic-opencode agentic-kilocode agentic-vibestral agentic-hermes; do
   cid="$(service_container_id "${service}")"
   [[ -n "${cid}" ]] || continue
   agents_found=1
@@ -1984,6 +1985,16 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral a
       grep -q "^OPENAI_API_KEY=local-ollama$" /state/home/.hermes/.env
     '; then
       doctor_fail "agent '${service}' Hermes config must be reconciled to ollama-gate"
+    fi
+  fi
+  if [[ "${service}" == "agentic-kilocode" ]]; then
+    if ! timeout 15 docker exec "${cid}" sh -lc '
+      test -f /state/home/.config/kilo/opencode.json &&
+      grep -q "\"\\$schema\": \"https://app.kilo.ai/config.json\"" /state/home/.config/kilo/opencode.json &&
+      grep -q "\"model\": \"ollama/" /state/home/.config/kilo/opencode.json &&
+      grep -q "\"baseURL\": \"http://ollama-gate:11435/v1\"" /state/home/.config/kilo/opencode.json
+    '; then
+      doctor_fail "agent '${service}' Kilocode config must be reconciled to ollama-gate"
     fi
   fi
   if ! timeout 15 docker exec "${cid}" sh -lc ". /state/bootstrap/ollama-gate-defaults.env && \
@@ -2763,6 +2774,7 @@ expected = {
     "agent/openclaw",
     "agent/claude",
     "agent/opencode",
+    "agent/kilocode",
     "agent/openhands",
     "agent/pi-mono",
     "agent/goose",

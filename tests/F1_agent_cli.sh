@@ -18,16 +18,19 @@ assert_cmd docker
 
 claude_cid="$(require_service_container agentic-claude)" || exit 1
 codex_cid="$(require_service_container agentic-codex)" || exit 1
+kilocode_cid="$(require_service_container agentic-kilocode)" || exit 1
 vibestral_cid="$(require_service_container agentic-vibestral)" || exit 1
 hermes_cid="$(require_service_container agentic-hermes)" || exit 1
 wait_for_container_ready "${claude_cid}" 60 || fail "agentic-claude is not ready"
 wait_for_container_ready "${codex_cid}" 60 || fail "agentic-codex is not ready"
+wait_for_container_ready "${kilocode_cid}" 60 || fail "agentic-kilocode is not ready"
 wait_for_container_ready "${vibestral_cid}" 60 || fail "agentic-vibestral is not ready"
 wait_for_container_ready "${hermes_cid}" 60 || fail "agentic-hermes is not ready"
 
 ls_output="$("${agent_bin}" ls)"
 printf '%s\n' "${ls_output}" | grep -q '^tool' || fail "agent ls output is missing header"
 printf '%s\n' "${ls_output}" | grep -q '^claude' || fail "agent ls output is missing claude row"
+printf '%s\n' "${ls_output}" | grep -q '^kilocode' || fail "agent ls output is missing kilocode row"
 printf '%s\n' "${ls_output}" | grep -q '^vibestral' || fail "agent ls output is missing vibestral row"
 printf '%s\n' "${ls_output}" | grep -q '^hermes' || fail "agent ls output is missing hermes row"
 printf '%s\n' "${ls_output}" | grep -q '^openclaw' || fail "agent ls output is missing openclaw row"
@@ -66,6 +69,25 @@ codex_path="$(timeout 20 docker exec "${codex_cid}" tmux display-message -p -t c
 [[ "${codex_path}" == "/workspace/${codex_project}" ]] \
   || fail "agent codex tmux pane path mismatch (expected=/workspace/${codex_project}, actual=${codex_path})"
 ok "agent codex prepares tmux session and project workspace"
+
+kilocode_project="f1-kilocode-${USER:-agent}-$$"
+AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${kilocode_project}" "${agent_bin}" kilocode >/tmp/agent-f1-kilocode.out
+
+timeout 20 docker exec "${kilocode_cid}" tmux has-session -t kilocode \
+  || fail "agent kilocode did not create/keep tmux session"
+timeout 20 docker exec "${kilocode_cid}" sh -lc "test -d '/workspace/${kilocode_project}'" \
+  || fail "agent kilocode did not create project workspace /workspace/${kilocode_project}"
+timeout 20 docker exec "${kilocode_cid}" sh -lc 'command -v kilo >/dev/null' \
+  || fail "agent kilocode runtime is missing kilo CLI"
+timeout 20 docker exec "${kilocode_cid}" sh -lc '
+  test -f /state/home/.config/kilo/opencode.json &&
+  grep -q "\"\\$schema\": \"https://app.kilo.ai/config.json\"" /state/home/.config/kilo/opencode.json &&
+  grep -q "\"baseURL\": \"http://ollama-gate:11435/v1\"" /state/home/.config/kilo/opencode.json
+' || fail "agent kilocode runtime must have managed Kilo config routed to ollama-gate"
+kilocode_path="$(timeout 20 docker exec "${kilocode_cid}" tmux display-message -p -t kilocode '#{pane_current_path}')"
+[[ "${kilocode_path}" == "/workspace/${kilocode_project}" ]] \
+  || fail "agent kilocode tmux pane path mismatch (expected=/workspace/${kilocode_project}, actual=${kilocode_path})"
+ok "agent kilocode prepares tmux session, workspace, and kilo CLI runtime"
 
 vibestral_project="f1-vibestral-${USER:-agent}-$$"
 AGENT_NO_ATTACH=1 AGENT_PROJECT_NAME="${vibestral_project}" "${agent_bin}" vibestral >/tmp/agent-f1-vibestral.out

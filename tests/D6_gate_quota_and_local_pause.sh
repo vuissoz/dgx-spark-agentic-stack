@@ -247,7 +247,7 @@ printf '%s\n' "${metrics_payload}" | grep -q 'external_quota_remaining{provider=
 ok "quota metrics are exposed for alerting"
 
 wait_for_container_ready "${gate_cid}" 120 || fail "ollama-gate is unhealthy after quota denials"
-for agent_service in agentic-claude agentic-codex agentic-opencode; do
+for agent_service in agentic-claude agentic-codex agentic-opencode agentic-kilocode; do
   agent_cid="$(service_container_id "${agent_service}")"
   [[ -n "${agent_cid}" ]] || continue
   [[ "$(docker inspect --format '{{.State.Status}}' "${agent_cid}" 2>/dev/null || true)" == "running" ]] \

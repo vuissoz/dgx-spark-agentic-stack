@@ -36,11 +36,11 @@ AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_v
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_GPU_CLOCK_LOW_PRESET="${AGENT_GPU_CLOCK_LOW_PRESET:-2000,2000}"
-AGENT_TOOLS=(claude codex opencode vibestral hermes openclaw pi-mono goose comfyui)
-AGENT_STATUS_TARGETS=(claude codex opencode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
-STOP_START_TARGETS=(claude codex opencode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
+AGENT_TOOLS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose comfyui)
+AGENT_STATUS_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
+STOP_START_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
 OPTIONAL_MODULES=(mcp pi-mono goose portainer)
-FORGET_TARGETS=(ollama claude codex opencode vibestral hermes comfyui openclaw openhands openwebui qdrant obs all)
+FORGET_TARGETS=(ollama claude codex opencode kilocode vibestral hermes comfyui openclaw openhands openwebui qdrant obs all)
 STACK_START_ORDER=(core agents ui obs rag optional)
 STACK_STOP_ORDER=(optional rag obs ui agents core)
 
@@ -53,7 +53,7 @@ Usage:
   agent up <core|agents|ui|obs|rag|optional>
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-  agent <claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose|comfyui> [project]
+  agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|comfyui> [project]
   agent openclaw init [project]
   agent openclaw status [--json]
   agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
@@ -186,6 +186,7 @@ path_allowed_for_purge() {
   path_within "${path}" "${AGENTIC_CLAUDE_WORKSPACES_DIR}" && return 0
   path_within "${path}" "${AGENTIC_CODEX_WORKSPACES_DIR}" && return 0
   path_within "${path}" "${AGENTIC_OPENCODE_WORKSPACES_DIR}" && return 0
+  path_within "${path}" "${AGENTIC_KILOCODE_WORKSPACES_DIR}" && return 0
   path_within "${path}" "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}" && return 0
   path_within "${path}" "${AGENTIC_HERMES_WORKSPACES_DIR}" && return 0
   path_within "${path}" "${AGENTIC_OPENHANDS_WORKSPACES_DIR}" && return 0
@@ -222,6 +223,7 @@ agent_workspace_dir() {
     claude) printf '%s\n' "${AGENTIC_CLAUDE_WORKSPACES_DIR}" ;;
     codex) printf '%s\n' "${AGENTIC_CODEX_WORKSPACES_DIR}" ;;
     opencode) printf '%s\n' "${AGENTIC_OPENCODE_WORKSPACES_DIR}" ;;
+    kilocode) printf '%s\n' "${AGENTIC_KILOCODE_WORKSPACES_DIR}" ;;
     vibestral) printf '%s\n' "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}" ;;
     hermes) printf '%s\n' "${AGENTIC_HERMES_WORKSPACES_DIR}" ;;
     openclaw) printf '%s\n' "${AGENTIC_OPENCLAW_WORKSPACES_DIR}" ;;
@@ -234,7 +236,7 @@ agent_workspace_dir() {
 target_workspace_dir() {
   local target="$1"
   case "${target}" in
-    claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose)
+    claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose)
       agent_workspace_dir "${target}"
       ;;
     openhands)
@@ -251,6 +253,7 @@ tool_to_service() {
     claude) echo "agentic-claude" ;;
     codex) echo "agentic-codex" ;;
     opencode) echo "agentic-opencode" ;;
+    kilocode) echo "agentic-kilocode" ;;
     vibestral) echo "agentic-vibestral" ;;
     hermes) echo "agentic-hermes" ;;
     openclaw) echo "openclaw" ;;
@@ -272,7 +275,7 @@ tool_session_mode() {
 
 target_session_mode() {
   case "$1" in
-    claude|codex|opencode|vibestral|hermes|pi-mono) echo "tmux" ;;
+    claude|codex|opencode|kilocode|vibestral|hermes|pi-mono) echo "tmux" ;;
     openclaw|goose|forgejo|openwebui|openhands|comfyui) echo "n/a" ;;
     *) return 1 ;;
   esac
@@ -290,7 +293,7 @@ service_start_hint() {
 
 target_to_compose_file() {
   case "$1" in
-    claude|codex|opencode|vibestral|hermes) stack_to_compose_file agents ;;
+    claude|codex|opencode|kilocode|vibestral|hermes) stack_to_compose_file agents ;;
     openclaw) stack_to_compose_file core ;;
     openwebui|openhands|comfyui|forgejo) stack_to_compose_file ui ;;
     pi-mono|goose) stack_to_compose_file optional ;;
@@ -303,6 +306,7 @@ target_to_services() {
     claude) printf '%s\n' "agentic-claude" ;;
     codex) printf '%s\n' "agentic-codex" ;;
     opencode) printf '%s\n' "agentic-opencode" ;;
+    kilocode) printf '%s\n' "agentic-kilocode" ;;
     vibestral) printf '%s\n' "agentic-vibestral" ;;
     hermes) printf '%s\n' "agentic-hermes" ;;
     openclaw)
@@ -851,7 +855,7 @@ build_core_local_images() {
 resolve_agent_base_build_services() {
   local agents_compose_file="$1"
   local -a available_services=()
-  local -a candidate_services=(agentic-claude agentic-codex agentic-opencode agentic-vibestral agentic-hermes)
+  local -a candidate_services=(agentic-claude agentic-codex agentic-opencode agentic-kilocode agentic-vibestral agentic-hermes)
   local -A available_lookup=()
   local service
 
@@ -1846,7 +1850,7 @@ cmd_ls() {
 
     sticky="-"
     case "${target}" in
-      claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose)
+      claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose)
         sticky="$(sticky_model_for_session "${target}")"
         ;;
     esac
@@ -2321,7 +2325,7 @@ forget_target_paths() {
     ollama)
       printf '%s\n' "${AGENTIC_ROOT}/ollama"
       ;;
-    claude|codex|opencode|vibestral|hermes)
+    claude|codex|opencode|kilocode|vibestral|hermes)
       printf '%s\n' \
         "${AGENTIC_ROOT}/${target}/state" \
         "${AGENTIC_ROOT}/${target}/logs" \
@@ -2401,6 +2405,7 @@ forget_target_services() {
     claude) printf '%s\n' agentic-claude ;;
     codex) printf '%s\n' agentic-codex ;;
     opencode) printf '%s\n' agentic-opencode ;;
+    kilocode) printf '%s\n' agentic-kilocode ;;
     vibestral) printf '%s\n' agentic-vibestral ;;
     hermes) printf '%s\n' agentic-hermes ;;
     comfyui) printf '%s\n' comfyui comfyui-loopback ;;
@@ -2416,7 +2421,7 @@ forget_target_services() {
         qdrant rag-retriever rag-worker opensearch \
         prometheus grafana loki promtail node-exporter cadvisor dcgm-exporter \
         openwebui openhands comfyui comfyui-loopback \
-        agentic-claude agentic-codex agentic-opencode agentic-vibestral agentic-hermes \
+        agentic-claude agentic-codex agentic-opencode agentic-kilocode agentic-vibestral agentic-hermes \
         ollama ollama-gate gate-mcp trtllm
       ;;
     *)
@@ -2431,7 +2436,7 @@ forget_target_init_scripts() {
     ollama)
       printf '%s\n' "${AGENTIC_REPO_ROOT}/deployments/core/init_runtime.sh"
       ;;
-    claude|codex|opencode|vibestral|hermes)
+    claude|codex|opencode|kilocode|vibestral|hermes)
       printf '%s\n' "${AGENTIC_REPO_ROOT}/deployments/agents/init_runtime.sh"
       ;;
     comfyui|openhands|openwebui)
@@ -2789,7 +2794,7 @@ cmd_forget() {
   shift || true
 
   case "${target}" in
-    ollama|claude|codex|opencode|vibestral|hermes|comfyui|openclaw|openhands|openwebui|qdrant|obs|all)
+    ollama|claude|codex|opencode|kilocode|vibestral|hermes|comfyui|openclaw|openhands|openwebui|qdrant|obs|all)
       ;;
     *)
       die "Unknown forget target '${target}'. Expected one of: ${FORGET_TARGETS[*]}"
@@ -3521,6 +3526,7 @@ refresh_first_up_runtime_defaults() {
     AGENTIC_CLAUDE_WORKSPACES_DIR
     AGENTIC_CODEX_WORKSPACES_DIR
     AGENTIC_OPENCODE_WORKSPACES_DIR
+    AGENTIC_KILOCODE_WORKSPACES_DIR
     AGENTIC_VIBESTRAL_WORKSPACES_DIR
     AGENTIC_HERMES_WORKSPACES_DIR
     AGENTIC_OPENHANDS_WORKSPACES_DIR
@@ -4743,7 +4749,7 @@ cmd_rollback() {
 normalize_logs_target() {
   local target="$1"
   case "${target}" in
-    claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose) tool_to_service "${target}" ;;
+    claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose) tool_to_service "${target}" ;;
     forgejo) printf '%s\n' "optional-forgejo" ;;
     *) printf '%s\n' "${target}" ;;
   esac
@@ -5004,7 +5010,7 @@ case "$cmd" in
         ;;
     esac
     ;;
-  claude|codex|opencode|vibestral|hermes|pi-mono|goose)
+  claude|codex|opencode|kilocode|vibestral|hermes|pi-mono|goose)
     shift
     cmd_tool_attach "${cmd}" "${1:-}"
     ;;

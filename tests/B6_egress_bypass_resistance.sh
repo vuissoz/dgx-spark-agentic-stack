@@ -12,7 +12,7 @@ fi
 
 pick_agent_service() {
   local service
-  for service in agentic-codex agentic-claude agentic-opencode agentic-vibestral agentic-hermes; do
+  for service in agentic-codex agentic-claude agentic-opencode agentic-kilocode agentic-vibestral agentic-hermes; do
     if service_container_id "${service}" >/dev/null 2>&1 && [[ -n "$(service_container_id "${service}")" ]]; then
       printf '%s\n' "${service}"
       return 0

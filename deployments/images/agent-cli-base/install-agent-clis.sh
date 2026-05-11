@@ -8,6 +8,7 @@ openclaw_prefix="${OPENCLAW_PREFIX:-/opt/agentic/openclaw}"
 codex_spec="${CODEX_CLI_NPM_SPEC:-@openai/codex@latest}"
 claude_spec="${CLAUDE_CODE_NPM_SPEC:-@anthropic-ai/claude-code@latest}"
 opencode_spec="${OPENCODE_NPM_SPEC:-opencode-ai@latest}"
+kilocode_spec="${KILOCODE_CLI_NPM_SPEC:-@kilocode/cli@latest}"
 pi_spec="${PI_CODING_AGENT_NPM_SPEC:-@mariozechner/pi-coding-agent@latest}"
 openhands_install_script="${OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.dev/install.sh}"
 openclaw_install_script="${OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}"
@@ -227,6 +228,7 @@ export PATH="${npm_prefix}/bin:${PATH}"
 install_npm_cli codex "${codex_spec}"
 install_npm_cli claude "${claude_spec}"
 install_npm_cli opencode "${opencode_spec}"
+install_npm_cli kilo "${kilocode_spec}"
 if ensure_node_version_at_least "20.6.0"; then
   install_npm_cli pi "${pi_spec}"
 else
@@ -268,7 +270,7 @@ fi
 
 install_hermes_cli "${hermes_git_url}" "${hermes_git_ref}" "${hermes_git_sha}" "${hermes_pip_extras}" || true
 
-for cli in codex claude opencode pi vibe openhands openclaw hermes; do
+for cli in codex claude opencode kilo pi vibe openhands openclaw hermes; do
   if [[ ! -f "/etc/agentic/${cli}-real-path" ]]; then
     record_cli_path "${cli}" "" "missing"
   fi

@@ -13,7 +13,7 @@ Current repo state: the primary day-to-day operating mode is `rootless-dev`. `st
 
 Compose files are located in `compose/`:
 - `compose/compose.core.yml`: `ollama`, `ollama-gate`, `gate-mcp`, `openclaw`, `openclaw-gateway`, `openclaw-sandbox`, `openclaw-relay`, `trtllm` (`trt` profile), `unbound`, `egress-proxy`, `toolbox`
-- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`
+- `compose/compose.agents.yml`: `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-kilocode`, `agentic-vibestral`, `agentic-hermes`
 - `compose/compose.ui.yml`: `optional-forgejo`, `optional-forgejo-loopback`, `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (`rag-lexical` profile)
@@ -94,7 +94,7 @@ Key persistent folders:
 - `openhands/{config,state,logs,workspaces}/`
 - `comfyui/{models,input,output,user}/`
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
-- `{claude,codex,opencode,vibestral,hermes}/{state,logs,workspaces}/`
+- `{claude,codex,opencode,kilocode,vibestral,hermes}/{state,logs,workspaces}/`
 - `openclaw/{config/{immutable,overlay},state,logs,relay/{state,logs},sandbox/state,workspaces}/`
 - `optional/{git,mcp,pi-mono,goose,portainer}/...`
 - `deployments/{releases,current}/`
@@ -129,11 +129,11 @@ export NODE_EXPORTER_HOST_ROOT_PATH=/
 
 ## Agent Base Image Override (E1b)
 
-Agent services (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`) share a common runtime-configurable base image.
+Agent services (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-kilocode`, `agentic-vibestral`, `agentic-hermes`) share a common runtime-configurable base image.
 
 By default, `deployments/images/agent-cli-base/Dockerfile` builds a CUDA-based (NVIDIA) development image with a multi-language toolchain (C/C++, Python, Node, Go, Rust).
 
-This shared image also installs these agent CLIs: `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`, `hermes`.
+This shared image also installs these agent CLIs: `codex`, `claude`, `opencode`, `kilo`, `pi`, `vibe`, `openhands`, `openclaw`, `hermes`.
 - default mode: `AGENT_CLI_INSTALL_MODE=best-effort` (explicit wrappers if an install fails),
 - strict mode: `AGENT_CLI_INSTALL_MODE=required` (build fails when a CLI install is missing).
 
@@ -344,7 +344,7 @@ agent first-up [--env-file <path>] [--no-env] [--dry-run]
 agent up <core|agents|ui|obs|rag|optional>
 agent down <core|agents|ui|obs|rag|optional>
 agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
-agent <claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose> [project]
+agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose> [project]
 agent openclaw init [project]
 agent ls
 agent ps
@@ -431,12 +431,12 @@ Examples:
 ```
 
 Notes:
-- `agent stop` and `agent start` handle `claude|codex|opencode|vibestral|hermes|openclaw|pi-mono|goose|openwebui|openhands|comfyui` targets.
+- `agent stop` and `agent start` handle `claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|openwebui|openhands|comfyui` targets.
 - `agent stop/start openclaw` manages the whole OpenClaw control/execution bundle; `agent stop/start comfyui` manages both `comfyui` and `comfyui-loopback`.
 - `agent trtllm stop` cleanly stops only the `trtllm` service; `agent trtllm start` brings it back and waits for its healthcheck.
 - `agent ls` now reads target state from `docker ps -a`, so stopped targets show `exited` or `mixed` instead of collapsing to `down`; `agent status` lists every project container with its exact state and health string.
 - for `codex`, `agent ls` also exposes the effective sandbox posture in the `runtime` column: `sandbox=native-userns` when native namespace sandboxing is available, or `sandbox=outer-container-bypass` when the Codex wrapper relies on outer container confinement instead.
-- `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|vibestral|hermes|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in the core `openclaw` service with loopback API, Web UI (`18789`), and Gateway WS reminders.
+- `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|kilocode|vibestral|hermes|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in the core `openclaw` service with loopback API, Web UI (`18789`), and Gateway WS reminders.
 - `agent openclaw init [project]` is the stack-managed OpenClaw onboarding/repair path: it repairs the default workspace back under `/workspace/...`, starts the core bundle if needed, applies the safe local bootstrap, then prints the exact provider/channel next steps. Without an argument it uses `AGENTIC_OPENCLAW_INIT_PROJECT` (default: `openclaw-default`). `agent onboard` can now collect that default project plus Telegram/Discord/Slack provider-bridge secrets so a later `agent openclaw init` can run without extra flags. `openclaw onboard`, `openclaw configure --section channels`, and `openclaw gateway run` remain expert fallbacks only.
 - `agent doctor` now validates the effective `agentic-codex` sandbox posture as well: `native-userns` is reported as nominal, `outer-container-bypass` as an explicit non-blocking warning while repo workflows remain covered, and `hard-fail` as an error.
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.

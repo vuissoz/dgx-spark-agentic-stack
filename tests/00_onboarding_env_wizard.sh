@@ -47,6 +47,7 @@ run_override_answers() {
   local custom_claude_workspace="${work_dir}/custom-workspaces/claude"
   local custom_codex_workspace="${work_dir}/custom-workspaces/codex"
   local custom_opencode_workspace="${work_dir}/custom-workspaces/opencode"
+  local custom_kilocode_workspace="${work_dir}/custom-workspaces/kilocode"
   local custom_vibestral_workspace="${work_dir}/custom-workspaces/vibestral"
   local custom_hermes_workspace="${work_dir}/custom-workspaces/hermes"
   local custom_openhands_workspace="${work_dir}/custom-workspaces/openhands"
@@ -68,6 +69,7 @@ ${custom_workspace_root}
 ${custom_claude_workspace}
 ${custom_codex_workspace}
 ${custom_opencode_workspace}
+${custom_kilocode_workspace}
 ${custom_vibestral_workspace}
 ${custom_hermes_workspace}
 ${custom_openhands_workspace}
@@ -211,6 +213,8 @@ grep -q "^export AGENTIC_CODEX_WORKSPACES_DIR='/srv/agentic/codex/workspaces'$" 
   || fail "default AGENTIC_CODEX_WORKSPACES_DIR is not /srv/agentic/codex/workspaces"
 grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='/srv/agentic/opencode/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_OPENCODE_WORKSPACES_DIR is not /srv/agentic/opencode/workspaces"
+grep -q "^export AGENTIC_KILOCODE_WORKSPACES_DIR='/srv/agentic/kilocode/workspaces'$" "${default_env_file}" \
+  || fail "default AGENTIC_KILOCODE_WORKSPACES_DIR is not /srv/agentic/kilocode/workspaces"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='/srv/agentic/vibestral/workspaces'$" "${default_env_file}" \
   || fail "default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not /srv/agentic/vibestral/workspaces"
 grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='/srv/agentic/hermes/workspaces'$" "${default_env_file}" \
@@ -330,6 +334,8 @@ grep -q "^export AGENTIC_CODEX_WORKSPACES_DIR='${work_dir}/custom-workspaces/cod
   || fail "override AGENTIC_CODEX_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/custom-workspaces/opencode'$" "${override_env_file}" \
   || fail "override AGENTIC_OPENCODE_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_KILOCODE_WORKSPACES_DIR='${work_dir}/custom-workspaces/kilocode'$" "${override_env_file}" \
+  || fail "override AGENTIC_KILOCODE_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/custom-workspaces/vibestral'$" "${override_env_file}" \
   || fail "override AGENTIC_VIBESTRAL_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='${work_dir}/custom-workspaces/hermes'$" "${override_env_file}" \
@@ -432,6 +438,8 @@ grep -q "^export AGENTIC_CODEX_WORKSPACES_DIR='${work_dir}/rootless-default-root
   || fail "rootless default AGENTIC_CODEX_WORKSPACES_DIR is not <root>/agent-workspaces/codex/workspaces"
 grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/rootless-default-root/agent-workspaces/opencode/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_OPENCODE_WORKSPACES_DIR is not <root>/agent-workspaces/opencode/workspaces"
+grep -q "^export AGENTIC_KILOCODE_WORKSPACES_DIR='${work_dir}/rootless-default-root/agent-workspaces/kilocode/workspaces'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_KILOCODE_WORKSPACES_DIR is not <root>/agent-workspaces/kilocode/workspaces"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/rootless-default-root/agent-workspaces/vibestral/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_VIBESTRAL_WORKSPACES_DIR is not <root>/agent-workspaces/vibestral/workspaces"
 grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='${work_dir}/rootless-default-root/agent-workspaces/hermes/workspaces'$" "${rootless_default_env_file}" \
@@ -535,6 +543,7 @@ if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
   --claude-workspaces-dir "${work_dir}/ni-workspaces/claude" \
   --codex-workspaces-dir "${work_dir}/ni-workspaces/codex" \
   --opencode-workspaces-dir "${work_dir}/ni-workspaces/opencode" \
+  --kilocode-workspaces-dir "${work_dir}/ni-workspaces/kilocode" \
   --vibestral-workspaces-dir "${work_dir}/ni-workspaces/vibestral" \
   --hermes-workspaces-dir "${work_dir}/ni-workspaces/hermes" \
   --openhands-workspaces-dir "${work_dir}/ni-workspaces/openhands" \
@@ -599,6 +608,8 @@ grep -q "^export AGENTIC_CODEX_WORKSPACES_DIR='${work_dir}/ni-workspaces/codex'$
   || fail "non-interactive AGENTIC_CODEX_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_OPENCODE_WORKSPACES_DIR='${work_dir}/ni-workspaces/opencode'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_OPENCODE_WORKSPACES_DIR is not applied"
+grep -q "^export AGENTIC_KILOCODE_WORKSPACES_DIR='${work_dir}/ni-workspaces/kilocode'$" "${non_interactive_env_file}" \
+  || fail "non-interactive AGENTIC_KILOCODE_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_VIBESTRAL_WORKSPACES_DIR='${work_dir}/ni-workspaces/vibestral'$" "${non_interactive_env_file}" \
   || fail "non-interactive AGENTIC_VIBESTRAL_WORKSPACES_DIR is not applied"
 grep -q "^export AGENTIC_HERMES_WORKSPACES_DIR='${work_dir}/ni-workspaces/hermes'$" "${non_interactive_env_file}" \

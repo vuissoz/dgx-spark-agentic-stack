@@ -178,8 +178,63 @@ PY
   else
     warn "agentic-opencode container not running; runtime opencode config assertion skipped"
   fi
+
+  kilocode_cid="$(service_container_id agentic-kilocode || true)"
+  if [[ -n "${kilocode_cid}" ]]; then
+    wait_for_container_ready "${kilocode_cid}" 120 || fail "agentic-kilocode container is not ready"
+    kilocode_default_model="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${kilocode_cid}" \
+      | awk -F= '$1=="AGENTIC_DEFAULT_MODEL"{print substr($0, index($0, "=")+1); exit}')"
+    [[ -n "${kilocode_default_model}" ]] || fail "agentic-kilocode env is missing AGENTIC_DEFAULT_MODEL"
+    kilocode_gate_v1="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${kilocode_cid}" \
+      | awk -F= '$1=="AGENTIC_OLLAMA_GATE_V1_URL"{print substr($0, index($0, "=")+1); exit}')"
+    [[ -n "${kilocode_gate_v1}" ]] || kilocode_gate_v1="http://ollama-gate:11435/v1"
+
+    kilocode_cfg="$(mktemp)"
+    docker exec "${kilocode_cid}" sh -lc 'cat /state/home/.config/kilo/opencode.json' >"${kilocode_cfg}" \
+      || fail "unable to read kilocode runtime config"
+    python3 - "${kilocode_cfg}" "${kilocode_default_model}" "${kilocode_gate_v1}" <<'PY'
+import json
+import pathlib
+import sys
+
+cfg_path = pathlib.Path(sys.argv[1])
+default_model = sys.argv[2]
+expected_v1 = sys.argv[3]
+
+payload = json.loads(cfg_path.read_text(encoding="utf-8"))
+model = payload.get("model")
+small_model = payload.get("small_model")
+if model != f"ollama/{default_model}":
+    raise SystemExit(f"unexpected kilocode model={model!r}")
+if small_model != f"ollama/{default_model}":
+    raise SystemExit(f"unexpected kilocode small_model={small_model!r}")
+if payload.get("$schema") != "https://app.kilo.ai/config.json":
+    raise SystemExit(f"unexpected kilocode schema={payload.get('$schema')!r}")
+
+providers = payload.get("provider")
+if not isinstance(providers, dict):
+    raise SystemExit("missing provider object")
+ollama = providers.get("ollama")
+if not isinstance(ollama, dict):
+    raise SystemExit("missing provider.ollama object")
+options = ollama.get("options")
+if not isinstance(options, dict):
+    raise SystemExit("missing provider.ollama.options object")
+if options.get("baseURL") != expected_v1:
+    raise SystemExit(f"unexpected provider.ollama.options.baseURL={options.get('baseURL')!r}")
+models = ollama.get("models")
+if not isinstance(models, dict):
+    raise SystemExit("missing provider.ollama.models object")
+if default_model not in models:
+    raise SystemExit(f"default model key not present in provider.ollama.models ({default_model!r})")
+PY
+    rm -f "${kilocode_cfg}" >/dev/null 2>&1 || true
+    ok "running kilocode container keeps local default model bootstrap contract"
+  else
+    warn "agentic-kilocode container not running; runtime kilocode config assertion skipped"
+  fi
 else
-  warn "docker not available; runtime opencode config assertion skipped"
+  warn "docker not available; runtime opencode/kilocode config assertions skipped"
 fi
 
 ok "L8_ollama_launch_alignment_contracts passed"

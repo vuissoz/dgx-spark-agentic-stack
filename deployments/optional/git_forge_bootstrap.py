@@ -98,6 +98,14 @@ MANAGED_ACCOUNTS = (
         "container_ssh_dir": "/state/home/.ssh",
     },
     {
+        "username": "kilocode",
+        "display_name": "KiloCode",
+        "email": "kilocode@forge.agentic.local",
+        "host_home": pathlib.Path(AGENTIC_ROOT) / "kilocode" / "state" / "home",
+        "container_home": "/state/home",
+        "container_ssh_dir": "/state/home/.ssh",
+    },
+    {
         "username": "vibestral",
         "display_name": "Vibestral",
         "email": "vibestral@forge.agentic.local",
@@ -144,7 +152,7 @@ TEAM_UNITS = [
 
 REFERENCE_AGENT_BRANCHES = tuple(
     f"agent/{name}"
-    for name in ("codex", "openclaw", "claude", "opencode", "openhands", "pi-mono", "goose", "vibestral", "hermes")
+    for name in ("codex", "openclaw", "claude", "opencode", "kilocode", "openhands", "pi-mono", "goose", "vibestral", "hermes")
 )
 
 
