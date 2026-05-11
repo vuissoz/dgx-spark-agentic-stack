@@ -33,6 +33,8 @@ printf '%s\n' "${ls_output}" | grep -q '^hermes' || fail "agent ls output is mis
 printf '%s\n' "${ls_output}" | grep -q '^openclaw' || fail "agent ls output is missing openclaw row"
 printf '%s\n' "${ls_output}" | grep -q '^pi-mono' || fail "agent ls output is missing pi-mono row"
 printf '%s\n' "${ls_output}" | grep -q '^goose' || fail "agent ls output is missing goose row"
+codex_runtime="$(printf '%s\n' "${ls_output}" | awk -F '\t' '$1 == "codex" {print $7; exit}')"
+[[ "${codex_runtime}" == sandbox=* ]] || fail "agent ls must expose codex sandbox runtime summary"
 ok "agent ls returns a structured output"
 
 project_name="f1-${USER:-agent}-$$"

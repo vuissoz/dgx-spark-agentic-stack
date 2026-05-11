@@ -1765,6 +1765,51 @@ print(f"sandboxes={len(sandboxes)}")
 PY
 }
 
+codex_runtime_summary() {
+  local status_file="${AGENTIC_ROOT}/codex/state/bootstrap/codex-sandbox-status.env"
+
+  if [[ ! -s "${status_file}" ]]; then
+    printf '%s\n' "-"
+    return 0
+  fi
+
+  python3 - "${status_file}" <<'PY'
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+pattern = re.compile(r'^export\s+([A-Z0-9_]+)="(.*)"$')
+values = {}
+
+try:
+    lines = path.read_text(encoding="utf-8").splitlines()
+except Exception:
+    print("invalid-sandbox-status")
+    raise SystemExit(0)
+
+for line in lines:
+    match = pattern.match(line.strip())
+    if not match:
+      continue
+    values[match.group(1)] = match.group(2)
+
+mode = values.get("AGENTIC_CODEX_SANDBOX_MODE", "").strip()
+probe = values.get("AGENTIC_CODEX_SANDBOX_PROBE_RESULT", "").strip()
+auto = values.get("AGENTIC_CODEX_AUTO_BYPASS_SANDBOX_EFFECTIVE", "").strip()
+if not mode:
+    print("invalid-sandbox-status")
+    raise SystemExit(0)
+
+parts = [f"sandbox={mode}"]
+if probe:
+    parts.append(f"probe={probe}")
+if auto:
+    parts.append(f"auto_bypass={auto}")
+print(";".join(parts))
+PY
+}
+
 cmd_ls() {
   require_cmd docker
 
@@ -1806,9 +1851,14 @@ cmd_ls() {
         ;;
     esac
     runtime="-"
-    if [[ "${target}" == "openclaw" ]]; then
-      runtime="$(openclaw_runtime_summary)"
-    fi
+    case "${target}" in
+      codex)
+        runtime="$(codex_runtime_summary)"
+        ;;
+      openclaw)
+        runtime="$(openclaw_runtime_summary)"
+        ;;
+    esac
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "${target}" "${service}" "${status}" "${tmux_status}" "${workspace_size}" "${sticky}" "${runtime}"
   done

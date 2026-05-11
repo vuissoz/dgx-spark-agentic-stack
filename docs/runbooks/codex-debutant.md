@@ -151,6 +151,10 @@ cd /home/vuissoz/wkdir/dgx-spark-agentic-stack
 ./agent stop codex
 ```
 
+Dans `./agent ls`, la colonne `runtime` de `codex` montre aussi le mode sandbox effectif:
+- `sandbox=native-userns`: le sandbox namespace natif est disponible dans le conteneur.
+- `sandbox=outer-container-bypass`: Codex bascule sur le fallback stack-managed; les workflows repo restent supportes, mais pas le sandbox userns natif.
+
 Preparer la session sans attacher (automation):
 
 ```bash

@@ -196,6 +196,8 @@ Primary CLI contract per baseline service:
   - `${AGENTIC_CODEX_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/codex/workspaces` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces/codex/workspaces` in `rootless-dev`)
 - Why it exists:
   - same controlled runtime model as other agents, specialized for Codex usage.
+  - persists the effective Codex sandbox posture in `${AGENTIC_ROOT}/codex/state/bootstrap/codex-sandbox-status.env`.
+  - exposes that posture in `./agent ls` as `sandbox=native-userns` or `sandbox=outer-container-bypass`.
 
 ### `agentic-opencode`
 - `./agent opencode <project>`

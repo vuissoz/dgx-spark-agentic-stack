@@ -86,6 +86,32 @@ AGENTIC_CODEX_SANDBOX_PROBE_CMD='exit 1' \
   ok "${container_id}: codex wrapper falls back to bypass mode when userns sandbox is unavailable"
 }
 
+assert_codex_sandbox_status_file() {
+  local container_id="$1"
+
+  timeout 20 docker exec "${container_id}" sh -lc '
+    test -f /state/bootstrap/codex-sandbox-status.env &&
+    . /state/bootstrap/codex-sandbox-status.env &&
+    case "${AGENTIC_CODEX_SANDBOX_MODE}" in
+      native-userns)
+        test "${AGENTIC_CODEX_SANDBOX_PROBE_RESULT}" = "ok"
+        ;;
+      outer-container-bypass)
+        test "${AGENTIC_CODEX_AUTO_BYPASS_SANDBOX_EFFECTIVE}" = "enabled"
+        case "${AGENTIC_CODEX_SANDBOX_PROBE_RESULT}" in
+          blocked|unshare-missing) ;;
+          *) exit 1 ;;
+        esac
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+  ' || fail "${container_id}: codex sandbox status file must report native-userns or outer-container-bypass"
+
+  ok "${container_id}: codex sandbox status file reports the effective sandbox posture"
+}
+
 assert_ollama_gate_defaults() {
   local container_id="$1"
   local defaults_file="/state/bootstrap/ollama-gate-defaults.env"
@@ -298,6 +324,7 @@ assert_repo_task_toolchain "${codex_cid}" "codex"
 assert_repo_task_toolchain "${opencode_cid}" "opencode"
 assert_repo_task_toolchain "${vibestral_cid}" "vibestral"
 assert_repo_task_toolchain "${hermes_cid}" "hermes"
+assert_codex_sandbox_status_file "${codex_cid}"
 assert_codex_wrapper_bypass_fallback "${codex_cid}"
 
 for cid in "${claude_cid}" "${codex_cid}" "${opencode_cid}" "${vibestral_cid}" "${hermes_cid}"; do

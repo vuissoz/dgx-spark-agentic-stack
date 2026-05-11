@@ -1940,6 +1940,39 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-vibestral a
   if ! timeout 15 docker exec "${cid}" sh -lc 'test -d /state/home && test -w /state/home'; then
     doctor_fail "agent '${service}' home directory is not writable (/state/home)"
   fi
+  if [[ "${service}" == "agentic-codex" ]]; then
+    if ! timeout 15 docker exec "${cid}" sh -lc '
+      test -f /state/bootstrap/codex-sandbox-status.env &&
+      . /state/bootstrap/codex-sandbox-status.env &&
+      case "${AGENTIC_CODEX_SANDBOX_MODE}" in
+        native-userns|outer-container-bypass|hard-fail) ;;
+        *) exit 1 ;;
+      esac
+    '; then
+      doctor_fail "agent '${service}' must persist /state/bootstrap/codex-sandbox-status.env with a valid sandbox mode"
+    else
+      codex_sandbox_status="$(timeout 15 docker exec "${cid}" sh -lc '
+        . /state/bootstrap/codex-sandbox-status.env
+        printf "%s|%s|%s|%s\n" \
+          "${AGENTIC_CODEX_SANDBOX_MODE}" \
+          "${AGENTIC_CODEX_SANDBOX_PROBE_RESULT:-}" \
+          "${AGENTIC_CODEX_AUTO_BYPASS_SANDBOX_EFFECTIVE:-}" \
+          "${AGENTIC_CODEX_SANDBOX_DETAIL:-}"
+      ' 2>/dev/null || true)"
+      IFS='|' read -r codex_sandbox_mode codex_sandbox_probe codex_sandbox_auto codex_sandbox_detail <<<"${codex_sandbox_status}"
+      case "${codex_sandbox_mode}" in
+        native-userns)
+          ok "agent '${service}' exposes native Codex userns sandboxing (${codex_sandbox_probe:-ok})"
+          ;;
+        outer-container-bypass)
+          warn "agent '${service}' runs Codex with outer-container-bypass (${codex_sandbox_probe:-blocked}): repo workflows remain supported inside container confinement, but native userns sandboxing is still unavailable"
+          ;;
+        hard-fail)
+          doctor_fail "agent '${service}' reports Codex hard-fail sandbox posture: ${codex_sandbox_detail:-native userns unavailable and auto bypass disabled}"
+          ;;
+      esac
+    fi
+  fi
   if [[ "${service}" == "agentic-hermes" ]]; then
     if ! timeout 15 docker exec "${cid}" sh -lc '
       test -d /state/home/.hermes &&
