@@ -1350,27 +1350,53 @@ run_compose_on_targets() {
   docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${profile_args[@]}" "${compose_args[@]}" "$action" "$@"
 }
 
-ensure_docker_bridge_network() {
+inspect_network_compose_state() {
   local network_name="$1"
-  local internal_mode="${2:-0}"
-  local -a create_cmd=(docker network create --driver bridge)
+  docker network inspect "${network_name}" \
+    --format '{{with index .Labels "com.docker.compose.project"}}{{.}}{{end}}|{{with index .Labels "com.docker.compose.network"}}{{.}}{{end}}|{{.Internal}}|{{len .Containers}}' \
+    2>/dev/null
+}
 
-  if docker network inspect "${network_name}" >/dev/null 2>&1; then
+ensure_compose_network_compatible() {
+  local network_name="$1"
+  local compose_network_name="$2"
+  local expected_internal="${3:-false}"
+
+  if ! docker network inspect "${network_name}" >/dev/null 2>&1; then
     return 0
   fi
 
-  if [[ "${internal_mode}" == "1" ]]; then
-    create_cmd+=(--internal)
-  fi
-  create_cmd+=("${network_name}")
+  local state actual_project actual_network actual_internal attached_count
+  state="$(inspect_network_compose_state "${network_name}")"
+  IFS='|' read -r actual_project actual_network actual_internal attached_count <<<"${state}"
+  attached_count="${attached_count:-0}"
 
-  "${create_cmd[@]}" >/dev/null
-  printf 'INFO: created docker network %s\n' "${network_name}"
+  if [[ "${actual_project}" == "${AGENTIC_COMPOSE_PROJECT}" ]] \
+    && [[ "${actual_network}" == "${compose_network_name}" ]] \
+    && [[ "${actual_internal}" == "${expected_internal}" ]]; then
+    return 0
+  fi
+
+  if [[ "${attached_count}" != "0" ]]; then
+    die "docker network '${network_name}' has Compose metadata drift (project='${actual_project:-<none>}', network='${actual_network:-<none>}', internal='${actual_internal:-<unknown>}') and is still attached to ${attached_count} container(s); stop/remove attached containers before retrying"
+  fi
+
+  printf 'INFO: removing docker network %s because Compose metadata drifted (project=%s network=%s internal=%s expected_project=%s expected_network=%s expected_internal=%s)\n' \
+    "${network_name}" \
+    "${actual_project:-<none>}" \
+    "${actual_network:-<none>}" \
+    "${actual_internal:-<unknown>}" \
+    "${AGENTIC_COMPOSE_PROJECT}" \
+    "${compose_network_name}" \
+    "${expected_internal}"
+  docker network rm "${network_name}" >/dev/null \
+    || die "failed to remove incompatible docker network '${network_name}'"
 }
 
-ensure_update_compose_networks() {
-  ensure_docker_bridge_network "${AGENTIC_NETWORK}" 0
-  ensure_docker_bridge_network "${AGENTIC_EGRESS_NETWORK}" 0
+ensure_core_compose_networks_compatible() {
+  ensure_compose_network_compatible "${AGENTIC_NETWORK}" "agentic" "true"
+  ensure_compose_network_compatible "${AGENTIC_LLM_NETWORK}" "agentic-llm" "true"
+  ensure_compose_network_compatible "${AGENTIC_EGRESS_NETWORK}" "agentic-egress" "false"
 }
 
 down_rag_compose_with_profiles() {
@@ -4681,7 +4707,7 @@ cmd_update() {
 
   resolve_update_latest_inputs "${resolution_dir}" "${compose_files[@]}"
   apply_resolved_runtime_env_file "${resolution_dir}/runtime.resolved.env"
-  ensure_update_compose_networks
+  ensure_core_compose_networks_compatible
 
   local -a compose_args=()
   local compose_file
@@ -4857,6 +4883,7 @@ case "$cmd" in
 
     if targets_include "core" "${targets[@]}"; then
       ensure_core_runtime
+      ensure_core_compose_networks_compatible
       build_core_local_images "$(stack_to_compose_file core)"
     fi
     if targets_include "agents" "${targets[@]}"; then
