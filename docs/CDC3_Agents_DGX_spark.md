@@ -302,9 +302,9 @@ L'écosystème de validation ne repose pas uniquement sur `doctor`. Il s'appuie 
 
 ### 11.3 Point de vigilance restant
 
-Le dépôt documente lui-même une limite importante: le rollback est proche du déterminisme strict visé, mais pas encore totalement hermétique, car le mécanisme de restauration peut encore dépendre de fichiers Compose présents dans le working tree pour certaines releases. La direction cible est déjà identifiée dans la documentation technique: restauration depuis artefacts de snapshot uniquement, avec fallback legacy si nécessaire.
+Le rollback courant est désormais hermétique pour les releases récentes: la restauration s'appuie d'abord sur les artefacts de snapshot (`compose.effective.yml` + manifeste d'images pinne). Un fallback legacy via `compose.files` subsiste seulement pour d'anciennes releases qui ne contiennent pas encore ce snapshot Compose effectif.
 
-Ce point ne remet pas en cause l'utilité du mécanisme existant, mais il doit rester visible dans un CDC actualisé.
+Le point de vigilance restant n'est donc plus le chemin nominal, mais la compatibilité avec cet historique legacy. Ce point doit rester visible dans un CDC actualisé, sans minimiser le fait que le contrat snapshot-first est maintenant livré pour les releases actuelles.
 
 ## 12. Définition de done actualisée
 

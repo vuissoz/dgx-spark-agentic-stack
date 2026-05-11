@@ -20,21 +20,21 @@ Why:
 - `scripts/agent.sh` has grown to a monolithic command router and orchestration layer (around 2500 lines), which increases coupling and change risk.
 - Runtime configuration keys are duplicated across `scripts/lib/runtime.sh`, `load_runtime_env`, `ensure_runtime_env`, and `cmd_profile`, which can drift over time.
 - Compose service definitions repeat the same hardening and proxy blocks in many places, increasing maintenance overhead.
-- Rollback is close to deterministic but not fully hermetic today because `deployments/releases/rollback.sh` reuses live compose files listed in `compose.files` instead of replaying only snapshot artifacts.
+- Rollback is now hermetic for current releases because `deployments/releases/rollback.sh` replays `compose.effective.yml` plus the pinned image manifest from the release snapshot. Legacy fallback via `compose.files` remains only for older releases that predate the effective compose snapshot artifact.
 
 ## Priority Refactoring Roadmap
 
-### Priority 0: Make Rollback Fully Hermetic
+### Priority 0: Keep Rollback Snapshot-First
 
 Problem:
-- `rollback.sh` currently depends on compose files from the working tree.
+- Older releases may still rely on the legacy `compose.files` fallback if they do not contain `compose.effective.yml`.
 
 Refactor:
-- Roll back from snapshot-only artifacts (`compose.effective.yml` + pinned images manifest), not from mutable repo compose files.
-- Keep current behavior as fallback only for legacy releases.
+- Keep the snapshot-first rollback path (`compose.effective.yml` + pinned images manifest) as the default contract.
+- Preserve the current legacy fallback only for older releases, and avoid introducing any new path that depends on mutable working-tree compose files.
 
 Expected gain:
-- Deterministic rollback independent of later repository edits.
+- Deterministic rollback independent of later repository edits for current releases.
 - Stronger CDC compliance for "exact restore".
 
 ### Priority 1: Split `agent.sh` into Command Modules
@@ -100,7 +100,7 @@ Expected gain:
 ## Recommended Delivery Strategy
 
 Use incremental, low-risk changes:
-1. Land Priority 0 first (highest operational risk reduction).
+1. Keep Priority 0 guarded first (highest operational risk reduction).
 2. Split `agent.sh` by command family without changing user-facing CLI.
 3. Introduce shared env schema and migrate commands progressively.
 4. Refactor compose with no behavior change, guarded by existing tests.
@@ -113,4 +113,4 @@ Avoid a big-bang rewrite.
 - `./agent doctor` remains green for nominal deployments.
 - `./agent update` and `./agent rollback all <release_id>` remain backward compatible.
 - Existing tests in `tests/` stay green or are replaced with equivalent/higher coverage.
-- Rollback no longer depends on mutable compose files from the current working tree.
+- Rollback remains snapshot-first and independent of mutable compose files from the current working tree for current releases.

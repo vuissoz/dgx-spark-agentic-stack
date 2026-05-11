@@ -146,16 +146,14 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
-| Issue | Status | Remaining work |
-| --- | --- | --- |
-| `dgx-spark-agentic-stack-vonj` | closed | `agentic-hermes` aligne sur le contrat upstream `ollama launch hermes` via matrice/drift-watch `launch-supported`, bootstrap non destructif, `web` toolset, et secrets Hermes confines a `.env` ; le runtime conserve `provider: custom` conformement au setup manuel upstream |
-| `dgx-spark-agentic-stack-vb7p` | open | valider un premier `hello` TRT-LLM natif Nemotron-3-Nano abouti de bout en bout via `ollama-gate` |
+- Aucun follow-up historique de `Plan.md` ne reste ouvert apres reconciliation avec Beads et les tests livres.
 
 ### Closed since former `Plan.md` snapshot
 
 | Issue | Status | Delivered scope |
 | --- | --- | --- |
 | `dgx-spark-agentic-stack-m00n` | closed | intégration Hermes déjà livrée comme surface core managée (`agentic-hermes`, commandes opérateur, persistance, doctor/tests/docs/ADR) ; le reliquat upstream est suivi dans `dgx-spark-agentic-stack-vonj` |
+| `dgx-spark-agentic-stack-vb7p` | closed | validation C10 du premier `Hello` TRT-LLM natif Nemotron-3-Nano via `ollama-gate` après warm-up |
 | `dgx-spark-agentic-stack-wj3` | closed | seuils de compaction `soft` / `danger` dérivés du budget de contexte et exposés aux agents |
 | `dgx-spark-agentic-stack-u326` | closed | `agent openclaw init` stack-managed d’onboarding/réparation |
 | `dgx-spark-agentic-stack-im5` | closed | rétention max + budget disque max collectés en onboarding et appliqués au runtime |
@@ -165,6 +163,10 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 | `dgx-spark-agentic-stack-i4o2` | closed | conteneurs agents `repo-e2e` autonomes avec toolchain Python/Git/pytest et fallback runtime `codex` |
 | `dgx-spark-agentic-stack-5ahj` | closed | stabilisation de la preuve `ollama-gate` de `tests/H2_openhands.sh` |
 | `dgx-spark-agentic-stack-r1my` | closed | alignement des assertions `rootless-dev` de `tests/E2_agents_confinement.sh` et `tests/K5_goose.sh` |
+| `dgx-spark-agentic-stack-ywl` | closed | rollback hermétique depuis artefacts release uniquement, livré et validé par `tests/F17_rollback_artifact_hermetic.sh` |
+| `dgx-spark-agentic-stack-7eo` | closed | intégrité des artefacts de release + anti-fuite secrets, livrés et validés par `tests/F10b_release_artifact_integrity.sh` |
+| `dgx-spark-agentic-stack-3je` | closed | test anti-drift du schéma runtime env livré par `tests/F11_runtime_env_schema_drift.sh` |
+| `dgx-spark-agentic-stack-eus` | closed | contrat `agent doctor` par profil livré par `tests/F12_doctor_profile_contract.sh` |
 
 ## Profils d’exécution (obligatoires)
 
@@ -983,7 +985,7 @@ Suivi Beads : `dgx-spark-agentic-stack-ywl`
   - éviter la dépendance aux fichiers Compose du working tree courant.
 - conserver un mode de compatibilité explicite pour anciennes releases si nécessaire (fallback documenté).
 
-**Test** : `tests/F9_rollback_hermetic_from_snapshot.sh`
+**Test** : `tests/F17_rollback_artifact_hermetic.sh`
 - créer une release via `agent update` ;
 - modifier ensuite un compose local (drift contrôlé) ;
 - exécuter `agent rollback all <release_id>` ;
@@ -997,7 +999,7 @@ Suivi Beads : `dgx-spark-agentic-stack-7eo`
   - `release.meta`, `images.json`, `health_report.json`, `compose.effective.yml`, `compose.files`, `runtime.env` (redacté).
 - ajouter un contrôle anti-fuite de secrets dans les artefacts exportés (mots-clés + patterns usuels).
 
-**Test** : `tests/F10_release_artifact_integrity.sh`
+**Test** : `tests/F10b_release_artifact_integrity.sh`
 - vérifie la présence/cohérence des fichiers obligatoires d’une release.
 - vérifie que `runtime.env` exporté n’expose pas de clés/valeurs sensibles.
 - vérifie que `images.json` contient les champs requis par service (image configurée/résolue, digest, état, santé).
