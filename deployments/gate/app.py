@@ -2565,6 +2565,7 @@ async def backend_chat_completion_stream(
     *,
     tools: Any = None,
     tool_choice: Any = None,
+    stream_options: Dict[str, Any] | None = None,
 ) -> tuple[int, UpstreamStreamingResponse | None, str]:
     cfg = state.backend_config(backend)
     if cfg is None:
@@ -2580,6 +2581,8 @@ async def backend_chat_completion_stream(
         "messages": messages if isinstance(messages, list) else [],
         "stream": True,
     }
+    if isinstance(stream_options, dict):
+        upstream_payload["stream_options"] = dict(stream_options)
     if isinstance(tools, list):
         upstream_payload["tools"] = tools
     if isinstance(tool_choice, (str, dict)):
@@ -2591,6 +2594,14 @@ async def backend_chat_completion_stream(
         headers = backend_request_headers(cfg, api_key)
         url = f"{cfg['base_url']}/chat/completions"
     else:
+        # Stack-managed local agents rely on token accounting in streamed
+        # chat-completions responses. Ollama's OpenAI-compatible endpoint only
+        # emits the final usage chunk when include_usage is requested.
+        upstream_stream_options = upstream_payload.get("stream_options")
+        if not isinstance(upstream_stream_options, dict):
+            upstream_stream_options = {}
+        upstream_stream_options["include_usage"] = True
+        upstream_payload["stream_options"] = upstream_stream_options
         url = f"{cfg['base_url']}/v1/chat/completions"
 
     timeout = httpx.Timeout(connect=30.0, read=None, write=60.0, pool=60.0)
@@ -3063,6 +3074,7 @@ async def handle_chat_completion_endpoint(
                         messages,
                         tools=tools,
                         tool_choice=tool_choice,
+                        stream_options=payload.get("stream_options") if isinstance(payload, dict) else None,
                     )
                 except BackendAuthError as exc:
                     status_code = 503

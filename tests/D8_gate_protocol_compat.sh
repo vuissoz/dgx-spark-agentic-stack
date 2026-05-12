@@ -375,6 +375,7 @@ path = sys.argv[1]
 delta_content_seen = False
 finish_reason_seen = False
 done_seen = False
+usage_seen = False
 with open(path, 'r', encoding='utf-8') as fh:
     for line in fh:
         stripped = line.strip()
@@ -398,9 +399,18 @@ with open(path, 'r', encoding='utf-8') as fh:
             delta_content_seen = True
         if isinstance(first.get('finish_reason'), str):
             finish_reason_seen = True
+        usage = obj.get('usage')
+        if isinstance(usage, dict):
+            prompt_tokens = usage.get('prompt_tokens')
+            completion_tokens = usage.get('completion_tokens')
+            total_tokens = usage.get('total_tokens')
+            if all(isinstance(value, int) for value in (prompt_tokens, completion_tokens, total_tokens)):
+                if prompt_tokens > 0 and total_tokens >= prompt_tokens and total_tokens >= completion_tokens:
+                    usage_seen = True
 assert delta_content_seen, 'chat stream did not emit content delta'
 assert finish_reason_seen, 'chat stream did not emit terminal finish_reason chunk'
 assert done_seen, 'chat stream did not emit [DONE] marker'
+assert usage_seen, 'chat stream did not emit final usage chunk with positive token counts'
 PY
 ok "gate /v1/chat/completions streaming compatibility is operational"
 
