@@ -1347,6 +1347,32 @@ PY
   done
 }
 
+wait_for_container_health_status() {
+  local cid="$1"
+  local expected_status="$2"
+  local timeout_sec="${3:-30}"
+  local sleep_sec="${4:-2}"
+  local deadline current_status
+
+  if ! [[ "${timeout_sec}" =~ ^[0-9]+$ ]] || (( timeout_sec < 1 )); then
+    timeout_sec=30
+  fi
+  if ! [[ "${sleep_sec}" =~ ^[0-9]+$ ]] || (( sleep_sec < 1 )); then
+    sleep_sec=2
+  fi
+
+  deadline=$((SECONDS + timeout_sec))
+  while (( SECONDS <= deadline )); do
+    current_status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${cid}" 2>/dev/null || true)"
+    if [[ "${current_status}" == "${expected_status}" ]]; then
+      return 0
+    fi
+    sleep "${sleep_sec}"
+  done
+
+  return 1
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fix-net)
@@ -2390,7 +2416,12 @@ PY
     doctor_fail "openclaw-gateway must not serve the fallback placeholder page"
   fi
 
-  if ! timeout 20 docker exec "${optional_openclaw_gateway_cid}" sh -lc 'token="$(tr -d "\n" </run/secrets/openclaw.token)"; test -n "${token}" && OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT=0 openclaw gateway status --json --require-rpc --url ws://127.0.0.1:18789 --token "${token}" >/tmp/openclaw-gateway-health.out'; then
+  if ! wait_for_container_health_status "${optional_openclaw_gateway_cid}" "healthy" 45 3; then
+    gateway_health_status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${optional_openclaw_gateway_cid}" 2>/dev/null || true)"
+    doctor_fail "openclaw-gateway health did not converge to healthy before RPC validation (health=${gateway_health_status:-unknown})"
+  fi
+
+  if ! timeout 20 docker exec "${optional_openclaw_gateway_cid}" sh -lc '/app/openclaw_gateway_rpc_probe.sh >/tmp/openclaw-gateway-health.out'; then
     doctor_fail "openclaw-gateway WS endpoint must answer token-auth RPC probe on ws://127.0.0.1:18789"
   fi
 

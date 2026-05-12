@@ -14,6 +14,21 @@ warn() {
   echo "WARN: $*" >&2
 }
 
+pick_free_loopback_port() {
+  local start_port="${1:-20000}"
+  local max_tries="${2:-200}"
+  local candidate
+
+  for ((candidate=start_port; candidate<start_port+max_tries; candidate++)); do
+    if ! ss -lntH 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:)$candidate$"; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+
+  fail "unable to find a free loopback port starting at ${start_port}"
+}
+
 assert_cmd() {
   local cmd="$1"
   command -v "$cmd" >/dev/null 2>&1 || fail "command not found: ${cmd}"

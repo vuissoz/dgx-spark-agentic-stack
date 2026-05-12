@@ -410,8 +410,7 @@ services:
       test:
         - CMD-SHELL
         - >
-          python3 -c 'import sys,urllib.request;
-          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8114/", timeout=3).status == 200 else 1)'
+          /app/openclaw_gateway_rpc_probe.sh >/tmp/openclaw-gateway-health.out
       interval: 30s
       timeout: 10s
       retries: 5
