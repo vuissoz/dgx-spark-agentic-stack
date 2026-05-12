@@ -84,10 +84,19 @@ repair_rootless_agents_layout() {
   local needs_repair=0
   local dir
   local -a repair_dirs=(
+    "${AGENTIC_ROOT}/claude"
     "${AGENTIC_ROOT}/claude/state"
+    "${AGENTIC_ROOT}/codex"
     "${AGENTIC_ROOT}/codex/state"
+    "${AGENTIC_ROOT}/opencode"
     "${AGENTIC_ROOT}/opencode/state"
+    "${AGENTIC_ROOT}/kilocode"
+    "${AGENTIC_ROOT}/kilocode/state"
+    "${AGENTIC_ROOT}/kilocode/logs"
+    "${AGENTIC_KILOCODE_WORKSPACES_DIR}"
+    "${AGENTIC_ROOT}/vibestral"
     "${AGENTIC_ROOT}/vibestral/state"
+    "${AGENTIC_ROOT}/hermes"
     "${AGENTIC_ROOT}/hermes/state"
     "${AGENTIC_ROOT}/secrets/ssh"
     "${AGENTIC_ROOT}/secrets/runtime/git-forge"
@@ -114,10 +123,19 @@ repair_rootless_agents_layout() {
     busybox:1.36.1 sh -lc "
       set -eu
       for path in \
+        /repair/root/claude \
         /repair/root/claude/state \
+        /repair/root/codex \
         /repair/root/codex/state \
+        /repair/root/opencode \
         /repair/root/opencode/state \
+        /repair/root/kilocode \
+        /repair/root/kilocode/state \
+        /repair/root/kilocode/logs \
+        /repair/root/agent-workspaces/kilocode/workspaces \
+        /repair/root/vibestral \
         /repair/root/vibestral/state \
+        /repair/root/hermes \
         /repair/root/hermes/state \
         /repair/root/secrets/ssh \
         /repair/root/secrets/runtime/git-forge
@@ -183,6 +201,7 @@ main() {
     claude
     codex
     opencode
+    kilocode
     vibestral
     hermes
   )
@@ -190,6 +209,7 @@ main() {
     "${AGENTIC_ROOT}/claude"
     "${AGENTIC_ROOT}/codex"
     "${AGENTIC_ROOT}/opencode"
+    "${AGENTIC_ROOT}/kilocode"
     "${AGENTIC_ROOT}/vibestral"
     "${AGENTIC_ROOT}/hermes"
     "${AGENTIC_ROOT}/shared-ro"
@@ -204,6 +224,9 @@ main() {
     "${AGENTIC_ROOT}/opencode/state"
     "${AGENTIC_ROOT}/opencode/state/home"
     "${AGENTIC_ROOT}/opencode/logs"
+    "${AGENTIC_ROOT}/kilocode/state"
+    "${AGENTIC_ROOT}/kilocode/state/home"
+    "${AGENTIC_ROOT}/kilocode/logs"
     "${AGENTIC_ROOT}/vibestral/state"
     "${AGENTIC_ROOT}/vibestral/state/home"
     "${AGENTIC_ROOT}/vibestral/logs"
@@ -214,6 +237,7 @@ main() {
     "${AGENTIC_CLAUDE_WORKSPACES_DIR}"
     "${AGENTIC_CODEX_WORKSPACES_DIR}"
     "${AGENTIC_OPENCODE_WORKSPACES_DIR}"
+    "${AGENTIC_KILOCODE_WORKSPACES_DIR}"
     "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}"
     "${AGENTIC_HERMES_WORKSPACES_DIR}"
     "${AGENTIC_ROOT}/shared-rw"
@@ -238,6 +262,7 @@ main() {
   seed_workspace_if_missing "${AGENTIC_CLAUDE_WORKSPACES_DIR}"
   seed_workspace_if_missing "${AGENTIC_CODEX_WORKSPACES_DIR}"
   seed_workspace_if_missing "${AGENTIC_OPENCODE_WORKSPACES_DIR}"
+  seed_workspace_if_missing "${AGENTIC_KILOCODE_WORKSPACES_DIR}"
   seed_workspace_if_missing "${AGENTIC_VIBESTRAL_WORKSPACES_DIR}"
   seed_workspace_if_missing "${AGENTIC_HERMES_WORKSPACES_DIR}"
 

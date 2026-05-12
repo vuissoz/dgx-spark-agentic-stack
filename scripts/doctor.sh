@@ -2015,10 +2015,17 @@ for service in agentic-claude agentic-codex agentic-opencode agentic-kilocode ag
   fi
   if [[ "${service}" == "agentic-kilocode" ]]; then
     if ! timeout 15 docker exec "${cid}" sh -lc '
-      test -f /state/home/.config/kilo/opencode.json &&
-      grep -q "\"\\$schema\": \"https://app.kilo.ai/config.json\"" /state/home/.config/kilo/opencode.json &&
-      grep -q "\"model\": \"ollama/" /state/home/.config/kilo/opencode.json &&
-      grep -q "\"baseURL\": \"http://ollama-gate:11435/v1\"" /state/home/.config/kilo/opencode.json
+      python3 - <<'"'"'PY'"'"'
+import json
+from pathlib import Path
+
+payload = json.loads(Path("/state/home/.config/kilo/opencode.json").read_text(encoding="utf-8"))
+assert payload.get("$schema") == "https://app.kilo.ai/config.json"
+assert str(payload.get("model", "")).startswith("ollama/")
+provider = (payload.get("provider") or {}).get("ollama") or {}
+options = provider.get("options") or {}
+assert options.get("baseURL") == "http://ollama-gate:11435/v1"
+PY
     '; then
       doctor_fail "agent '${service}' Kilocode config must be reconciled to ollama-gate"
     fi

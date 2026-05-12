@@ -80,9 +80,16 @@ timeout 20 docker exec "${kilocode_cid}" sh -lc "test -d '/workspace/${kilocode_
 timeout 20 docker exec "${kilocode_cid}" sh -lc 'command -v kilo >/dev/null' \
   || fail "agent kilocode runtime is missing kilo CLI"
 timeout 20 docker exec "${kilocode_cid}" sh -lc '
-  test -f /state/home/.config/kilo/opencode.json &&
-  grep -q "\"\\$schema\": \"https://app.kilo.ai/config.json\"" /state/home/.config/kilo/opencode.json &&
-  grep -q "\"baseURL\": \"http://ollama-gate:11435/v1\"" /state/home/.config/kilo/opencode.json
+  python3 - <<'"'"'PY'"'"'
+import json
+from pathlib import Path
+
+payload = json.loads(Path("/state/home/.config/kilo/opencode.json").read_text(encoding="utf-8"))
+assert payload.get("$schema") == "https://app.kilo.ai/config.json"
+provider = (payload.get("provider") or {}).get("ollama") or {}
+options = provider.get("options") or {}
+assert options.get("baseURL") == "http://ollama-gate:11435/v1"
+PY
 ' || fail "agent kilocode runtime must have managed Kilo config routed to ollama-gate"
 kilocode_path="$(timeout 20 docker exec "${kilocode_cid}" tmux display-message -p -t kilocode '#{pane_current_path}')"
 [[ "${kilocode_path}" == "/workspace/${kilocode_project}" ]] \
