@@ -56,7 +56,7 @@ if [[ "${EUID}" -eq 0 ]]; then
 fi
 
 telegram_bot_token="123456:k11-telegram"
-"${agent_bin}" openclaw init >/tmp/agent-k11-init.out \
+"${agent_bin}" openclaw init "${project_name}" >/tmp/agent-k11-init.out \
   || fail "agent openclaw init must succeed on a first-time stack"
 
 grep -q '^OpenClaw managed init complete\.$' /tmp/agent-k11-init.out \
@@ -72,6 +72,12 @@ openclaw_cid="$(require_service_container openclaw)" || exit 1
 provider_bridge_cid="$(require_service_container openclaw-provider-bridge)" || exit 1
 wait_for_container_ready "${openclaw_cid}" 120 || fail "openclaw did not become ready after managed init"
 wait_for_container_ready "${provider_bridge_cid}" 120 || fail "openclaw-provider-bridge did not become ready after managed init"
+
+if timeout 10 docker exec "${openclaw_cid}" sh -lc 'openclaw gateway run' >/tmp/agent-k11-gateway-run.out 2>&1; then
+  fail "manual openclaw gateway run must be blocked in the operator shell by default"
+fi
+grep -q "stack-managed OpenClaw blocks manual 'openclaw gateway run'" /tmp/agent-k11-gateway-run.out \
+  || fail "manual gateway block must explain how to use the managed service"
 
 [[ -d "${workspace_host_dir}" ]] || fail "managed init must create the host workspace directory"
 [[ "$(tr -d '\r\n' <"${agentic_root}/secrets/runtime/telegram.bot_token")" == "${telegram_bot_token}" ]] \
@@ -129,7 +135,7 @@ cat >"${overlay_file}" <<'JSON'
 JSON
 chmod 0640 "${overlay_file}"
 
-"${agent_bin}" openclaw init >/tmp/agent-k11-repair.out \
+"${agent_bin}" openclaw init "${project_name}" >/tmp/agent-k11-repair.out \
   || fail "agent openclaw init must succeed as a repair path after workspace drift"
 
 grep -q "^workspace=${workspace_dir}$" /tmp/agent-k11-repair.out \

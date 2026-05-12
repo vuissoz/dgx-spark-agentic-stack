@@ -11,6 +11,41 @@ export_secret_env() {
   export "${env_name}=${value}"
 }
 
+help_requested() {
+  local arg
+  for arg in "$@"; do
+    case "${arg}" in
+      -h|--help|help)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+guard_stack_managed_gateway_run() {
+  if [[ "${1:-}" != "gateway" || "${2:-}" != "run" ]]; then
+    return 0
+  fi
+
+  shift 2
+  if help_requested "$@"; then
+    return 0
+  fi
+
+  if [[ "${OPENCLAW_ALLOW_UPSTREAM_GATEWAY_RUN:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  cat >&2 <<'EOF'
+ERROR: stack-managed OpenClaw blocks manual 'openclaw gateway run' in operator shells.
+Use './agent up core' for the managed gateway service on 127.0.0.1:18789.
+If you intentionally need the upstream gateway for debugging, rerun with:
+  OPENCLAW_ALLOW_UPSTREAM_GATEWAY_RUN=1 openclaw gateway run ...
+EOF
+  exit 64
+}
+
 real_bin="$(cat /etc/agentic/openclaw-real-path 2>/dev/null || true)"
 [[ -n "${real_bin}" && -x "${real_bin}" ]] || {
   echo "ERROR: upstream openclaw binary is unavailable" >&2
@@ -31,6 +66,8 @@ export_secret_env DISCORD_BOT_TOKEN "${OPENCLAW_DISCORD_BOT_TOKEN_FILE:-/run/sec
 export_secret_env SLACK_BOT_TOKEN "${OPENCLAW_SLACK_BOT_TOKEN_FILE:-/run/secrets/slack.bot_token}"
 export_secret_env SLACK_APP_TOKEN "${OPENCLAW_SLACK_APP_TOKEN_FILE:-/run/secrets/slack.app_token}"
 export_secret_env SLACK_SIGNING_SECRET "${OPENCLAW_SLACK_SIGNING_SECRET_FILE:-/run/secrets/slack.signing_secret}"
+
+guard_stack_managed_gateway_run "$@"
 
 python3 "${layer_helper}" materialize \
   --immutable-file "${immutable_file}" \

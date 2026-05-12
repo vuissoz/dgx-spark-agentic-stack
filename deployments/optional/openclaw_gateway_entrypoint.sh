@@ -23,6 +23,7 @@ fi
 
 export OPENCLAW_GATEWAY_TOKEN="${gateway_token}"
 export OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT=0
+export OPENCLAW_ALLOW_UPSTREAM_GATEWAY_RUN=1
 gateway_pid=""
 proxy_pid=""
 

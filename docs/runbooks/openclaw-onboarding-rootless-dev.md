@@ -356,7 +356,13 @@ Do not use this for normal stack operation:
 openclaw gateway run
 ```
 
-That command starts a second unmanaged upstream gateway inside the operator shell. It does not represent the stack-managed `openclaw-gateway` service and can fall back to upstream defaults such as `anthropic/claude-opus-4-6`, which is why you can see misleading "No API key found for provider anthropic" errors there.
+The stack wrapper now blocks that command by default in operator shells. This avoids starting a second unmanaged upstream gateway that can fall back to upstream defaults such as `anthropic/claude-opus-4-6`, which is why you can otherwise see misleading "No API key found for provider anthropic" errors there.
+
+If you intentionally need the raw upstream gateway for debugging, opt in explicitly:
+
+```bash
+OPENCLAW_ALLOW_UPSTREAM_GATEWAY_RUN=1 openclaw gateway run ...
+```
 
 ## Step 4c: Manual Onboard Wizard Choices (This Stack)
 
