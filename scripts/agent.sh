@@ -1325,6 +1325,11 @@ cmd_profile() {
   done < <(agentic_runtime_schema_iter_role profile)
 }
 
+docker_compose_partial() {
+  require_cmd docker
+  COMPOSE_IGNORE_ORPHANS=true docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "$@"
+}
+
 run_compose_on_targets() {
   local action="$1"
   local target_arg="$2"
@@ -1346,8 +1351,7 @@ run_compose_on_targets() {
     profile_args+=("--profile" "optional")
   fi
 
-  require_cmd docker
-  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" "${profile_args[@]}" "${compose_args[@]}" "$action" "$@"
+  docker_compose_partial "${profile_args[@]}" "${compose_args[@]}" "$action" "$@"
 }
 
 inspect_network_compose_state() {
@@ -1938,8 +1942,7 @@ cmd_start_target() {
     pi-mono|goose) ensure_optional_runtime ;;
   esac
 
-  require_cmd docker
-  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" up -d --no-deps "${services_to_start[@]}"
+  docker_compose_partial -f "${compose_file}" up -d --no-deps "${services_to_start[@]}"
   if [[ "${target}" == "forgejo" || "${target}" == "ui" ]]; then
     run_git_forge_bootstrap
   fi
@@ -3389,8 +3392,7 @@ cmd_trtllm_start() {
   compose_file="$(stack_to_compose_file core)"
   [[ -f "${compose_file}" ]] || die "Compose file not found for core stack: ${compose_file}"
 
-  require_cmd docker
-  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${compose_file}" up -d trtllm
+  docker_compose_partial -f "${compose_file}" up -d trtllm
   wait_for_service_ready "trtllm" 120 || die "trtllm did not become ready after start"
   cmd_trtllm_status
 }
@@ -3462,8 +3464,7 @@ cmd_ollama_models() {
       core_compose_file="$(stack_to_compose_file core)"
       [[ -f "${core_compose_file}" ]] || die "Compose file not found for core stack: ${core_compose_file}"
 
-      require_cmd docker
-      docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${core_compose_file}" up -d --force-recreate ollama
+      docker_compose_partial -f "${core_compose_file}" up -d --force-recreate ollama
       printf 'ollama models mount mode updated to %s\n' "${action}"
       ;;
     *)
@@ -4934,8 +4935,7 @@ case "$cmd" in
         build_optional_module_images "${optional_compose_file}" "${optional_modules[@]}"
       fi
 
-      require_cmd docker
-      docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+      docker_compose_partial \
         "${optional_profiles[@]}" \
         -f "${optional_compose_file}" up -d
     else
@@ -4988,8 +4988,7 @@ case "$cmd" in
         down_rag_compose_with_profiles
       fi
 
-      require_cmd docker
-      docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+      docker_compose_partial \
         --profile optional \
         --profile optional-mcp \
         --profile optional-pi-mono \
