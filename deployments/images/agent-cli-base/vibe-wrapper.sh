@@ -6,6 +6,18 @@ if [[ -f /etc/agentic/vibe-real-path ]]; then
   real_bin="$(cat /etc/agentic/vibe-real-path 2>/dev/null || true)"
 fi
 
+if [[ -z "${real_bin}" ]]; then
+  for candidate in \
+    /opt/agentic/install-home/.local/bin/vibe \
+    /root/.local/bin/vibe
+  do
+    if [[ -x "${candidate}" ]]; then
+      real_bin="${candidate}"
+      break
+    fi
+  done
+fi
+
 if [[ -n "${real_bin}" && -x "${real_bin}" ]]; then
   exec "${real_bin}" "$@"
 fi

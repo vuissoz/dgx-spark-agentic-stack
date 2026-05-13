@@ -222,6 +222,37 @@ run_script_install() {
   return 1
 }
 
+install_vibe_cli() {
+  local managed_vibe_bin="${install_home}/.local/bin/vibe"
+  local managed_vibe_acp_bin="${install_home}/.local/bin/vibe-acp"
+
+  if run_script_install "${vibe_install_script}"; then
+    track_cli_after_install vibe \
+      "${managed_vibe_bin}" \
+      "/root/.local/bin/vibe" \
+      "${npm_prefix}/bin/vibe" \
+      || fail_or_warn "vibe install script completed but executable was not found"
+    return 0
+  fi
+
+  # The upstream installer exits non-zero when the managed install-home bin
+  # directory is off PATH, even if the CLI was installed successfully there.
+  if [[ -x "${managed_vibe_bin}" ]]; then
+    track_cli_after_install vibe \
+      "${managed_vibe_bin}" \
+      "/root/.local/bin/vibe" \
+      "${npm_prefix}/bin/vibe" \
+      || fail_or_warn "vibe executable exists after installer fallback but could not be recorded"
+    if [[ -x "${managed_vibe_acp_bin}" ]]; then
+      warn "vibe installer returned non-zero after installing successfully under ${install_home}/.local/bin"
+    fi
+    return 0
+  fi
+
+  record_cli_path vibe "" "missing"
+  fail_or_warn "unable to install vibe from ${vibe_install_script}"
+}
+
 export npm_config_prefix="${npm_prefix}"
 export PATH="${npm_prefix}/bin:${PATH}"
 
@@ -235,16 +266,7 @@ else
   record_cli_path pi "" "missing"
 fi
 
-if run_script_install "${vibe_install_script}"; then
-  track_cli_after_install vibe \
-    "${install_home}/.local/bin/vibe" \
-    "/root/.local/bin/vibe" \
-    "${npm_prefix}/bin/vibe" \
-    || fail_or_warn "vibe install script completed but executable was not found"
-else
-  record_cli_path vibe "" "missing"
-  fail_or_warn "unable to install vibe from ${vibe_install_script}"
-fi
+install_vibe_cli
 
 if run_script_install "${openhands_install_script}"; then
   track_cli_after_install openhands \

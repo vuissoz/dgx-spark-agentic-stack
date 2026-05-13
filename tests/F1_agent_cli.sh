@@ -105,6 +105,8 @@ timeout 20 docker exec "${vibestral_cid}" sh -lc "test -d '/workspace/${vibestra
   || fail "agent vibestral did not create project workspace /workspace/${vibestral_project}"
 timeout 20 docker exec "${vibestral_cid}" sh -lc 'command -v vibe >/dev/null' \
   || fail "agent vibestral runtime is missing vibe CLI"
+timeout 20 docker exec "${vibestral_cid}" sh -lc 'vibe --version | grep -Eq "^vibe[[:space:]][0-9]"' \
+  || fail "agent vibestral runtime exposes the shim fallback instead of the official vibe CLI"
 vibestral_path="$(timeout 20 docker exec "${vibestral_cid}" tmux display-message -p -t vibestral '#{pane_current_path}')"
 [[ "${vibestral_path}" == "/workspace/${vibestral_project}" ]] \
   || fail "agent vibestral tmux pane path mismatch (expected=/workspace/${vibestral_project}, actual=${vibestral_path})"
