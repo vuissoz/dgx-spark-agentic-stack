@@ -299,6 +299,16 @@ print(json.dumps({
 PY
 )"
 
+responses_text_stream_payload="$(python3 - <<PY
+import json
+print(json.dumps({
+    'model': '${default_model}',
+    'input': 'D8 responses text streaming compatibility check',
+    'stream': True,
+}))
+PY
+)"
+
 messages_tool_payload="$(python3 - <<PY
 import json
 print(json.dumps({
@@ -336,10 +346,11 @@ chat_stream_file="$(mktemp)"
 resp_tool_file="$(mktemp)"
 resp_tool_codex_schema_file="$(mktemp)"
 resp_tool_stream_file="$(mktemp)"
+resp_text_stream_file="$(mktemp)"
 msg_tool_file="$(mktemp)"
 resp_roundtrip_file="$(mktemp)"
 msg_roundtrip_file="$(mktemp)"
-trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${chat_stream_file}" "${resp_tool_file}" "${resp_tool_codex_schema_file}" "${resp_tool_stream_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
+trap 'rm -f "${resp_file}" "${msg_file}" "${stream_file}" "${chat_stream_file}" "${resp_tool_file}" "${resp_tool_codex_schema_file}" "${resp_tool_stream_file}" "${resp_text_stream_file}" "${msg_tool_file}" "${resp_roundtrip_file}" "${msg_roundtrip_file}"' EXIT
 
 responses_resp="$(call_post "d8-v1-responses-$$" "http://ollama-gate:11435/v1/responses" "${responses_payload}")"
 responses_code="$(extract_code "${responses_resp}")"
@@ -436,6 +447,55 @@ printf '%s\n' "${responses_tool_codex_schema_body}" >"${resp_tool_codex_schema_f
 assert_responses_tool_call_payload "${resp_tool_codex_schema_file}" "exec_command" \
   || fail "/v1/responses codex-style tool schema payload is invalid"
 ok "gate /v1/responses accepts codex-style top-level function tools schema"
+
+responses_text_stream_resp="$(call_post "d8-v1-responses-text-stream-$$" "http://ollama-gate:11435/v1/responses" "${responses_text_stream_payload}")"
+responses_text_stream_code="$(extract_code "${responses_text_stream_resp}")"
+responses_text_stream_body="$(extract_body "${responses_text_stream_resp}")"
+printf '%s\n' "${responses_text_stream_body}" >"${resp_text_stream_file}"
+[[ "${responses_text_stream_code}" == "200" ]] || {
+  cat "${resp_text_stream_file}" >&2
+  fail "/v1/responses text stream returned status ${responses_text_stream_code}"
+}
+grep -q 'event: response.output_text.done' "${resp_text_stream_file}" || fail "/v1/responses text stream missing response.output_text.done event"
+grep -q 'event: response.completed' "${resp_text_stream_file}" || fail "/v1/responses text stream missing response.completed event"
+if grep -q 'chat.completion.chunk' "${resp_text_stream_file}"; then
+  fail "/v1/responses text stream leaked raw chat.completion.chunk passthrough frames"
+fi
+python3 - "${resp_text_stream_file}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+output_delta_seen = False
+completed_seen = False
+done_seen = False
+with open(path, 'r', encoding='utf-8') as fh:
+    for line in fh:
+        stripped = line.strip()
+        if stripped == 'data: [DONE]':
+            done_seen = True
+            continue
+        if not stripped.startswith('data: '):
+            continue
+        payload = stripped[len('data: '):]
+        if not payload:
+            continue
+        obj = json.loads(payload)
+        event_type = obj.get('type')
+        if event_type == 'response.output_text.delta':
+            delta = obj.get('delta')
+            if isinstance(delta, str) and delta.strip():
+                output_delta_seen = True
+        elif event_type == 'response.completed':
+            completed_seen = True
+            response = obj.get('response') or {}
+            assert response.get('object') == 'response', obj
+            assert isinstance(response.get('output_text'), str), obj
+assert output_delta_seen, 'response.output_text.delta event not found'
+assert completed_seen, 'response.completed event not found'
+assert done_seen, '[DONE] marker not found'
+PY
+ok "gate /v1/responses text streaming emits Responses SSE contract"
 
 responses_tool_stream_resp="$(call_post "d8-v1-responses-tool-stream-$$" "http://ollama-gate:11435/v1/responses" "${responses_tool_stream_payload}")"
 responses_tool_stream_code="$(extract_code "${responses_tool_stream_resp}")"

@@ -3066,7 +3066,7 @@ async def handle_chat_completion_endpoint(
                         "total_tokens": external_tokens_used,
                     }
         else:
-            if stream and protocol == "ollama":
+            if stream and protocol == "ollama" and endpoint == "/v1/chat/completions":
                 try:
                     upstream_status, upstream_stream, upstream_text = await backend_chat_completion_stream(
                         backend,
