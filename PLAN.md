@@ -317,11 +317,19 @@ Suivi Beads : `dgx-spark-agentic-stack-kvs`
     - demander/valider `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`,
     - générer ou recueillir hors git le secret admin initial et les credentials des comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`,
     - préparer la configuration Git initiale par agent (au minimum remote base URL, helper de credentials ou fichier équivalent hors git, `user.name`, `user.email`) pour qu’un premier `git clone`/checkout fonctionne dès la première connexion shell,
-    - créer de manière idempotente, dès la première initialisation complète de la stack, un dépôt/projet partagé de référence pour le test E2E (ex: `eight-queens-agent-e2e`) dans la forge interne, contenant :
-      - la formulation du problème des 8 reines dans le dépôt lui-même ;
-      - la consigne de sortie attendue et les contraintes de vérification ;
-      - la commande de test à exécuter et les critères binaires de succès/échec ;
-      - un état initial volontairement non conforme ou incomplet que l’agent doit corriger en Python ;
+    - créer de manière idempotente, dès la première initialisation complète de la stack, des dépôts/projets partagés de référence pour les tests E2E dans la forge interne :
+      - `eight-queens-agent-e2e` reste le **canari rapide** :
+        - la formulation du problème des 8 reines dans le dépôt lui-même ;
+        - la consigne de sortie attendue et les contraintes de vérification ;
+        - la commande de test à exécuter et les critères binaires de succès/échec ;
+        - un état initial volontairement non conforme ou incomplet que l’agent doit corriger en Python ;
+      - `agent-stack-full-e2e` (nom de travail, peut être ajusté) devient le **test complet informatif** :
+        - petit dépôt applicatif réaliste, volontairement cassé mais borné, couvrant plusieurs fichiers (`src/`, `tests/`, éventuellement `README.md` ou config) ;
+        - au moins un test initialement rouge, plus un contrat de qualité minimal (`pytest` obligatoire, lint optionnel si présent) ;
+        - correctif attendu de type “debug + compréhension du repo”, pas simple génération algorithmique isolée ;
+        - scénario imposant lecture du dépôt, identification de la panne, correction du code, mise à jour éventuelle du test/doc, puis exécution complète des vérifications ;
+        - artefacts de vérification permettant de classer les échecs par catégorie (`prepare`, `invoke`, `test`, `publish`, `artifact`) plutôt qu’en simple succès/échec ;
+        - charge suffisamment petite pour rester exécutable sur toute la matrice agents, mais assez riche pour exposer les écarts de compréhension, navigation multi-fichiers et discipline Git.
     - protéger la branche par défaut (`main`) contre les pushes directs agents et créer/préparer une branche dédiée par agent (ex: `agent/<tool>` pour `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`) ;
     - documenter et injecter dans la consigne standard des agents l’interdiction de pousser sur `main` : chaque agent ne doit pousser que sur sa propre branche dédiée,
     - récapituler les chemins secrets et la commande d’activation `./agent up optional`.
@@ -1285,12 +1293,22 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 - chaque conteneur agent concerné doit aussi recevoir une préconfiguration Git stack-managed (identity + auth) pointant vers la forge interne, de façon à permettre un premier `git clone`/checkout direct dès la première session sans setup manuel dans le shell utilisateur.
 - transport par défaut : HTTP interne sur le réseau Docker privé + fichiers mot de passe dédiés ; SSH côté forge activé pour permettre aux agents de pousser via SSH. Les clés SSH des agents doivent être préconfigurées et montées dans les conteneurs respectifs pour permettre une authentification SSH sécurisée.
 - prévoir un bootstrap minimal d’organisation/projet partagé pour permettre à plusieurs agents de collaborer sur les mêmes dépôts sans dépendre d’un fournisseur externe.
-- à la première initialisation complète de la stack avec `git-forge` actif, créer de façon idempotente un projet/dépôt partagé de référence pour le test d’intégration agentique (problème des 8 reines) :
-  - le dépôt doit porter l’énoncé du problème, la structure Python cible, la commande de test et le contrat de vérification de sortie ;
-  - les tests du dépôt doivent vérifier au minimum la correction fonctionnelle attendue et produire un résultat exploitable automatiquement par l’orchestrateur/doctor ;
-  - la branche par défaut `main` doit être protégée contre les pushes directs des comptes agents ;
-  - une branche dédiée par agent doit être créée ou réservée (`agent/codex`, `agent/openclaw`, `agent/claude`, `agent/opencode`, `agent/openhands`, `agent/pi-mono`, `agent/goose`, `agent/vibestral`) ;
-  - le scénario E2E doit imposer à chaque agent de ne pousser que sur sa branche dédiée et le doctor doit signaler explicitement tout push agent sur `main` comme échec de conformité.
+- à la première initialisation complète de la stack avec `git-forge` actif, créer de façon idempotente deux dépôts/projets partagés de référence pour le test d’intégration agentique :
+  - dépôt 1 : `eight-queens-agent-e2e`
+    - canari rapide conservé pour comparabilité historique ;
+    - le dépôt doit porter l’énoncé du problème, la structure Python cible, la commande de test et le contrat de vérification de sortie ;
+    - les tests du dépôt doivent vérifier au minimum la correction fonctionnelle attendue et produire un résultat exploitable automatiquement par l’orchestrateur/doctor ;
+  - dépôt 2 : `agent-stack-full-e2e` (nom de travail, peut être ajusté)
+    - dépôt plus informatif qu’un puzzle isolé, ciblé sur un vrai scénario de maintenance de repo ;
+    - état initial : au moins un test rouge, une cause dans le code applicatif, et au moins une attente de cohérence multi-fichiers ;
+    - structure minimale attendue : `src/`, `tests/`, consigne de tâche dans le dépôt, commande unique de validation, et éventuelle doc/config à réaligner ;
+    - l’agent doit réussir un flux complet : lecture du repo, diagnostic, modification du bon fichier, exécution des tests, commit propre, push sur sa branche dédiée ;
+    - l’orchestrateur doit pouvoir distinguer explicitement les échecs d’invocation, de compréhension de tâche, de correction fonctionnelle, de validation et de publication Git ;
+    - le dépôt doit rester assez petit pour tourner sur toute la matrice agents avec budget de temps borné.
+  - pour les deux dépôts :
+    - la branche par défaut `main` doit être protégée contre les pushes directs des comptes agents ;
+    - une branche dédiée par agent doit être créée ou réservée (`agent/codex`, `agent/openclaw`, `agent/claude`, `agent/opencode`, `agent/openhands`, `agent/pi-mono`, `agent/goose`, `agent/vibestral`, `agent/kilocode`, `agent/hermes`) ;
+    - le scénario E2E doit imposer à chaque agent de ne pousser que sur sa branche dédiée et le doctor doit signaler explicitement tout push agent sur `main` comme échec de conformité.
 - onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, créer/recueillir séparément les secrets runtime nécessaires, et annoncer que la configuration Git des agents sera préchargée pour un premier checkout direct. La configuration SSH pour les agents doit être préparée lors du premier démarrage de la stack (`first-up`), incluant la génération et la distribution des clés SSH pour chaque agent.
 - `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur, la cohérence de la liste des comptes agents attendus, et la configuration SSH des agents pour permettre les pushes via SSH.
 - **Fix de permissions rootless** : Le script `deployments/ui/init_runtime.sh` inclut désormais `prepare_forgejo_volumes()` qui corrige automatiquement les permissions des volumes Forgejo pour le conteneur rootless (queues directory en 775, suppression des locks obsolètes, config directory accessible). Voir ADR-0098.
@@ -1303,10 +1321,11 @@ Suivi Beads : `dgx-spark-agentic-stack-zu7n`
 - volumes DB et dépôts pointent vers `${AGENTIC_ROOT}/optional/git/...`.
 - compte `system-manager` existe avec rôle admin/manager.
 - comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose` existent.
-- le dépôt/projet partagé `eight-queens-agent-e2e` existe après première initialisation et contient bien l’énoncé, la commande de test et le contrat de vérification de sortie.
+- les dépôts/projets partagés `eight-queens-agent-e2e` et `agent-stack-full-e2e` existent après première initialisation ; le premier fournit le canari rapide, le second le scénario complet informatif, avec pour chacun l’énoncé, la commande de test et le contrat de vérification de sortie.
 - `main` est protégée contre les pushes directs des comptes agents ; les branches `agent/<tool>` attendues existent ou sont réservées.
 - depuis au moins deux conteneurs agents distincts : première session shell -> `git clone`/checkout d’un dépôt de la forge sans saisie de credential manuelle fonctionne ; puis `git commit`, `git push`, `git fetch`, `git pull` sur un même dépôt partagé fonctionnent.
-- le test E2E de référence échoue explicitement si un agent pousse sur `main` au lieu de sa branche dédiée.
+- les tests E2E de référence échouent explicitement si un agent pousse sur `main` au lieu de sa branche dédiée.
+- le scénario `agent-stack-full-e2e` échoue explicitement si l’agent ne corrige qu’un symptôme sans remettre au vert la commande de validation complète du dépôt.
 - backup/restore ou rollback restaure un dépôt test et la métadonnée DB correspondante.
 
 ---
