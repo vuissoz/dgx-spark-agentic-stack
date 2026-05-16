@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -184,6 +185,39 @@ def docker_exec(container_id: str, shell_command: str, *, timeout_seconds: int) 
     )
 
 
+def host_workspace_root_for_mode(mode: str) -> pathlib.Path | None:
+    if mode == "openhands":
+        return AGENTIC_ROOT / "openhands" / "workspaces"
+    return None
+
+
+def cleanup_host_workspace_if_managed(workspace: str, *, mode: str) -> None:
+    workspace_root = host_workspace_root_for_mode(mode)
+    if workspace_root is None:
+        return
+
+    workspace_path = pathlib.PurePosixPath(workspace)
+    workspace_name = workspace_path.name.strip()
+    if not workspace_name:
+        fail(f"invalid workspace path for host cleanup: {workspace}")
+    if workspace_path.parent.as_posix() != "/workspace":
+        fail(f"refusing host cleanup outside /workspace namespace: {workspace}")
+
+    host_path = (workspace_root / workspace_name).resolve()
+    try:
+        managed_root = workspace_root.resolve()
+    except FileNotFoundError:
+        managed_root = workspace_root
+
+    if host_path != managed_root and managed_root not in host_path.parents:
+        fail(f"refusing host cleanup outside managed workspace root: {host_path}")
+
+    if host_path.is_symlink() or host_path.is_file():
+        host_path.unlink()
+    elif host_path.is_dir():
+        shutil.rmtree(host_path)
+
+
 def sanitize_name(value: str) -> str:
     cleaned = []
     for char in value:
@@ -283,11 +317,13 @@ def warm_default_model(artifact_dir: pathlib.Path, *, timeout_seconds: int = OLL
 def prepare_workspace(
     container_id: str,
     *,
+    mode: str,
     clone_url: str,
     workspace: str,
     branch: str,
     timeout_seconds: int,
 ) -> subprocess.CompletedProcess[str]:
+    cleanup_host_workspace_if_managed(workspace, mode=mode)
     command = "set -eu\n" + "\n".join(
         [
             f"rm -rf {shlex.quote(workspace)}",
@@ -1054,6 +1090,7 @@ def run_agent_once(
 
     prepare = prepare_workspace(
         container_id,
+        mode=mode,
         clone_url=clone_url,
         workspace=workspace,
         branch=branch,

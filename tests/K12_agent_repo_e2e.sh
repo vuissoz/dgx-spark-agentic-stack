@@ -231,6 +231,70 @@ assert "allowlisted" in detail
 assert (runtime_root / "fail" / "openclaw-allowlist.stderr.log").is_file()
 PY
 
+python3 - "${REPO_ROOT}" "${runtime_root}" <<'PY' || fail "agent_repo_e2e managed host workspace cleanup failed"
+from __future__ import annotations
+
+import importlib.util
+import pathlib
+import subprocess
+import sys
+
+repo_root = pathlib.Path(sys.argv[1])
+runtime_root = pathlib.Path(sys.argv[2]) / "workspace-cleanup"
+module_path = repo_root / "deployments" / "optional" / "agent_repo_e2e.py"
+
+runtime_root.mkdir(parents=True, exist_ok=True)
+openhands_root = runtime_root / "openhands" / "workspaces"
+stale_workspace = openhands_root / "eight-queens-agent-e2e-openhands"
+stale_workspace.mkdir(parents=True, exist_ok=True)
+(stale_workspace / "README.md").write_text("stale\n", encoding="utf-8")
+
+spec = importlib.util.spec_from_file_location("agent_repo_e2e", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+
+module.AGENTIC_ROOT = runtime_root
+captured: dict[str, object] = {}
+
+def fake_docker_exec(container_id: str, shell_command: str, *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+    captured["container_id"] = container_id
+    captured["shell_command"] = shell_command
+    captured["timeout_seconds"] = timeout_seconds
+    return subprocess.CompletedProcess(args=[], returncode=0, stdout="prepared\n", stderr="")
+
+module.docker_exec = fake_docker_exec
+proc = module.prepare_workspace(
+    "cid-openhands",
+    mode="openhands",
+    clone_url="http://optional-forgejo:3000/agentic/eight-queens-agent-e2e.git",
+    workspace="/workspace/eight-queens-agent-e2e-openhands",
+    branch="agent/openhands",
+    timeout_seconds=45,
+)
+
+assert proc.returncode == 0
+assert not stale_workspace.exists()
+assert captured["container_id"] == "cid-openhands"
+assert "git clone" in str(captured["shell_command"])
+
+other_root = runtime_root / "codex" / "workspaces"
+other_workspace = other_root / "eight-queens-agent-e2e-codex"
+other_workspace.mkdir(parents=True, exist_ok=True)
+(other_workspace / "README.md").write_text("keep\n", encoding="utf-8")
+proc = module.prepare_workspace(
+    "cid-codex",
+    mode="codex",
+    clone_url="http://optional-forgejo:3000/agentic/eight-queens-agent-e2e.git",
+    workspace="/workspace/eight-queens-agent-e2e-codex",
+    branch="agent/codex",
+    timeout_seconds=45,
+)
+
+assert proc.returncode == 0
+assert other_workspace.exists()
+PY
+
 python3 - "${REPO_ROOT}" <<'PY' || fail "repo.eight_queens.solve must use canonical Forgejo SSH path"
 from pathlib import Path
 import re
