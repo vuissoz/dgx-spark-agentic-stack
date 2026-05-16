@@ -40,6 +40,12 @@ gate_cid="$(require_service_container ollama-gate)" || exit 1
 wait_for_container_ready "${openhands_cid}" 180 || fail "openhands is not ready"
 wait_for_container_ready "${gate_cid}" 90 || fail "ollama-gate is not ready"
 
+expected_user="${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+configured_user="$(docker inspect --format '{{.Config.User}}' "${openhands_cid}")"
+[[ "${configured_user}" == "${expected_user}" ]] \
+  || fail "openhands container user drifted from runtime mapping (got ${configured_user}, expected ${expected_user})"
+ok "openhands container user matches runtime uid/gid"
+
 assert_no_public_bind "${openhands_port}" || fail "openhands host bind is not loopback-only"
 ok "openhands host bind is loopback-only"
 

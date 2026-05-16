@@ -141,6 +141,24 @@ assert paths.get("openhands") == "/.openhands/home/.ssh"
 assert paths.get("comfyui") == "/comfyui/user/.ssh"
 PY
 
+AGENT_RUNTIME_UID="${AGENT_RUNTIME_UID:-1000}" python3 - "${REPO_ROOT}/deployments/optional/git_forge_bootstrap.py" <<'PY' \
+  || fail "git-forge bootstrap must derive OpenHands SSH ACL readers from AGENT_RUNTIME_UID"
+import importlib.util
+import os
+import pathlib
+import sys
+
+module_path = pathlib.Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("git_forge_bootstrap", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+
+expected_uid = int(os.environ["AGENT_RUNTIME_UID"])
+openhands = next(account for account in module.MANAGED_ACCOUNTS if account["username"] == "openhands")
+assert tuple(openhands.get("ssh_reader_uids", ())) == (expected_uid,)
+PY
+
 for mapping in \
   "agentic-claude|claude|/state/home/.ssh" \
   "agentic-codex|codex|/state/home/.ssh" \

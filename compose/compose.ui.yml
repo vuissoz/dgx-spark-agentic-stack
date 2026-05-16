@@ -195,7 +195,7 @@ services:
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_OPENHANDS_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_OPENHANDS_MEM:-2g}
-    user: "42420:42420"
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     group_add:
       - "${AGENT_RUNTIME_GID:-1000}"
     entrypoint:
