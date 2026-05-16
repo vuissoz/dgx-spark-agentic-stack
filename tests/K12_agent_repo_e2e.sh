@@ -67,10 +67,16 @@ cat >"${bootstrap_dir}/git-forge-bootstrap.json" <<'JSON'
 JSON
 
 summary_json="${runtime_root}/summary.json"
+summary_stderr="${runtime_root}/summary.stderr.log"
 AGENTIC_ROOT="${runtime_root}" AGENTIC_COMPOSE_PROJECT="agentic-dev" \
   python3 "${REPO_ROOT}/deployments/optional/agent_repo_e2e.py" \
-    --dry-run >"${summary_json}" \
+    --dry-run >"${summary_json}" 2>"${summary_stderr}" \
   || fail "agent_repo_e2e dry-run planner failed"
+
+grep -q "selected agents:" "${summary_stderr}" \
+  || fail "agent_repo_e2e must emit progress logs to stderr during dry-run"
+grep -q "building dry-run attempt plans" "${summary_stderr}" \
+  || fail "agent_repo_e2e stderr must mention dry-run planning"
 
 python3 - "${summary_json}" <<'PY' || fail "agent_repo_e2e dry-run summary schema is invalid"
 import json
@@ -86,6 +92,10 @@ assert isinstance(doctor, dict)
 assert isinstance(preflight, dict)
 assert doctor.get("overall") == "partial"
 assert preflight.get("status") == "skipped"
+allowlist = preflight.get("openclaw_repo_solver_allowlist")
+assert isinstance(allowlist, dict)
+assert allowlist.get("status") == "skipped"
+assert allowlist.get("reason") == "dry-run"
 assert preflight.get("reset_agent_branches") is False
 assert preflight.get("attempts_requested") == 5
 assert preflight.get("validation_policy") == "at_least_one_success"
@@ -149,10 +159,14 @@ for agent, branch in expected.items():
 PY
 
 summary_reset_json="${runtime_root}/summary-reset.json"
+summary_reset_stderr="${runtime_root}/summary-reset.stderr.log"
 AGENTIC_ROOT="${runtime_root}" AGENTIC_COMPOSE_PROJECT="agentic-dev" \
   python3 "${REPO_ROOT}/deployments/optional/agent_repo_e2e.py" \
-    --dry-run --reset-agent-branches >"${summary_reset_json}" \
+    --dry-run --reset-agent-branches >"${summary_reset_json}" 2>"${summary_reset_stderr}" \
   || fail "agent_repo_e2e dry-run planner with reset failed"
+
+grep -q "running branch reset preflight" "${summary_reset_stderr}" \
+  || fail "agent_repo_e2e stderr must mention branch reset preflight"
 
 python3 - "${summary_reset_json}" <<'PY' || fail "agent_repo_e2e reset dry-run summary schema is invalid"
 import json
@@ -173,6 +187,48 @@ branches = preflight.get("branches") or {}
 assert len(branches) == 10
 for entry in branches.values():
     assert entry["reset_applied"] is False
+PY
+
+python3 - "${REPO_ROOT}" "${runtime_root}" <<'PY' || fail "agent_repo_e2e openclaw allowlist preflight failed"
+from __future__ import annotations
+
+import importlib.util
+import pathlib
+import subprocess
+import sys
+
+repo_root = pathlib.Path(sys.argv[1])
+runtime_root = pathlib.Path(sys.argv[2]) / "allowlist-preflight"
+module_path = repo_root / "deployments" / "optional" / "agent_repo_e2e.py"
+
+runtime_root.mkdir(parents=True, exist_ok=True)
+spec = importlib.util.spec_from_file_location("agent_repo_e2e", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+
+module.docker_exec = lambda *_args, **_kwargs: subprocess.CompletedProcess(
+    args=[],
+    returncode=0,
+    stdout="allowlist_file=/config/tool_allowlist.txt\nrequired_tool=repo.eight_queens.solve\n",
+    stderr="",
+)
+ok, detail = module.verify_openclaw_repo_solver_allowlist("cid-ok", runtime_root / "ok")
+assert ok is True
+assert "allowlist contains repo.eight_queens.solve" in detail
+assert (runtime_root / "ok" / "openclaw-allowlist.stdout.log").is_file()
+
+module.docker_exec = lambda *_args, **_kwargs: subprocess.CompletedProcess(
+    args=[],
+    returncode=1,
+    stdout="",
+    stderr="",
+)
+ok, detail = module.verify_openclaw_repo_solver_allowlist("cid-fail", runtime_root / "fail")
+assert ok is False
+assert "repo.eight_queens.solve" in detail
+assert "allowlisted" in detail
+assert (runtime_root / "fail" / "openclaw-allowlist.stderr.log").is_file()
 PY
 
 python3 - "${REPO_ROOT}" "${runtime_root}" <<'PY' || fail "agent_repo_e2e branch reset integration failed"

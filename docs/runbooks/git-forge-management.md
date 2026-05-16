@@ -228,6 +228,11 @@ The runner stores:
 - `doctor.json` with consolidated failure classes, attempt totals, and
   missing-artifact checks.
 
+During live runs, the runner now streams progress to `stderr` with timestamps
+while keeping the machine-readable JSON summary on `stdout`. This makes
+`./agent repo-e2e` usable directly in a terminal without losing structured
+capture for automation.
+
 The runner prepares the checkout, but the agent instruction itself must perform:
 
 - `git pull --ff-only` on its reserved `agent/<tool>` branch,
@@ -240,6 +245,9 @@ Two adapters have stack-managed finalization around that contract:
 - OpenClaw executes the reviewed `repo.eight_queens.solve` sandbox tool through
   its live `/v1/tools/execute` API. The tool is scoped to this reference repo
   task and is not a general shell.
+- Before any live OpenClaw run, `repo-e2e` now verifies that
+  `repo.eight_queens.solve` is present in the effective OpenClaw tool allowlist
+  and aborts immediately if it is missing, instead of burning a full attempt.
 - Vibestral keeps the same prompt, then the runner applies a common publish
   guard after tests pass so runs that stop after editing still end with a clean
   committed branch.

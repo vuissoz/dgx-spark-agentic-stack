@@ -62,6 +62,11 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def log_progress(message: str) -> None:
+    timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    print(f"[repo-e2e {timestamp}] {message}", file=sys.stderr, flush=True)
+
+
 def write_json(path: pathlib.Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -867,6 +872,34 @@ def invoke_openclaw_repo_solver(
     return False, f"openclaw repo solver tool failed exit={proc.returncode}"
 
 
+def verify_openclaw_repo_solver_allowlist(
+    container_id: str,
+    artifact_dir: pathlib.Path,
+    *,
+    timeout_seconds: int = 20,
+) -> tuple[bool, str]:
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    command = "set -eu\n" + "\n".join(
+        [
+            'allowlist_file="${OPENCLAW_TOOL_ALLOWLIST_FILE:-/config/tool_allowlist.txt}"',
+            '[ -r "$allowlist_file" ]',
+            f'grep -F -x {shlex.quote(OPENCLAW_REPO_SOLVER_TOOL)} "$allowlist_file" >/dev/null',
+            'printf "allowlist_file=%s\\nrequired_tool=%s\\n" "$allowlist_file" '
+            f'{shlex.quote(OPENCLAW_REPO_SOLVER_TOOL)}',
+        ]
+    )
+    proc = docker_exec(container_id, command, timeout_seconds=timeout_seconds)
+    (artifact_dir / "openclaw-allowlist.stdout.log").write_text(proc.stdout, encoding="utf-8")
+    (artifact_dir / "openclaw-allowlist.stderr.log").write_text(proc.stderr, encoding="utf-8")
+    if proc.returncode == 0:
+        return True, f"openclaw repo solver allowlist contains {OPENCLAW_REPO_SOLVER_TOOL}"
+    return (
+        False,
+        "openclaw repo solver tool is not allowlisted; add "
+        f"'{OPENCLAW_REPO_SOLVER_TOOL}' to OPENCLAW_TOOL_ALLOWLIST_FILE before running repo-e2e",
+    )
+
+
 def classify_result(
     *,
     stage: str,
@@ -1254,6 +1287,43 @@ def build_final_doctor(results: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+def preflight_openclaw_repo_solver(
+    selected_agents: list[str],
+    artifact_root: pathlib.Path,
+    *,
+    dry_run: bool,
+) -> dict[str, object]:
+    preflight_dir = artifact_root / "_preflight"
+    preflight_dir.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, object] = {
+        "status": "skipped",
+        "tool": OPENCLAW_REPO_SOLVER_TOOL,
+        "checked": False,
+    }
+
+    if "openclaw" not in selected_agents:
+        payload["reason"] = "openclaw not selected"
+        return payload
+    if dry_run:
+        payload["reason"] = "dry-run"
+        return payload
+
+    container_id = service_container_id(str(AGENT_MATRIX["openclaw"]["service"]))
+    payload["checked"] = True
+    if not container_id:
+        payload["status"] = "warning"
+        payload["reason"] = "openclaw service not running; allowlist preflight skipped"
+        return payload
+
+    ok, detail = verify_openclaw_repo_solver_allowlist(container_id, preflight_dir)
+    payload["container_id"] = container_id
+    payload["detail"] = detail
+    payload["status"] = "verified" if ok else "failed"
+    if not ok:
+        fail(detail)
+    return payload
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Repository-driven multi-agent E2E runner")
     parser.add_argument("--agents", default=",".join(AGENT_MATRIX), help="Comma-separated agent list")
@@ -1277,6 +1347,7 @@ def main() -> None:
     args = parse_args()
     if args.attempts < 1:
         fail("--attempts must be >= 1")
+    log_progress("loading git-forge bootstrap state")
     state = load_bootstrap_state()
     repo_name = args.repo or str(state.get("reference_repository") or "")
     clone_url = args.clone_url or str(state.get("reference_clone_url_internal") or "")
@@ -1287,11 +1358,18 @@ def main() -> None:
     for agent_name in selected_agents:
         if agent_name not in AGENT_MATRIX:
             fail(f"unknown agent '{agent_name}'")
+    log_progress(
+        "selected agents: "
+        + ", ".join(selected_agents)
+        + f" | attempts={args.attempts} | repo={repo_name} | dry_run={'yes' if args.dry_run else 'no'}"
+    )
 
     timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     artifact_root = pathlib.Path(args.artifacts_dir) if args.artifacts_dir else DEFAULT_ARTIFACTS_ROOT / timestamp
     artifact_root.mkdir(parents=True, exist_ok=True)
+    log_progress(f"artifacts directory: {artifact_root}")
 
+    log_progress("running branch reset preflight")
     preflight = reset_agent_branches_if_requested(
         state=state,
         repo_name=repo_name,
@@ -1309,6 +1387,12 @@ def main() -> None:
         if args.reset_agent_branches and args.attempts > 1
         else ("before_run" if args.reset_agent_branches else "none")
     )
+    log_progress("checking openclaw repo solver allowlist preflight")
+    preflight["openclaw_repo_solver_allowlist"] = preflight_openclaw_repo_solver(
+        selected_agents,
+        artifact_root,
+        dry_run=args.dry_run,
+    )
     write_json(artifact_root / "_preflight" / "preflight.json", preflight)
 
     expected_heads = {
@@ -1319,6 +1403,7 @@ def main() -> None:
     per_agent_attempts: dict[str, list[dict[str, object]]] = {agent_name: [] for agent_name in selected_agents}
 
     if args.dry_run:
+        log_progress("building dry-run attempt plans")
         for attempt in range(1, args.attempts + 1):
             for agent_name in selected_agents:
                 config = AGENT_MATRIX[agent_name]
@@ -1357,10 +1442,12 @@ def main() -> None:
                 )
     else:
         for attempt in range(1, args.attempts + 1):
+            log_progress(f"starting attempt {attempt}/{args.attempts}")
             attempt_root = artifact_root / f"attempt-{attempt:02d}"
             attempt_root.mkdir(parents=True, exist_ok=True)
             round_expected_heads = expected_heads
             if attempt > 1 and args.reset_agent_branches:
+                log_progress(f"re-applying branch reset before attempt {attempt}")
                 round_preflight = reset_agent_branches_if_requested(
                     state=state,
                     repo_name=repo_name,
@@ -1375,6 +1462,7 @@ def main() -> None:
                     for agent_name in selected_agents
                 }
             for agent_name in selected_agents:
+                log_progress(f"attempt {attempt}/{args.attempts}: invoking {agent_name}")
                 attempt_result = run_agent_once(
                     agent_name,
                     clone_url=clone_url,
@@ -1389,6 +1477,11 @@ def main() -> None:
                 )
                 attempt_result["attempt"] = attempt
                 per_agent_attempts[agent_name].append(attempt_result)
+                log_progress(
+                    f"attempt {attempt}/{args.attempts}: {agent_name} -> "
+                    f"{attempt_result.get('status')} at {attempt_result.get('stage')} "
+                    f"({attempt_result.get('detail')})"
+                )
 
     results = [
         build_agent_result(
@@ -1402,6 +1495,11 @@ def main() -> None:
         for agent_name in selected_agents
     ]
     doctor = build_final_doctor(results)
+    log_progress(
+        "completed run with overall="
+        f"{doctor['overall']} and attempt totals="
+        f"{doctor['attempt_totals']['successes']}/{doctor['attempt_totals']['requested']} success"
+    )
 
     (artifact_root / "summary.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     (artifact_root / "doctor.json").write_text(json.dumps(doctor, indent=2) + "\n", encoding="utf-8")
