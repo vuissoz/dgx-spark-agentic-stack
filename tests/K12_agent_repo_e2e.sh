@@ -231,6 +231,21 @@ assert "allowlisted" in detail
 assert (runtime_root / "fail" / "openclaw-allowlist.stderr.log").is_file()
 PY
 
+python3 - "${REPO_ROOT}" <<'PY' || fail "repo.eight_queens.solve must use canonical Forgejo SSH path"
+from pathlib import Path
+import re
+import sys
+
+source = (Path(sys.argv[1]) / "deployments" / "optional" / "optional_service.py").read_text(encoding="utf-8")
+assert "openclaw-repo-e2e-askpass.sh" not in source
+assert "GIT_ASKPASS" not in source
+assert "git_remote_set_origin_ssh" in source
+assert "ssh://git@" in source
+assert "/state/cli/openclaw-home/.ssh" in source
+assert "UserKnownHostsFile=" in source
+assert "StrictHostKeyChecking=yes" in source
+PY
+
 python3 - "${REPO_ROOT}" "${runtime_root}" <<'PY' || fail "agent_repo_e2e branch reset integration failed"
 from __future__ import annotations
 

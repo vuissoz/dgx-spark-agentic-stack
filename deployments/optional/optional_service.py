@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.parse
 import urllib.error
 import urllib.request
 import uuid
@@ -96,6 +97,23 @@ def run_command(
             exc.stdout or "",
             exc.stderr or f"command timed out after {timeout_sec}s",
         )
+
+
+def canonicalize_forgejo_ssh_remote(remote_url: str) -> str:
+    value = str(remote_url).strip()
+    if not value:
+        return ""
+    if value.startswith("ssh://"):
+        return value
+
+    parsed = urllib.parse.urlsplit(value)
+    repo_path = parsed.path.lstrip("/")
+    if parsed.scheme in {"http", "https"} and repo_path:
+        ssh_host = os.environ.get("GIT_FORGE_INTERNAL_HOST", "optional-forgejo").strip() or "optional-forgejo"
+        ssh_port = os.environ.get("GIT_FORGE_INTERNAL_SSH_PORT", "2222").strip() or "2222"
+        return f"ssh://git@{ssh_host}:{ssh_port}/{repo_path}"
+
+    return value
 
 
 def decode_json_bytes(raw: bytes) -> dict[str, Any]:
@@ -2343,6 +2361,7 @@ setInterval(loadStatus, 5000);
         branch = str(args.get("branch", "")).strip()
         target_file = "src/eight_queens.py"
         commit_message = "Implement solve_eight_queens()"
+        ssh_dir = Path("/state/cli/openclaw-home/.ssh")
 
         if not workspace_raw:
             return 400, {"error": "workspace_required", "tool": tool}
@@ -2360,23 +2379,19 @@ setInterval(loadStatus, 5000);
             return 400, {"error": "target_outside_workspace", "target": target_file, "tool": tool}
         if not target_path.is_file():
             return 404, {"error": "target_missing", "target": target_file, "tool": tool}
+        if not (ssh_dir / "id_ed25519").is_file():
+            return 500, {"error": "ssh_identity_missing", "tool": tool, "ssh_dir": str(ssh_dir)}
+        if not (ssh_dir / "known_hosts").is_file():
+            return 500, {"error": "ssh_known_hosts_missing", "tool": tool, "ssh_dir": str(ssh_dir)}
 
         git_env = os.environ.copy()
         git_env["GIT_TERMINAL_PROMPT"] = "0"
-        git_env["GIT_USERNAME"] = "openclaw"
-        git_env["GIT_PASSWORD_FILE"] = "/run/secrets/git-forge.password"
-        askpass_path = Path("/tmp/openclaw-repo-e2e-askpass.sh")
-        askpass_path.write_text(
-            "#!/bin/sh\n"
-            "case \"$1\" in\n"
-            "  *Username*|*username*) printf '%s\\n' \"$GIT_USERNAME\" ;;\n"
-            "  *Password*|*password*) tr -d '\\r\\n' <\"$GIT_PASSWORD_FILE\" ;;\n"
-            "  *) tr -d '\\r\\n' <\"$GIT_PASSWORD_FILE\" ;;\n"
-            "esac\n",
-            encoding="utf-8",
+        git_env["GIT_SSH_COMMAND"] = (
+            "ssh -F /dev/null "
+            f"-i {ssh_dir / 'id_ed25519'} "
+            f"-o UserKnownHostsFile={ssh_dir / 'known_hosts'} "
+            "-o StrictHostKeyChecking=yes"
         )
-        askpass_path.chmod(0o700)
-        git_env["GIT_ASKPASS"] = str(askpass_path)
 
         source = target_path.read_text(encoding="utf-8")
         sentinel = 'raise NotImplementedError("Implement solve_eight_queens()")'
@@ -2427,16 +2442,52 @@ setInterval(loadStatus, 5000);
                 }
 
         status_before = run_command(["git", "status", "--short"], cwd=workspace, timeout_sec=30, env=git_env)
+        remote_get = run_command(["git", "remote", "get-url", "origin"], cwd=workspace, timeout_sec=30, env=git_env)
+        origin_url = remote_get.stdout.strip()
+        ssh_origin_url = canonicalize_forgejo_ssh_remote(origin_url)
         git_steps: list[dict[str, Any]] = [
             {
                 "name": "status_before",
                 "returncode": status_before.returncode,
                 "stdout": status_before.stdout,
                 "stderr": status_before.stderr,
-            }
+            },
+            {
+                "name": "git_remote_get_origin",
+                "returncode": remote_get.returncode,
+                "stdout": remote_get.stdout[-4000:],
+                "stderr": remote_get.stderr[-4000:],
+            },
         ]
         if status_before.returncode != 0:
             return 500, {"error": "git_status_failed", "tool": tool, "git_steps": git_steps}
+        if remote_get.returncode != 0:
+            return 500, {"error": "git_remote_get_origin_failed", "tool": tool, "git_steps": git_steps}
+        if not ssh_origin_url.startswith("ssh://"):
+            return 500, {
+                "error": "git_origin_not_convertible_to_ssh",
+                "tool": tool,
+                "origin_url": origin_url,
+                "git_steps": git_steps,
+            }
+
+        remote_set = run_command(["git", "remote", "set-url", "origin", ssh_origin_url], cwd=workspace, timeout_sec=30, env=git_env)
+        git_steps.append(
+            {
+                "name": "git_remote_set_origin_ssh",
+                "returncode": remote_set.returncode,
+                "stdout": remote_set.stdout[-4000:],
+                "stderr": remote_set.stderr[-4000:],
+            }
+        )
+        if remote_set.returncode != 0:
+            return 500, {
+                "error": "git_remote_set_origin_ssh_failed",
+                "tool": tool,
+                "origin_url": origin_url,
+                "ssh_origin_url": ssh_origin_url,
+                "git_steps": git_steps,
+            }
 
         if status_before.stdout.strip():
             for name, argv in (
@@ -2474,6 +2525,8 @@ setInterval(loadStatus, 5000);
             "tool": tool,
             "workspace": str(workspace),
             "branch": branch,
+            "origin_url": origin_url,
+            "ssh_origin_url": ssh_origin_url,
             "head": head_proc.stdout.strip(),
             "worktree_clean": status_after.returncode == 0 and not status_after.stdout.strip(),
             "pytest_stdout": pytest_proc.stdout[-4000:],

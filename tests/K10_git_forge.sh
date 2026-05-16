@@ -167,6 +167,7 @@ for mapping in \
   "agentic-vibestral|vibestral|/state/home/.ssh" \
   "agentic-hermes|hermes|/state/home/.ssh" \
   "openclaw|openclaw|/state/cli/openclaw-home/.ssh" \
+  "openclaw-sandbox|openclaw|/state/cli/openclaw-home/.ssh" \
   "openhands|openhands|/.openhands/home/.ssh" \
   "comfyui|comfyui|/comfyui/user/.ssh" \
   "optional-pi-mono|pi-mono|/state/home/.ssh" \
