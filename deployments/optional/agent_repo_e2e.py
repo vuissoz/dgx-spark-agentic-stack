@@ -447,7 +447,11 @@ def publish_workspace_changes(
 
 
 def mode_uses_adapter_publish_guard(mode: str) -> bool:
-    return mode in {"vibe"}
+    return mode in {"vibe", "kilo"}
+
+
+def mode_salvages_invoke_failure(mode: str) -> bool:
+    return mode in {"kilo"}
 
 
 def claude_login_preflight(
@@ -966,6 +970,53 @@ def run_agent_once(
         "artifacts_dir": str(artifact_dir),
     }
 
+    def attempt_post_invoke_salvage(invoke_detail: str) -> dict[str, object]:
+        result["invoke_detail"] = invoke_detail
+        tests_ok, tests_detail = verify_tests(container_id, workspace, artifact_dir, verify_timeout)
+        collect_git_artifacts(container_id, workspace, artifact_dir)
+        result["salvaged_after_invoke_failure"] = True
+        if not tests_ok:
+            result.update(classify_result(stage="invoke", ok=False, detail=invoke_detail))
+            result["salvage_verify_detail"] = tests_detail
+            return result
+
+        if mode_uses_adapter_publish_guard(mode):
+            adapter_publish_ok, adapter_publish_detail = publish_workspace_changes(
+                container_id,
+                workspace,
+                branch,
+                artifact_dir,
+                verify_timeout,
+            )
+            collect_git_artifacts(container_id, workspace, artifact_dir)
+            result["adapter_publish_detail"] = adapter_publish_detail
+            if not adapter_publish_ok:
+                result.update(classify_result(stage="publish", ok=False, detail=adapter_publish_detail))
+                result["invoke_detail"] = invoke_detail
+                return result
+
+        publish_ok, publish_detail = verify_branch_publish(
+            container_id,
+            workspace,
+            branch,
+            initial_head,
+            artifact_dir,
+            verify_timeout,
+        )
+        collect_git_artifacts(container_id, workspace, artifact_dir)
+        if publish_ok:
+            result.update(
+                classify_result(
+                    stage="publish",
+                    ok=True,
+                    detail=f"invoke failure salvaged by guard: {publish_detail}",
+                )
+            )
+        else:
+            result.update(classify_result(stage="publish", ok=False, detail=publish_detail))
+            result["invoke_detail"] = invoke_detail
+        return result
+
     plan_payload = {
         "clone_url": clone_url,
         "workspace": workspace,
@@ -1078,7 +1129,10 @@ def run_agent_once(
         (artifact_dir / "invoke.stdout.log").write_text(invoke.stdout, encoding="utf-8")
         (artifact_dir / "invoke.stderr.log").write_text(invoke.stderr, encoding="utf-8")
         if invoke.returncode != 0:
-            result.update(classify_result(stage="invoke", ok=False, detail=f"invoke failed exit={invoke.returncode}"))
+            invoke_detail = f"invoke failed exit={invoke.returncode}"
+            if mode_salvages_invoke_failure(mode) and invoke.returncode == 124:
+                return attempt_post_invoke_salvage(invoke_detail)
+            result.update(classify_result(stage="invoke", ok=False, detail=invoke_detail))
             return result
 
     tests_ok, tests_detail = verify_tests(container_id, workspace, artifact_dir, verify_timeout)

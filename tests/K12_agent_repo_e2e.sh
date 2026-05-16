@@ -480,6 +480,37 @@ assert "http://127.0.0.1:8111/v1/tools/execute" in openclaw_calls[0][1]
 assert "/run/secrets/openclaw.token" in openclaw_calls[0][1]
 module.docker_exec = original_docker_exec
 
+module.service_container_id = lambda service: "cid-kilo" if service == "agentic-kilocode" else ""
+module.warm_default_model = lambda *_args, **_kwargs: (True, "model warmup completed for test model")
+module.prepare_workspace = lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, "", "")
+module.read_git_head = lambda *_args, **_kwargs: "initial-head"
+module.verify_tests = lambda *_args, **_kwargs: (True, "pytest exit=0")
+module.collect_git_artifacts = lambda *_args, **_kwargs: None
+module.publish_workspace_changes = lambda *_args, **_kwargs: (True, "adapter publish guard completed")
+module.verify_branch_publish = lambda *_args, **_kwargs: (True, "agent committed and pushed branch update")
+module.docker_exec = lambda *_args, **_kwargs: subprocess.CompletedProcess([], 124, "partial invoke log", "")
+
+kilo_result = module.run_agent_once(
+    "kilocode",
+    clone_url="http://optional-forgejo:3000/agentic/eight-queens-agent-e2e.git",
+    repo_name="eight-queens-agent-e2e",
+    root_artifact_dir=artifact_root / "kilo-salvage",
+    prepare_timeout=12,
+    invoke_timeout=34,
+    verify_timeout=56,
+    dry_run=False,
+    require_unresolved_baseline=False,
+    expected_initial_head="",
+)
+assert kilo_result["status"] == "success"
+assert kilo_result["stage"] == "publish"
+assert kilo_result["salvaged_after_invoke_failure"] is True
+assert kilo_result["invoke_detail"] == "invoke failed exit=124"
+assert kilo_result["adapter_publish_detail"] == "adapter publish guard completed"
+assert "salvaged" in kilo_result["detail"]
+
+module.docker_exec = original_docker_exec
+
 module.git_forge_api_request = lambda *args, **kwargs: {"name": "eight-queens-agent-e2e"}
 module.read_secret = lambda secret_name: "dummy"
 
