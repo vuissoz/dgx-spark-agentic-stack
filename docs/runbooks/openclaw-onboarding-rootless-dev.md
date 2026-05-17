@@ -2,6 +2,9 @@
 
 This runbook explains how to configure and validate OpenClaw in this repository when running in `rootless-dev` mode.
 
+For a Telegram-specific operational path after bootstrap, see:
+- `docs/runbooks/openclaw-telegram-setup.md`
+
 Scope:
 - this stack's core OpenClaw services (`openclaw` + `openclaw-gateway` + `openclaw-sandbox` + `openclaw-relay`),
 - loopback-only host exposure (`127.0.0.1`),

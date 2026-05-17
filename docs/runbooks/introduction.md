@@ -197,7 +197,7 @@ Suggested order:
 13. `services-expliques-debutants.md` (beginner-friendly service-by-service guide),
 14. `services-explained-beginners.en.md` (English beginner-friendly service-by-service guide),
 15. `codex-debutant.md` (beginner step-by-step usage of `agentic-codex` and the sibling `agentic-kilocode` workflow),
-16. specialized runbooks (`optional-modules.md`, `openclaw-onboarding-rootless-dev.md`, `observability-triage.md`, etc.).
+16. specialized runbooks (`optional-modules.md`, `openclaw-onboarding-rootless-dev.md`, `openclaw-telegram-setup.md`, `observability-triage.md`, etc.).
 
 When troubleshooting:
 - always capture active profile and effective runtime values first (`./agent profile`),
