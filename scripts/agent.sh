@@ -4205,6 +4205,12 @@ USAGE
     die "failed to persist the stack-managed OpenClaw workspace"
   fi
 
+  if ! docker exec "${openclaw_cid}" sh -lc "openclaw config set models.providers.custom-ollama-gate-11435.request.allowPrivateNetwork true" \
+    >/tmp/agent-openclaw-init-provider-private-network.out 2>&1; then
+    cat /tmp/agent-openclaw-init-provider-private-network.out >&2
+    die "failed to allow the stack-managed OpenClaw provider to reach internal ollama-gate"
+  fi
+
   if ! docker exec "${openclaw_cid}" sh -lc "openclaw config validate" \
     >/tmp/agent-openclaw-init-config-validate.out 2>&1; then
     cat /tmp/agent-openclaw-init-config-validate.out >&2

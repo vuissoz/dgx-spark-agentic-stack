@@ -105,6 +105,10 @@ assert ((payload.get("agents") or {}).get("defaults") or {}).get("workspace") ==
 PY
 [[ $? -eq 0 ]] || fail "managed init must persist the OpenClaw workspace in the validated overlay"
 
+provider_allow_private_network="$(docker exec "${openclaw_cid}" sh -lc 'openclaw config get models.providers.custom-ollama-gate-11435.request.allowPrivateNetwork')"
+[[ "${provider_allow_private_network}" == "true" ]] \
+  || fail "managed init must allow the stack-managed OpenClaw provider to reach internal ollama-gate"
+
 configured_workspace="$(docker exec "${openclaw_cid}" sh -lc 'openclaw config get agents.defaults.workspace')"
 [[ "${configured_workspace}" == "${workspace_dir}" ]] \
   || fail "OpenClaw config must point at the stack-managed workspace after init"
