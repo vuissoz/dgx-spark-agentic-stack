@@ -225,6 +225,58 @@ EOF
   fi
 }
 
+repair_rootless_openhands_layout() {
+  local target_uid="${AGENT_RUNTIME_UID:-$(id -u)}"
+  local target_gid="${AGENT_RUNTIME_GID:-$(id -g)}"
+  local needs_repair=0
+  local path
+  local -a repair_paths=(
+    "${AGENTIC_ROOT}/openhands/state"
+    "${AGENTIC_ROOT}/openhands/logs"
+    "${AGENTIC_OPENHANDS_WORKSPACES_DIR}"
+  )
+
+  [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" ]] || return 0
+  [[ "${EUID}" -ne 0 ]] || return 0
+
+  for path in "${repair_paths[@]}"; do
+    [[ -e "${path}" ]] || continue
+    if [[ ! -r "${path}" ]] || [[ ! -w "${path}" ]] || [[ -n "$(find "${path}" -mindepth 0 \( ! -readable -o ! -writable \) -print -quit 2>/dev/null || true)" ]]; then
+      needs_repair=1
+      break
+    fi
+  done
+  [[ "${needs_repair}" -eq 1 ]] || return 0
+
+  command -v docker >/dev/null 2>&1 \
+    || die "docker command is required to repair OpenHands ownership in rootless-dev"
+
+  docker run --rm \
+    -v "${AGENTIC_ROOT}/openhands:/repair/openhands" \
+    busybox:1.36.1 sh -lc "
+      set -eu
+      for path in /repair/openhands/state /repair/openhands/logs /repair/openhands/workspaces; do
+        [ -e \"\${path}\" ] || continue
+        chown -R ${target_uid}:${target_gid} \"\${path}\"
+        find \"\${path}\" -type d -exec chmod 2770 {} +
+        find \"\${path}\" -type f -exec chmod ug+rw,o-rwx {} +
+      done
+    " || die "failed to repair OpenHands ownership for rootless-dev runtime"
+
+  log "repaired OpenHands ownership with containerized chown (uid=${target_uid} gid=${target_gid})"
+}
+
+repair_openhands_state_permissions() {
+  local state_root="${AGENTIC_ROOT}/openhands/state"
+
+  [[ -d "${state_root}" ]] || return 0
+
+  find "${state_root}" -type d -exec chmod g+s {} + 2>/dev/null || true
+  find "${state_root}" -type d -exec chmod g+rwx {} + 2>/dev/null || true
+  find "${state_root}" -type f -exec chmod g+rw {} + 2>/dev/null || true
+  log "prepared OpenHands state permissions for native uid + host runtime group access"
+}
+
 main() {
   local git_forge_secret
   local -a git_forge_accounts=(
@@ -293,9 +345,11 @@ main() {
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_MODEL" "${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}"
   ensure_env_key "${AGENTIC_ROOT}/openhands/config/openhands.env" "LLM_BASE_URL" "http://ollama-gate:11435/v1"
   seed_openhands_workspace_if_missing
+  repair_rootless_openhands_layout
   write_openhands_settings_if_missing \
     "${AGENTIC_ROOT}/openhands/config/openhands.env" \
     "${AGENTIC_ROOT}/openhands/state/settings.json"
+  repair_openhands_state_permissions
 
   for git_forge_secret in "${git_forge_accounts[@]}"; do
     ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password"

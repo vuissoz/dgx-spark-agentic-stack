@@ -214,9 +214,7 @@ class ProcessSandboxService(SandboxService):
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                url = replace_localhost_hostname_for_docker(
-                    f'http://localhost:{port}/alive'
-                )
+                url = f'http://127.0.0.1:{port}/alive'
                 response = await self.httpx_client.get(url, timeout=5.0)
                 if response.status_code == 200:
                     data = response.json()
@@ -258,15 +256,13 @@ class ProcessSandboxService(SandboxService):
         if status == SandboxStatus.RUNNING:
             # Check if server is actually responding
             try:
-                url = replace_localhost_hostname_for_docker(
-                    f'http://localhost:{process_info.port}{self.health_check_path}'
-                )
+                url = f'http://127.0.0.1:{process_info.port}{self.health_check_path}'
                 response = await self.httpx_client.get(url, timeout=5.0)
                 if response.status_code == 200:
                     exposed_urls = [
                         ExposedUrl(
                             name=AGENT_SERVER,
-                            url=f'http://localhost:{process_info.port}',
+                            url=f'http://127.0.0.1:{process_info.port}',
                             port=process_info.port,
                         ),
                     ]

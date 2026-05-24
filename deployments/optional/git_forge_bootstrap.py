@@ -46,7 +46,8 @@ SECRETS_ROOT = pathlib.Path(AGENTIC_ROOT) / "secrets" / "runtime" / "git-forge"
 BOOTSTRAP_DIR = pathlib.Path(AGENTIC_ROOT) / "optional" / "git" / "bootstrap"
 REFERENCE_TEMPLATE_DIR = pathlib.Path(__file__).resolve().parents[2] / "examples" / "optional" / REFERENCE_REPOSITORY
 REFERENCE_MANIFEST_PATH = ".agentic/reference-e2e.manifest.json"
-OPENHANDS_SSH_READER_UIDS = (AGENT_RUNTIME_UID,)
+OPENHANDS_RUNTIME_UID = 42420
+OPENHANDS_SSH_READER_UIDS = (OPENHANDS_RUNTIME_UID,)
 
 MANAGED_ACCOUNTS = (
     {
