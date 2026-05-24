@@ -1141,6 +1141,33 @@ wait_for_service_ready() {
   return 1
 }
 
+wait_for_ui_loopback_service() {
+  local service="$1"
+  local timeout_seconds="${2:-120}"
+
+  wait_for_service_ready "${service}" "${timeout_seconds}" \
+    || die "ui loopback service '${service}' did not become ready after start"
+}
+
+wait_for_ui_loopback_services_for_targets() {
+  local timeout_seconds="${1:-120}"
+  shift || true
+  local target
+
+  for target in "$@"; do
+    case "${target}" in
+      ui|forgejo)
+        wait_for_ui_loopback_service "optional-forgejo-loopback" "${timeout_seconds}"
+        ;;
+    esac
+    case "${target}" in
+      ui|comfyui)
+        wait_for_ui_loopback_service "comfyui-loopback" "${timeout_seconds}"
+        ;;
+    esac
+  done
+}
+
 target_status_from_services() {
   local target="$1"
   local -a services=()
@@ -1943,6 +1970,7 @@ cmd_start_target() {
   esac
 
   docker_compose_partial -f "${compose_file}" up -d --no-deps "${services_to_start[@]}"
+  wait_for_ui_loopback_services_for_targets 120 "${target}"
   if [[ "${target}" == "forgejo" || "${target}" == "ui" ]]; then
     run_git_forge_bootstrap
   fi
@@ -4946,6 +4974,7 @@ case "$cmd" in
         -f "${optional_compose_file}" up -d
     else
       run_compose_on_targets up "$target_arg" -d
+      wait_for_ui_loopback_services_for_targets 120 "${targets[@]}"
       up_enabled_baseline_optional_modules "${targets[@]}"
       if targets_include "ui" "${targets[@]}"; then
         run_git_forge_bootstrap

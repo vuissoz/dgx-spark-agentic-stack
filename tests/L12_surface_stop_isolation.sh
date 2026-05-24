@@ -26,14 +26,17 @@ export AGENTIC_EGRESS_NETWORK="agentic-${suffix}-egress"
 export AGENTIC_OPTIONAL_MODULES="goose,pi-mono"
 export AGENTIC_SKIP_OPTIONAL_GATING=1
 export OLLAMA_HOST_PORT="31434"
+export GIT_FORGE_HOST_PORT="33010"
+export GIT_FORGE_SSH_HOST_PORT="32222"
 export OPENWEBUI_HOST_PORT="38080"
 export OPENHANDS_HOST_PORT="33000"
 export COMFYUI_HOST_PORT="38188"
 export OPENCLAW_WEBHOOK_HOST_PORT="38111"
 export OPENCLAW_GATEWAY_HOST_PORT="38789"
+export OPENCLAW_GATEWAY_PROXY_METRICS_PORT="39114"
 export OPENCLAW_RELAY_HOST_PORT="38112"
 
-targets=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose openwebui openhands comfyui)
+targets=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
 
 cleanup() {
   AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" down optional >/tmp/agent-l12-down-optional.out 2>&1 || true
@@ -69,6 +72,11 @@ target_services() {
       ;;
     pi-mono) printf '%s\n' "optional-pi-mono" ;;
     goose) printf '%s\n' "optional-goose" ;;
+    forgejo)
+      printf '%s\n' \
+        "optional-forgejo" \
+        "optional-forgejo-loopback"
+      ;;
     openwebui) printf '%s\n' "openwebui" ;;
     openhands) printf '%s\n' "openhands" ;;
     comfyui)
@@ -129,6 +137,8 @@ all_services=(
   openclaw-provider-bridge
   openclaw-sandbox
   openclaw-relay
+  optional-forgejo
+  optional-forgejo-loopback
   openwebui
   openhands
   comfyui
