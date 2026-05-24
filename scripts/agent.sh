@@ -1188,7 +1188,7 @@ wait_for_openclaw_runtime_convergence() {
     set -e
     if [[ "${rc}" -eq 0 ]]; then
       if (( elapsed > 0 )); then
-        log "openclaw layered runtime converged after ${elapsed}s"
+        printf 'INFO: openclaw layered runtime converged after %ss\n' "${elapsed}"
       fi
       return 0
     fi
