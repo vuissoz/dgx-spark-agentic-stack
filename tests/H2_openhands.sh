@@ -46,6 +46,11 @@ configured_user="$(docker inspect --format '{{.Config.User}}' "${openhands_cid}"
   || fail "openhands container user drifted from runtime mapping (got ${configured_user}, expected ${expected_user})"
 ok "openhands container user matches runtime uid/gid"
 
+configured_groups="$(docker inspect --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' "${openhands_cid}")"
+echo "${configured_groups}" | grep -qx '42420' \
+  || fail "openhands must include image group 42420 so runtime uid/gid can execute /app/.venv tools"
+ok "openhands keeps image supplementary group for bundled virtualenv access"
+
 assert_no_public_bind "${openhands_port}" || fail "openhands host bind is not loopback-only"
 ok "openhands host bind is loopback-only"
 

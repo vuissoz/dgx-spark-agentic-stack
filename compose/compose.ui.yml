@@ -198,6 +198,7 @@ services:
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     group_add:
       - "${AGENT_RUNTIME_GID:-1000}"
+      - "42420"
     entrypoint:
       - /app/.venv/bin/uvicorn
       - openhands.server.listen:app
