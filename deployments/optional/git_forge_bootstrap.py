@@ -777,10 +777,17 @@ def seed_reference_repo(admin_user: str, admin_password: str) -> None:
 def write_if_changed(path: pathlib.Path, content: str, mode: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and path.read_text(encoding="utf-8") == content:
-        os.chmod(path, mode)
+        safe_chmod(path, mode)
         return
     path.write_text(content, encoding="utf-8")
-    os.chmod(path, mode)
+    safe_chmod(path, mode)
+
+
+def safe_chmod(path: pathlib.Path, mode: int) -> None:
+    try:
+        os.chmod(path, mode)
+    except PermissionError:
+        return
 
 
 def ensure_git_include(gitconfig_path: pathlib.Path, include_path: str) -> None:
@@ -788,21 +795,21 @@ def ensure_git_include(gitconfig_path: pathlib.Path, include_path: str) -> None:
     if gitconfig_path.exists():
         existing = gitconfig_path.read_text(encoding="utf-8")
         if include_path in existing:
-            os.chmod(gitconfig_path, 0o660)
+            safe_chmod(gitconfig_path, 0o660)
             return
         content = existing.rstrip() + "\n\n" + include_block
     else:
         content = include_block
     gitconfig_path.parent.mkdir(parents=True, exist_ok=True)
     gitconfig_path.write_text(content, encoding="utf-8")
-    os.chmod(gitconfig_path, 0o660)
+    safe_chmod(gitconfig_path, 0o660)
 
 
 def ensure_gitconfig_value(gitconfig_path: pathlib.Path, key: str, value: str) -> None:
     gitconfig_path.parent.mkdir(parents=True, exist_ok=True)
     gitconfig_path.touch(exist_ok=True)
     run(["git", "config", "--file", str(gitconfig_path), key, value])
-    os.chmod(gitconfig_path, 0o660)
+    safe_chmod(gitconfig_path, 0o660)
 
 
 def account_container_ssh_dir(account: dict[str, object]) -> str:

@@ -1168,6 +1168,44 @@ wait_for_ui_loopback_services_for_targets() {
   done
 }
 
+wait_for_openclaw_runtime_convergence() {
+  local timeout_seconds="${1:-45}"
+  local elapsed=0
+  local container_id=""
+  local last_error=""
+  local check_cmd="openclaw --version >/tmp/openclaw-layer-version.out && python3 /app/openclaw_config_layers.py check-runtime --immutable-file /config/immutable/openclaw.stack-config.v1.json --bridge-file /config/bridge/openclaw.provider-bridge.json --overlay-file /overlay/openclaw.operator-overlay.json --state-file /state/cli/openclaw-home/openclaw.state.json --effective-file /tmp/openclaw.effective.json --gateway-token-file /run/secrets/openclaw.token"
+
+  require_cmd docker
+  container_id="$(service_container_any_id openclaw)"
+  [[ -n "${container_id}" ]] || return 0
+
+  wait_for_service_ready "openclaw" "${timeout_seconds}" || return 1
+
+  while (( elapsed < timeout_seconds )); do
+    set +e
+    last_error="$(timeout 20 docker exec "${container_id}" sh -lc "${check_cmd}" 2>&1)"
+    rc=$?
+    set -e
+    if [[ "${rc}" -eq 0 ]]; then
+      if (( elapsed > 0 )); then
+        log "openclaw layered runtime converged after ${elapsed}s"
+      fi
+      return 0
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  warn "openclaw layered runtime did not converge within ${timeout_seconds}s before doctor"
+  if [[ -n "${last_error}" ]]; then
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] && warn "openclaw convergence: ${line}"
+    done <<<"${last_error}"
+  fi
+  return 1
+}
+
 target_status_from_services() {
   local target="$1"
   local -a services=()
@@ -4950,6 +4988,7 @@ case "$cmd" in
       fi
 
       if [[ "${AGENTIC_SKIP_OPTIONAL_GATING:-0}" != "1" ]]; then
+        wait_for_openclaw_runtime_convergence 45 || true
         if ! "${AGENT_DOCTOR_SCRIPT}" >/tmp/agent-optional-gate.out 2>&1; then
           cat /tmp/agent-optional-gate.out >&2
           die "optional stack gating refused because 'agent doctor' is not green (set AGENTIC_SKIP_OPTIONAL_GATING=1 to bypass intentionally)"
