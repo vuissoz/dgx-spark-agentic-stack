@@ -138,6 +138,9 @@ crt.sh
 # SCIENTIFIC LITERATURE / PREPRINTS
 # ----------------------------------------------------------
 
+# Project Gutenberg
+gutenberg.org
+
 # arXiv
 arxiv.org
 export.arxiv.org
