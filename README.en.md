@@ -75,6 +75,7 @@ Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROO
 The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) and reused by Ollama preload.
 The stack now emits an explicit warning if you choose `qwen3.5:35b`: as of March 26, 2026, local Codex/OpenHands runs in this repo have already shown pseudo tool tags instead of real tool calls, even though Ollama upstream advertises the model with `tools` support. The model is no longer blocked, because this is treated as a stack integration bug to fix rather than a model capability contract.
 Context window size is controlled by `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (default `50909`) and propagated to `OLLAMA_CONTEXT_LENGTH`.
+`./agent context show` prints the effective runtime policy; `./agent context set <tokens>` persists the context window into `${AGENTIC_ROOT}/deployments/runtime.env`, keeps `OLLAMA_CONTEXT_LENGTH` and `AGENTIC_GOOSE_CONTEXT_LIMIT` aligned, and recomputes `AGENTIC_CONTEXT_BUDGET_TOKENS` plus the derived compaction thresholds.
 For Goose (`optional-goose`), the client-side context limit is controlled separately by `AGENTIC_GOOSE_CONTEXT_LIMIT` (default: `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}`) and propagated to `GOOSE_CONTEXT_LIMIT`.
 The stack also publishes a shared compaction policy derived from the effective context budget: `AGENTIC_CONTEXT_BUDGET_TOKENS`, `AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS` (default policy `75%`) and `AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS` (default policy `90%`). `codex` receives the soft threshold as `auto_compact_token_limit`, while `goose` and `openhands` receive the same thresholds as runtime env hints.
 
@@ -351,6 +352,7 @@ agent ps
 agent llm mode [local|hybrid|remote]
 agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
+agent context [show|set <tokens>]
 agent rag index [--docs-dir <path>] [--wait|--sync|--no-wait] [--timeout-sec <seconds>] [--json]
 agent rag task <task_id> [--json]
 agent rag bootstrap-lexical [--json]
@@ -438,6 +440,7 @@ Notes:
 - `agent ls` now reads target state from `docker ps -a`, so stopped targets show `exited` or `mixed` instead of collapsing to `down`; `agent status` lists every project container with its exact state and health string.
 - for `codex`, `agent ls` also exposes the effective sandbox posture in the `runtime` column: `sandbox=native-userns` when native namespace sandboxing is available, or `sandbox=outer-container-bypass` when the Codex wrapper relies on outer container confinement instead.
 - `agent <tool> [project]` attaches to a persistent session: `claude|codex|opencode|kilocode|vibestral|hermes|pi-mono` use tmux (`Ctrl-b d` to detach), `goose` launches the Goose CLI directly in `/workspace/<project>` (no tmux in upstream image), and `openclaw` opens an operator shell in the core `openclaw` service with loopback API, Web UI (`18789`), and Gateway WS reminders.
+- `agent context show` prints the effective runtime context budget; `agent context set <tokens>` persists the new value into `${AGENTIC_ROOT}/deployments/runtime.env`, keeps `OLLAMA_CONTEXT_LENGTH` and `AGENTIC_GOOSE_CONTEXT_LIMIT` aligned, and recomputes the derived compaction thresholds.
 - `agent openclaw init [project]` is the stack-managed OpenClaw onboarding/repair path: it repairs the default workspace back under `/workspace/...`, starts the core bundle if needed, applies the safe local bootstrap, then prints the exact provider/channel next steps. Without an argument it uses `AGENTIC_OPENCLAW_INIT_PROJECT` (default: `openclaw-default`). `agent onboard` can now collect that default project plus Telegram/Discord/Slack provider-bridge secrets so a later `agent openclaw init` can run without extra flags. `openclaw onboard`, `openclaw configure --section channels`, and `openclaw gateway run` remain expert fallbacks only.
 - `agent doctor` now validates the effective `agentic-codex` sandbox posture as well: `native-userns` is reported as nominal, `outer-container-bypass` as an explicit non-blocking warning while repo workflows remain covered, and `hard-fail` as an error.
 - `agent sudo-mode on` enables `sudo` inside agent containers (by relaxing only `no-new-privileges` for those services); `agent sudo-mode off` restores hardened mode.

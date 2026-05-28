@@ -77,6 +77,7 @@ La stack émet un avertissement explicite si vous choisissez `qwen3.5:35b`: au 2
 La fenêtre de contexte est pilotée par `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (défaut `50909`) et propagée vers `OLLAMA_CONTEXT_LENGTH`.
 Quand `./agent onboard` peut lire les métadonnées Ollama du modèle choisi, il propose automatiquement la fenêtre maximale estimée qui tient dans `AGENTIC_LIMIT_OLLAMA_MEM`; sinon il retombe sur le défaut du dépôt `50909`.
 `./agent doctor` remonte aussi cette fenêtre maximale estimée pour aider à corriger un contexte trop grand.
+`./agent context show` affiche la politique runtime effective; `./agent context set <tokens>` persiste la fenêtre de contexte dans `${AGENTIC_ROOT}/deployments/runtime.env`, aligne `OLLAMA_CONTEXT_LENGTH` et `AGENTIC_GOOSE_CONTEXT_LIMIT`, puis recalcule `AGENTIC_CONTEXT_BUDGET_TOKENS` ainsi que les seuils de compaction dérivés.
 Pour Goose (`optional-goose`), la limite de contexte client est pilotée séparément par `AGENTIC_GOOSE_CONTEXT_LIMIT` (défaut: `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}`) et propagée vers `GOOSE_CONTEXT_LIMIT`.
 La stack publie aussi une politique commune de compaction dérivée du budget de contexte effectif: `AGENTIC_CONTEXT_BUDGET_TOKENS`, `AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS` (politique par défaut `75%`) et `AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS` (politique par défaut `90%`). `codex` reçoit le seuil `soft` via `auto_compact_token_limit`, et `goose` / `openhands` reçoivent les mêmes seuils sous forme d’indices runtime.
 
@@ -356,6 +357,7 @@ agent ps
 agent llm mode [local|hybrid|mixed|remote]
 agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
+agent context [show|set <tokens>]
 agent rag index [--docs-dir <path>] [--wait|--sync|--no-wait] [--timeout-sec <secondes>] [--json]
 agent rag task <task_id> [--json]
 agent rag bootstrap-lexical [--json]
@@ -443,6 +445,7 @@ Notes:
 - `agent ls` lit maintenant l’état via `docker ps -a`, donc une cible stoppée remonte `exited` ou `mixed` au lieu d’un simple `down`; `agent status` liste chaque conteneur du projet avec son état et sa santé exacte.
 - pour `codex`, `agent ls` expose aussi le mode sandbox effectif dans la colonne `runtime`: `sandbox=native-userns` si le sandbox namespace natif est disponible, ou `sandbox=outer-container-bypass` si le wrapper Codex s'appuie sur le confinement externe du conteneur.
 - `agent <tool> [project]` attache une session persistante: `claude|codex|opencode|kilocode|vibestral|hermes|pi-mono` utilisent tmux (`Ctrl-b d` pour détacher), `goose` lance directement la CLI Goose dans `/workspace/<project>` (pas de tmux dans l'image upstream), et `openclaw` ouvre un shell opérateur dans le service core `openclaw` avec rappel des endpoints API loopback, Web UI (`18789`) et Gateway WS (`ws://127.0.0.1:18789`).
+- `agent context show` affiche le budget de contexte effectif du runtime; `agent context set <tokens>` persiste la nouvelle valeur dans `${AGENTIC_ROOT}/deployments/runtime.env`, garde `OLLAMA_CONTEXT_LENGTH` et `AGENTIC_GOOSE_CONTEXT_LIMIT` alignés, puis recalcule les seuils de compaction dérivés.
 - `agent openclaw init [project]` est le chemin d'onboarding/réparation OpenClaw stack-managed: il corrige le workspace par défaut vers `/workspace/...`, démarre le bundle core si nécessaire, applique le bootstrap local sûr, puis imprime les next steps providers/channels. Sans argument, il utilise `AGENTIC_OPENCLAW_INIT_PROJECT` (défaut: `openclaw-default`). `agent onboard` peut désormais collecter ce projet par défaut ainsi que les secrets provider bridge Telegram/Discord/Slack pour qu'un `agent openclaw init` ultérieur soit automatique. `openclaw onboard`, `openclaw configure --section channels` et `openclaw gateway run` restent des fallbacks experts.
 - `agent ls` expose aussi un résumé runtime pour OpenClaw (`sandboxes=<n>;sessions=<n>;current=<id>;...`), dérivé du registre persistant opérateur de l'execution-plane.
 - `agent doctor` valide aussi la posture sandbox effective de `agentic-codex`: `native-userns` est signalé comme état nominal, `outer-container-bypass` comme warning explicite non bloquant tant que les workflows repo restent couverts, et `hard-fail` comme erreur.
