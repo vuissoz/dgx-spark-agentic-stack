@@ -66,6 +66,7 @@ Usage:
   agent llm mode [local|hybrid|mixed|remote]
   agent llm backend [ollama|trtllm|both|remote]
   agent llm test-mode [on|off]
+  agent context [show|set <tokens>]
   agent rag index [--docs-dir <path>] [--wait|--sync|--no-wait] [--timeout-sec <seconds>] [--json]
   agent rag task <task_id> [--json]
   agent rag bootstrap-lexical [--json]
@@ -4078,6 +4079,83 @@ JSON
   esac
 }
 
+cmd_context() {
+  local action="${1:-show}"
+  shift || true
+
+  case "${action}" in
+    show)
+      printf 'default_model=%s\n' "${AGENTIC_DEFAULT_MODEL:-}"
+      printf 'default_model_context_window=%s\n' "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-}"
+      printf 'ollama_context_length=%s\n' "${OLLAMA_CONTEXT_LENGTH:-}"
+      printf 'goose_context_limit=%s\n' "${AGENTIC_GOOSE_CONTEXT_LIMIT:-}"
+      printf 'context_budget_tokens=%s\n' "${AGENTIC_CONTEXT_BUDGET_TOKENS:-}"
+      printf 'context_compaction_soft_tokens=%s\n' "${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-}"
+      printf 'context_compaction_danger_tokens=%s\n' "${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}"
+      printf 'runtime_env=%s\n' "${AGENT_RUNTIME_ENV_FILE}"
+      ;;
+    set)
+      local tokens="${1:-}"
+      local align_goose="${2:-}"
+      local soft_percent="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
+      local danger_percent="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
+      local compaction_report=""
+      local derived_budget=""
+      local derived_soft_tokens=""
+      local derived_danger_tokens=""
+
+      [[ -n "${tokens}" ]] || die "Usage: agent context set <tokens>"
+      [[ "${tokens}" =~ ^[0-9]+$ ]] || die "context tokens must be numeric"
+      (( tokens >= 2048 )) || die "context tokens must be >= 2048"
+      [[ -z "${align_goose}" ]] || die "Usage: agent context set <tokens>"
+
+      compaction_report="$(agentic_context_compaction_report "${tokens}" "${soft_percent}" "${danger_percent}")"
+      derived_budget="$(printf '%s\n' "${compaction_report}" | sed -n 's/^context_budget_tokens=//p')"
+      derived_soft_tokens="$(printf '%s\n' "${compaction_report}" | sed -n 's/^soft_tokens=//p')"
+      derived_danger_tokens="$(printf '%s\n' "${compaction_report}" | sed -n 's/^danger_tokens=//p')"
+
+      [[ "${derived_budget}" =~ ^[0-9]+$ ]] || die "failed to derive context budget tokens"
+      [[ "${derived_soft_tokens}" =~ ^[0-9]+$ ]] || die "failed to derive soft compaction threshold"
+      [[ "${derived_danger_tokens}" =~ ^[0-9]+$ ]] || die "failed to derive danger compaction threshold"
+
+      ensure_runtime_env
+      set_runtime_env_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${tokens}"
+      set_runtime_env_value "OLLAMA_CONTEXT_LENGTH" "${tokens}"
+      set_runtime_env_value "AGENTIC_GOOSE_CONTEXT_LIMIT" "${tokens}"
+      set_runtime_env_value "AGENTIC_CONTEXT_BUDGET_TOKENS" "${derived_budget}"
+      set_runtime_env_value "AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS" "${derived_soft_tokens}"
+      set_runtime_env_value "AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS" "${derived_danger_tokens}"
+
+      AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW="${tokens}"
+      OLLAMA_CONTEXT_LENGTH="${tokens}"
+      AGENTIC_GOOSE_CONTEXT_LIMIT="${tokens}"
+      AGENTIC_CONTEXT_BUDGET_TOKENS="${derived_budget}"
+      AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS="${derived_soft_tokens}"
+      AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS="${derived_danger_tokens}"
+      export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW
+      export OLLAMA_CONTEXT_LENGTH
+      export AGENTIC_GOOSE_CONTEXT_LIMIT
+      export AGENTIC_CONTEXT_BUDGET_TOKENS
+      export AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS
+      export AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS
+
+      printf 'context window persisted=%s\n' "${tokens}"
+      printf 'goose context limit persisted=%s\n' "${tokens}"
+      printf 'context budget persisted=%s\n' "${derived_budget}"
+      printf 'context compaction soft=%s danger=%s\n' "${derived_soft_tokens}" "${derived_danger_tokens}"
+      printf 'runtime_env=%s\n' "${AGENT_RUNTIME_ENV_FILE}"
+      printf 'next: run ./agent doctor'
+      if docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}' | grep -q .; then
+        printf ' and ./agent up core'
+      fi
+      printf '\n'
+      ;;
+    *)
+      die "Usage: agent context [show|set <tokens>]"
+      ;;
+  esac
+}
+
 cmd_comfyui() {
   local action="${1:-}"
   shift || true
@@ -4952,6 +5030,10 @@ cmd="${1:-}"
 case "$cmd" in
   profile)
     cmd_profile
+    ;;
+  context)
+    shift
+    cmd_context "$@"
     ;;
   first-up)
     shift
