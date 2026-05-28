@@ -4283,6 +4283,18 @@ USAGE
     die "OpenClaw config validation failed after managed init"
   fi
 
+  context_window="${AGENTIC_CONTEXT_BUDGET_TOKENS:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${OLLAMA_CONTEXT_LENGTH:-}}}"
+  if [[ "${context_window}" =~ ^[0-9]+$ ]] && (( context_window >= 2048 )); then
+    if ! python3 "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_context_reconcile.py" reconcile \
+      --state-file "${state_file}" \
+      --state-dir "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home" \
+      --model-id "${AGENTIC_DEFAULT_MODEL}" \
+      --context-window "${context_window}" >/tmp/agent-openclaw-init-context-reconcile.out 2>&1; then
+      cat /tmp/agent-openclaw-init-context-reconcile.out >&2
+      die "failed to reconcile OpenClaw context metadata after managed init"
+    fi
+  fi
+
   cmd_openclaw_operator model set "${AGENTIC_DEFAULT_MODEL}" --json >/tmp/agent-openclaw-init-model-set.out 2>&1 \
     || die "failed to reconcile OpenClaw operator default model"
 

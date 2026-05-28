@@ -2266,6 +2266,18 @@ PY
   if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw --version >/tmp/openclaw-layer-version.out && python3 /app/openclaw_config_layers.py check-runtime --immutable-file /config/immutable/openclaw.stack-config.v1.json --bridge-file /config/bridge/openclaw.provider-bridge.json --overlay-file /overlay/openclaw.operator-overlay.json --state-file /state/cli/openclaw-home/openclaw.state.json --effective-file /tmp/openclaw.effective.json --gateway-token-file /run/secrets/openclaw.token"; then
     doctor_fail "openclaw layered config runtime check failed"
   fi
+  optional_openclaw_context_window="${AGENTIC_CONTEXT_BUDGET_TOKENS:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${OLLAMA_CONTEXT_LENGTH:-}}}"
+  if [[ "${optional_openclaw_context_window}" =~ ^[0-9]+$ ]] && (( optional_openclaw_context_window >= 2048 )); then
+    if ! python3 "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_context_reconcile.py" check \
+      --state-file "${optional_openclaw_state_file}" \
+      --state-dir "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home" \
+      --model-id "${AGENTIC_DEFAULT_MODEL}" \
+      --context-window "${optional_openclaw_context_window}" >/tmp/doctor-openclaw-context-check.out 2>&1; then
+      doctor_fail "openclaw local provider context metadata drifted from the stack budget"
+    else
+      ok "openclaw local provider context metadata matches the stack budget"
+    fi
+  fi
   if [[ ! -s "${optional_openclaw_chat_status_manifest_file}" ]]; then
     doctor_fail "managed openclaw chat-status plugin manifest is missing: ${optional_openclaw_chat_status_manifest_file}"
   fi

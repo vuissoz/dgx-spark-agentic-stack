@@ -94,6 +94,25 @@ sync_runtime_file() {
   install -D -m "$mode" "$src" "$dst"
 }
 
+reconcile_openclaw_context_metadata() {
+  local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+  local state_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home"
+  local context_window="${AGENTIC_CONTEXT_BUDGET_TOKENS:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${OLLAMA_CONTEXT_LENGTH:-}}}"
+
+  [[ -f "${state_file}" ]] || return 0
+  [[ -d "${state_dir}" ]] || return 0
+  [[ -n "${AGENTIC_DEFAULT_MODEL:-}" ]] || return 0
+  [[ "${context_window}" =~ ^[0-9]+$ ]] || return 0
+  (( context_window >= 2048 )) || return 0
+
+  python3 "${REPO_ROOT}/deployments/optional/openclaw_context_reconcile.py" reconcile \
+    --state-file "${state_file}" \
+    --state-dir "${state_dir}" \
+    --model-id "${AGENTIC_DEFAULT_MODEL}" \
+    --context-window "${context_window}" >/tmp/agentic-openclaw-context-reconcile.out 2>/dev/null \
+    || die "failed to reconcile OpenClaw context metadata"
+}
+
 ensure_openclaw_chat_status_plugin() {
   local plugin_src_dir="${OPTIONAL_TEMPLATE_DIR}/openclaw-chat-status-plugin"
   local plugin_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
@@ -488,6 +507,7 @@ main() {
     printf '%s\n' '{}' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
   fi
   ensure_openclaw_chat_status_plugin
+  reconcile_openclaw_context_metadata
   ensure_allowlist_baseline_entries "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt"
   chmod 0640 "${AGENTIC_ROOT}/gate/config/model_routes.yml"
   chmod 0644 "${AGENTIC_ROOT}/dns/unbound.conf"
