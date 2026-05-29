@@ -38,6 +38,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 - `tests/L7_default_model_tool_call_fs_ops.sh` couvre les opérations fichier sur `claude`, `codex`, `opencode`, `vibestral`, `openhands`.
 - Suivi livré `dgx-spark-agentic-stack-yzk0` : test d’intégration end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, collecte d’artefacts et doctor final.
 - Suivi livré `dgx-spark-agentic-stack-i4o2` : tous les conteneurs agents ciblés par `repo-e2e` embarquent désormais la toolchain `git/python3/pytest` dès leur création, avec fallback runtime `codex` quand `bwrap`/user namespaces ne sont pas disponibles.
+- Les images `agentic/agent-cli-base:local` et `agentic/optional-modules:local` embarquent désormais aussi `ffmpeg`, `vlc` et `openai-whisper`, avec wrappers `whisper-fr` et `whisper-en` pour la transcription locale en français et en anglais dans les conteneurs agents et `openclaw-sandbox`.
 - La compatibilité agents inspirée des contrats Ollama inclut :
   - profils de configuration par agent versionnés ;
   - chemins explicites `/v1/chat/completions`, `/v1/responses`, `/v1/messages` ;
@@ -113,6 +114,7 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-qik` : provider bridges stack-managed pour Telegram/Slack/Discord + bootstrap WhatsApp.
   - `dgx-spark-agentic-stack-u326` : `agent openclaw init` livré comme chemin stack-managed d’onboarding/réparation, réexécutable en mode réparation idempotente.
 - UI / ComfyUI / docs / onboarding :
+  - transcription locale intégrée dans les conteneurs agents et `openclaw-sandbox` via `ffmpeg`/`vlc`/`openai-whisper`, avec wrappers `whisper-fr` et `whisper-en`, caches persistants compatibles `read_only`, contrat d’image renforcé et documentation/ADR associées.
   - `dgx-spark-agentic-stack-3yi` : garde-fou OpenHands contre restart/OOM au démarrage de nouvelles conversations.
   - `dgx-spark-agentic-stack-8cx` : proxy WebSocket ComfyUI et bootstrap Flux.1-dev clarifiés.
   - `dgx-spark-agentic-stack-hz0n` : test e2e rootless-dev Flux.1-dev avec préparation/téléchargement des assets requis, garde-fou sur restart backend et validation d'image PNG produite.
