@@ -460,6 +460,12 @@ services:
       OPENCLAW_SANDBOX_WORKSPACES_DIR: /sandbox-workspaces
       OPENCLAW_APPROVALS_STATE_DIR: /approvals
       OPENCLAW_APPROVALS_PENDING_TTL_SEC: ${OPENCLAW_APPROVALS_PENDING_TTL_SEC:-604800}
+      HOME: /state/cli/openclaw-home
+      XDG_CACHE_HOME: /state/cli/openclaw-home/.cache
+      WHISPER_CACHE_DIR: /state/cli/openclaw-home/.cache/whisper
+      TORCH_HOME: /state/cli/openclaw-home/.cache/torch
+      HF_HOME: /state/cli/openclaw-home/.cache/huggingface
+      MPLCONFIGDIR: /state/cli/openclaw-home/.cache/matplotlib
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw,openclaw-sandbox,localhost,127.0.0.1

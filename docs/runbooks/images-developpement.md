@@ -42,10 +42,15 @@ Variable de contournement:
 Apres build, un contrat minimum est verifie:
 - user image non-root,
 - `ENTRYPOINT` defini,
-- `bash`, `tmux`, `git`, `curl` presents.
+- `bash`, `tmux`, `git`, `curl`, `ffmpeg`, `vlc`, `whisper`, `whisper-fr` presents.
 
 Le Dockerfile agents fournit aussi une matrice de CLIs:
 - `codex`, `claude`, `opencode`, `pi`, `vibe`, `openhands`, `openclaw`.
+- plus un outillage media/transcription local:
+  - `ffmpeg`
+  - `vlc`
+  - `whisper`
+  - `whisper-fr` (`whisper --language French --task transcribe`)
 
 Mode d'installation des CLIs:
 - `AGENT_CLI_INSTALL_MODE=best-effort` (defaut): build resilient, wrappers explicites en fallback.

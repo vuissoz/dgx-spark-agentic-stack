@@ -12,9 +12,17 @@ default_model_fallback="nemotron-cascade-2:30b"
 default_context_window_fallback="50909"
 
 export HOME="${agent_home}"
+export WHISPER_CACHE_DIR="${WHISPER_CACHE_DIR:-${agent_home}/.cache/whisper}"
+export TORCH_HOME="${TORCH_HOME:-${agent_home}/.cache/torch}"
+export HF_HOME="${HF_HOME:-${agent_home}/.cache/huggingface}"
+export MPLCONFIGDIR="${MPLCONFIGDIR:-${agent_home}/.cache/matplotlib}"
 mkdir -p "${workspace}" "${state_dir}" "${logs_dir}" "${agent_home}" \
-  "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes" "${agent_home}/.kilo"
-chmod 0700 "${agent_home}" "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes" "${agent_home}/.kilo" 2>/dev/null || true
+  "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.cache/whisper" \
+  "${agent_home}/.cache/torch" "${agent_home}/.cache/huggingface" "${agent_home}/.cache/matplotlib" \
+  "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes" "${agent_home}/.kilo"
+chmod 0700 "${agent_home}" "${agent_home}/.config" "${agent_home}/.cache" "${agent_home}/.cache/whisper" \
+  "${agent_home}/.cache/torch" "${agent_home}/.cache/huggingface" "${agent_home}/.cache/matplotlib" \
+  "${agent_home}/.codex" "${agent_home}/.vibe" "${agent_home}/.hermes" "${agent_home}/.kilo" 2>/dev/null || true
 if [[ -n "${TMPDIR:-}" ]]; then
   mkdir -p "${TMPDIR}"
   chmod 0700 "${TMPDIR}" 2>/dev/null || true

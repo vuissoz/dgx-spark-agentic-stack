@@ -50,6 +50,7 @@ RUN apt-get update \
     cppcheck \
     direnv \
     fd-find \
+    ffmpeg \
     gdb \
     gdbserver \
     git \
@@ -75,6 +76,8 @@ RUN apt-get update \
     python3-dev \
     python3-pip \
     python3-pytest \
+    python3-setuptools \
+    python3-torch \
     python3-venv \
     ripgrep \
     rsync \
@@ -86,10 +89,13 @@ RUN apt-get update \
     tmux \
     unzip \
     valgrind \
+    vlc \
     vim-tiny \
     xz-utils \
     zip \
     zlib1g-dev \
+  && python3 -m pip install --break-system-packages --no-cache-dir \
+    openai-whisper \
   && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 20 || (major === 20 && minor < 6)) { console.error(`Node ${process.versions.node} is below required 20.6.0`); process.exit(1); }' \
   && rm -rf /var/lib/apt/lists/*
 
@@ -107,8 +113,9 @@ COPY deployments/images/agent-cli-base/install-agent-clis.sh /usr/local/bin/inst
 COPY deployments/images/agent-cli-base/entrypoint.sh /usr/local/bin/agent-entrypoint
 COPY deployments/images/agent-cli-base/agent-cli-wrapper.sh /usr/local/bin/agent-cli-wrapper
 COPY deployments/images/agent-cli-base/hermes-wrapper.sh /usr/local/bin/hermes
+COPY deployments/images/agent-cli-base/whisper-fr.sh /usr/local/bin/whisper-fr
 RUN chmod 0755 /usr/local/bin/install-agent-clis /usr/local/bin/agent-entrypoint /usr/local/bin/agent-cli-wrapper \
-    /usr/local/bin/hermes \
+    /usr/local/bin/hermes /usr/local/bin/whisper-fr \
   && AGENT_CLI_INSTALL_MODE="${AGENT_CLI_INSTALL_MODE}" \
     AGENT_NPM_PREFIX="${AGENT_NPM_PREFIX}" \
     AGENT_CLI_INSTALL_HOME="${AGENT_CLI_INSTALL_HOME}" \
