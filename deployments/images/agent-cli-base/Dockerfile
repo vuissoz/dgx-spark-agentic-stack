@@ -113,9 +113,10 @@ COPY deployments/images/agent-cli-base/install-agent-clis.sh /usr/local/bin/inst
 COPY deployments/images/agent-cli-base/entrypoint.sh /usr/local/bin/agent-entrypoint
 COPY deployments/images/agent-cli-base/agent-cli-wrapper.sh /usr/local/bin/agent-cli-wrapper
 COPY deployments/images/agent-cli-base/hermes-wrapper.sh /usr/local/bin/hermes
+COPY deployments/images/agent-cli-base/whisper-en.sh /usr/local/bin/whisper-en
 COPY deployments/images/agent-cli-base/whisper-fr.sh /usr/local/bin/whisper-fr
 RUN chmod 0755 /usr/local/bin/install-agent-clis /usr/local/bin/agent-entrypoint /usr/local/bin/agent-cli-wrapper \
-    /usr/local/bin/hermes /usr/local/bin/whisper-fr \
+    /usr/local/bin/hermes /usr/local/bin/whisper-en /usr/local/bin/whisper-fr \
   && AGENT_CLI_INSTALL_MODE="${AGENT_CLI_INSTALL_MODE}" \
     AGENT_NPM_PREFIX="${AGENT_NPM_PREFIX}" \
     AGENT_CLI_INSTALL_HOME="${AGENT_CLI_INSTALL_HOME}" \

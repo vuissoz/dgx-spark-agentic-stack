@@ -1,4 +1,4 @@
-# ADR-0119: Local French Whisper runtime in agent and OpenClaw sandbox images
+# ADR-0119: Local Whisper runtime for French and English in agent and OpenClaw sandbox images
 
 ## Status
 
@@ -6,8 +6,8 @@ Accepted
 
 ## Context
 
-The stack now needs in-container local speech transcription for French without
-manual package installation after deployment.
+The stack now needs in-container local speech transcription for French and
+English without manual package installation after deployment.
 
 Two runtime constraints shape the implementation:
 
@@ -22,6 +22,8 @@ Two runtime constraints shape the implementation:
   - `agentic/optional-modules:local`
 - Expose both:
   - `whisper` for raw upstream usage;
+  - `whisper-en` as a convenience wrapper for
+    `whisper --language English --task transcribe`;
   - `whisper-fr` as a convenience wrapper for
     `whisper --language French --task transcribe`.
 - Pin Whisper/Torch caches to writable state-backed directories so model
@@ -29,7 +31,7 @@ Two runtime constraints shape the implementation:
 
 ## Consequences
 
-- French transcription works locally inside agent containers and
+- French and English transcription work locally inside agent containers and
   `openclaw-sandbox` without ad hoc `apt` or `pip` commands.
 - First use still downloads the selected Whisper model into the persistent
   state/cache path.

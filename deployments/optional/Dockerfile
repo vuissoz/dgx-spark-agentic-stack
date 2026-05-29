@@ -58,6 +58,7 @@ COPY deployments/optional/openclaw_wrapper.sh /app/openclaw_wrapper.sh
 COPY deployments/optional/openclaw_config_layers.py /app/openclaw_config_layers.py
 COPY deployments/optional/openclaw_provider_bridge.py /app/openclaw_provider_bridge.py
 COPY deployments/optional/tcp_forward.py /app/tcp_forward.py
+COPY deployments/optional/whisper-en.sh /usr/local/bin/whisper-en
 COPY deployments/optional/whisper-fr.sh /usr/local/bin/whisper-fr
 COPY --from=openclaw-ui-builder /build/src/dist/control-ui /tmp/openclaw-control-ui
 
@@ -70,6 +71,7 @@ RUN install -d -m 0755 "${OPENCLAW_PREFIX}" /etc/agentic \
   && printf '%s\n' "${OPENCLAW_PREFIX}/bin/openclaw" >/etc/agentic/openclaw-real-path \
   && chmod 0644 /etc/agentic/openclaw-real-path \
   && install -m 0755 /app/openclaw_wrapper.sh /usr/local/bin/openclaw \
+  && chmod 0755 /usr/local/bin/whisper-en \
   && chmod 0755 /usr/local/bin/whisper-fr \
   && chmod 0755 /app/openclaw_gateway_entrypoint.sh \
   && chmod 0755 /app/openclaw_gateway_rpc_probe.sh \

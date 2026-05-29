@@ -592,6 +592,7 @@ optional_module_build_inputs() {
       printf '%s\n' \
         "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/whisper-en.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/whisper-fr.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/tcp_forward.py"
       ;;
@@ -601,6 +602,7 @@ optional_module_build_inputs() {
         "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/entrypoint.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/install-agent-clis.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/agent-cli-wrapper.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/whisper-en.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/whisper-fr.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/vibe-wrapper.sh"
       ;;
@@ -726,6 +728,7 @@ core_service_build_inputs() {
         "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_wrapper.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_config_layers.py" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_gateway_entrypoint.sh" \
+        "${AGENTIC_REPO_ROOT}/deployments/optional/whisper-en.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/whisper-fr.sh" \
         "${AGENTIC_REPO_ROOT}/deployments/optional/tcp_forward.py"
       ;;
@@ -922,12 +925,14 @@ agent_base_build_fingerprint() {
       [[ -f "${default_cli_wrapper}" ]] || die "default agent CLI wrapper missing: ${default_cli_wrapper}"
       [[ -f "${default_vibe_wrapper}" ]] || die "default vibe wrapper missing: ${default_vibe_wrapper}"
       [[ -f "${default_hermes_wrapper}" ]] || die "default hermes wrapper missing: ${default_hermes_wrapper}"
+      [[ -f "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/whisper-en.sh" ]] || die "default whisper-en wrapper missing"
       [[ -f "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/whisper-fr.sh" ]] || die "default whisper-fr wrapper missing"
       sha256sum "${default_entrypoint}"
       sha256sum "${default_install_script}"
       sha256sum "${default_cli_wrapper}"
       sha256sum "${default_vibe_wrapper}"
       sha256sum "${default_hermes_wrapper}"
+      sha256sum "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/whisper-en.sh"
       sha256sum "${AGENTIC_REPO_ROOT}/deployments/images/agent-cli-base/whisper-fr.sh"
     fi
   } | sha256sum | awk '{print $1}'
@@ -946,8 +951,8 @@ assert_agent_base_image_contract() {
   [[ -n "${entrypoint_json}" && "${entrypoint_json}" != "null" && "${entrypoint_json}" != "[]" ]] \
     || die "agent base image must define an entrypoint compatible with persistent tmux sessions: ${image_ref}"
 
-  timeout 30 docker run --rm --entrypoint sh "${image_ref}" -lc 'command -v bash tmux git curl ffmpeg vlc whisper whisper-fr >/dev/null' \
-    || die "agent base image must include bash/tmux/git/curl/ffmpeg/vlc/whisper/whisper-fr: ${image_ref}"
+  timeout 30 docker run --rm --entrypoint sh "${image_ref}" -lc 'command -v bash tmux git curl ffmpeg vlc whisper whisper-en whisper-fr >/dev/null' \
+    || die "agent base image must include bash/tmux/git/curl/ffmpeg/vlc/whisper/whisper-en/whisper-fr: ${image_ref}"
 
   timeout 45 docker run --rm --entrypoint sh "${image_ref}" -lc '
     command -v codex claude opencode pi vibe openhands openclaw hermes >/dev/null
