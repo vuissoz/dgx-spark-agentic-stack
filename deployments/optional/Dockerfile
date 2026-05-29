@@ -30,7 +30,7 @@ ARG OPENCLAW_INSTALL_VERSION=latest
 ARG OPENCLAW_PREFIX=/opt/openclaw
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
+  && packages='\
     bash \
     ca-certificates \
     curl \
@@ -40,10 +40,12 @@ RUN apt-get update \
     python3-pip \
     python3-pytest \
     python3-setuptools \
-    python3-torch \
     vlc \
-    xz-utils \
+    xz-utils' \
+  && if apt-cache show python3-torch 2>/dev/null | grep -q '^Package: python3-torch$'; then packages="${packages} python3-torch"; fi \
+  && apt-get install -y --no-install-recommends ${packages} \
   && python3 -m pip install --no-cache-dir pytest openai-whisper \
+  && python3 -c 'import torch, whisper; print(torch.__version__); print(whisper.__file__)' \
   && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system app && adduser --system --ingroup app app

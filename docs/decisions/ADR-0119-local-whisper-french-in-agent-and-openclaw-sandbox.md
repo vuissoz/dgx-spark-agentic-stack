@@ -17,9 +17,14 @@ Two runtime constraints shape the implementation:
 
 ## Decision
 
-- Ship `ffmpeg`, `vlc`, `python3-torch`, and `openai-whisper` directly in:
+- Ship `ffmpeg`, `vlc`, and `openai-whisper` directly in:
   - `agentic/agent-cli-base:local`
   - `agentic/optional-modules:local`
+- Resolve the Torch runtime from the most stable source available per target
+  architecture:
+  - prefer distro `python3-torch` when the package exists for the image base;
+  - otherwise let `pip` resolve `torch` during the managed image build and fail
+    the build immediately if `import torch` or `import whisper` is broken.
 - Expose both:
   - `whisper` for raw upstream usage;
   - `whisper-en` as a convenience wrapper for

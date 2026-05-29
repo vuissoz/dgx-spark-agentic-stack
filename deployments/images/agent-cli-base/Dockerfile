@@ -34,7 +34,7 @@ RUN apt-get update \
   && printf 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_%s.x nodistro main\n' "${AGENT_NODE_MAJOR}" \
     >/etc/apt/sources.list.d/nodesource.list \
   && apt-get update \
-  && apt-get install -y --no-install-recommends \
+  && packages='\
     autoconf \
     automake \
     bash \
@@ -77,7 +77,6 @@ RUN apt-get update \
     python3-pip \
     python3-pytest \
     python3-setuptools \
-    python3-torch \
     python3-venv \
     ripgrep \
     rsync \
@@ -93,9 +92,11 @@ RUN apt-get update \
     vim-tiny \
     xz-utils \
     zip \
-    zlib1g-dev \
-  && python3 -m pip install --break-system-packages --no-cache-dir \
-    openai-whisper \
+    zlib1g-dev' \
+  && if apt-cache show python3-torch 2>/dev/null | grep -q '^Package: python3-torch$'; then packages="${packages} python3-torch"; fi \
+  && apt-get install -y --no-install-recommends ${packages} \
+  && python3 -m pip install --break-system-packages --no-cache-dir openai-whisper \
+  && python3 -c 'import torch, whisper; print(torch.__version__); print(whisper.__file__)' \
   && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 20 || (major === 20 && minor < 6)) { console.error(`Node ${process.versions.node} is below required 20.6.0`); process.exit(1); }' \
   && rm -rf /var/lib/apt/lists/*
 
