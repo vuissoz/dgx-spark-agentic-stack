@@ -39,6 +39,9 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 - Suivi livré `dgx-spark-agentic-stack-yzk0` : test d’intégration end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, collecte d’artefacts et doctor final.
 - Suivi livré `dgx-spark-agentic-stack-i4o2` : tous les conteneurs agents ciblés par `repo-e2e` embarquent désormais la toolchain `git/python3/pytest` dès leur création, avec fallback runtime `codex` quand `bwrap`/user namespaces ne sont pas disponibles.
 - Les images `agentic/agent-cli-base:local` et `agentic/optional-modules:local` embarquent désormais aussi `ffmpeg`, `vlc` et `openai-whisper`, avec wrappers `whisper-fr` et `whisper-en` pour la transcription locale en français et en anglais dans les conteneurs agents et `openclaw-sandbox`.
+- La commande opérateur `agent context` existe désormais avec persistance runtime et documentation de surface dans les README.
+- OpenClaw réconcilie maintenant ses métadonnées de contexte avec le budget effectif de la stack, avec contrôle `doctor` et test dédié.
+- `agent doctor` attend désormais la convergence runtime OpenClaw avant de statuer, ce qui évite des faux négatifs au démarrage.
 - La compatibilité agents inspirée des contrats Ollama inclut :
   - profils de configuration par agent versionnés ;
   - chemins explicites `/v1/chat/completions`, `/v1/responses`, `/v1/messages` ;
@@ -113,8 +116,11 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
   - `dgx-spark-agentic-stack-433` : vrai Control UI OpenClaw sur `127.0.0.1:18789`.
   - `dgx-spark-agentic-stack-qik` : provider bridges stack-managed pour Telegram/Slack/Discord + bootstrap WhatsApp.
   - `dgx-spark-agentic-stack-u326` : `agent openclaw init` livré comme chemin stack-managed d’onboarding/réparation, réexécutable en mode réparation idempotente.
+  - la trajectoire `repo-e2e` OpenClaw est complétée par un push SSH canonique vers la forge interne, un préflight plus strict avec progression terminale exploitable, et une réconciliation explicite des métadonnées de contexte avec le budget stack.
 - UI / ComfyUI / docs / onboarding :
   - transcription locale intégrée dans les conteneurs agents et `openclaw-sandbox` via `ffmpeg`/`vlc`/`openai-whisper`, avec wrappers `whisper-fr` et `whisper-en`, caches persistants compatibles `read_only`, contrat d’image renforcé et documentation/ADR associées.
+  - OpenHands reste maintenant aligné sur son UID natif `42420`, avec bootstrap runtime et tests ajustés pour préserver la stabilité d’exécution rootless.
+  - un runbook dédié documente maintenant l’onboarding du canal Telegram OpenClaw stack-managed.
   - `dgx-spark-agentic-stack-3yi` : garde-fou OpenHands contre restart/OOM au démarrage de nouvelles conversations.
   - `dgx-spark-agentic-stack-8cx` : proxy WebSocket ComfyUI et bootstrap Flux.1-dev clarifiés.
   - `dgx-spark-agentic-stack-hz0n` : test e2e rootless-dev Flux.1-dev avec préparation/téléchargement des assets requis, garde-fou sur restart backend et validation d'image PNG produite.
