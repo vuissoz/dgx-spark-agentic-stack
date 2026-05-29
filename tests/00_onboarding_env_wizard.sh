@@ -395,6 +395,8 @@ grep -q "^export AGENTIC_LIMIT_OBS_MEM='512m'$" "${override_env_file}" \
   || fail "rootless default AGENTIC_LIMIT_OBS_MEM is not applied"
 grep -q "^export AGENTIC_LIMIT_OLLAMA_MEM='64g'$" "${override_env_file}" \
   || fail "override flow default AGENTIC_LIMIT_OLLAMA_MEM is not 64g for rootless-dev"
+grep -q "^export AGENTIC_LIMIT_AGENTS_MEM='4g'$" "${override_env_file}" \
+  || fail "override flow default AGENTIC_LIMIT_AGENTS_MEM is not 4g for rootless-dev"
 grep -q "^export AGENTIC_OBS_RETENTION_TIME='7d'$" "${override_env_file}" \
   || fail "rootless default AGENTIC_OBS_RETENTION_TIME is not applied"
 grep -q "^export AGENTIC_OBS_MAX_DISK='8GB'$" "${override_env_file}" \
@@ -475,6 +477,8 @@ grep -q "^export AGENTIC_OBS_RETENTION_TIME='7d'$" "${rootless_default_env_file}
   || fail "rootless default AGENTIC_OBS_RETENTION_TIME must be 7d"
 grep -q "^export AGENTIC_OBS_MAX_DISK='8GB'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_OBS_MAX_DISK must be 8GB"
+grep -q "^export AGENTIC_LIMIT_AGENTS_MEM='4g'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_LIMIT_AGENTS_MEM must be 4g"
 ok "wizard rootless default models path is open-webui/ollama_data/models"
 
 if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \

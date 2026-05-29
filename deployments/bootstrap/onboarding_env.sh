@@ -377,7 +377,7 @@ default_limits_stack_mem_for_profile() {
   if [[ "${profile}" == "rootless-dev" ]]; then
     case "${stack}" in
       core) printf '%s\n' "2g" ;;
-      agents) printf '%s\n' "1g" ;;
+      agents) printf '%s\n' "4g" ;;
       ui) printf '%s\n' "1g" ;;
       obs) printf '%s\n' "512m" ;;
       rag) printf '%s\n' "1g" ;;
