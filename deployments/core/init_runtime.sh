@@ -278,6 +278,63 @@ state_path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", enc
 PY
 }
 
+ensure_openclaw_default_skills_plugin() {
+  local plugin_src_dir="${OPTIONAL_TEMPLATE_DIR}/openclaw-default-skills-plugin"
+  local plugin_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/stack-default-skills"
+  local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+  local rel_path=""
+
+  install -d -m 0770 "${plugin_dst_dir}" "${plugin_dst_dir}/skills"
+  sync_runtime_file "${plugin_src_dir}/package.json" "${plugin_dst_dir}/package.json" 0644
+  sync_runtime_file "${plugin_src_dir}/openclaw.plugin.json" "${plugin_dst_dir}/openclaw.plugin.json" 0644
+  while IFS= read -r -d '' src_file; do
+    rel_path="${src_file#${plugin_src_dir}/}"
+    sync_runtime_file "${src_file}" "${plugin_dst_dir}/${rel_path}" 0644
+  done < <(find "${plugin_src_dir}/skills" -type f -print0)
+
+  python3 - "${state_file}" "${plugin_dst_dir}" <<'PY'
+import json
+import pathlib
+import sys
+
+state_path = pathlib.Path(sys.argv[1])
+plugin_dir = pathlib.Path(sys.argv[2])
+payload = json.loads(state_path.read_text(encoding="utf-8"))
+
+plugins = payload.setdefault("plugins", {})
+allow = plugins.setdefault("allow", [])
+if not isinstance(allow, list):
+    allow = []
+    plugins["allow"] = allow
+if "stack-default-skills" not in allow:
+    allow.append("stack-default-skills")
+
+entries = plugins.setdefault("entries", {})
+if not isinstance(entries, dict):
+    entries = {}
+    plugins["entries"] = entries
+entry = entries.setdefault("stack-default-skills", {})
+if not isinstance(entry, dict):
+    entry = {}
+    entries["stack-default-skills"] = entry
+entry["enabled"] = True
+
+installs = plugins.setdefault("installs", {})
+if not isinstance(installs, dict):
+    installs = {}
+    plugins["installs"] = installs
+install_record = installs.setdefault("stack-default-skills", {})
+if not isinstance(install_record, dict):
+    install_record = {}
+    installs["stack-default-skills"] = install_record
+install_record["source"] = "path"
+install_record["sourcePath"] = str(plugin_dir)
+install_record["installPath"] = str(plugin_dir)
+
+state_path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+PY
+}
+
 set_openclaw_runtime_permissions() {
   local openclaw_config_dir="${AGENTIC_ROOT}/openclaw/config"
   local openclaw_config_bridge_dir="${AGENTIC_ROOT}/openclaw/config/bridge"
@@ -624,6 +681,7 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   ensure_openclaw_default_web_tools
   ensure_openclaw_chat_status_plugin
   ensure_openclaw_deep_research_skill
+  ensure_openclaw_default_skills_plugin
   reconcile_openclaw_context_metadata
   ensure_allowlist_baseline_entries "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt"
   chmod 0640 "${AGENTIC_ROOT}/gate/config/model_routes.yml"

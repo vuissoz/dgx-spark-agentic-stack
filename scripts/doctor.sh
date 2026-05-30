@@ -2113,6 +2113,9 @@ optional_openclaw_deep_research_skill_file="${optional_openclaw_deep_research_pl
 optional_openclaw_deep_research_workspace_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR}/deep-researcher"
 optional_openclaw_deep_research_workspace_soul_file="${optional_openclaw_deep_research_workspace_dir}/SOUL.md"
 optional_openclaw_deep_research_workspace_init_file="${optional_openclaw_deep_research_workspace_dir}/scripts/init_research_run.py"
+optional_openclaw_default_skills_plugin_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/stack-default-skills"
+optional_openclaw_default_skills_runtime_dir="/state/cli/openclaw-home/.openclaw/extensions/stack-default-skills"
+optional_openclaw_default_skills_manifest_file="${optional_openclaw_default_skills_plugin_dir}/openclaw.plugin.json"
 optional_openclaw_approvals_dir="${AGENTIC_ROOT}/openclaw/state/approvals"
 optional_openclaw_sandbox_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/session-sandboxes.json"
 optional_openclaw_operator_registry_file="${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
@@ -2386,6 +2389,9 @@ PY
   if [[ ! -s "${optional_openclaw_deep_research_workspace_init_file}" ]]; then
     doctor_fail "managed deep-research workspace init script is missing: ${optional_openclaw_deep_research_workspace_init_file}"
   fi
+  if [[ ! -s "${optional_openclaw_default_skills_manifest_file}" ]]; then
+    doctor_fail "managed openclaw default-skills plugin manifest is missing: ${optional_openclaw_default_skills_manifest_file}"
+  fi
   if ! python3 - "${optional_openclaw_state_file}" "${optional_openclaw_chat_status_manifest_file}" "${optional_openclaw_chat_status_runtime_dir}" <<'PY' >/dev/null 2>&1
 import json
 import pathlib
@@ -2468,6 +2474,47 @@ PY
   then
     doctor_fail "openclaw runtime must enable the managed deep-research plugin and record install provenance"
   fi
+  if ! python3 - "${optional_openclaw_state_file}" "${optional_openclaw_default_skills_manifest_file}" "${optional_openclaw_default_skills_runtime_dir}" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+manifest = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+plugin_dir = str(pathlib.Path(sys.argv[3]))
+if manifest.get("id") != "stack-default-skills":
+    raise SystemExit(1)
+skills = manifest.get("skills")
+if not isinstance(skills, list) or "./skills" not in skills:
+    raise SystemExit(1)
+plugins = state.get("plugins")
+if not isinstance(plugins, dict):
+    raise SystemExit(1)
+allow = plugins.get("allow")
+if not isinstance(allow, list) or "stack-default-skills" not in allow:
+    raise SystemExit(1)
+entries = plugins.get("entries")
+if not isinstance(entries, dict):
+    raise SystemExit(1)
+entry = entries.get("stack-default-skills")
+if not isinstance(entry, dict) or entry.get("enabled") is not True:
+    raise SystemExit(1)
+installs = plugins.get("installs")
+if not isinstance(installs, dict):
+    raise SystemExit(1)
+install = installs.get("stack-default-skills")
+if not isinstance(install, dict):
+    raise SystemExit(1)
+if install.get("source") != "path":
+    raise SystemExit(1)
+if install.get("sourcePath") != plugin_dir:
+    raise SystemExit(1)
+if install.get("installPath") != plugin_dir:
+    raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw runtime must enable the managed default-skills plugin and record install provenance"
+  fi
   if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw plugins list --json >/tmp/openclaw-doctor-plugins.json 2>/tmp/openclaw-doctor-plugins.err && python3 - <<'PY'
 import json
 from pathlib import Path
@@ -2503,6 +2550,72 @@ for plugin in payload.get('plugins', []):
 raise SystemExit(1)
 PY"; then
     doctor_fail "openclaw plugins list must expose an enabled managed deep-research plugin"
+  fi
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw plugins list --json >/tmp/openclaw-doctor-plugins.json 2>/tmp/openclaw-doctor-plugins.err && python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('/tmp/openclaw-doctor-plugins.json').read_text(encoding='utf-8'))
+for plugin in payload.get('plugins', []):
+    if plugin.get('id') != 'stack-default-skills':
+        continue
+    if not (plugin.get('enabled') is True or plugin.get('explicitlyEnabled') is True):
+        raise SystemExit(1)
+    status = str(plugin.get('status') or '').strip().lower()
+    if status in {'disabled', 'error'}:
+        raise SystemExit(1)
+    raise SystemExit(0)
+raise SystemExit(1)
+PY"; then
+    doctor_fail "openclaw plugins list must expose an enabled managed default-skills plugin"
+  fi
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw skills list --json >/tmp/openclaw-doctor-skills.json 2>/tmp/openclaw-doctor-skills.err && python3 - <<'PY'
+import json
+from pathlib import Path
+
+expected = {
+    'capability-evolver',
+    'clawflows',
+    'gog-google-one-gpt',
+    'github-repo-manager',
+    'summarize',
+    'knowledge-base-rag',
+    'mission-control',
+    'code-reviewer',
+    'decision-assistant',
+    'red-team',
+    'pre-mortem',
+    'literature-scout',
+    'paper-reviewer',
+    'grant-writer',
+    'citation-auditor',
+    'architecture-reviewer',
+    'documentation-builder',
+    'dependency-auditor',
+    'test-engineer',
+    'knowledge-curator',
+    'knowledge-gap-detector',
+    'workspace-cartographer',
+    'capability-evolver-plus-plus',
+    'agent-security-watcher',
+    'meeting-synthesizer',
+}
+
+payload = json.loads(Path('/tmp/openclaw-doctor-skills.json').read_text(encoding='utf-8'))
+skills = payload.get('skills', []) if isinstance(payload, dict) else []
+seen = set()
+for item in skills:
+    if not isinstance(item, dict):
+        continue
+    for key in ('name', 'id', 'slug'):
+        value = item.get(key)
+        if isinstance(value, str) and value:
+            seen.add(value)
+missing = sorted(expected - seen)
+if missing:
+    raise SystemExit('\\n'.join(missing))
+PY"; then
+    doctor_fail "openclaw skills list must expose the full managed default skill catalog"
   fi
 fi
 
