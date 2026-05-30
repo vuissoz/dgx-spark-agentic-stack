@@ -28,6 +28,7 @@ FROM python:3.12-slim
 ARG OPENCLAW_INSTALL_CLI_SCRIPT=https://openclaw.ai/install-cli.sh
 ARG OPENCLAW_INSTALL_VERSION=latest
 ARG OPENCLAW_PREFIX=/opt/openclaw
+ARG OPENAI_WHISPER_PIP_SPEC=openai-whisper==20250625
 
 RUN apt-get update \
   && packages='\
@@ -42,9 +43,22 @@ RUN apt-get update \
     python3-setuptools \
     vlc \
     xz-utils' \
-  && if apt-cache show python3-torch 2>/dev/null | grep -q '^Package: python3-torch$'; then packages="${packages} python3-torch"; fi \
+  && whisper_pip_deps='certifi==2026.5.20 charset-normalizer==3.4.7 idna==3.17 llvmlite==0.47.0 more-itertools==11.1.0 numba==0.65.1 numpy==2.4.6 regex==2026.5.9 requests==2.34.2 tiktoken==0.13.0 tqdm==4.67.3 urllib3==2.7.0' \
+  && requested_distro_torch=0 \
+  && if apt-cache show python3-torch 2>/dev/null | grep -q '^Package: python3-torch$'; then \
+       packages="${packages} python3-torch"; \
+       requested_distro_torch=1; \
+     fi \
   && apt-get install -y --no-install-recommends ${packages} \
-  && python3 -m pip install --no-cache-dir pytest openai-whisper \
+  && has_distro_torch=0 \
+  && if [ "${requested_distro_torch}" = "1" ] && python3 -c 'import torch' >/dev/null 2>&1; then \
+       has_distro_torch=1; \
+     fi \
+  && if [ "${has_distro_torch}" = "1" ]; then \
+       python3 -m pip install --ignore-installed --no-cache-dir ${whisper_pip_deps} "${OPENAI_WHISPER_PIP_SPEC}" --no-deps; \
+     else \
+       python3 -m pip install --no-cache-dir "${OPENAI_WHISPER_PIP_SPEC}"; \
+     fi \
   && python3 -c 'import torch, whisper; print(torch.__version__); print(whisper.__file__)' \
   && rm -rf /var/lib/apt/lists/*
 

@@ -21,6 +21,7 @@ ARG HERMES_AGENT_GIT_URL=https://github.com/NousResearch/hermes-agent.git
 ARG HERMES_AGENT_GIT_REF=v2026.4.3
 ARG HERMES_AGENT_GIT_SHA=abf1e98f6253f6984479fe03d1098173a9b065a7
 ARG HERMES_PIP_EXTRAS=pty,cli
+ARG OPENAI_WHISPER_PIP_SPEC=openai-whisper==20250625
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -93,9 +94,22 @@ RUN apt-get update \
     xz-utils \
     zip \
     zlib1g-dev' \
-  && if apt-cache show python3-torch 2>/dev/null | grep -q '^Package: python3-torch$'; then packages="${packages} python3-torch"; fi \
+  && whisper_pip_deps='certifi==2026.5.20 charset-normalizer==3.4.7 idna==3.17 llvmlite==0.47.0 more-itertools==11.1.0 numba==0.65.1 numpy==2.4.6 regex==2026.5.9 requests==2.34.2 tiktoken==0.13.0 tqdm==4.67.3 urllib3==2.7.0' \
+  && requested_distro_torch=0 \
+  && if apt-cache show python3-torch 2>/dev/null | grep -q '^Package: python3-torch$'; then \
+       packages="${packages} python3-torch"; \
+       requested_distro_torch=1; \
+     fi \
   && apt-get install -y --no-install-recommends ${packages} \
-  && python3 -m pip install --break-system-packages --no-cache-dir openai-whisper \
+  && has_distro_torch=0 \
+  && if [ "${requested_distro_torch}" = "1" ] && python3 -c 'import torch' >/dev/null 2>&1; then \
+       has_distro_torch=1; \
+     fi \
+  && if [ "${has_distro_torch}" = "1" ]; then \
+       python3 -m pip install --break-system-packages --ignore-installed --no-cache-dir ${whisper_pip_deps} "${OPENAI_WHISPER_PIP_SPEC}" --no-deps; \
+     else \
+       python3 -m pip install --break-system-packages --no-cache-dir "${OPENAI_WHISPER_PIP_SPEC}"; \
+     fi \
   && python3 -c 'import torch, whisper; print(torch.__version__); print(whisper.__file__)' \
   && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 20 || (major === 20 && minor < 6)) { console.error(`Node ${process.versions.node} is below required 20.6.0`); process.exit(1); }' \
   && rm -rf /var/lib/apt/lists/*

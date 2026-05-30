@@ -22,7 +22,12 @@ Two runtime constraints shape the implementation:
   - `agentic/optional-modules:local`
 - Resolve the Torch runtime from the most stable source available per target
   architecture:
-  - prefer distro `python3-torch` when the package exists for the image base;
+  - prefer distro `python3-torch` when the package exists for the image base
+    and is importable by the active container Python interpreter;
+  - when distro `python3-torch` is usable, install `openai-whisper` with
+    `--no-deps`, `--ignore-installed`, and explicit pins for the remaining
+    Whisper Python dependencies so `pip` does not redownload or override
+    Torch/CUDA or fail while trying to uninstall distro-managed Python wheels;
   - otherwise let `pip` resolve `torch` during the managed image build and fail
     the build immediately if `import torch` or `import whisper` is broken.
 - Expose both:
