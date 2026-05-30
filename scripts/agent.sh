@@ -1537,6 +1537,25 @@ ensure_optional_runtime() {
   fi
 }
 
+reconcile_openclaw_context_metadata() {
+  local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+  local state_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home"
+  local context_window="${AGENTIC_CONTEXT_BUDGET_TOKENS:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${OLLAMA_CONTEXT_LENGTH:-}}}"
+
+  [[ -f "${state_file}" ]] || return 0
+  [[ -d "${state_dir}" ]] || return 0
+  [[ -n "${AGENTIC_DEFAULT_MODEL:-}" ]] || return 0
+  [[ "${context_window}" =~ ^[0-9]+$ ]] || return 0
+  (( context_window >= 2048 )) || return 0
+
+  python3 "${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_context_reconcile.py" reconcile \
+    --state-file "${state_file}" \
+    --state-dir "${state_dir}" \
+    --model-id "${AGENTIC_DEFAULT_MODEL}" \
+    --context-window "${context_window}" >/tmp/agent-openclaw-context-reconcile.out 2>&1 \
+    || die "failed to reconcile OpenClaw context metadata before optional gating"
+}
+
 run_git_forge_bootstrap() {
   [[ -x "${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}" ]] || die "git-forge bootstrap script missing or not executable: ${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}"
   if ! "${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT}"; then
@@ -5092,6 +5111,7 @@ case "$cmd" in
       fi
 
       if [[ "${AGENTIC_SKIP_OPTIONAL_GATING:-0}" != "1" ]]; then
+        reconcile_openclaw_context_metadata
         wait_for_openclaw_runtime_convergence 45 || true
         if ! "${AGENT_DOCTOR_SCRIPT}" >/tmp/agent-optional-gate.out 2>&1; then
           cat /tmp/agent-optional-gate.out >&2
