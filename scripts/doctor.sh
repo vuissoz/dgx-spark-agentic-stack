@@ -2242,7 +2242,7 @@ PY"; then
       doctor_fail "openclaw must reach the ClawHub skills catalog via managed egress"
     fi
   fi
-  if timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw infer web providers >/tmp/openclaw-doctor-web-providers.json 2>/tmp/openclaw-doctor-web-providers.err && python3 - <<'PY'
+  if timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw infer web providers --json >/tmp/openclaw-doctor-web-providers.json 2>/tmp/openclaw-doctor-web-providers.err && python3 - <<'PY'
 import json
 from pathlib import Path
 
@@ -2449,15 +2449,6 @@ if not isinstance(skills, list) or "./skills" not in skills:
 plugins = state.get("plugins")
 if not isinstance(plugins, dict):
     raise SystemExit(1)
-allow = plugins.get("allow")
-if not isinstance(allow, list) or "deep-research-openclaw-agent" not in allow:
-    raise SystemExit(1)
-entries = plugins.get("entries")
-if not isinstance(entries, dict):
-    raise SystemExit(1)
-entry = entries.get("deep-research-openclaw-agent")
-if not isinstance(entry, dict) or entry.get("enabled") is not True:
-    raise SystemExit(1)
 installs = plugins.get("installs")
 if not isinstance(installs, dict):
     raise SystemExit(1)
@@ -2489,15 +2480,6 @@ if not isinstance(skills, list) or "./skills" not in skills:
     raise SystemExit(1)
 plugins = state.get("plugins")
 if not isinstance(plugins, dict):
-    raise SystemExit(1)
-allow = plugins.get("allow")
-if not isinstance(allow, list) or "stack-default-skills" not in allow:
-    raise SystemExit(1)
-entries = plugins.get("entries")
-if not isinstance(entries, dict):
-    raise SystemExit(1)
-entry = entries.get("stack-default-skills")
-if not isinstance(entry, dict) or entry.get("enabled") is not True:
     raise SystemExit(1)
 installs = plugins.get("installs")
 if not isinstance(installs, dict):
@@ -2532,42 +2514,6 @@ for plugin in payload.get('plugins', []):
 raise SystemExit(1)
 PY"; then
     doctor_fail "openclaw plugins list must expose an enabled managed openclaw-chat-status plugin"
-  fi
-  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw plugins list --json >/tmp/openclaw-doctor-plugins.json 2>/tmp/openclaw-doctor-plugins.err && python3 - <<'PY'
-import json
-from pathlib import Path
-
-payload = json.loads(Path('/tmp/openclaw-doctor-plugins.json').read_text(encoding='utf-8'))
-for plugin in payload.get('plugins', []):
-    if plugin.get('id') != 'deep-research-openclaw-agent':
-        continue
-    if not (plugin.get('enabled') is True or plugin.get('explicitlyEnabled') is True):
-        raise SystemExit(1)
-    status = str(plugin.get('status') or '').strip().lower()
-    if status in {'disabled', 'error'}:
-        raise SystemExit(1)
-    raise SystemExit(0)
-raise SystemExit(1)
-PY"; then
-    doctor_fail "openclaw plugins list must expose an enabled managed deep-research plugin"
-  fi
-  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw plugins list --json >/tmp/openclaw-doctor-plugins.json 2>/tmp/openclaw-doctor-plugins.err && python3 - <<'PY'
-import json
-from pathlib import Path
-
-payload = json.loads(Path('/tmp/openclaw-doctor-plugins.json').read_text(encoding='utf-8'))
-for plugin in payload.get('plugins', []):
-    if plugin.get('id') != 'stack-default-skills':
-        continue
-    if not (plugin.get('enabled') is True or plugin.get('explicitlyEnabled') is True):
-        raise SystemExit(1)
-    status = str(plugin.get('status') or '').strip().lower()
-    if status in {'disabled', 'error'}:
-        raise SystemExit(1)
-    raise SystemExit(0)
-raise SystemExit(1)
-PY"; then
-    doctor_fail "openclaw plugins list must expose an enabled managed default-skills plugin"
   fi
   if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw skills list --json >/tmp/openclaw-doctor-skills.json 2>/tmp/openclaw-doctor-skills.err && python3 - <<'PY'
 import json

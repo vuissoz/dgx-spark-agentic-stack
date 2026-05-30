@@ -214,6 +214,8 @@ PY
 ensure_openclaw_deep_research_skill() {
   local plugin_src_dir="${OPTIONAL_TEMPLATE_DIR}/openclaw-deep-research-plugin"
   local plugin_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/deep-research-openclaw-agent"
+  local managed_skill_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/skills/deep-research"
+  local plugin_runtime_dir="/state/cli/openclaw-home/.openclaw/extensions/deep-research-openclaw-agent"
   local workspace_src_dir="${OPTIONAL_TEMPLATE_DIR}/openclaw-deep-research-workspace"
   local workspace_dst_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR}/deep-researcher"
   local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
@@ -223,6 +225,8 @@ ensure_openclaw_deep_research_skill() {
   sync_runtime_file "${plugin_src_dir}/package.json" "${plugin_dst_dir}/package.json" 0644
   sync_runtime_file "${plugin_src_dir}/openclaw.plugin.json" "${plugin_dst_dir}/openclaw.plugin.json" 0644
   sync_runtime_file "${plugin_src_dir}/skills/deep-research/SKILL.md" "${plugin_dst_dir}/skills/deep-research/SKILL.md" 0644
+  install -d -m 0770 "${managed_skill_dst_dir}"
+  sync_runtime_file "${plugin_src_dir}/skills/deep-research/SKILL.md" "${managed_skill_dst_dir}/SKILL.md" 0644
 
   install -d -m 0770 \
     "${workspace_dst_dir}" \
@@ -235,7 +239,7 @@ ensure_openclaw_deep_research_skill() {
     copy_if_missing "${src_file}" "${workspace_dst_dir}/${rel_path}" 0644
   done < <(find "${workspace_src_dir}" -type f -print0)
 
-  python3 - "${state_file}" "${plugin_dst_dir}" <<'PY'
+  python3 - "${state_file}" "${plugin_runtime_dir}" <<'PY'
 import json
 import pathlib
 import sys
@@ -245,22 +249,13 @@ plugin_dir = pathlib.Path(sys.argv[2])
 payload = json.loads(state_path.read_text(encoding="utf-8"))
 
 plugins = payload.setdefault("plugins", {})
-allow = plugins.setdefault("allow", [])
-if not isinstance(allow, list):
-    allow = []
-    plugins["allow"] = allow
-if "deep-research-openclaw-agent" not in allow:
-    allow.append("deep-research-openclaw-agent")
+allow = plugins.get("allow")
+if isinstance(allow, list):
+    plugins["allow"] = [item for item in allow if item != "deep-research-openclaw-agent"]
 
-entries = plugins.setdefault("entries", {})
-if not isinstance(entries, dict):
-    entries = {}
-    plugins["entries"] = entries
-entry = entries.setdefault("deep-research-openclaw-agent", {})
-if not isinstance(entry, dict):
-    entry = {}
-    entries["deep-research-openclaw-agent"] = entry
-entry["enabled"] = True
+entries = plugins.get("entries")
+if isinstance(entries, dict):
+    entries.pop("deep-research-openclaw-agent", None)
 
 installs = plugins.setdefault("installs", {})
 if not isinstance(installs, dict):
@@ -281,18 +276,23 @@ PY
 ensure_openclaw_default_skills_plugin() {
   local plugin_src_dir="${OPTIONAL_TEMPLATE_DIR}/openclaw-default-skills-plugin"
   local plugin_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/stack-default-skills"
+  local managed_skills_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/skills"
+  local plugin_runtime_dir="/state/cli/openclaw-home/.openclaw/extensions/stack-default-skills"
   local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
   local rel_path=""
 
-  install -d -m 0770 "${plugin_dst_dir}" "${plugin_dst_dir}/skills"
+  install -d -m 0770 "${plugin_dst_dir}" "${plugin_dst_dir}/skills" "${managed_skills_dst_dir}"
   sync_runtime_file "${plugin_src_dir}/package.json" "${plugin_dst_dir}/package.json" 0644
   sync_runtime_file "${plugin_src_dir}/openclaw.plugin.json" "${plugin_dst_dir}/openclaw.plugin.json" 0644
   while IFS= read -r -d '' src_file; do
     rel_path="${src_file#${plugin_src_dir}/}"
     sync_runtime_file "${src_file}" "${plugin_dst_dir}/${rel_path}" 0644
+    if [[ "${rel_path}" == skills/* ]]; then
+      sync_runtime_file "${src_file}" "${managed_skills_dst_dir}/${rel_path#skills/}" 0644
+    fi
   done < <(find "${plugin_src_dir}/skills" -type f -print0)
 
-  python3 - "${state_file}" "${plugin_dst_dir}" <<'PY'
+  python3 - "${state_file}" "${plugin_runtime_dir}" <<'PY'
 import json
 import pathlib
 import sys
@@ -302,22 +302,13 @@ plugin_dir = pathlib.Path(sys.argv[2])
 payload = json.loads(state_path.read_text(encoding="utf-8"))
 
 plugins = payload.setdefault("plugins", {})
-allow = plugins.setdefault("allow", [])
-if not isinstance(allow, list):
-    allow = []
-    plugins["allow"] = allow
-if "stack-default-skills" not in allow:
-    allow.append("stack-default-skills")
+allow = plugins.get("allow")
+if isinstance(allow, list):
+    plugins["allow"] = [item for item in allow if item != "stack-default-skills"]
 
-entries = plugins.setdefault("entries", {})
-if not isinstance(entries, dict):
-    entries = {}
-    plugins["entries"] = entries
-entry = entries.setdefault("stack-default-skills", {})
-if not isinstance(entry, dict):
-    entry = {}
-    entries["stack-default-skills"] = entry
-entry["enabled"] = True
+entries = plugins.get("entries")
+if isinstance(entries, dict):
+    entries.pop("stack-default-skills", None)
 
 installs = plugins.setdefault("installs", {})
 if not isinstance(installs, dict):

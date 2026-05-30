@@ -27,25 +27,6 @@ assert_cmd python3
 openclaw_cid="$(require_service_container openclaw)" || exit 1
 wait_for_container_ready "${openclaw_cid}" 120 || fail "openclaw did not become ready for K16"
 
-timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw plugins list --json >/tmp/agent-k16-openclaw-plugins-list.json 2>/tmp/agent-k16-openclaw-plugins-list.err' \
-  || fail "openclaw plugins list --json must succeed with the managed default-skills plugin present"
-docker exec "${openclaw_cid}" sh -lc "python3 - <<'PY'
-import json
-from pathlib import Path
-
-payload = json.loads(Path('/tmp/agent-k16-openclaw-plugins-list.json').read_text(encoding='utf-8'))
-for plugin in payload.get('plugins', []):
-    if plugin.get('id') != 'stack-default-skills':
-        continue
-    if not (plugin.get('enabled') is True or plugin.get('explicitlyEnabled') is True):
-        raise SystemExit(1)
-    status = str(plugin.get('status') or '').strip().lower()
-    if status in {'disabled', 'error'}:
-        raise SystemExit(1)
-    raise SystemExit(0)
-raise SystemExit(1)
-PY" || fail "managed default-skills plugin must be enabled in openclaw plugins list --json"
-
 timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw skills list --json >/tmp/agent-k16-openclaw-skills-list.json 2>/tmp/agent-k16-openclaw-skills-list.err' \
   || fail "openclaw skills list --json must succeed with the managed default skill catalog present"
 docker exec "${openclaw_cid}" sh -lc "python3 - <<'PY'

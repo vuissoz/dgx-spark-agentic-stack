@@ -66,13 +66,18 @@ search = web.get("search") or {}
 fetch = web.get("fetch") or {}
 plugins = payload.get("plugins") or {}
 entries = plugins.get("entries") or {}
+installs = plugins.get("installs") or {}
 
 assert search.get("provider") == "duckduckgo", "openclaw state must default web search to duckduckgo"
 assert fetch.get("enabled") is True, "openclaw state must enable web fetch"
 assert fetch.get("useTrustedEnvProxy") is True, "openclaw state must trust the managed env proxy for web fetch"
 assert (entries.get("duckduckgo") or {}).get("enabled") is True, "openclaw state must enable bundled duckduckgo plugin"
-assert (entries.get("deep-research-openclaw-agent") or {}).get("enabled") is True, "openclaw state must enable managed deep-research plugin"
-assert (entries.get("stack-default-skills") or {}).get("enabled") is True, "openclaw state must enable managed default-skills plugin"
+assert "deep-research-openclaw-agent" not in (plugins.get("allow") or []), "skill packs must not be forced into plugins.allow"
+assert "stack-default-skills" not in (plugins.get("allow") or []), "skill packs must not be forced into plugins.allow"
+assert "deep-research-openclaw-agent" not in entries, "skill packs must not be seeded as gateway plugins"
+assert "stack-default-skills" not in entries, "skill packs must not be seeded as gateway plugins"
+assert (installs.get("deep-research-openclaw-agent") or {}).get("installPath"), "deep research install provenance must be recorded"
+assert (installs.get("stack-default-skills") or {}).get("installPath"), "default skills install provenance must be recorded"
 PY
 python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
   --immutable-file "${openclaw_immutable_file}" \
