@@ -572,8 +572,8 @@ optional_module_build_services() {
 
 optional_module_build_stamp_key() {
   case "$1" in
-    optional-mcp-catalog) echo "optional-modules-local" ;;
-    optional-pi-mono) echo "agent-cli-base-local" ;;
+    optional-mcp-catalog) echo "openclaw-local" ;;
+    optional-pi-mono) echo "agent-cli-base" ;;
     *) return 1 ;;
   esac
 }
@@ -589,12 +589,7 @@ optional_module_image_ref() {
 optional_module_build_inputs() {
   case "$1" in
     optional-mcp-catalog)
-      printf '%s\n' \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/Dockerfile" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/optional_service.py" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/whisper-en.sh" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/whisper-fr.sh" \
-        "${AGENTIC_REPO_ROOT}/deployments/optional/tcp_forward.py"
+      core_service_build_inputs openclaw
       ;;
     optional-pi-mono)
       printf '%s\n' \
@@ -614,6 +609,17 @@ optional_module_build_inputs() {
 
 optional_module_build_fingerprint() {
   local service="$1"
+  case "${service}" in
+    optional-mcp-catalog)
+      core_service_build_fingerprint openclaw
+      return 0
+      ;;
+    optional-pi-mono)
+      agent_base_build_fingerprint
+      return 0
+      ;;
+  esac
+
   local -a files=()
   local file
 

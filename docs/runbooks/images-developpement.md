@@ -107,12 +107,12 @@ Fichiers usuels:
 - `ollama-gate-local.sha256`
 - `gate-mcp-local.sha256`
 - `agent-cli-base.sha256`
-- `optional-modules-local.sha256`
-- `agent-cli-base-local.sha256` (cas `optional-pi-mono`)
+- `openclaw-local.sha256`
 
 Usage:
 - si l'empreinte correspond aux inputs actuels et que l'image existe, le build est saute,
 - sinon `agent` rebuild et met a jour le stamp.
+- `./agent up optional` partage les memes stamps que `core` (`openclaw-local.sha256` pour `agentic/optional-modules:local`) et `agents` (`agent-cli-base.sha256` pour `agentic/agent-cli-base:local`) pour eviter de recompiler une image deja construite.
 
 ## 4) Override de l'image agents (cas custom)
 
