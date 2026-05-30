@@ -2,4 +2,7 @@
 # Keep this list short and reviewed.
 diagnostics.ping
 time.now_utc
+attachments.list
+attachments.read_text
+attachments.transcribe_audio
 repo.eight_queens.solve

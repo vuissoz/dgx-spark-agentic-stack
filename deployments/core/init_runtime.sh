@@ -180,6 +180,7 @@ set_openclaw_runtime_permissions() {
   local openclaw_sandbox_state_dir="${AGENTIC_ROOT}/openclaw/sandbox/state"
   local openclaw_sandbox_workspaces_dir="${AGENTIC_ROOT}/openclaw/sandbox/workspaces"
   local openclaw_relay_state_dir="${AGENTIC_ROOT}/openclaw/relay/state"
+  local openclaw_relay_attachments_dir="${AGENTIC_ROOT}/openclaw/relay/state/attachments"
   local openclaw_relay_logs_dir="${AGENTIC_ROOT}/openclaw/relay/logs"
   local openclaw_token="${AGENTIC_ROOT}/secrets/runtime/openclaw.token"
   local openclaw_webhook_secret="${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret"
@@ -204,6 +205,7 @@ set_openclaw_runtime_permissions() {
       "${openclaw_sandbox_state_dir}" \
       "${openclaw_sandbox_workspaces_dir}" \
       "${openclaw_relay_state_dir}" \
+      "${openclaw_relay_attachments_dir}" \
       "${openclaw_relay_logs_dir}" \
       "${openclaw_logs_dir}" \
       "${openclaw_ssh_dir}" || true
@@ -228,6 +230,7 @@ set_openclaw_runtime_permissions() {
     "${openclaw_sandbox_state_dir}" \
     "${openclaw_sandbox_workspaces_dir}" \
     "${openclaw_relay_state_dir}" \
+    "${openclaw_relay_attachments_dir}" \
     "${openclaw_relay_logs_dir}" \
     "${openclaw_logs_dir}" \
     "${openclaw_ssh_dir}"
@@ -475,9 +478,10 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/state/approvals/expired"
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/logs"
   install -d -m 0770 "${AGENTIC_OPENCLAW_WORKSPACES_DIR}"
-  install -d -m 0750 "${AGENTIC_ROOT}/openclaw/relay"
-  install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/state"
-  install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
+install -d -m 0750 "${AGENTIC_ROOT}/openclaw/relay"
+install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/state"
+install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/state/attachments"
+install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   install -d -m 0750 "${AGENTIC_ROOT}/openclaw/sandbox"
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/sandbox/state"
   install -d -m 0770 "${AGENTIC_ROOT}/openclaw/sandbox/workspaces"

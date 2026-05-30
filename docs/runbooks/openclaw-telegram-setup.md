@@ -7,6 +7,13 @@ Scope:
 - stack-managed OpenClaw Telegram channel via provider bridge,
 - Telegram DM access to the OpenClaw gateway-backed agent.
 
+Attachment note:
+- the repository now supports staged file attachments and voice notes on the
+  stack-managed local relay/webhook path;
+- direct upstream Telegram provider behavior inside the OpenClaw gateway still
+  depends on upstream runtime behavior outside this repository's controlled
+  relay path.
+
 Use this runbook when:
 - the Telegram bot does not answer,
 - pairing seems unclear,

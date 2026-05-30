@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import hashlib
 import hmac
 import json
+import mimetypes
 import os
 import re
 import shutil
@@ -28,6 +30,25 @@ from openclaw_approvals import (
 
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 SANDBOX_ID_COMPONENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
+ATTACHMENT_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+TEXT_ATTACHMENT_MEDIA_PREFIXES = (
+    "text/",
+    "application/json",
+    "application/xml",
+    "application/yaml",
+    "application/x-yaml",
+)
+TEXT_ATTACHMENT_EXTENSIONS = {
+    ".csv",
+    ".json",
+    ".log",
+    ".md",
+    ".rst",
+    ".txt",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
 
 
 def now_ts() -> str:
@@ -293,6 +314,286 @@ def write_json_file_atomic(path: Path, payload: Any) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, separators=(",", ":"), sort_keys=True), encoding="utf-8")
     tmp.replace(path)
+
+
+def parse_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def attachment_storage_root(cfg: dict[str, Any]) -> Path:
+    return Path(str(cfg.get("attachments_root", "/state/attachments")))
+
+
+def attachment_mount_root(cfg: dict[str, Any]) -> str:
+    return str(cfg.get("attachments_mount_root", "/relay-attachments")).rstrip("/") or "/relay-attachments"
+
+
+def attachment_event_dir(cfg: dict[str, Any], event_id: str) -> Path:
+    return attachment_storage_root(cfg) / event_id
+
+
+def attachment_manifest_path(cfg: dict[str, Any], event_id: str) -> Path:
+    return attachment_event_dir(cfg, event_id) / "manifest.json"
+
+
+def safe_attachment_name(name: str, *, fallback_stem: str, media_type: str) -> str:
+    raw_name = str(name or "").strip()
+    ext = ""
+    if raw_name:
+        ext = Path(raw_name).suffix[:16]
+    if not ext:
+        guessed = mimetypes.guess_extension(media_type or "")
+        if isinstance(guessed, str):
+            ext = guessed[:16]
+    stem = Path(raw_name).stem if raw_name else fallback_stem
+    stem = ATTACHMENT_FILENAME_RE.sub("-", stem).strip(".-_") or fallback_stem
+    safe_ext = ATTACHMENT_FILENAME_RE.sub("", ext).lower()
+    if safe_ext and not safe_ext.startswith("."):
+        safe_ext = f".{safe_ext}"
+    return f"{stem[:80]}{safe_ext}"
+
+
+def attachment_is_textual(metadata: dict[str, Any]) -> bool:
+    media_type = str(metadata.get("media_type", "")).strip().lower()
+    if any(media_type.startswith(prefix) for prefix in TEXT_ATTACHMENT_MEDIA_PREFIXES):
+        return True
+    mounted_path = str(metadata.get("mounted_path", "")).strip()
+    if mounted_path:
+        return Path(mounted_path).suffix.lower() in TEXT_ATTACHMENT_EXTENSIONS
+    return False
+
+
+def attachment_is_audio(metadata: dict[str, Any]) -> bool:
+    media_type = str(metadata.get("media_type", "")).strip().lower()
+    kind = str(metadata.get("kind", "")).strip().lower()
+    if media_type.startswith("audio/"):
+        return True
+    return kind in {"audio", "voice", "voice_note"}
+
+
+def extract_message_text(payload: dict[str, Any]) -> str:
+    for key in ("message", "text", "body"):
+        value = str(payload.get(key, "")).strip()
+        if value:
+            return value
+    return ""
+
+
+def summarize_attachments(event_id: str, attachments: list[dict[str, Any]]) -> str:
+    if not attachments:
+        return ""
+    lines = [f"[attachments event_id={event_id}] {len(attachments)} attachment(s) available:"]
+    for item in attachments[:8]:
+        attachment_id = str(item.get("attachment_id", "")).strip()
+        filename = str(item.get("filename", "")).strip() or attachment_id or "attachment"
+        media_type = str(item.get("media_type", "")).strip() or "application/octet-stream"
+        size_bytes = int(item.get("size_bytes", 0) or 0)
+        kind = str(item.get("kind", "")).strip()
+        flags: list[str] = []
+        if kind:
+            flags.append(kind)
+        if item.get("transcript"):
+            flags.append("transcript")
+        suffix = f" ({', '.join(flags)})" if flags else ""
+        lines.append(f"- {attachment_id}: {filename} [{media_type}, {size_bytes} bytes]{suffix}")
+    if len(attachments) > 8:
+        lines.append(f"- ... {len(attachments) - 8} more attachment(s)")
+    lines.append("Use attachments.list / attachments.read_text / attachments.transcribe_audio as needed.")
+    return "\n".join(lines)
+
+
+def collect_attachment_candidates(payload: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:
+    candidates: list[tuple[dict[str, Any], str]] = []
+    multi_sources = (
+        ("attachments", ""),
+        ("files", ""),
+        ("media", ""),
+    )
+    for key, default_kind in multi_sources:
+        value = payload.get(key)
+        if isinstance(value, list):
+            for entry in value:
+                if isinstance(entry, dict):
+                    candidates.append((entry, default_kind))
+        elif isinstance(value, dict):
+            candidates.append((value, default_kind))
+
+    single_sources = (
+        ("voice", "voice_note"),
+        ("voice_note", "voice_note"),
+        ("audio", "audio"),
+        ("document", "document"),
+        ("image", "image"),
+        ("video", "video"),
+        ("file", "document"),
+    )
+    for key, default_kind in single_sources:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            candidates.append((value, default_kind))
+        elif isinstance(value, list):
+            for entry in value:
+                if isinstance(entry, dict):
+                    candidates.append((entry, default_kind))
+    return candidates
+
+
+def stage_payload_attachments(
+    cfg: dict[str, Any],
+    *,
+    payload: dict[str, Any],
+    event_id: str,
+    provider: str,
+    target: str,
+    base_message: str,
+) -> tuple[list[dict[str, Any]], str]:
+    candidates = collect_attachment_candidates(payload)
+    if not candidates:
+        return [], ""
+
+    max_count = max(1, int(cfg.get("attachment_max_count", 8) or 8))
+    max_bytes = max(1024, int(cfg.get("attachment_max_bytes", 25 * 1024 * 1024) or (25 * 1024 * 1024)))
+    if len(candidates) > max_count:
+        return [], f"too_many_attachments:max={max_count}"
+
+    event_dir = attachment_event_dir(cfg, event_id)
+    event_dir.mkdir(parents=True, exist_ok=True)
+    mount_root = attachment_mount_root(cfg)
+    attachments: list[dict[str, Any]] = []
+
+    for index, (entry, default_kind) in enumerate(candidates, start=1):
+        kind = str(entry.get("kind") or entry.get("type") or default_kind or "attachment").strip().lower() or "attachment"
+        media_type = (
+            str(entry.get("media_type") or entry.get("mime_type") or entry.get("content_type") or "").strip().lower()
+            or "application/octet-stream"
+        )
+        attachment_id = str(entry.get("attachment_id") or entry.get("id") or entry.get("file_id") or "").strip()
+        if not attachment_id:
+            attachment_id = f"att-{index:02d}"
+        if not REQUEST_ID_RE.match(attachment_id):
+            attachment_id = f"att-{index:02d}"
+
+        raw_bytes: bytes
+        base64_value = str(entry.get("content_base64") or entry.get("data_base64") or entry.get("base64") or "").strip()
+        if base64_value:
+            try:
+                raw_bytes = base64.b64decode(base64_value, validate=True)
+            except Exception:
+                return [], f"invalid_attachment_base64:{attachment_id}"
+        else:
+            text_value = entry.get("text")
+            if text_value is None:
+                text_value = entry.get("content")
+            if text_value is None:
+                text_value = entry.get("body")
+            if text_value is None:
+                return [], f"attachment_content_missing:{attachment_id}"
+            raw_text = str(text_value)
+            raw_bytes = raw_text.encode("utf-8")
+            if media_type == "application/octet-stream":
+                media_type = "text/plain; charset=utf-8"
+
+        size_bytes = len(raw_bytes)
+        if size_bytes > max_bytes:
+            return [], f"attachment_too_large:{attachment_id}:max={max_bytes}"
+
+        expected_sha = str(entry.get("sha256", "")).strip().lower()
+        actual_sha = hashlib.sha256(raw_bytes).hexdigest()
+        if expected_sha and expected_sha != actual_sha:
+            return [], f"attachment_sha256_mismatch:{attachment_id}"
+
+        filename = safe_attachment_name(
+            str(entry.get("filename") or entry.get("file_name") or entry.get("name") or ""),
+            fallback_stem=f"{attachment_id}-{kind}",
+            media_type=media_type,
+        )
+        disk_name = f"{index:02d}-{filename}"
+        disk_path = event_dir / disk_name
+        disk_path.write_bytes(raw_bytes)
+
+        transcript_raw = entry.get("transcript")
+        transcript: dict[str, Any] | None = None
+        if isinstance(transcript_raw, dict):
+            transcript_text = str(transcript_raw.get("text", "")).strip()
+            if transcript_text:
+                transcript = {
+                    "text": transcript_text,
+                    "language": str(transcript_raw.get("language", "")).strip(),
+                    "source": str(transcript_raw.get("source", "provider")).strip() or "provider",
+                }
+
+        attachment_meta = {
+            "attachment_id": attachment_id,
+            "caption": str(entry.get("caption", "")).strip(),
+            "event_id": event_id,
+            "filename": filename,
+            "kind": kind,
+            "media_type": media_type,
+            "mounted_path": f"{mount_root}/{event_id}/{disk_name}",
+            "provider": provider,
+            "provider_file_id": str(entry.get("provider_file_id") or entry.get("file_id") or "").strip(),
+            "sha256": actual_sha,
+            "size_bytes": size_bytes,
+            "staged_name": disk_name,
+            "target": target,
+            "transcript": transcript,
+        }
+        attachments.append(attachment_meta)
+
+    manifest = {
+        "attachments": attachments,
+        "event_id": event_id,
+        "message": base_message,
+        "provider": provider,
+        "received_at": now_ts(),
+        "target": target,
+    }
+    write_json_file_atomic(attachment_manifest_path(cfg, event_id), manifest)
+    return attachments, ""
+
+
+def resolve_attachment_manifest(cfg: dict[str, Any], event_id: str) -> tuple[dict[str, Any] | None, str]:
+    normalized_event_id = str(event_id or "").strip()
+    if not normalized_event_id or not REQUEST_ID_RE.match(normalized_event_id):
+        return None, "invalid_event_id"
+    manifest_path = attachment_manifest_path(cfg, normalized_event_id)
+    payload = read_json_file(manifest_path, {})
+    if not isinstance(payload, dict):
+        return None, "attachment_manifest_invalid"
+    attachments = payload.get("attachments")
+    if not isinstance(attachments, list):
+        return None, "attachment_manifest_invalid"
+    return payload, ""
+
+
+def resolve_attachment_metadata(
+    cfg: dict[str, Any],
+    *,
+    event_id: str,
+    attachment_id: str = "",
+    attachment_index: int = 0,
+) -> tuple[dict[str, Any] | None, str]:
+    manifest, error = resolve_attachment_manifest(cfg, event_id)
+    if manifest is None:
+        return None, error
+    attachments = manifest.get("attachments", [])
+    if not isinstance(attachments, list):
+        return None, "attachment_manifest_invalid"
+    if attachment_index > 0:
+        if attachment_index > len(attachments):
+            return None, "attachment_index_not_found"
+        candidate = attachments[attachment_index - 1]
+        if isinstance(candidate, dict):
+            return candidate, ""
+    normalized_id = str(attachment_id or "").strip()
+    for candidate in attachments:
+        if isinstance(candidate, dict) and str(candidate.get("attachment_id", "")).strip() == normalized_id:
+            return candidate, ""
+    return None, "attachment_not_found"
 
 
 def normalize_runtime_label(value: Any, fallback: str, *, max_length: int = 128) -> str:
@@ -1099,10 +1400,11 @@ def relay_forward_to_openclaw(cfg: dict[str, Any], event: dict[str, Any]) -> tup
         return 503, {"error": "openclaw_webhook_secret_missing"}
 
     body_obj = {
+        "attachments": event.get("attachments", []),
+        "event_id": event.get("event_id", ""),
         "target": event.get("target", ""),
         "message": event.get("message", ""),
         "provider": event.get("provider", ""),
-        "event_id": event.get("event_id", ""),
     }
     body = json.dumps(body_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
     ts_header = str(epoch_now())
@@ -1818,14 +2120,7 @@ setInterval(loadStatus, 5000);
             self._json_response(403, {"error": sig_reason, "request_id": request_id})
             return
 
-        message = str(payload.get("message", "")).strip()
-        if not message:
-            message = str(payload.get("text", "")).strip()
-        if not message:
-            message = str(payload.get("body", "")).strip()
-        if not message:
-            self._json_response(400, {"error": "message_required", "request_id": request_id})
-            return
+        message = extract_message_text(payload)
 
         provider_targets = self.cfg.get("provider_targets", {})
         if not isinstance(provider_targets, dict):
@@ -1851,12 +2146,38 @@ setInterval(loadStatus, 5000);
             self._json_response(202, {"event_id": event_id, "request_id": request_id, "status": "duplicate"})
             return
 
+        attachments, attachment_error = stage_payload_attachments(
+            self.cfg,
+            payload=payload,
+            event_id=event_id,
+            provider=provider,
+            target=target,
+            base_message=message,
+        )
+        if attachment_error:
+            self._json_response(400, {"error": attachment_error, "request_id": request_id})
+            return
+        if not message and not attachments:
+            self._json_response(400, {"error": "message_or_attachment_required", "request_id": request_id})
+            return
+
+        attachment_summary = summarize_attachments(event_id, attachments)
+        effective_message = message
+        if attachment_summary:
+            effective_message = f"{message}\n\n{attachment_summary}".strip() if message else attachment_summary
+
+        queue_payload = dict(payload)
+        for heavy_key in ("attachments", "files", "media", "voice", "voice_note", "audio", "document", "image", "video", "file"):
+            if heavy_key in queue_payload:
+                queue_payload[heavy_key] = "<staged>"
+
         event_payload = {
             "attempts": 0,
+            "attachments": attachments,
             "event_id": event_id,
-            "message": message,
+            "message": effective_message,
             "provider": provider,
-            "raw_payload": payload,
+            "raw_payload": queue_payload,
             "received_at": now_ts(),
             "request_id": request_id,
             "target": target,
@@ -1879,9 +2200,13 @@ setInterval(loadStatus, 5000);
                 "event_id": event_id,
                 "request_id": request_id,
                 "target": target,
+                "attachment_count": len(attachments),
             },
         )
-        self._json_response(202, {"event_id": event_id, "request_id": request_id, "status": "queued"})
+        self._json_response(
+            202,
+            {"event_id": event_id, "request_id": request_id, "status": "queued", "attachment_count": len(attachments)},
+        )
 
     def do_GET(self) -> None:
         if self.cfg["mode"] == "openclaw-relay":
@@ -2069,9 +2394,12 @@ setInterval(loadStatus, 5000);
     ) -> None:
         target = str(payload.get("target", "")).strip()
         message = str(payload.get("message", "")).strip()
+        attachments = payload.get("attachments", [])
+        if not isinstance(attachments, list):
+            attachments = []
         session_id, model, _workspace_hint = self._session_context(payload)
 
-        if not target or not message:
+        if not target or (not message and not attachments):
             append_audit(
                 self.cfg["audit_log"],
                 {
@@ -2097,7 +2425,7 @@ setInterval(loadStatus, 5000);
                 source=source,
                 session_id=session_id,
                 model=model,
-                metadata={"action": action, "message_len": len(message)},
+                metadata={"action": action, "message_len": len(message), "attachment_count": len(attachments)},
             )
             if approval_status == "approved":
                 append_audit(
@@ -2111,6 +2439,7 @@ setInterval(loadStatus, 5000);
                         "source": source,
                         "target": target,
                         "message_len": len(message),
+                        "attachment_count": len(attachments),
                         "session_id": session_id,
                         "model": model,
                         "approval_id": approval_record.get("id", ""),
@@ -2125,6 +2454,7 @@ setInterval(loadStatus, 5000);
                         "request_id": request_id,
                         "status": "queued",
                         "target": target,
+                        "attachment_count": len(attachments),
                     },
                 )
                 return
@@ -2168,11 +2498,15 @@ setInterval(loadStatus, 5000);
                 "source": source,
                 "target": target,
                 "message_len": len(message),
+                "attachment_count": len(attachments),
                 "session_id": session_id,
                 "model": model,
             },
         )
-        self._json_response(202, {"request_id": request_id, "status": "queued", "target": target})
+        self._json_response(
+            202,
+            {"request_id": request_id, "status": "queued", "target": target, "attachment_count": len(attachments)},
+        )
 
     def _handle_openclaw_dm(self) -> None:
         request_id = self._request_id()
@@ -2340,7 +2674,13 @@ setInterval(loadStatus, 5000);
         append_audit(self.cfg["audit_log"], audit_payload)
         self._json_response(status_code, sandbox_payload)
 
-    def _execute_sandbox_tool(self, tool: str, args: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def _execute_sandbox_tool(
+        self,
+        tool: str,
+        args: dict[str, Any],
+        *,
+        sandbox_info: dict[str, Any] | None = None,
+    ) -> tuple[int, dict[str, Any]]:
         if tool == "diagnostics.ping":
             return 200, {"output": "pong", "status": "executed", "tool": tool}
 
@@ -2354,7 +2694,183 @@ setInterval(loadStatus, 5000);
         if tool == "repo.eight_queens.solve":
             return self._execute_repo_eight_queens_tool(tool, args)
 
+        if tool == "attachments.list":
+            return self._execute_attachment_list_tool(tool, args)
+
+        if tool == "attachments.read_text":
+            return self._execute_attachment_read_text_tool(tool, args)
+
+        if tool == "attachments.transcribe_audio":
+            return self._execute_attachment_transcribe_tool(tool, args, sandbox_info=sandbox_info or {})
+
         return 501, {"error": "tool_not_implemented", "tool": tool}
+
+    def _execute_attachment_list_tool(self, tool: str, args: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        event_id = str(args.get("event_id", "")).strip()
+        if event_id:
+            manifest, error = resolve_attachment_manifest(self.cfg, event_id)
+            if manifest is None:
+                return 404, {"error": error, "event_id": event_id, "tool": tool}
+            attachments = manifest.get("attachments", [])
+            if not isinstance(attachments, list):
+                attachments = []
+            return 200, {
+                "attachments": attachments,
+                "event_id": event_id,
+                "message": str(manifest.get("message", "")),
+                "provider": str(manifest.get("provider", "")),
+                "status": "executed",
+                "target": str(manifest.get("target", "")),
+                "tool": tool,
+            }
+
+        root = attachment_storage_root(self.cfg)
+        if not root.exists():
+            return 200, {"events": [], "status": "executed", "tool": tool}
+
+        limit = max(1, min(20, int(args.get("limit", 8) or 8)))
+        manifests = sorted(root.glob("*/manifest.json"), key=lambda item: item.stat().st_mtime, reverse=True)
+        events: list[dict[str, Any]] = []
+        for manifest_path in manifests[:limit]:
+            manifest = read_json_file(manifest_path, {})
+            if not isinstance(manifest, dict):
+                continue
+            attachments = manifest.get("attachments", [])
+            if not isinstance(attachments, list):
+                attachments = []
+            events.append(
+                {
+                    "attachment_count": len(attachments),
+                    "attachments": attachments,
+                    "event_id": str(manifest.get("event_id", manifest_path.parent.name)),
+                    "message": str(manifest.get("message", "")),
+                    "provider": str(manifest.get("provider", "")),
+                    "received_at": str(manifest.get("received_at", "")),
+                    "target": str(manifest.get("target", "")),
+                }
+            )
+        return 200, {"events": events, "status": "executed", "tool": tool}
+
+    def _execute_attachment_read_text_tool(self, tool: str, args: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        event_id = str(args.get("event_id", "")).strip()
+        attachment_id = str(args.get("attachment_id", "")).strip()
+        attachment_index = int(args.get("attachment_index", 0) or 0)
+        metadata, error = resolve_attachment_metadata(
+            self.cfg,
+            event_id=event_id,
+            attachment_id=attachment_id,
+            attachment_index=attachment_index,
+        )
+        if metadata is None:
+            return 404, {"error": error, "event_id": event_id, "tool": tool}
+        if not attachment_is_textual(metadata):
+            return 415, {"error": "attachment_not_textual", "event_id": event_id, "tool": tool}
+
+        mounted_path = str(metadata.get("mounted_path", "")).strip()
+        disk_path = Path(mounted_path)
+        if not disk_path.is_file():
+            return 404, {"error": "attachment_file_missing", "event_id": event_id, "tool": tool}
+        try:
+            text = disk_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return 500, {"error": "attachment_read_failed", "event_id": event_id, "tool": tool}
+        max_chars = max(256, min(20000, int(args.get("max_chars", 6000) or 6000)))
+        if len(text) > max_chars:
+            text = text[:max_chars]
+        return 200, {
+            "attachment": metadata,
+            "event_id": event_id,
+            "output": text,
+            "status": "executed",
+            "tool": tool,
+        }
+
+    def _execute_attachment_transcribe_tool(
+        self,
+        tool: str,
+        args: dict[str, Any],
+        *,
+        sandbox_info: dict[str, Any],
+    ) -> tuple[int, dict[str, Any]]:
+        event_id = str(args.get("event_id", "")).strip()
+        attachment_id = str(args.get("attachment_id", "")).strip()
+        attachment_index = int(args.get("attachment_index", 0) or 0)
+        metadata, error = resolve_attachment_metadata(
+            self.cfg,
+            event_id=event_id,
+            attachment_id=attachment_id,
+            attachment_index=attachment_index,
+        )
+        if metadata is None:
+            return 404, {"error": error, "event_id": event_id, "tool": tool}
+        if not attachment_is_audio(metadata):
+            return 415, {"error": "attachment_not_audio", "event_id": event_id, "tool": tool}
+
+        transcript = metadata.get("transcript")
+        if isinstance(transcript, dict) and transcript.get("text") and not parse_bool(args.get("force"), False):
+            return 200, {
+                "attachment": metadata,
+                "event_id": event_id,
+                "output": str(transcript.get("text", "")),
+                "source": str(transcript.get("source", "provider") or "provider"),
+                "status": "executed",
+                "tool": tool,
+            }
+
+        mounted_path = str(metadata.get("mounted_path", "")).strip()
+        disk_path = Path(mounted_path)
+        if not disk_path.is_file():
+            return 404, {"error": "attachment_file_missing", "event_id": event_id, "tool": tool}
+
+        workspace_dir = Path(str(sandbox_info.get("workspace_dir", "/tmp")))
+        transcript_dir = workspace_dir / ".openclaw-attachment-transcripts" / event_id
+        transcript_dir.mkdir(parents=True, exist_ok=True)
+
+        whisper_model = str(
+            args.get("whisper_model") or self.cfg.get("attachments_whisper_model", "tiny")
+        ).strip() or "tiny"
+        language = str(args.get("language") or "").strip()
+        command = [
+            "whisper",
+            str(disk_path),
+            "--model",
+            whisper_model,
+            "--task",
+            "transcribe",
+            "--output_format",
+            "json",
+            "--output_dir",
+            str(transcript_dir),
+        ]
+        if language:
+            command.extend(["--language", language])
+
+        proc = run_command(command, cwd=transcript_dir, timeout_sec=int(self.cfg.get("attachments_whisper_timeout_sec", 600) or 600))
+        if proc.returncode != 0:
+            return 500, {
+                "error": "whisper_failed",
+                "event_id": event_id,
+                "stderr": proc.stderr[-4000:],
+                "stdout": proc.stdout[-4000:],
+                "tool": tool,
+            }
+
+        transcript_file = transcript_dir / f"{disk_path.stem}.json"
+        payload = read_json_file(transcript_file, {})
+        if not isinstance(payload, dict):
+            payload = {}
+        output_text = str(payload.get("text", "")).strip()
+        if not output_text:
+            return 500, {"error": "whisper_output_missing", "event_id": event_id, "tool": tool}
+        return 200, {
+            "attachment": metadata,
+            "event_id": event_id,
+            "output": output_text,
+            "source": "whisper",
+            "status": "executed",
+            "tool": tool,
+            "transcript_file": str(transcript_file),
+        }
 
     def _execute_repo_eight_queens_tool(self, tool: str, args: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         workspace_raw = str(args.get("workspace", "")).strip()
@@ -2683,7 +3199,7 @@ setInterval(loadStatus, 5000);
                 "sandbox_reused": reused,
             },
         )
-        status_code, payload_out = self._execute_sandbox_tool(tool, args)
+        status_code, payload_out = self._execute_sandbox_tool(tool, args, sandbox_info=sandbox_info)
         decision = "allow" if status_code == 200 else "deny"
         audit_payload: dict[str, Any] = {
             "ts": now_ts(),
@@ -2884,6 +3400,7 @@ def main() -> int:
             ),
             "approvals_state_dir": os.environ.get("OPENCLAW_APPROVALS_STATE_DIR", "/state/approvals"),
             "approvals_pending_ttl_sec": int(os.environ.get("OPENCLAW_APPROVALS_PENDING_TTL_SEC", "604800") or 604800),
+            "attachments_mount_root": os.environ.get("OPENCLAW_RELAY_ATTACHMENTS_MOUNT_ROOT", "/relay-attachments"),
         }
 
         if not cfg["token"]:
@@ -2953,6 +3470,9 @@ def main() -> int:
             "bearer_token_required": profile_cfg["bearer_token_required"],
             "approvals_state_dir": os.environ.get("OPENCLAW_APPROVALS_STATE_DIR", "/approvals"),
             "approvals_pending_ttl_sec": int(os.environ.get("OPENCLAW_APPROVALS_PENDING_TTL_SEC", "604800") or 604800),
+            "attachments_root": os.environ.get("OPENCLAW_SANDBOX_ATTACHMENTS_ROOT", "/relay-attachments"),
+            "attachments_whisper_model": os.environ.get("OPENCLAW_ATTACHMENTS_WHISPER_MODEL", "tiny"),
+            "attachments_whisper_timeout_sec": int(os.environ.get("OPENCLAW_ATTACHMENTS_WHISPER_TIMEOUT_SEC", "600") or 600),
         }
 
         if not cfg["token"]:
@@ -2993,6 +3513,10 @@ def main() -> int:
             "mode": args.mode,
             "audit_log": audit_log,
             "state_dir": os.environ.get("OPENCLAW_RELAY_STATE_DIR", "/state"),
+            "attachments_root": os.environ.get("OPENCLAW_RELAY_ATTACHMENTS_ROOT", "/state/attachments"),
+            "attachments_mount_root": os.environ.get("OPENCLAW_RELAY_ATTACHMENTS_MOUNT_ROOT", "/relay-attachments"),
+            "attachment_max_count": int(os.environ.get("OPENCLAW_RELAY_ATTACHMENT_MAX_COUNT", "8") or 8),
+            "attachment_max_bytes": int(os.environ.get("OPENCLAW_RELAY_ATTACHMENT_MAX_BYTES", str(25 * 1024 * 1024)) or (25 * 1024 * 1024)),
             "provider_targets": provider_targets,
             "provider_secrets": provider_secrets,
             "provider_signature_header": os.environ.get("OPENCLAW_RELAY_SIGNATURE_HEADER", "X-Relay-Signature"),
@@ -3040,6 +3564,7 @@ def main() -> int:
     sandbox_thread: threading.Thread | None = None
     if args.mode == "openclaw-relay":
         relay_state_dir = Path(str(cfg.get("state_dir", "/state")))
+        attachment_storage_root(cfg).mkdir(parents=True, exist_ok=True)
         (relay_state_dir / "queue" / "pending").mkdir(parents=True, exist_ok=True)
         (relay_state_dir / "queue" / "done").mkdir(parents=True, exist_ok=True)
         (relay_state_dir / "queue" / "dead").mkdir(parents=True, exist_ok=True)

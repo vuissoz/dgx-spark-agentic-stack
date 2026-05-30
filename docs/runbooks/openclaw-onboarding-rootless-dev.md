@@ -119,6 +119,13 @@ Edit allowed sandbox tools:
 ${EDITOR:-vi} "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt"
 ```
 
+If you want OpenClaw to inspect staged file attachments or voice notes arriving
+through the local relay/webhook path, also allow:
+
+- `attachments.list`
+- `attachments.read_text`
+- `attachments.transcribe_audio`
+
 Edit relay provider targets:
 
 ```bash
@@ -132,6 +139,40 @@ cat "${AGENTIC_ROOT}/openclaw/config/integration-profile.current.json"
 ```
 
 It must remain valid JSON matching the runtime contract, otherwise OpenClaw startup is refused.
+
+## Step 3a: Attachment and Voice-Note Contract
+
+The stack-managed local relay/webhook path now accepts inline attachments.
+This is the path guaranteed by the repository for Telegram-like/provider webhook
+integrations; it does not change whatever the upstream OpenClaw direct provider
+runtime may or may not do internally.
+
+Supported webhook fields:
+
+- `attachments`: array of inline files
+- common single-item aliases: `voice`, `audio`, `document`, `image`, `video`, `file`
+
+Each attachment can provide:
+
+- `attachment_id`
+- `name` or `filename`
+- `media_type`
+- `content_base64`
+- optional `transcript.text` for voice-note/provider transcript fallback
+
+Relay behavior:
+
+- stores the bytes under `${AGENTIC_ROOT}/openclaw/relay/state/attachments/<event_id>/`
+- writes `${AGENTIC_ROOT}/openclaw/relay/state/attachments/<event_id>/manifest.json`
+- forwards only metadata plus a message summary to OpenClaw
+
+Sandbox usage once the tools are allowlisted:
+
+```bash
+./agent openclaw policy add tool attachments.list
+./agent openclaw policy add tool attachments.read_text
+./agent openclaw policy add tool attachments.transcribe_audio
+```
 
 ## Step 3b: Review and Process Interactive Approvals
 

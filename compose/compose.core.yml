@@ -197,6 +197,7 @@ services:
       OPENCLAW_RELAY_STATUS_URL: http://openclaw-relay:8113/v1/queue/status
       OPENCLAW_APPROVALS_STATE_DIR: /state/approvals
       OPENCLAW_APPROVALS_PENDING_TTL_SEC: ${OPENCLAW_APPROVALS_PENDING_TTL_SEC:-604800}
+      OPENCLAW_RELAY_ATTACHMENTS_MOUNT_ROOT: /relay-attachments
       OPENCLAW_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
       AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}
       OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}
@@ -458,8 +459,11 @@ services:
       OPENCLAW_SANDBOX_OPERATOR_REGISTRY_FILE: /state/openclaw-state-registry.v1.json
       OPENCLAW_SANDBOX_STATE_ROOT: /state/sandboxes
       OPENCLAW_SANDBOX_WORKSPACES_DIR: /sandbox-workspaces
+      OPENCLAW_SANDBOX_ATTACHMENTS_ROOT: /relay-attachments
       OPENCLAW_APPROVALS_STATE_DIR: /approvals
       OPENCLAW_APPROVALS_PENDING_TTL_SEC: ${OPENCLAW_APPROVALS_PENDING_TTL_SEC:-604800}
+      OPENCLAW_ATTACHMENTS_WHISPER_MODEL: ${OPENCLAW_ATTACHMENTS_WHISPER_MODEL:-tiny}
+      OPENCLAW_ATTACHMENTS_WHISPER_TIMEOUT_SEC: ${OPENCLAW_ATTACHMENTS_WHISPER_TIMEOUT_SEC:-600}
       HOME: /state/cli/openclaw-home
       XDG_CACHE_HOME: /state/cli/openclaw-home/.cache
       WHISPER_CACHE_DIR: /state/cli/openclaw-home/.cache/whisper
@@ -473,6 +477,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/config:/config:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/sandbox/state:/state
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/sandbox/workspaces:/sandbox-workspaces
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/relay/state/attachments:/relay-attachments:ro
       - ${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openclaw/workspaces}:/workspace
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/state/approvals:/approvals
       - ${AGENTIC_ROOT:-/srv/agentic}/openclaw/logs:/logs
@@ -520,6 +525,10 @@ services:
       OPENCLAW_RELAY_PROVIDER_TARGETS_FILE: /config/relay_targets.json
       OPENCLAW_RELAY_TELEGRAM_SECRET_FILE: /run/secrets/openclaw.relay.telegram.secret
       OPENCLAW_RELAY_WHATSAPP_SECRET_FILE: /run/secrets/openclaw.relay.whatsapp.secret
+      OPENCLAW_RELAY_ATTACHMENTS_ROOT: /state/attachments
+      OPENCLAW_RELAY_ATTACHMENTS_MOUNT_ROOT: /relay-attachments
+      OPENCLAW_RELAY_ATTACHMENT_MAX_COUNT: ${OPENCLAW_RELAY_ATTACHMENT_MAX_COUNT:-8}
+      OPENCLAW_RELAY_ATTACHMENT_MAX_BYTES: ${OPENCLAW_RELAY_ATTACHMENT_MAX_BYTES:-26214400}
       OPENCLAW_RELAY_FORWARD_URL: http://openclaw:8111/v1/webhooks/dm
       OPENCLAW_RELAY_OPENCLAW_TOKEN_FILE: /run/secrets/openclaw.token
       OPENCLAW_RELAY_OPENCLAW_WEBHOOK_SECRET_FILE: /run/secrets/openclaw.webhook_secret

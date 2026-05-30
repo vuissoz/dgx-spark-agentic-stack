@@ -72,11 +72,15 @@ PY
 
 cat >"${agentic_root}/openclaw/config/dm_allowlist.txt" <<'ALLOW'
 discord:user:test
+telegram:user:example
 ALLOW
 chmod 0644 "${agentic_root}/openclaw/config/dm_allowlist.txt"
 
 cat >"${agentic_root}/openclaw/config/tool_allowlist.txt" <<'ALLOW'
 diagnostics.ping
+attachments.list
+attachments.read_text
+attachments.transcribe_audio
 ALLOW
 chmod 0644 "${agentic_root}/openclaw/config/tool_allowlist.txt"
 
@@ -215,6 +219,110 @@ webhook_deny_status="$(curl -sS -o /tmp/k1-webhook-deny.out -w '%{http_code}' -X
   "http://127.0.0.1:${webhook_host_port}/v1/webhooks/dm")"
 [[ "${webhook_deny_status}" == "403" ]] || fail "invalid webhook signature must be rejected (status=${webhook_deny_status})"
 
+relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
+relay_ready=0
+for _ in $(seq 1 20); do
+  if curl -sS -o /tmp/k1-relay-health.out -w '%{http_code}' "http://127.0.0.1:${relay_host_port}/healthz" | grep -q '^200$'; then
+    relay_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "${relay_ready}" -eq 1 ]] || fail "openclaw relay is not reachable on 127.0.0.1:${relay_host_port}"
+
+relay_secret="$(tr -d '\r\n' <"${agentic_root}/secrets/runtime/openclaw.relay.telegram.secret")"
+relay_body="$(python3 - <<'PY'
+import base64
+import json
+
+payload = {
+    "message": "Please inspect the staged attachments.",
+    "attachments": [
+        {
+            "attachment_id": "note-1",
+            "name": "report.txt",
+            "media_type": "text/plain",
+            "content_base64": base64.b64encode(b"Attachment payload from relay path.\n").decode("ascii"),
+        }
+    ],
+    "voice": {
+        "attachment_id": "voice-1",
+        "name": "voice-note.ogg",
+        "media_type": "audio/ogg",
+        "content_base64": base64.b64encode(b"OggSvoice-note").decode("ascii"),
+        "transcript": {
+            "text": "bonjour depuis telegram",
+            "language": "fr",
+            "source": "telegram"
+        }
+    }
+}
+print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+PY
+)"
+relay_ts="$(date +%s)"
+relay_sig="$(RELAY_SECRET="${relay_secret}" RELAY_TS="${relay_ts}" RELAY_BODY="${relay_body}" python3 - <<'PY'
+import hashlib
+import hmac
+import os
+
+secret = os.environ["RELAY_SECRET"].encode("utf-8")
+timestamp = os.environ["RELAY_TS"].encode("utf-8")
+body = os.environ["RELAY_BODY"].encode("utf-8")
+print(hmac.new(secret, timestamp + b'.' + body, hashlib.sha256).hexdigest())
+PY
+)"
+
+relay_status="$(curl -sS -o /tmp/k1-relay-allow.out -w '%{http_code}' -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Relay-Timestamp: ${relay_ts}" \
+  -H "X-Relay-Signature: sha256=${relay_sig}" \
+  -d "${relay_body}" \
+  "http://127.0.0.1:${relay_host_port}/v1/providers/telegram/webhook")"
+[[ "${relay_status}" == "202" ]] || fail "relay webhook with attachments must be accepted (status=${relay_status})"
+
+relay_event_id="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path("/tmp/k1-relay-allow.out").read_text(encoding="utf-8"))
+print(payload["event_id"])
+PY
+)"
+[[ -n "${relay_event_id}" ]] || fail "relay response must include event_id"
+
+relay_done_file="${agentic_root}/openclaw/relay/state/queue/done/${relay_event_id}.json"
+relay_forwarded=0
+for _ in $(seq 1 20); do
+  if [[ -f "${relay_done_file}" ]]; then
+    relay_forwarded=1
+    break
+  fi
+  sleep 1
+done
+[[ "${relay_forwarded}" -eq 1 ]] || fail "relay event was not forwarded to openclaw in time: ${relay_event_id}"
+
+attachment_dir="${agentic_root}/openclaw/relay/state/attachments/${relay_event_id}"
+[[ -d "${attachment_dir}" ]] || fail "relay attachment staging directory is missing: ${attachment_dir}"
+[[ -f "${attachment_dir}/manifest.json" ]] || fail "relay attachment manifest is missing: ${attachment_dir}/manifest.json"
+
+attach_list_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-attachments-list.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer ${claw_token}' -d '{\"tool\":\"attachments.list\",\"args\":{\"event_id\":\"${relay_event_id}\"}}' http://openclaw:8111/v1/tools/execute")"
+[[ "${attach_list_status}" == "200" ]] || fail "attachments.list must succeed (status=${attach_list_status})"
+docker exec "${toolbox_cid}" sh -lc "grep -q '\"attachment_id\":\"note-1\"' /tmp/k1-attachments-list.out" \
+  || fail "attachments.list must expose the staged text attachment"
+docker exec "${toolbox_cid}" sh -lc "grep -q '\"attachment_id\":\"voice-1\"' /tmp/k1-attachments-list.out" \
+  || fail "attachments.list must expose the staged voice attachment"
+
+attach_read_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-attachments-read.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer ${claw_token}' -d '{\"tool\":\"attachments.read_text\",\"args\":{\"event_id\":\"${relay_event_id}\",\"attachment_id\":\"note-1\"}}' http://openclaw:8111/v1/tools/execute")"
+[[ "${attach_read_status}" == "200" ]] || fail "attachments.read_text must succeed (status=${attach_read_status})"
+docker exec "${toolbox_cid}" sh -lc "grep -q 'Attachment payload from relay path' /tmp/k1-attachments-read.out" \
+  || fail "attachments.read_text must return staged text content"
+
+attach_transcribe_status="$(docker exec "${toolbox_cid}" sh -lc "curl -sS -o /tmp/k1-attachments-transcribe.out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer ${claw_token}' -d '{\"tool\":\"attachments.transcribe_audio\",\"args\":{\"event_id\":\"${relay_event_id}\",\"attachment_id\":\"voice-1\"}}' http://openclaw:8111/v1/tools/execute")"
+[[ "${attach_transcribe_status}" == "200" ]] || fail "attachments.transcribe_audio must succeed (status=${attach_transcribe_status})"
+docker exec "${toolbox_cid}" sh -lc "grep -q 'bonjour depuis telegram' /tmp/k1-attachments-transcribe.out" \
+  || fail "attachments.transcribe_audio must expose provider transcript fallback"
+
 audit_log="${agentic_root}/openclaw/logs/audit.jsonl"
 [[ -s "${audit_log}" ]] || fail "openclaw audit log is missing: ${audit_log}"
 grep -q '"decision":"allow"' "${audit_log}" || fail "openclaw audit log must include an allow decision"
@@ -222,6 +330,7 @@ grep -q '"decision":"deny"' "${audit_log}" || fail "openclaw audit log must incl
 grep -q '"module":"openclaw-sandbox"' "${audit_log}" || fail "audit log must include openclaw-sandbox records"
 grep -q '"action":"webhook_dm"' "${audit_log}" || fail "audit log must include webhook actions"
 grep -q '"request_id":"k1-allow-tool"' "${audit_log}" || fail "audit log must include request_id correlation"
+grep -q '"attachment_count":2' "${audit_log}" || fail "audit log must record attachment_count for attachment-carrying requests"
 
 drift_fixture_tmp="$(mktemp -d)"
 drift_state_dir="${agentic_root}/deployments/ollama-drift-k1-openclaw"
