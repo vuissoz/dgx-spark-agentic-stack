@@ -4434,6 +4434,34 @@ PY
       || die "failed to read OpenClaw agents after managed agent seeding"
   fi
 
+  deep_research_workspace="/workspace/deep-researcher"
+  if ! docker exec "${openclaw_cid}" sh -lc "test -f '${deep_research_workspace}/SOUL.md' && test -f '${deep_research_workspace}/scripts/init_research_run.py'"; then
+    die "managed OpenClaw deep-research workspace is missing under ${deep_research_workspace}"
+  fi
+  deep_research_agent_present="$(python3 - "${agents_json}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if not isinstance(payload, list):
+    raise SystemExit(1)
+def agent_name(item):
+    if not isinstance(item, dict):
+        return None
+    return item.get("name") or item.get("id")
+print("yes" if any(agent_name(item) == "deep-researcher" for item in payload) else "no")
+PY
+)" || die "failed to parse OpenClaw agent list while reconciling deep-researcher"
+  if [[ "${deep_research_agent_present}" != "yes" ]]; then
+    if ! docker exec "${openclaw_cid}" sh -lc "openclaw agents add deep-researcher --workspace '${deep_research_workspace}' --model '${AGENTIC_DEFAULT_MODEL}' --non-interactive --json" \
+      >/tmp/agent-openclaw-init-deep-research-agent-add.out 2>&1; then
+      cat /tmp/agent-openclaw-init-deep-research-agent-add.out >&2
+      die "managed OpenClaw init could not seed the deep-researcher agent"
+    fi
+    agents_json="$(docker exec "${openclaw_cid}" sh -lc "openclaw agents list --json" 2>/tmp/agent-openclaw-init-agents.err)" \
+      || die "failed to read OpenClaw agents after deep-researcher seeding"
+  fi
+
   configured_workspace="$(docker exec "${openclaw_cid}" sh -lc "openclaw config get agents.defaults.workspace" 2>/tmp/agent-openclaw-init-workspace.err || true)"
   [[ "${configured_workspace}" == "${workspace}" ]] \
     || die "OpenClaw default workspace drift persists after init (expected=${workspace}, actual=${configured_workspace:-unset})"

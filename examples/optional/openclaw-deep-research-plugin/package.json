@@ -1,0 +1,9 @@
+{
+  "name": "deep-research-openclaw-agent",
+  "version": "0.1.1",
+  "license": "MIT-0",
+  "type": "module",
+  "openclaw": {
+    "extensions": []
+  }
+}

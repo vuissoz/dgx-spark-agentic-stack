@@ -37,12 +37,19 @@ openclaw_provider_bridge_file="${agentic_root}/openclaw/config/bridge/openclaw.p
 openclaw_overlay_file="${agentic_root}/openclaw/config/overlay/openclaw.operator-overlay.json"
 openclaw_state_config_file="${agentic_root}/openclaw/state/cli/openclaw-home/openclaw.state.json"
 openclaw_git_forge_secret="${agentic_root}/secrets/runtime/git-forge/openclaw.password"
+openclaw_deep_research_plugin_manifest="${agentic_root}/openclaw/state/cli/openclaw-home/.openclaw/extensions/deep-research-openclaw-agent/openclaw.plugin.json"
+openclaw_deep_research_skill_file="${agentic_root}/openclaw/state/cli/openclaw-home/.openclaw/extensions/deep-research-openclaw-agent/skills/deep-research/SKILL.md"
+openclaw_deep_research_workspace="${AGENTIC_OPENCLAW_WORKSPACES_DIR}/deep-researcher"
 [[ -s "${openclaw_profile_file}" ]] || fail "openclaw integration profile file is missing after init_runtime: ${openclaw_profile_file}"
 [[ -s "${openclaw_immutable_file}" ]] || fail "openclaw immutable config file is missing after init_runtime: ${openclaw_immutable_file}"
 [[ -f "${openclaw_provider_bridge_file}" ]] || fail "openclaw provider bridge file is missing after init_runtime: ${openclaw_provider_bridge_file}"
 [[ -s "${openclaw_overlay_file}" ]] || fail "openclaw operator overlay file is missing after init_runtime: ${openclaw_overlay_file}"
 [[ -f "${openclaw_state_config_file}" ]] || fail "openclaw state config file is missing after init_runtime: ${openclaw_state_config_file}"
 [[ -f "${openclaw_git_forge_secret}" ]] || fail "openclaw git-forge secret file is missing after init_runtime: ${openclaw_git_forge_secret}"
+[[ -s "${openclaw_deep_research_plugin_manifest}" ]] || fail "managed deep-research plugin manifest is missing after init_runtime: ${openclaw_deep_research_plugin_manifest}"
+[[ -s "${openclaw_deep_research_skill_file}" ]] || fail "managed deep-research skill is missing after init_runtime: ${openclaw_deep_research_skill_file}"
+[[ -s "${openclaw_deep_research_workspace}/SOUL.md" ]] || fail "managed deep-research workspace contract is missing after init_runtime"
+[[ -s "${openclaw_deep_research_workspace}/scripts/init_research_run.py" ]] || fail "managed deep-research workspace init script is missing after init_runtime"
 python3 - "${openclaw_state_config_file}" <<'PY'
 import json
 import pathlib
@@ -60,6 +67,7 @@ assert search.get("provider") == "duckduckgo", "openclaw state must default web 
 assert fetch.get("enabled") is True, "openclaw state must enable web fetch"
 assert fetch.get("useTrustedEnvProxy") is True, "openclaw state must trust the managed env proxy for web fetch"
 assert (entries.get("duckduckgo") or {}).get("enabled") is True, "openclaw state must enable bundled duckduckgo plugin"
+assert (entries.get("deep-research-openclaw-agent") or {}).get("enabled") is True, "openclaw state must enable managed deep-research plugin"
 PY
 python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
   --immutable-file "${openclaw_immutable_file}" \

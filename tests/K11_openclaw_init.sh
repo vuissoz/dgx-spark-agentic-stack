@@ -122,8 +122,9 @@ payload = json.loads(sys.argv[1])
 expected = sys.argv[2]
 assert isinstance(payload, list) and payload
 assert any(isinstance(item, dict) and item.get("workspace") == expected for item in payload)
+assert any(isinstance(item, dict) and (item.get("name") or item.get("id")) == "deep-researcher" and item.get("workspace") == "/workspace/deep-researcher" for item in payload)
 PY
-[[ $? -eq 0 ]] || fail "managed init must reconcile at least one OpenClaw agent onto the stack workspace"
+[[ $? -eq 0 ]] || fail "managed init must reconcile the operator and deep-researcher agents onto the managed workspaces"
 
 cat >"${overlay_file}" <<'JSON'
 {
@@ -170,7 +171,8 @@ payload = json.loads(sys.argv[1])
 expected = sys.argv[2]
 assert isinstance(payload, list) and payload
 assert any(isinstance(item, dict) and item.get("workspace") == expected for item in payload)
+assert any(isinstance(item, dict) and (item.get("name") or item.get("id")) == "deep-researcher" and item.get("workspace") == "/workspace/deep-researcher" for item in payload)
 PY
-[[ $? -eq 0 ]] || fail "repair must keep an OpenClaw agent on the managed workspace"
+[[ $? -eq 0 ]] || fail "repair must keep the operator and deep-researcher agents wired after managed init"
 
 ok "K11_openclaw_init passed"

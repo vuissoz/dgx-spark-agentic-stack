@@ -1,0 +1,14 @@
+{
+  "id": "deep-research-openclaw-agent",
+  "name": "Deep Research for OpenClaw",
+  "description": "Adds a stack-managed deep-research skill plus the deep-researcher workspace pack sourced from MilleniumGenAI/deep-research-openclaw-agent v0.1.1.",
+  "version": "0.1.1",
+  "skills": [
+    "./skills"
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
