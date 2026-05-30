@@ -2247,18 +2247,44 @@ PY" >/tmp/openclaw-doctor-web-providers.count 2>/dev/null; then
     if [[ "${openclaw_web_search_provider_count:-0}" =~ ^[0-9]+$ ]] && (( openclaw_web_search_provider_count > 0 )); then
       ok "openclaw web_search providers available: ${openclaw_web_search_provider_count}"
     else
-      warn "openclaw web_search is unavailable: no ready provider. Configure it inside OpenClaw with 'openclaw configure --section web' (tools.web.* lives in OpenClaw runtime state, not the stack overlay), then re-run doctor."
-    fi
-    if [[ "${openclaw_web_fetch_provider_count:-0}" =~ ^[0-9]+$ ]] && (( openclaw_web_fetch_provider_count > 0 )); then
-      ok "openclaw web_fetch providers available: ${openclaw_web_fetch_provider_count}"
+      doctor_fail "openclaw web_search is unavailable: no ready provider. The stack baseline expects DuckDuckGo to be enabled in OpenClaw runtime state."
     fi
   else
-    warn "unable to inspect OpenClaw web providers with 'openclaw infer web providers'"
+    doctor_fail "unable to inspect OpenClaw web providers with 'openclaw infer web providers'"
   fi
-  if timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw infer web fetch --url https://clawhub.ai --json >/tmp/openclaw-doctor-web-fetch.json 2>/tmp/openclaw-doctor-web-fetch.err"; then
-    ok "openclaw web_fetch is operational against an allowlisted URL"
-  else
-    warn "openclaw web_fetch is unavailable. In this proxy-managed stack, configure OpenClaw via 'openclaw configure --section web'; if you want the built-in fetch path, enable tools.web.fetch.useTrustedEnvProxy=true in OpenClaw state, otherwise configure a fetch-capable provider, then re-run doctor."
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "test \"\$(openclaw config get tools.web.search.provider 2>/dev/null)\" = duckduckgo"; then
+    doctor_fail "openclaw must default tools.web.search.provider=duckduckgo in runtime state"
+  fi
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw infer web search --query 'openclaw' --limit 1 --json >/tmp/openclaw-doctor-web-search.json 2>/tmp/openclaw-doctor-web-search.err && python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('/tmp/openclaw-doctor-web-search.json').read_text(encoding='utf-8'))
+if not isinstance(payload, dict):
+    raise SystemExit(1)
+outputs = payload.get('outputs')
+if not isinstance(outputs, list) or not outputs:
+    raise SystemExit(1)
+first = outputs[0]
+if not isinstance(first, dict):
+    raise SystemExit(1)
+result = first.get('result')
+if not isinstance(result, dict):
+    raise SystemExit(1)
+results = result.get('results')
+if not isinstance(results, list) or not results:
+    raise SystemExit(1)
+PY"; then
+    doctor_fail "openclaw web_search must be operational through DuckDuckGo and managed egress"
+  fi
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "test \"\$(openclaw config get tools.web.fetch.enabled 2>/dev/null)\" = true"; then
+    doctor_fail "openclaw must enable tools.web.fetch.enabled=true in runtime state"
+  fi
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "test \"\$(openclaw config get tools.web.fetch.useTrustedEnvProxy 2>/dev/null)\" = true"; then
+    doctor_fail "openclaw must enable tools.web.fetch.useTrustedEnvProxy=true in runtime state"
+  fi
+  if curl -sS -o /dev/null --max-time 20 "http://127.0.0.1:${openclaw_webhook_host_port}/healthz" >/dev/null 2>&1; then
+    ok "openclaw web_fetch is configured for the trusted stack egress proxy"
   fi
   if ! mount_destination_present "${optional_openclaw_cid}" "/overlay"; then
     doctor_fail "openclaw must mount /overlay for validated operator config"

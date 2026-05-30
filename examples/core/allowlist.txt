@@ -79,6 +79,8 @@ platform.claude.com
 openrouter.ai
 clawhub.ai
 www.clawhub.ai
+duckduckgo.com
+html.duckduckgo.com
 
 # ----------------------------------------------------------
 # DOCUMENTATION / TECH REFERENCES

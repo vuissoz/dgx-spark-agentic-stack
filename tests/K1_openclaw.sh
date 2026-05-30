@@ -43,6 +43,24 @@ openclaw_git_forge_secret="${agentic_root}/secrets/runtime/git-forge/openclaw.pa
 [[ -s "${openclaw_overlay_file}" ]] || fail "openclaw operator overlay file is missing after init_runtime: ${openclaw_overlay_file}"
 [[ -f "${openclaw_state_config_file}" ]] || fail "openclaw state config file is missing after init_runtime: ${openclaw_state_config_file}"
 [[ -f "${openclaw_git_forge_secret}" ]] || fail "openclaw git-forge secret file is missing after init_runtime: ${openclaw_git_forge_secret}"
+python3 - "${openclaw_state_config_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+tools = payload.get("tools") or {}
+web = tools.get("web") or {}
+search = web.get("search") or {}
+fetch = web.get("fetch") or {}
+plugins = payload.get("plugins") or {}
+entries = plugins.get("entries") or {}
+
+assert search.get("provider") == "duckduckgo", "openclaw state must default web search to duckduckgo"
+assert fetch.get("enabled") is True, "openclaw state must enable web fetch"
+assert fetch.get("useTrustedEnvProxy") is True, "openclaw state must trust the managed env proxy for web fetch"
+assert (entries.get("duckduckgo") or {}).get("enabled") is True, "openclaw state must enable bundled duckduckgo plugin"
+PY
 python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-host-layout \
   --immutable-file "${openclaw_immutable_file}" \
   --bridge-file "${openclaw_provider_bridge_file}" \
@@ -115,6 +133,19 @@ assert_proxy_enforced "${claw_cid}" || fail "openclaw proxy env baseline failed"
 assert_no_docker_sock_mount "${claw_cid}" || fail "openclaw must not mount docker.sock"
 docker exec "${claw_cid}" sh -lc 'command -v git >/dev/null && command -v python3 >/dev/null && python3 -c "import pytest" >/dev/null' \
   || fail "openclaw repo task toolchain must provide git, python3, and pytest"
+docker exec "${claw_cid}" sh -lc 'openclaw infer web search --query "openclaw" --limit 1 --json >/tmp/k1-web-search.json && python3 - <<'"'"'PY'"'"'
+import json
+from pathlib import Path
+payload = json.loads(Path("/tmp/k1-web-search.json").read_text(encoding="utf-8"))
+assert isinstance(payload, dict), "web search payload must be an object"
+outputs = payload.get("outputs")
+assert isinstance(outputs, list) and outputs, "web search payload must expose outputs"
+result = outputs[0].get("result") if isinstance(outputs[0], dict) else None
+assert isinstance(result, dict), "web search payload must expose a result object"
+results = result.get("results")
+assert isinstance(results, list) and results, "web search must return at least one result"
+PY' \
+  || fail "openclaw must provide a working DuckDuckGo-backed web search provider by default"
 
 AGENT_NO_ATTACH=1 "${agent_bin}" openclaw >/tmp/agent-k1-openclaw-entrypoint.out \
   || fail "agent openclaw operator entrypoint must be available"

@@ -113,6 +113,50 @@ reconcile_openclaw_context_metadata() {
     || die "failed to reconcile OpenClaw context metadata"
 }
 
+ensure_openclaw_default_web_tools() {
+  local state_file="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
+
+  [[ -f "${state_file}" ]] || return 0
+
+  python3 - "${state_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+state_path = pathlib.Path(sys.argv[1])
+payload = json.loads(state_path.read_text(encoding="utf-8"))
+
+tools = payload.setdefault("tools", {})
+web = tools.setdefault("web", {})
+search = web.setdefault("search", {})
+fetch = web.setdefault("fetch", {})
+
+search["provider"] = "duckduckgo"
+fetch["enabled"] = True
+fetch["useTrustedEnvProxy"] = True
+
+plugins = payload.setdefault("plugins", {})
+allow = plugins.setdefault("allow", [])
+if not isinstance(allow, list):
+    allow = []
+    plugins["allow"] = allow
+if "duckduckgo" not in allow:
+    allow.append("duckduckgo")
+
+entries = plugins.setdefault("entries", {})
+if not isinstance(entries, dict):
+    entries = {}
+    plugins["entries"] = entries
+duckduckgo_entry = entries.setdefault("duckduckgo", {})
+if not isinstance(duckduckgo_entry, dict):
+    duckduckgo_entry = {}
+    entries["duckduckgo"] = duckduckgo_entry
+duckduckgo_entry["enabled"] = True
+
+state_path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+PY
+}
+
 ensure_openclaw_chat_status_plugin() {
   local plugin_src_dir="${OPTIONAL_TEMPLATE_DIR}/openclaw-chat-status-plugin"
   local plugin_dst_dir="${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/openclaw-chat-status"
@@ -510,6 +554,7 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
     install -D -m 0600 /dev/null "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
     printf '%s\n' '{}' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
   fi
+  ensure_openclaw_default_web_tools
   ensure_openclaw_chat_status_plugin
   reconcile_openclaw_context_metadata
   ensure_allowlist_baseline_entries "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt"

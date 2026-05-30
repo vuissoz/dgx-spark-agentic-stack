@@ -663,6 +663,10 @@ grep -q '^registry.ollama.ai$' "${non_interactive_allowlist_file}" \
   || fail "default allowlist must include registry.ollama.ai"
 grep -q '^clawhub.ai$' "${non_interactive_allowlist_file}" \
   || fail "default allowlist must include clawhub.ai"
+grep -q '^duckduckgo.com$' "${non_interactive_allowlist_file}" \
+  || fail "default allowlist must include duckduckgo.com"
+grep -q '^html.duckduckgo.com$' "${non_interactive_allowlist_file}" \
+  || fail "default allowlist must include html.duckduckgo.com"
 assert_git_ignored "${non_interactive_env_file}"
 ok "wizard non-interactive flags mode works"
 

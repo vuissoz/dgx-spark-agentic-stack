@@ -218,6 +218,7 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
 - this list includes explicit domains for: source hosting, package registries, AI/model providers, docs, security feeds, CI/CD, cloud, observability, and scientific literature.
 - keep only domains required for your real workflows (recommended hardening after first bootstrap).
 - baseline curated list also includes `clawhub.ai` and `www.clawhub.ai` for ClawHub access through the managed egress path.
+- baseline curated list also includes `duckduckgo.com` and `html.duckduckgo.com` because the stack-managed OpenClaw baseline now defaults `web_search` to DuckDuckGo.
 - for D5 external LLM routing via `ollama-gate`, keep at least:
   - `api.openai.com`
   - `openrouter.ai`
