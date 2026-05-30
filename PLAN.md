@@ -154,7 +154,8 @@ Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Com
 
 ### Remaining active follow-ups merged from former `Plan.md`
 
-- Aucun follow-up historique de `Plan.md` ne reste ouvert apres reconciliation avec Beads et les tests livres.
+- Nouvel axe OpenClaw skills par defaut :
+  - `dgx-spark-agentic-stack-dy95` : definir et integrer un catalogue par defaut de skills OpenClaw stack-managed couvrant la liste demandee (`Capability Evolver`, `Clawflows`, `GOG`, `GitHub`, `Summarize`, `Knowledge Base`, `Mission Control`, `Code Reviewer`, `Decision Assistant`, `Red Team`, `Pre-Mortem`, `Literature Scout`, `Paper Reviewer`, `Grant Writer`, `Citation Auditor`, `Architecture Reviewer`, `Documentation Builder`, `Dependency Auditor`, `Test Engineer`, `Knowledge Curator`, `Knowledge Gap Detector`, `Workspace Cartographer`, `Capability Evolver++`, `Agent Security Watcher`, `Meeting Synthesizer`), avec provenance epinglee, prerequis documentes, bootstrap runtime, couverture `doctor` et tests.
 
 ### Closed since former `Plan.md` snapshot
 
