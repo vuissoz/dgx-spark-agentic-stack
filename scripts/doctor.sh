@@ -2232,6 +2232,34 @@ PY"; then
       doctor_fail "openclaw must reach the ClawHub skills catalog via managed egress"
     fi
   fi
+  if timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw infer web providers >/tmp/openclaw-doctor-web-providers.json 2>/tmp/openclaw-doctor-web-providers.err && python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('/tmp/openclaw-doctor-web-providers.json').read_text(encoding='utf-8'))
+search = payload.get('search')
+fetch = payload.get('fetch')
+if not isinstance(search, list) or not isinstance(fetch, list):
+    raise SystemExit(1)
+print(f'{len(search)} {len(fetch)}')
+PY" >/tmp/openclaw-doctor-web-providers.count 2>/dev/null; then
+    read -r openclaw_web_search_provider_count openclaw_web_fetch_provider_count < /tmp/openclaw-doctor-web-providers.count
+    if [[ "${openclaw_web_search_provider_count:-0}" =~ ^[0-9]+$ ]] && (( openclaw_web_search_provider_count > 0 )); then
+      ok "openclaw web_search providers available: ${openclaw_web_search_provider_count}"
+    else
+      warn "openclaw web_search is unavailable: no ready provider. Configure it inside OpenClaw with 'openclaw configure --section web' (tools.web.* lives in OpenClaw runtime state, not the stack overlay), then re-run doctor."
+    fi
+    if [[ "${openclaw_web_fetch_provider_count:-0}" =~ ^[0-9]+$ ]] && (( openclaw_web_fetch_provider_count > 0 )); then
+      ok "openclaw web_fetch providers available: ${openclaw_web_fetch_provider_count}"
+    fi
+  else
+    warn "unable to inspect OpenClaw web providers with 'openclaw infer web providers'"
+  fi
+  if timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw infer web fetch --url https://clawhub.ai --json >/tmp/openclaw-doctor-web-fetch.json 2>/tmp/openclaw-doctor-web-fetch.err"; then
+    ok "openclaw web_fetch is operational against an allowlisted URL"
+  else
+    warn "openclaw web_fetch is unavailable. In this proxy-managed stack, configure OpenClaw via 'openclaw configure --section web'; if you want the built-in fetch path, enable tools.web.fetch.useTrustedEnvProxy=true in OpenClaw state, otherwise configure a fetch-capable provider, then re-run doctor."
+  fi
   if ! mount_destination_present "${optional_openclaw_cid}" "/overlay"; then
     doctor_fail "openclaw must mount /overlay for validated operator config"
   fi
