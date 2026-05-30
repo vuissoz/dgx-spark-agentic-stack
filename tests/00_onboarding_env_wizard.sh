@@ -661,6 +661,8 @@ non_interactive_allowlist_file="${work_dir}/ni-root/proxy/allowlist.txt"
   || fail "non-interactive flow did not write default allowlist file"
 grep -q '^registry.ollama.ai$' "${non_interactive_allowlist_file}" \
   || fail "default allowlist must include registry.ollama.ai"
+grep -q '^clawhub.ai$' "${non_interactive_allowlist_file}" \
+  || fail "default allowlist must include clawhub.ai"
 assert_git_ignored "${non_interactive_env_file}"
 ok "wizard non-interactive flags mode works"
 

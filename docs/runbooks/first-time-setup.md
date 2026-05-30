@@ -217,7 +217,7 @@ export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'
   - `examples/core/allowlist.txt`
 - this list includes explicit domains for: source hosting, package registries, AI/model providers, docs, security feeds, CI/CD, cloud, observability, and scientific literature.
 - keep only domains required for your real workflows (recommended hardening after first bootstrap).
-- baseline curated list also includes `www.clawhub.ai` for ClawHub access through the managed egress path.
+- baseline curated list also includes `clawhub.ai` and `www.clawhub.ai` for ClawHub access through the managed egress path.
 - for D5 external LLM routing via `ollama-gate`, keep at least:
   - `api.openai.com`
   - `openrouter.ai`

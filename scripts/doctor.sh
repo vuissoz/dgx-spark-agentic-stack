@@ -2071,17 +2071,17 @@ check_observability_retention_policy
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"
+proxy_allowlist_file="${AGENTIC_ROOT}/proxy/allowlist.txt"
 if [[ -n "${comfyui_cid}" ]]; then
   if [[ ! -d "${AGENTIC_ROOT}/comfyui" ]]; then
     doctor_fail_or_warn "comfyui runtime root is missing: ${AGENTIC_ROOT}/comfyui"
   fi
-  allowlist_file="${AGENTIC_ROOT}/proxy/allowlist.txt"
-  if [[ ! -f "${allowlist_file}" ]]; then
-    doctor_fail_or_warn "proxy allowlist file is missing: ${allowlist_file}"
+  if [[ ! -f "${proxy_allowlist_file}" ]]; then
+    doctor_fail_or_warn "proxy allowlist file is missing: ${proxy_allowlist_file}"
   else
     for required_domain in api.comfy.org registry.comfy.org; do
-      if ! allowlist_has_entry "${allowlist_file}" "${required_domain}"; then
-        doctor_fail_or_warn "proxy allowlist missing required ComfyUI domain '${required_domain}' in ${allowlist_file}"
+      if ! allowlist_has_entry "${proxy_allowlist_file}" "${required_domain}"; then
+        doctor_fail_or_warn "proxy allowlist missing required ComfyUI domain '${required_domain}' in ${proxy_allowlist_file}"
       fi
     done
   fi
@@ -2205,6 +2205,32 @@ PY
   fi
   if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'command -v openclaw >/dev/null'; then
     doctor_fail "openclaw must provide openclaw CLI in-container"
+  fi
+  if [[ ! -f "${proxy_allowlist_file}" ]]; then
+    doctor_fail "proxy allowlist file is missing: ${proxy_allowlist_file}"
+  else
+    for required_domain in clawhub.ai www.clawhub.ai; do
+      if ! allowlist_has_entry "${proxy_allowlist_file}" "${required_domain}"; then
+        doctor_fail "proxy allowlist missing required OpenClaw/ClawHub domain '${required_domain}' in ${proxy_allowlist_file}"
+      fi
+    done
+    if ! timeout 25 docker exec "${optional_openclaw_cid}" sh -lc "openclaw skills search --json --limit 1 calendar >/tmp/openclaw-doctor-clawhub-search.json 2>/tmp/openclaw-doctor-clawhub-search.err && python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('/tmp/openclaw-doctor-clawhub-search.json').read_text(encoding='utf-8'))
+if isinstance(payload, list):
+    if not payload:
+        raise SystemExit(1)
+elif isinstance(payload, dict):
+    items = payload.get('results')
+    if not isinstance(items, list) or not items:
+        raise SystemExit(1)
+else:
+    raise SystemExit(1)
+PY"; then
+      doctor_fail "openclaw must reach the ClawHub skills catalog via managed egress"
+    fi
   fi
   if ! mount_destination_present "${optional_openclaw_cid}" "/overlay"; then
     doctor_fail "openclaw must mount /overlay for validated operator config"
