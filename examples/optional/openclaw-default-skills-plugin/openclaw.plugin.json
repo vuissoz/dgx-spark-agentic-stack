@@ -2,7 +2,7 @@
   "id": "stack-default-skills",
   "name": "DGX Spark Default Skills",
   "description": "Stack-managed default OpenClaw skill catalog requested by the operator and versioned in-repo for deterministic runtime bootstrap.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "skills": [
     "./skills"
   ],
