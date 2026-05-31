@@ -53,6 +53,7 @@ real_bin="$(cat /etc/agentic/openclaw-real-path 2>/dev/null || true)"
 }
 
 layer_helper="${OPENCLAW_LAYER_HELPER:-/app/openclaw_config_layers.py}"
+ddg_patch_helper="${OPENCLAW_DDG_PATCH_HELPER:-/app/patch_openclaw_ddg.py}"
 immutable_file="${OPENCLAW_IMMUTABLE_CONFIG_FILE:-/config/immutable/openclaw.stack-config.v1.json}"
 bridge_file="${OPENCLAW_PROVIDER_BRIDGE_FILE:-/config/bridge/openclaw.provider-bridge.json}"
 overlay_file="${OPENCLAW_OPERATOR_OVERLAY_FILE:-/overlay/openclaw.operator-overlay.json}"
@@ -60,12 +61,17 @@ state_file="${OPENCLAW_STATE_CONFIG_FILE:-/state/cli/openclaw-home/openclaw.stat
 effective_file="${OPENCLAW_CONFIG_PATH:-/tmp/openclaw.effective.json}"
 gateway_token_file="${OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE:-${OPENCLAW_GATEWAY_TOKEN_FILE:-/run/secrets/openclaw.token}}"
 capture_on_exit="${OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT:-1}"
+openclaw_home="${OPENCLAW_HOME:-/state/cli/openclaw-home}"
 
 export_secret_env TELEGRAM_BOT_TOKEN "${OPENCLAW_TELEGRAM_BOT_TOKEN_FILE:-/run/secrets/telegram.bot_token}"
 export_secret_env DISCORD_BOT_TOKEN "${OPENCLAW_DISCORD_BOT_TOKEN_FILE:-/run/secrets/discord.bot_token}"
 export_secret_env SLACK_BOT_TOKEN "${OPENCLAW_SLACK_BOT_TOKEN_FILE:-/run/secrets/slack.bot_token}"
 export_secret_env SLACK_APP_TOKEN "${OPENCLAW_SLACK_APP_TOKEN_FILE:-/run/secrets/slack.app_token}"
 export_secret_env SLACK_SIGNING_SECRET "${OPENCLAW_SLACK_SIGNING_SECRET_FILE:-/run/secrets/slack.signing_secret}"
+
+if [[ -x "${ddg_patch_helper}" ]]; then
+  python3 "${ddg_patch_helper}" "${openclaw_home}/.openclaw/plugin-runtime-deps" >/dev/null 2>&1 || true
+fi
 
 guard_stack_managed_gateway_run "$@"
 
