@@ -110,6 +110,7 @@ RUN apt-get update \
      else \
        python3 -m pip install --break-system-packages --no-cache-dir "${OPENAI_WHISPER_PIP_SPEC}"; \
      fi \
+  && python3 -m pip install --break-system-packages --no-cache-dir pytest \
   && python3 -c 'import torch, whisper; print(torch.__version__); print(whisper.__file__)' \
   && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 20 || (major === 20 && minor < 6)) { console.error(`Node ${process.versions.node} is below required 20.6.0`); process.exit(1); }' \
   && rm -rf /var/lib/apt/lists/*

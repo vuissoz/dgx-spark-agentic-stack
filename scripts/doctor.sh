@@ -2216,6 +2216,9 @@ PY
   if ! timeout 15 docker exec "${optional_openclaw_cid}" sh -lc 'command -v openclaw >/dev/null'; then
     doctor_fail "openclaw must provide openclaw CLI in-container"
   fi
+  if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc 'command -v git >/dev/null && command -v python3 >/dev/null && python3 -c "import pytest" >/dev/null'; then
+    doctor_fail "openclaw repo task toolchain must provide git, python3, and pytest"
+  fi
   if [[ ! -f "${proxy_allowlist_file}" ]]; then
     doctor_fail "proxy allowlist file is missing: ${proxy_allowlist_file}"
   else

@@ -59,6 +59,7 @@ RUN apt-get update \
      else \
        python3 -m pip install --no-cache-dir "${OPENAI_WHISPER_PIP_SPEC}"; \
      fi \
+  && python3 -m pip install --no-cache-dir pytest \
   && python3 -c 'import torch, whisper; print(torch.__version__); print(whisper.__file__)' \
   && rm -rf /var/lib/apt/lists/*
 
