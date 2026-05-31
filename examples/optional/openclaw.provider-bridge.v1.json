@@ -1,5 +1,17 @@
 {
   "_agentic": {
     "managed_by": "openclaw-provider-bridge"
+  },
+  "models": {
+    "providers": {
+      "custom-ollama-gate-11435": {
+        "baseUrl": "http://ollama-gate:11435/v1",
+        "api": "openai-completions",
+        "apiKey": "local-gate",
+        "request": {
+          "allowPrivateNetwork": true
+        }
+      }
+    }
   }
 }

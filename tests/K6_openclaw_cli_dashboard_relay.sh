@@ -332,6 +332,7 @@ channels = bridge.get("channels") or {}
 telegram = channels.get("telegram") or {}
 discord = channels.get("discord") or {}
 slack = channels.get("slack") or {}
+provider = (((bridge.get("models") or {}).get("providers") or {}).get("custom-ollama-gate-11435") or {})
 
 if telegram.get("botToken", {}).get("id") != "TELEGRAM_BOT_TOKEN":
     raise SystemExit("provider bridge must seed Telegram SecretRef")
@@ -341,6 +342,14 @@ if slack.get("botToken", {}).get("id") != "SLACK_BOT_TOKEN":
     raise SystemExit("provider bridge must seed Slack bot SecretRef")
 if slack.get("appToken", {}).get("id") != "SLACK_APP_TOKEN":
     raise SystemExit("provider bridge must seed Slack app SecretRef")
+if provider.get("baseUrl") != "http://ollama-gate:11435/v1":
+    raise SystemExit("provider bridge must seed the local custom provider baseUrl")
+if provider.get("api") != "openai-completions":
+    raise SystemExit("provider bridge must seed the local custom provider API compatibility")
+if provider.get("apiKey") != "local-gate":
+    raise SystemExit("provider bridge must seed the local custom provider placeholder API key")
+if ((provider.get("request") or {}).get("allowPrivateNetwork")) is not True:
+    raise SystemExit("provider bridge must allow the local custom provider to reach private ollama-gate")
 providers = status.get("providers") or {}
 for provider in ("telegram", "discord", "slack", "whatsapp"):
     if provider not in providers:

@@ -139,6 +139,18 @@ def ensure_whatsapp_plugin(plugin_spec: str) -> tuple[bool, str]:
 
 def build_bridge_config() -> tuple[dict[str, Any], dict[str, Any]]:
     channels: dict[str, Any] = {}
+    models: dict[str, Any] = {
+        "providers": {
+            "custom-ollama-gate-11435": {
+                "baseUrl": "http://ollama-gate:11435/v1",
+                "api": "openai-completions",
+                "apiKey": "local-gate",
+                "request": {
+                    "allowPrivateNetwork": True,
+                },
+            }
+        }
+    }
     status: dict[str, Any] = {
         "ready": True,
         "synced_at": now_ts(),
@@ -245,7 +257,10 @@ def build_bridge_config() -> tuple[dict[str, Any], dict[str, Any]]:
     normalized_channels = {key: value for key, value in channels.items() if isinstance(value, dict)}
     # Keep the bridge payload stable across sync loops so gateway config watchers
     # only reload when channel config actually changes.
-    payload: dict[str, Any] = {"_agentic": {"managed_by": "openclaw-provider-bridge"}}
+    payload: dict[str, Any] = {
+        "_agentic": {"managed_by": "openclaw-provider-bridge"},
+        "models": models,
+    }
     if normalized_channels:
         payload["channels"] = normalized_channels
     return payload, status

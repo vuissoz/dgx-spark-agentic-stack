@@ -2500,6 +2500,25 @@ PY
   then
     doctor_fail "openclaw runtime must enable the managed default-skills plugin and record install provenance"
   fi
+  if ! python3 - "${optional_openclaw_bridge_file}" <<'PY' >/dev/null 2>&1
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+provider = (((payload.get("models") or {}).get("providers") or {}).get("custom-ollama-gate-11435") or {})
+if provider.get("baseUrl") != "http://ollama-gate:11435/v1":
+    raise SystemExit(1)
+if provider.get("api") != "openai-completions":
+    raise SystemExit(1)
+if provider.get("apiKey") != "local-gate":
+    raise SystemExit(1)
+if ((provider.get("request") or {}).get("allowPrivateNetwork")) is not True:
+    raise SystemExit(1)
+PY
+  then
+    doctor_fail "openclaw provider bridge must seed a valid local custom provider for ollama-gate"
+  fi
   if ! timeout 20 docker exec "${optional_openclaw_cid}" sh -lc "openclaw plugins list --json >/tmp/openclaw-doctor-plugins.json 2>/tmp/openclaw-doctor-plugins.err && python3 - <<'PY'
 import json
 from pathlib import Path

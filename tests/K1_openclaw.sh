@@ -86,6 +86,18 @@ python3 "${REPO_ROOT}/deployments/optional/openclaw_config_layers.py" validate-h
   --state-file "${openclaw_state_config_file}" \
   >/tmp/agent-k1-layer-validate.out 2>&1 \
   || fail "openclaw layered config bootstrap contract is invalid"
+python3 - "${openclaw_provider_bridge_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+provider = (((payload.get("models") or {}).get("providers") or {}).get("custom-ollama-gate-11435") or {})
+assert provider.get("baseUrl") == "http://ollama-gate:11435/v1"
+assert provider.get("api") == "openai-completions"
+assert provider.get("apiKey") == "local-gate"
+assert ((provider.get("request") or {}).get("allowPrivateNetwork")) is True
+PY
 python3 - "${openclaw_profile_file}" <<'PY'
 import json
 import pathlib
