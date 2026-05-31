@@ -2500,7 +2500,7 @@ PY
   then
     doctor_fail "openclaw runtime must enable the managed default-skills plugin and record install provenance"
   fi
-  if ! python3 - "${optional_openclaw_bridge_file}" <<'PY' >/dev/null 2>&1
+  if ! python3 - "${optional_openclaw_provider_bridge_file}" <<'PY' >/dev/null 2>&1
 import json
 import pathlib
 import sys
