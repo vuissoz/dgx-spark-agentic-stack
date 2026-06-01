@@ -4917,6 +4917,13 @@ cmd_update() {
   require_cmd docker
   [[ -x "${AGENT_RELEASE_SNAPSHOT_SCRIPT}" ]] || die "snapshot script missing: ${AGENT_RELEASE_SNAPSHOT_SCRIPT}"
 
+  ensure_core_runtime
+  ensure_agents_runtime
+  ensure_ui_runtime
+  ensure_obs_runtime
+  ensure_rag_runtime
+  ensure_optional_runtime
+
   local -a compose_files=()
   mapfile -t compose_files < <(existing_compose_files)
   [[ "${#compose_files[@]}" -gt 0 ]] || die "No compose files available to update"
