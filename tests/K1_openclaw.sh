@@ -72,6 +72,13 @@ assert search.get("provider") == "duckduckgo", "openclaw state must default web 
 assert fetch.get("enabled") is True, "openclaw state must enable web fetch"
 assert fetch.get("useTrustedEnvProxy") is True, "openclaw state must trust the managed env proxy for web fetch"
 assert (entries.get("duckduckgo") or {}).get("enabled") is True, "openclaw state must enable bundled duckduckgo plugin"
+subagents = tools.get("subagents") or {}
+subagent_tools = subagents.get("tools") or {}
+deny = subagent_tools.get("deny") or []
+allow_tools = subagent_tools.get("allow") or []
+assert "gateway" in deny, "openclaw state must continue to deny gateway to subagents"
+assert "cron" not in deny, "openclaw state must remove cron from the subagent deny list"
+assert "cron" in allow_tools, "openclaw state must explicitly allow cron to subagents"
 assert "deep-research-openclaw-agent" not in (plugins.get("allow") or []), "skill packs must not be forced into plugins.allow"
 assert "stack-default-skills" not in (plugins.get("allow") or []), "skill packs must not be forced into plugins.allow"
 assert "deep-research-openclaw-agent" not in entries, "skill packs must not be seeded as gateway plugins"

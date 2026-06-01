@@ -153,6 +153,31 @@ if not isinstance(duckduckgo_entry, dict):
     entries["duckduckgo"] = duckduckgo_entry
 duckduckgo_entry["enabled"] = True
 
+subagents = tools.setdefault("subagents", {})
+if not isinstance(subagents, dict):
+    subagents = {}
+    tools["subagents"] = subagents
+subagent_tools = subagents.setdefault("tools", {})
+if not isinstance(subagent_tools, dict):
+    subagent_tools = {}
+    subagents["tools"] = subagent_tools
+
+deny = subagent_tools.setdefault("deny", [])
+if not isinstance(deny, list):
+    deny = []
+    subagent_tools["deny"] = deny
+deny = [item for item in deny if item != "cron"]
+if "gateway" not in deny:
+    deny.append("gateway")
+subagent_tools["deny"] = deny
+
+allow_subagent_tools = subagent_tools.setdefault("allow", [])
+if not isinstance(allow_subagent_tools, list):
+    allow_subagent_tools = []
+if "cron" not in allow_subagent_tools:
+    allow_subagent_tools.append("cron")
+subagent_tools["allow"] = allow_subagent_tools
+
 state_path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 PY
 }

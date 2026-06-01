@@ -70,6 +70,8 @@ docs.comfy.org
 blog.comfy.org
 
 ollama.ai
+ollama.com
+www.ollama.com
 registry.ollama.ai
 
 api.openai.com
@@ -81,6 +83,7 @@ clawhub.ai
 www.clawhub.ai
 duckduckgo.com
 html.duckduckgo.com
+news.smol.ai
 
 # ----------------------------------------------------------
 # DOCUMENTATION / TECH REFERENCES
