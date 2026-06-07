@@ -108,7 +108,7 @@ chmod +x "${fake_bin}/docker"
 PATH="${fake_bin}:${PATH}" \
 AGENTIC_ROOT="${runtime_root}" \
 COMPOSE_PROFILES=trt \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
 TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only \
 TRTLLM_NVFP4_PREPARE_SOURCE_DIR="${fixture_source}" \
 bash "${agent_bin}" strict-prod trtllm prepare \
@@ -125,14 +125,14 @@ status_output="$(
   PATH="${fake_bin}:${PATH}" \
   AGENTIC_ROOT="${runtime_root}" \
   COMPOSE_PROFILES=trt \
-  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
   TRTLLM_NVFP4_LOCAL_MODEL_DIR="/models/trtllm-model" \
   bash "${agent_bin}" strict-prod trtllm status
 )"
 
 printf '%s\n' "${status_output}" | grep -q 'trtllm prepared=yes service_state=missing health=- runtime_mode=- native_ready=-' \
   || fail "status must degrade cleanly to missing when no live trtllm container exists"
-printf '%s\n' "${status_output}" | grep -q 'model=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 local_dir=/models/trtllm-model ' \
+printf '%s\n' "${status_output}" | grep -q 'model=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 local_dir=/models/trtllm-model ' \
   || fail "status must report the configured TRT model and local directory"
 ok "agent trtllm status reports the configured single-model TRT state"
 
@@ -140,7 +140,7 @@ start_output="$(
   PATH="${fake_bin}:${PATH}" \
   AGENTIC_ROOT="${runtime_root}" \
   COMPOSE_PROFILES=trt \
-  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
   TRTLLM_NVFP4_LOCAL_MODEL_DIR="/models/trtllm-model" \
   bash "${agent_bin}" strict-prod trtllm start
 )"
@@ -152,7 +152,7 @@ stop_output="$(
   PATH="${fake_bin}:${PATH}" \
   AGENTIC_ROOT="${runtime_root}" \
   COMPOSE_PROFILES=trt \
-  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
   TRTLLM_NVFP4_LOCAL_MODEL_DIR="/models/trtllm-model" \
   bash "${agent_bin}" strict-prod trtllm stop
 )"

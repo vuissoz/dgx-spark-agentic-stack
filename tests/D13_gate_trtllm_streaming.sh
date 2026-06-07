@@ -53,8 +53,8 @@ routes:
   - name: default-trt
     backend: trtllm
     match:
-      - "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
-      - "trtllm/nvidia-nemotron-3-nano-30b-a3b-fp8"
+      - "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+      - "trtllm/nvidia-nemotron-3-super-120b-a12b-nvfp4"
 YAML
 sed -i "s/codex-trt-stream-trt-PLACEHOLDER/${trt_name}/g" "${tmp_root}/gate-config/model_routes.yml"
 
@@ -102,7 +102,7 @@ status_code="$(curl -N -sS \
   -o "${body_file}" \
   -w '%{http_code}' \
   -H 'Content-Type: application/json' \
-  -d '{"model":"trtllm/nvidia-nemotron-3-nano-30b-a3b-fp8","messages":[{"role":"user","content":"Hello"}],"stream":true}' \
+  -d '{"model":"trtllm/nvidia-nemotron-3-super-120b-a12b-nvfp4","messages":[{"role":"user","content":"Hello"}],"stream":true}' \
   http://127.0.0.1:18035/v1/chat/completions)"
 
 [[ "${status_code}" == "200" ]] || {

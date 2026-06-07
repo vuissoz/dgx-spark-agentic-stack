@@ -15,7 +15,7 @@ As observed on 2026-03-28, the NVIDIA Spark TRT-LLM material documents:
 - `trtllm-serve serve ...`,
 - `HF_TOKEN`,
 - an OpenAI-compatible server on port `8355`,
-- Nemotron-3-Super-120B support listed with the FP8 handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`,
+- Nemotron-3-Super-120B support listed with the NVFP4 handle `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`,
 - and a DGX Spark NVFP4 flow based on a prepared local directory such as `/data/super_fp4/`.
 
 The repository still needs deterministic regression coverage on machines where:

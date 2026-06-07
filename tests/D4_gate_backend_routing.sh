@@ -95,7 +95,7 @@ assert_log_backend "${session_trt}" "trtllm"
 ok "NVFP4 model is routed to backend=trtllm"
 
 session_trt_default="d4-trt-default-$$"
-resp_trt_default="$(call_chat "${session_trt_default}" "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" 1)"
+resp_trt_default="$(call_chat "${session_trt_default}" "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" 1)"
 code_trt_default="$(extract_code "${resp_trt_default}")"
 body_trt_default="$(extract_body "${resp_trt_default}")"
 [[ "${code_trt_default}" == "200" ]] || {

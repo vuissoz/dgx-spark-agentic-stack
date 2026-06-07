@@ -49,7 +49,7 @@ runtime_dump="$(
   AGENTIC_PROFILE=rootless-dev \
   AGENTIC_ROOT="${runtime_root}" \
   COMPOSE_PROFILES=trt \
-  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
   bash -lc "source '${runtime_lib}'; printf 'policy=%s\nlocal_dir=%s\nrepo=%s\nrevision=%s\n' \"\${TRTLLM_NATIVE_MODEL_POLICY}\" \"\${TRTLLM_NVFP4_LOCAL_MODEL_DIR}\" \"\${TRTLLM_NVFP4_HF_REPO}\" \"\${TRTLLM_NVFP4_HF_REVISION}\""
 )"
 
@@ -57,7 +57,7 @@ printf '%s\n' "${runtime_dump}" | grep -q '^policy=strict-nvfp4-local-only$' \
   || fail "runtime defaults must auto-promote to strict local-only when the configured TRT model matches the local payload contract"
 printf '%s\n' "${runtime_dump}" | grep -q '^local_dir=/models/trtllm-model$' \
   || fail "runtime defaults must keep /models/trtllm-model as the local strict-mode target"
-printf '%s\n' "${runtime_dump}" | grep -q '^repo=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8$' \
+printf '%s\n' "${runtime_dump}" | grep -q '^repo=nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4$' \
   || fail "runtime defaults must derive the local TRT repo from TRTLLM_MODELS"
 printf '%s\n' "${runtime_dump}" | grep -q '^revision=main$' \
   || fail "runtime defaults must keep the local TRT revision on main unless overridden"
@@ -66,7 +66,7 @@ ok "runtime defaults keep one configured TRT model and derive strict local metad
 AGENTIC_PROFILE=rootless-dev \
 AGENTIC_ROOT="${runtime_root}" \
 COMPOSE_PROFILES=trt \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
 TRTLLM_NVFP4_PREPARE_SOURCE_DIR="${fixture_source}" \
 bash "${bootstrap_script}" \
   || fail "NVFP4 bootstrap script failed on local fixture source"
@@ -117,26 +117,26 @@ rm -rf "${fixture_cascade_source}"
 AGENTIC_PROFILE=rootless-dev \
 AGENTIC_ROOT="${runtime_root}" \
 COMPOSE_PROFILES=trt \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
 bash "${bootstrap_script}" \
   || fail "NVFP4 bootstrap must be idempotent once the payload is already complete"
 ok "local TRT bootstrap is idempotent after the model payload is complete"
 
 compose_dump="$(docker compose --profile trt -f "${compose_file}" config 2>/dev/null)"
-printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_MODELS: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' \
-  || fail "compose config must expose Nano FP8 as the default TRTLLM_MODELS alias"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_MODELS: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' \
+  || fail "compose config must expose Super NVFP4 as the default TRTLLM_MODELS alias"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_NUM_TOKENS: "4096"' \
-  || fail "compose config must bound TRTLLM_NATIVE_MAX_NUM_TOKENS for Nano startup safety"
+  || fail "compose config must bound TRTLLM_NATIVE_MAX_NUM_TOKENS for Super startup safety"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_SEQ_LEN: "32768"' \
-  || fail "compose config must bound TRTLLM_NATIVE_MAX_SEQ_LEN for Nano startup safety"
+  || fail "compose config must bound TRTLLM_NATIVE_MAX_SEQ_LEN for Super startup safety"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_ENABLE_CUDA_GRAPH: "false"' \
-  || fail "compose config must disable CUDA graph by default for Nano startup safety"
-printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REPO: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' \
+  || fail "compose config must disable CUDA graph by default for Super startup safety"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REPO: nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' \
   || fail "compose config must pass the single configured TRT repo into the trtllm container"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REVISION: main' \
   || fail "compose config must pass the local TRT revision into the trtllm container"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_LOCAL_MODEL_DIR: /models/trtllm-model' \
   || fail "compose config must pass the single local TRT model directory into the trtllm container"
-ok "compose config exposes Nano FP8 by default with bounded startup settings and single-model local metadata"
+ok "compose config exposes Super NVFP4 by default with bounded startup settings and single-model local metadata"
 
 ok "C5_trtllm_nvfp4_bootstrap passed"

@@ -560,8 +560,8 @@ prefetch_trtllm_default_model() {
 
 ensure_gate_default_trtllm_route() {
   local routes_file="$1"
-  local default_url="${AGENTIC_DEFAULT_TRTLLM_MODEL_URL:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}"
-  local default_handle="${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE:-nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}"
+  local default_url="${AGENTIC_DEFAULT_TRTLLM_MODEL_URL:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}"
+  local default_handle="${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE:-nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}"
 
   [[ -f "${routes_file}" ]] || return 0
   if grep -Fq 'name: default-trtllm-model' "${routes_file}" \

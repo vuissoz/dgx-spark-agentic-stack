@@ -175,9 +175,9 @@ routes:
   - name: default-trt
     backend: trtllm
     match:
-      - "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
-      - "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
-      - "trtllm/nvidia-nemotron-3-nano-30b-a3b-fp8"
+      - "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+      - "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+      - "trtllm/nvidia-nemotron-3-super-120b-a12b-nvfp4"
 YAML
 
 gate_port="$(python3 - <<'PY'
@@ -199,7 +199,7 @@ docker run -d \
   -e TRTLLM_LISTEN_HOST=0.0.0.0 \
   -e TRTLLM_PORT=11436 \
   -e TRTLLM_NATIVE_START_TIMEOUT_SECONDS=30 \
-  -e TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+  -e TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
   -e TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only \
   -e TRTLLM_NVFP4_LOCAL_MODEL_DIR=/models/trtllm-model \
   -e TRTLLM_STATE_DIR=/state \
@@ -260,7 +260,7 @@ ok "trtllm runtime-state exposes native warm-up in progress before the first hel
 
 prewarm_status="$(curl -sS -o "${tmp_root}/prewarm-body.json" -w '%{http_code}' \
   -H 'Content-Type: application/json' \
-  -d '{"model":"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8","messages":[{"role":"user","content":"Hello"}]}' \
+  -d '{"model":"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4","messages":[{"role":"user","content":"Hello"}]}' \
   "http://127.0.0.1:${gate_port}/api/chat")"
 [[ "${prewarm_status}" == "503" ]] || {
   cat "${tmp_root}/prewarm-body.json" >&2 || true
@@ -321,7 +321,7 @@ hello_status="$(curl -sS \
   -H 'Content-Type: application/json' \
   -H 'X-Agent-Project: c10' \
   -H 'X-Agent-Session: c10-hello-native-warmup' \
-  -d '{"model":"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8","messages":[{"role":"user","content":"Hello"}]}' \
+  -d '{"model":"https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4","messages":[{"role":"user","content":"Hello"}]}' \
   "http://127.0.0.1:${gate_port}/api/chat")"
 [[ "${hello_status}" == "200" ]] || {
   cat "${tmp_root}/hello-headers.txt" >&2 || true
@@ -337,7 +337,7 @@ import pathlib
 import sys
 
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert payload["model"] == "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8", payload
+assert payload["model"] == "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4", payload
 assert payload["message"]["role"] == "assistant", payload
 assert payload["message"]["content"] == "Hello from native TRT warmup test", payload
 assert payload["done"] is True, payload

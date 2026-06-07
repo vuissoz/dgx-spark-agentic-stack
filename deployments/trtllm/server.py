@@ -19,8 +19,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
-DEFAULT_TRTLLM_MODEL = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
-DEFAULT_TRTLLM_MODEL_HANDLE = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+DEFAULT_TRTLLM_MODEL = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+DEFAULT_TRTLLM_MODEL_HANDLE = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
 DEFAULT_NVFP4_LOCAL_MODEL_DIR = "/models/trtllm-model"
 MODEL_POLICY_AUTO = "auto"
 MODEL_POLICY_STRICT_NVFP4_LOCAL_ONLY = "strict-nvfp4-local-only"

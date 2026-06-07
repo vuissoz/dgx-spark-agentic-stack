@@ -179,7 +179,7 @@ EOF
 
 bootstrap_ollama_gate_defaults() {
   local defaults_dir
-  local default_context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${default_context_window_fallback}}"
+  local default_context_window="${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${default_context_window_fallback}}"
   local backend_context_window="${OLLAMA_CONTEXT_LENGTH:-${default_context_window}}"
   local compaction_soft_percent="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
   local compaction_danger_percent="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
@@ -225,7 +225,9 @@ export AGENTIC_OLLAMA_GATE_BASE_URL="${AGENTIC_OLLAMA_GATE_BASE_URL:-http://olla
 export AGENTIC_OLLAMA_GATE_V1_URL="${AGENTIC_OLLAMA_GATE_V1_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL%/}/v1}"
 export AGENTIC_DEFAULT_MODEL="${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}"
 export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}"
-export OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}}"
+export AGENTIC_AGENT_DEFAULT_MODEL="${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL}}"
+export AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW="${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}}"
+export OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW}}"
 export AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
 export AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
 export AGENTIC_CONTEXT_BUDGET_TOKENS="${AGENTIC_CONTEXT_BUDGET_TOKENS:-50909}"
@@ -239,7 +241,7 @@ export OPENAI_API_KEY="${OPENAI_API_KEY:-local-ollama}"
 export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL}}"
 export ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_AUTH_TOKEN:-local-ollama}"
 export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-local-ollama}"
-export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-${AGENTIC_DEFAULT_MODEL}}"
+export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-${AGENTIC_AGENT_DEFAULT_MODEL}}"
 EOF
     chmod 0600 "${agent_defaults_file}" || true
     log "INFO: created first-run defaults file (${agent_defaults_file})"
@@ -258,7 +260,9 @@ EOF
   ensure_default_export "AGENTIC_OLLAMA_GATE_V1_URL" '${AGENTIC_OLLAMA_GATE_V1_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL%/}/v1}'
   ensure_default_export "AGENTIC_DEFAULT_MODEL" '${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}'
   ensure_default_export "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" '${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}'
-  ensure_default_export "OLLAMA_CONTEXT_LENGTH" '${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}}'
+  ensure_default_export "AGENTIC_AGENT_DEFAULT_MODEL" '${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL}}'
+  ensure_default_export "AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW" '${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}}'
+  ensure_default_export "OLLAMA_CONTEXT_LENGTH" '${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW}}'
   ensure_default_export "AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT" '${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}'
   ensure_default_export "AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT" '${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}'
   ensure_default_export "AGENTIC_CONTEXT_BUDGET_TOKENS" '${AGENTIC_CONTEXT_BUDGET_TOKENS:-50909}'
@@ -272,7 +276,7 @@ EOF
   ensure_default_export "ANTHROPIC_BASE_URL" '${ANTHROPIC_BASE_URL:-${AGENTIC_OLLAMA_GATE_BASE_URL}}'
   ensure_default_export "ANTHROPIC_AUTH_TOKEN" '${ANTHROPIC_AUTH_TOKEN:-local-ollama}'
   ensure_default_export "ANTHROPIC_API_KEY" '${ANTHROPIC_API_KEY:-local-ollama}'
-  ensure_default_export "ANTHROPIC_MODEL" '${ANTHROPIC_MODEL:-${AGENTIC_DEFAULT_MODEL}}'
+  ensure_default_export "ANTHROPIC_MODEL" '${ANTHROPIC_MODEL:-${AGENTIC_AGENT_DEFAULT_MODEL}}'
 
   # Keep runtime environment aligned with persisted defaults for tmux sessions.
   # shellcheck disable=SC1090
@@ -366,8 +370,8 @@ bootstrap_codex_config() {
   local codex_bootstrap_dir="${state_dir}/bootstrap"
   local codex_catalog="${AGENT_CODEX_MODEL_CATALOG_FILE:-${codex_bootstrap_dir}/codex-model-catalog.json}"
   local codex_config="${agent_home}/.codex/config.toml"
-  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
-  local default_context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${default_context_window_fallback}}"
+  local default_model="${AGENTIC_AGENT_DEFAULT_MODEL:-${default_model_fallback}}"
+  local default_context_window="${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${default_context_window_fallback}}"
   local backend_context_window="${OLLAMA_CONTEXT_LENGTH:-${default_context_window}}"
   local compaction_soft_percent="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
   local compaction_danger_percent="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
@@ -440,7 +444,7 @@ catalog = {
         {
             "slug": model,
             "display_name": model,
-            "description": "Local Ollama model via ollama-gate",
+            "description": "Local stack model via ollama-gate",
             "default_reasoning_level": "medium",
             "supported_reasoning_levels": [
                 {"effort": "low", "description": "Fast responses with lighter reasoning"},
@@ -559,7 +563,7 @@ project_id = ""
 region = ""
 
 [[models]]
-name = "${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+name = "${AGENTIC_AGENT_DEFAULT_MODEL:-${default_model_fallback}}"
 provider = "ollama-gate"
 alias = "local-gate"
 temperature = 0.2
@@ -578,7 +582,7 @@ bootstrap_hermes_config() {
   local hermes_home="${HERMES_HOME:-${AGENT_HERMES_HOME:-${agent_home}/.hermes}}"
   local hermes_config="${hermes_home}/config.yaml"
   local hermes_env="${hermes_home}/.env"
-  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+  local default_model="${AGENTIC_AGENT_DEFAULT_MODEL:-${default_model_fallback}}"
   local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
   local api_key="${OPENAI_API_KEY:-local-ollama}"
   local tmp_config
@@ -647,7 +651,7 @@ bootstrap_opencode_config() {
 
   local opencode_config="${agent_home}/.config/opencode/opencode.json"
   local tmp_config
-  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+  local default_model="${AGENTIC_AGENT_DEFAULT_MODEL:-${default_model_fallback}}"
   local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
 
   mkdir -p "$(dirname "${opencode_config}")"
@@ -713,7 +717,7 @@ bootstrap_kilocode_config() {
 
   local kilocode_config="${agent_home}/.config/kilo/opencode.json"
   local tmp_config
-  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+  local default_model="${AGENTIC_AGENT_DEFAULT_MODEL:-${default_model_fallback}}"
   local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
 
   mkdir -p "$(dirname "${kilocode_config}")"
@@ -780,7 +784,7 @@ bootstrap_pi_config() {
   local pi_config_dir="${agent_home}/.pi/agent"
   local pi_models_config="${pi_config_dir}/models.json"
   local pi_settings_config="${pi_config_dir}/settings.json"
-  local default_model="${AGENTIC_DEFAULT_MODEL:-${default_model_fallback}}"
+  local default_model="${AGENTIC_AGENT_DEFAULT_MODEL:-${default_model_fallback}}"
   local gate_v1_url="${AGENTIC_OLLAMA_GATE_V1_URL:-http://ollama-gate:11435/v1}"
   local provider_name="${AGENTIC_PI_PROVIDER_NAME:-ollama}"
   local provider_api_key="${AGENTIC_PI_API_KEY:-${OPENAI_API_KEY:-ollama}}"

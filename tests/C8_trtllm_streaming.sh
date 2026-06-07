@@ -59,7 +59,7 @@ while True:
 
 payload = json.dumps(
     {
-        "model": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
+        "model": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
         "messages": [{"role": "user", "content": "Hello"}],
         "stream": True,
     }
@@ -85,7 +85,7 @@ import sys
 port = int(sys.argv[1])
 payload = json.dumps(
     {
-        "model": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
+        "model": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
         "messages": [{"role": "user", "content": "Hello"}],
         "stream": True,
     }

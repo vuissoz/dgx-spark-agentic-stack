@@ -109,7 +109,7 @@ main() {
   local repo_id revision cache_root repo_cache_dir
 
   if ! prefetch_enabled; then
-    log "skip TRT HF prefetch: current runtime selection does not target the default Nano FP8 alias"
+    log "skip TRT HF prefetch: current runtime selection does not target the default Super NVFP4 alias"
     return 0
   fi
 

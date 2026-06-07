@@ -21,7 +21,7 @@ mkdir -p "${strict_model_dir}" "${custom_model_dir}" "${state_dir}" "${logs_dir}
 TRTLLM_RUNTIME_MODE=mock \
 TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only \
 TRTLLM_NVFP4_LOCAL_MODEL_DIR="${strict_model_dir}" \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
 TRTLLM_MODELS_DIR="${models_dir}" \
 TRTLLM_STATE_DIR="${state_dir}" \
 TRTLLM_LOGS_DIR="${logs_dir}" \
@@ -82,7 +82,7 @@ ok "strict NVFP4 local-only maps a custom TRT alias to a local directory"
 TRTLLM_RUNTIME_MODE=auto \
 TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only \
 TRTLLM_NVFP4_LOCAL_MODEL_DIR="${tmp_root}/missing-trtllm-model" \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
 TRTLLM_MODELS_DIR="${models_dir}" \
 TRTLLM_STATE_DIR="${state_dir}" \
 TRTLLM_LOGS_DIR="${logs_dir}" \
@@ -107,7 +107,7 @@ TRTLLM_RUNTIME_MODE=mock \
 TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only \
 TRTLLM_NVFP4_LOCAL_MODEL_DIR="${strict_model_dir}" \
 TRTLLM_NVFP4_HF_REPO="acme/Custom-TRT-Local-Model" \
-TRTLLM_MODELS="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
 TRTLLM_MODELS_DIR="${models_dir}" \
 TRTLLM_STATE_DIR="${state_dir}" \
 TRTLLM_LOGS_DIR="${logs_dir}" \
@@ -131,7 +131,7 @@ PY
 ok "strict NVFP4 local-only rejects mismatched model exposure configuration"
 
 TRTLLM_RUNTIME_MODE=mock \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
 TRTLLM_MODELS_DIR="${models_dir}" \
 TRTLLM_STATE_DIR="${state_dir}" \
 TRTLLM_LOGS_DIR="${logs_dir}" \
@@ -142,7 +142,7 @@ TRTLLM_NATIVE_ENABLE_CUDA_GRAPH=false \
 TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE=1 \
 TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING=false \
 TRTLLM_NATIVE_START_TIMEOUT_SECONDS=5 \
-python3 - "${server_path}" <<'PY' || fail "Nano runtime defaults must bound warmup and disable CUDA graph by default"
+python3 - "${server_path}" <<'PY' || fail "Super runtime defaults must bound warmup and disable CUDA graph by default"
 import importlib.util
 import pathlib
 import sys
@@ -169,9 +169,9 @@ friendly_alias = module.friendly_catalog_alias(
 assert controller.native_max_num_tokens == 4096
 assert controller.native_max_seq_len == 32768
 assert controller.native_enable_cuda_graph is False
-assert friendly_alias == "trtllm/nvidia-nemotron-3-nano-30b-a3b-fp8"
+assert friendly_alias == "trtllm/nvidia-nemotron-3-super-120b-a12b-nvfp4"
 assert friendly_alias in controller.primary_entry.aliases
-assert "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" in model_ids
+assert "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" in model_ids
 assert friendly_alias in model_ids
 assert friendly_alias in tag_names
 assert "cuda_graph_config:" not in cfg
@@ -184,10 +184,10 @@ assert env["TORCHINDUCTOR_CACHE_DIR"].endswith("/state/cache/torchinductor")
 assert env["TORCH_EXTENSIONS_DIR"].endswith("/state/cache/torch_extensions")
 assert env["HF_TOKEN"] == "hf_test_token"
 PY
-ok "Nano runtime defaults bound seq len, expose a friendly TRT alias, avoid CUDA graph warmup, and redirect JIT caches under /state/cache"
+ok "Super runtime defaults bound seq len, expose a friendly TRT alias, avoid CUDA graph warmup, and redirect JIT caches under /state/cache"
 
 TRTLLM_RUNTIME_MODE=mock \
-TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8" \
+TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
 TRTLLM_MODELS_DIR="${models_dir}" \
 TRTLLM_STATE_DIR="${state_dir}" \
 TRTLLM_LOGS_DIR="${logs_dir}" \
