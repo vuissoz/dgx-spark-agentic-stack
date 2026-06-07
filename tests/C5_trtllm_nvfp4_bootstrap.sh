@@ -122,13 +122,19 @@ bash "${bootstrap_script}" \
   || fail "NVFP4 bootstrap must be idempotent once the payload is already complete"
 ok "local TRT bootstrap is idempotent after the model payload is complete"
 
-compose_dump="$(docker compose --profile trt -f "${compose_file}" config 2>/dev/null)"
+compose_dump="$(
+  AGENTIC_PROFILE=rootless-dev \
+  AGENTIC_ROOT="${runtime_root}" \
+  COMPOSE_PROFILES=trt \
+  TRTLLM_MODELS="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" \
+  bash -lc "source '${runtime_lib}'; docker compose --profile trt -f '${compose_file}' config" 2>/dev/null
+)"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_MODELS: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' \
   || fail "compose config must expose Super NVFP4 as the default TRTLLM_MODELS alias"
-printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_NUM_TOKENS: "4096"' \
-  || fail "compose config must bound TRTLLM_NATIVE_MAX_NUM_TOKENS for Super startup safety"
-printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_SEQ_LEN: "32768"' \
-  || fail "compose config must bound TRTLLM_NATIVE_MAX_SEQ_LEN for Super startup safety"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_NUM_TOKENS: "262144"' \
+  || fail "compose config must expose the full Super context as TRTLLM_NATIVE_MAX_NUM_TOKENS on DGX Spark"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_SEQ_LEN: "262144"' \
+  || fail "compose config must expose the full Super context as TRTLLM_NATIVE_MAX_SEQ_LEN on DGX Spark"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_ENABLE_CUDA_GRAPH: "false"' \
   || fail "compose config must disable CUDA graph by default for Super startup safety"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REPO: nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' \
@@ -137,6 +143,6 @@ printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REVISION: main' \
   || fail "compose config must pass the local TRT revision into the trtllm container"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_LOCAL_MODEL_DIR: /models/trtllm-model' \
   || fail "compose config must pass the single local TRT model directory into the trtllm container"
-ok "compose config exposes Super NVFP4 by default with bounded startup settings and single-model local metadata"
+ok "compose config exposes Super NVFP4 by default with full DGX Spark context settings and single-model local metadata"
 
 ok "C5_trtllm_nvfp4_bootstrap passed"

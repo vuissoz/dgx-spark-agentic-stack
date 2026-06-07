@@ -136,8 +136,8 @@ TRTLLM_MODELS_DIR="${models_dir}" \
 TRTLLM_STATE_DIR="${state_dir}" \
 TRTLLM_LOGS_DIR="${logs_dir}" \
 TRTLLM_NATIVE_MAX_BATCH_SIZE=1 \
-TRTLLM_NATIVE_MAX_NUM_TOKENS=4096 \
-TRTLLM_NATIVE_MAX_SEQ_LEN=32768 \
+TRTLLM_NATIVE_MAX_NUM_TOKENS=262144 \
+TRTLLM_NATIVE_MAX_SEQ_LEN=262144 \
 TRTLLM_NATIVE_ENABLE_CUDA_GRAPH=false \
 TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE=1 \
 TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING=false \
@@ -166,8 +166,8 @@ friendly_alias = module.friendly_catalog_alias(
     controller.primary_entry.serve_handle,
 )
 
-assert controller.native_max_num_tokens == 4096
-assert controller.native_max_seq_len == 32768
+assert controller.native_max_num_tokens == 262144
+assert controller.native_max_seq_len == 262144
 assert controller.native_enable_cuda_graph is False
 assert friendly_alias == "trtllm/nvidia-nemotron-3-super-120b-a12b-nvfp4"
 assert friendly_alias in controller.primary_entry.aliases
@@ -175,9 +175,9 @@ assert "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4" i
 assert friendly_alias in model_ids
 assert friendly_alias in tag_names
 assert "cuda_graph_config:" not in cfg
-assert "max_num_tokens: 4096" in cfg
-assert "--max_num_tokens" in cmd and "4096" in cmd
-assert "--max_seq_len" in cmd and "32768" in cmd
+assert "max_num_tokens: 262144" in cfg
+assert "--max_num_tokens" in cmd and "262144" in cmd
+assert "--max_seq_len" in cmd and "262144" in cmd
 assert env["TMPDIR"].endswith("/state/cache/tmp")
 assert env["TRITON_CACHE_DIR"].endswith("/state/cache/triton")
 assert env["TORCHINDUCTOR_CACHE_DIR"].endswith("/state/cache/torchinductor")

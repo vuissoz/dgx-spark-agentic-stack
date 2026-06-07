@@ -251,10 +251,10 @@ grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${default_env_file}" \
   || fail "default TRTLLM_MODELS must be ${default_trt_model}"
 grep -q "^export TRTLLM_NATIVE_MAX_BATCH_SIZE='1'$" "${default_env_file}" \
   || fail "default TRTLLM_NATIVE_MAX_BATCH_SIZE must be 1"
-grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='4096'$" "${default_env_file}" \
-  || fail "default TRTLLM_NATIVE_MAX_NUM_TOKENS must be 4096"
-grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='32768'$" "${default_env_file}" \
-  || fail "default TRTLLM_NATIVE_MAX_SEQ_LEN must be 32768"
+grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='262144'$" "${default_env_file}" \
+  || fail "default TRTLLM_NATIVE_MAX_NUM_TOKENS must be 262144"
+grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='262144'$" "${default_env_file}" \
+  || fail "default TRTLLM_NATIVE_MAX_SEQ_LEN must be 262144"
 grep -q "^export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH='false'$" "${default_env_file}" \
   || fail "default TRTLLM_NATIVE_ENABLE_CUDA_GRAPH must be false"
 grep -q "^export TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE='1'$" "${default_env_file}" \
