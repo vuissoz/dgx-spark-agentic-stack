@@ -2409,6 +2409,8 @@ async def v1_models(request: Request) -> JSONResponse:
     try:
         records: list[Dict[str, Any]] = []
         seen_ids: set[str] = set()
+        catalog_failures: list[tuple[str, str]] = []
+        successful_catalog_backend: str | None = None
         backends = state.backend_catalog_priority(state.catalog_backends(llm_mode=llm_mode, llm_backend=llm_backend))
         if backends:
             backend = backends[0]
@@ -2420,6 +2422,13 @@ async def v1_models(request: Request) -> JSONResponse:
                 backend_records = await fetch_backend_model_catalog(backend_name)
             except BackendAuthError:
                 continue
+            except Exception as exc:
+                catalog_failures.append((backend_name, str(exc)))
+                continue
+            if successful_catalog_backend is None:
+                successful_catalog_backend = backend_name
+                backend = backend_name
+                provider = backend_provider_name(backend_name)
             for record in backend_records:
                 for published in published_backend_model_records(record, backend_name):
                     record_id = published.get("id")
@@ -2427,6 +2436,11 @@ async def v1_models(request: Request) -> JSONResponse:
                         continue
                     seen_ids.add(record_id)
                     records.append(published)
+        if successful_catalog_backend is None and catalog_failures:
+            failed_backend, failure_message = catalog_failures[0]
+            backend = failed_backend
+            provider = backend_provider_name(failed_backend)
+            raise RuntimeError(failure_message)
         response = {
             "object": "list",
             "data": records,
