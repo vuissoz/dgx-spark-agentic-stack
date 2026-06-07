@@ -436,6 +436,7 @@ Notes:
 - `agent repo-e2e` streams live progress to `stderr` and keeps the final JSON summary on `stdout`. Live OpenClaw runs also fail fast unless `repo.eight_queens.solve` is present in the effective OpenClaw tool allowlist.
 - Baseline agent containers now publish `/state/bootstrap/known-local-tools.md` and `/state/bootstrap/known-local-tools.json`; `repo-e2e` prompts use those manifests to bias agents toward the reviewed local shell command set instead of guessed tool schemas.
 - `repo-e2e` also injects ignored project-scoped instruction files into each cloned workspace (`AGENTS.md`, `AGENT.md`, `SKILLS.md`, plus one harness-specific file such as `CLAUDE.md` or `CODEX.md`) so each CLI sees repo-local task instructions before acting.
+- `kilocode` now gets a larger effective `repo-e2e` invoke budget (`1800s` minimum) before timeout classification; the requested and effective values are recorded in per-agent artifacts.
 - `agent stop` and `agent start` handle `claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|openwebui|openhands|comfyui` targets.
 - `agent stop/start openclaw` manages the whole OpenClaw control/execution bundle; `agent stop/start comfyui` manages both `comfyui` and `comfyui-loopback`.
 - `agent trtllm stop` cleanly stops only the `trtllm` service; `agent trtllm start` brings it back and waits for its healthcheck.

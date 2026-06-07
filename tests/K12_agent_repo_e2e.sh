@@ -163,6 +163,9 @@ for agent, branch in expected.items():
     assert "the repository must be completely clean" in prompt
     assert "The target file is 'src/eight_queens.py'" in prompt
     assert "Use 'python3 -m pytest -q' as the verification command" in prompt
+    assert plan["invoke_timeout_requested"] == 900
+    expected_invoke_timeout = 1800 if entry["mode"] == "kilo" else 900
+    assert plan["invoke_timeout_effective"] == expected_invoke_timeout
     assert "AGENTS.md" in prompt
     assert "AGENT.md" in prompt
     assert "SKILLS.md" in prompt
@@ -628,6 +631,8 @@ assert kilo_result["salvaged_after_invoke_failure"] is True
 assert kilo_result["invoke_detail"] == "invoke failed exit=124"
 assert kilo_result["adapter_publish_detail"] == "adapter publish guard completed"
 assert "salvaged" in kilo_result["detail"]
+assert kilo_result["invoke_timeout_requested"] == 34
+assert kilo_result["invoke_timeout_effective"] == 1800
 
 module.docker_exec = original_docker_exec
 
@@ -712,6 +717,7 @@ summary = module.build_agent_result(
     root_artifact_dir=artifact_root / "aggregate",
     attempt_results=attempt_results,
     attempts_requested=5,
+    invoke_timeout=900,
 )
 assert summary["status"] == "success"
 assert summary["category"] == "success"
@@ -721,6 +727,7 @@ assert summary["attempt_statistics"]["failures"] == 4
 assert summary["attempt_statistics"]["successful_attempts"] == [2]
 assert summary["validation_policy"] == "at_least_one_success"
 assert summary["success_threshold"] == 1
+assert summary["invoke_timeout_effective"] == 900
 
 failed_summary = module.build_agent_result(
     "goose",
@@ -735,11 +742,23 @@ failed_summary = module.build_agent_result(
         {"attempt": 5, "status": "failed", "category": "functional", "stage": "verify", "detail": "pytest exit=1"},
     ],
     attempts_requested=5,
+    invoke_timeout=900,
 )
 assert failed_summary["status"] == "failed"
 assert failed_summary["attempt_statistics"]["successes"] == 0
 assert failed_summary["category"] == "functional"
 assert failed_summary["stage"] == "aggregate"
+
+kilo_summary = module.build_agent_result(
+    "kilocode",
+    clone_url=internal_clone_url,
+    repo_name="eight-queens-agent-e2e",
+    root_artifact_dir=artifact_root / "aggregate-kilo",
+    attempt_results=attempt_results,
+    attempts_requested=5,
+    invoke_timeout=900,
+)
+assert kilo_summary["invoke_timeout_effective"] == 1800
 PY
 
 ok "K12_agent_repo_e2e passed"

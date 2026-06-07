@@ -45,6 +45,7 @@ VALIDATION_POLICY = "at_least_one_success"
 SUCCESS_THRESHOLD = 1
 OPENCLAW_REPO_SOLVER_TOOL = "repo.eight_queens.solve"
 OPENCLAW_TOKEN_FILE = "/run/secrets/openclaw.token"
+KILOCODE_MIN_INVOKE_TIMEOUT = 1800
 COMMON_INSTRUCTION_FILES = ("AGENTS.md", "AGENT.md", "SKILLS.md")
 MODE_INSTRUCTION_FILE = {
     "codex": "CODEX.md",
@@ -627,6 +628,12 @@ def mode_salvages_invoke_failure(mode: str) -> bool:
     return mode in {"kilo"}
 
 
+def effective_invoke_timeout(mode: str, requested_timeout: int) -> int:
+    if mode == "kilo":
+        return max(requested_timeout, KILOCODE_MIN_INVOKE_TIMEOUT)
+    return requested_timeout
+
+
 def claude_login_preflight(
     container_id: str,
     artifact_dir: pathlib.Path,
@@ -1133,6 +1140,7 @@ def run_agent_once(
     mode = str(config["mode"])
     workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
     prompt = build_standard_prompt(repo_name, branch, workspace, mode)
+    invoke_timeout_effective = effective_invoke_timeout(mode, invoke_timeout)
 
     result: dict[str, object] = {
         "agent": agent_name,
@@ -1141,6 +1149,8 @@ def run_agent_once(
         "workspace": workspace,
         "mode": mode,
         "artifacts_dir": str(artifact_dir),
+        "invoke_timeout_requested": invoke_timeout,
+        "invoke_timeout_effective": invoke_timeout_effective,
     }
 
     def attempt_post_invoke_salvage(invoke_detail: str) -> dict[str, object]:
@@ -1197,6 +1207,8 @@ def run_agent_once(
         "mode": mode,
         "prompt": prompt,
         "attempts_requested": 1,
+        "invoke_timeout_requested": invoke_timeout,
+        "invoke_timeout_effective": invoke_timeout_effective,
         "validation_policy": VALIDATION_POLICY,
         "success_threshold": SUCCESS_THRESHOLD,
     }
@@ -1272,7 +1284,7 @@ def run_agent_once(
         result["baseline_detail"] = baseline_detail
 
     if mode == "openhands":
-        ok, detail = invoke_openhands(prompt, artifact_dir, invoke_timeout)
+        ok, detail = invoke_openhands(prompt, artifact_dir, invoke_timeout_effective)
         if not ok:
             result.update(classify_result(stage="invoke", ok=False, detail=detail))
             return result
@@ -1282,7 +1294,7 @@ def run_agent_once(
             workspace=workspace,
             branch=branch,
             artifact_dir=artifact_dir,
-            timeout_seconds=invoke_timeout,
+            timeout_seconds=invoke_timeout_effective,
         )
         if not ok:
             result.update(classify_result(stage="invoke", ok=False, detail=detail))
@@ -1299,7 +1311,7 @@ def run_agent_once(
                 )
             )
             return result
-        invoke = docker_exec(container_id, command, timeout_seconds=invoke_timeout)
+        invoke = docker_exec(container_id, command, timeout_seconds=invoke_timeout_effective)
         (artifact_dir / "invoke.stdout.log").write_text(invoke.stdout, encoding="utf-8")
         (artifact_dir / "invoke.stderr.log").write_text(invoke.stderr, encoding="utf-8")
         if invoke.returncode != 0:
@@ -1350,6 +1362,7 @@ def build_agent_result(
     root_artifact_dir: pathlib.Path,
     attempt_results: list[dict[str, object]],
     attempts_requested: int,
+    invoke_timeout: int,
 ) -> dict[str, object]:
     config = AGENT_MATRIX[agent_name]
     artifact_dir = root_artifact_dir / agent_name
@@ -1360,6 +1373,7 @@ def build_agent_result(
     mode = str(config["mode"])
     workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
     prompt = build_standard_prompt(repo_name, branch, workspace, mode)
+    invoke_timeout_effective = effective_invoke_timeout(mode, invoke_timeout)
 
     plan_payload = {
         "clone_url": clone_url,
@@ -1368,6 +1382,8 @@ def build_agent_result(
         "mode": mode,
         "prompt": prompt,
         "attempts_requested": attempts_requested,
+        "invoke_timeout_requested": invoke_timeout,
+        "invoke_timeout_effective": invoke_timeout_effective,
         "validation_policy": VALIDATION_POLICY,
         "success_threshold": SUCCESS_THRESHOLD,
     }
@@ -1382,6 +1398,8 @@ def build_agent_result(
         "mode": mode,
         "artifacts_dir": str(artifact_dir),
         "attempts_requested": attempts_requested,
+        "invoke_timeout_requested": invoke_timeout,
+        "invoke_timeout_effective": invoke_timeout_effective,
         "validation_policy": VALIDATION_POLICY,
         "success_threshold": SUCCESS_THRESHOLD,
         "attempt_statistics": attempt_statistics,
@@ -1650,6 +1668,8 @@ def main() -> None:
                         "prompt": build_standard_prompt(repo_name, branch, workspace, mode),
                         "attempts_requested": args.attempts,
                         "attempt": attempt,
+                        "invoke_timeout_requested": args.invoke_timeout,
+                        "invoke_timeout_effective": effective_invoke_timeout(mode, args.invoke_timeout),
                         "validation_policy": VALIDATION_POLICY,
                         "success_threshold": SUCCESS_THRESHOLD,
                     },
@@ -1719,6 +1739,7 @@ def main() -> None:
             root_artifact_dir=artifact_root,
             attempt_results=per_agent_attempts[agent_name],
             attempts_requested=args.attempts,
+            invoke_timeout=args.invoke_timeout,
         )
         for agent_name in selected_agents
     ]
