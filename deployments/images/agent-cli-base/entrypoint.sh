@@ -287,7 +287,7 @@ bootstrap_known_local_tools() {
   local bootstrap_dir="${state_dir}/bootstrap"
   local tools_json="${bootstrap_dir}/known-local-tools.json"
   local tools_md="${bootstrap_dir}/known-local-tools.md"
-  local tool_inspect_script="/usr/local/bin/agent-known-tools"
+  local tool_inspect_script="agent-known-tools"
   local tmp_json
   local tmp_md
   local command_name
@@ -384,14 +384,7 @@ PY
   } >"${tmp_md}"
   write_if_changed "${tools_md}" "${tmp_md}"
   chmod 0600 "${tools_md}" || true
-
-  cat >"${tool_inspect_script}" <<EOF
-#!/bin/sh
-set -eu
-cat "${tools_md}"
-EOF
-  chmod 0755 "${tool_inspect_script}" || true
-  log "INFO: known local tools manifest reconciled (${tools_md})"
+  log "INFO: known local tools manifest reconciled (${tools_md}); helper=${tool_inspect_script}"
 }
 
 codex_auto_bypass_enabled() {
