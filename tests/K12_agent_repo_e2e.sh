@@ -163,6 +163,23 @@ for agent, branch in expected.items():
     assert "the repository must be completely clean" in prompt
     assert "The target file is 'src/eight_queens.py'" in prompt
     assert "Use 'python3 -m pytest -q' as the verification command" in prompt
+    assert "AGENTS.md" in prompt
+    assert "AGENT.md" in prompt
+    assert "SKILLS.md" in prompt
+    mode = entry["mode"]
+    specific = {
+        "codex": "CODEX.md",
+        "claude": "CLAUDE.md",
+        "opencode": "OPENCODE.md",
+        "kilo": "KILOCODE.md",
+        "openhands": "OPENHANDS.md",
+        "pi": "PI-MONO.md",
+        "goose": "GOOSE.md",
+        "vibe": "VIBESTRAL.md",
+        "hermes": "HERMES.md",
+        "openclaw": "OPENCLAW.md",
+    }.get(mode)
+    assert specific and specific in prompt
 PY
 
 summary_reset_json="${runtime_root}/summary-reset.json"
@@ -262,12 +279,16 @@ assert spec.loader is not None
 spec.loader.exec_module(module)
 
 module.AGENTIC_ROOT = runtime_root
-captured: dict[str, object] = {}
+captured_calls: list[dict[str, object]] = []
 
 def fake_docker_exec(container_id: str, shell_command: str, *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
-    captured["container_id"] = container_id
-    captured["shell_command"] = shell_command
-    captured["timeout_seconds"] = timeout_seconds
+    captured_calls.append(
+        {
+            "container_id": container_id,
+            "shell_command": shell_command,
+            "timeout_seconds": timeout_seconds,
+        }
+    )
     return subprocess.CompletedProcess(args=[], returncode=0, stdout="prepared\n", stderr="")
 
 module.docker_exec = fake_docker_exec
@@ -282,8 +303,14 @@ proc = module.prepare_workspace(
 
 assert proc.returncode == 0
 assert not stale_workspace.exists()
-assert captured["container_id"] == "cid-openhands"
-assert "git clone" in str(captured["shell_command"])
+assert len(captured_calls) == 2
+assert captured_calls[0]["container_id"] == "cid-openhands"
+assert "git clone" in str(captured_calls[0]["shell_command"])
+openhands_files = module.build_workspace_instruction_files("openhands", "agent/openhands", "/workspace/eight-queens-agent-e2e-openhands")
+assert "AGENTS.md" in openhands_files
+assert "OPENHANDS.md" in openhands_files
+assert "python3 -c" in str(captured_calls[1]["shell_command"])
+assert "/workspace/eight-queens-agent-e2e-openhands" in str(captured_calls[1]["shell_command"])
 
 other_root = runtime_root / "codex" / "workspaces"
 other_workspace = other_root / "eight-queens-agent-e2e-codex"
@@ -300,6 +327,9 @@ proc = module.prepare_workspace(
 
 assert proc.returncode == 0
 assert other_workspace.exists()
+assert len(captured_calls) == 4
+codex_files = module.build_workspace_instruction_files("codex", "agent/codex", "/workspace/eight-queens-agent-e2e-codex")
+assert "CODEX.md" in codex_files
 PY
 
 python3 - "${REPO_ROOT}" <<'PY' || fail "repo.eight_queens.solve must use canonical Forgejo SSH path"
@@ -439,6 +469,25 @@ assert "set -a" in wrapped
 assert "/state/bootstrap/ollama-gate-defaults.env" in wrapped
 assert ". " in wrapped
 assert "printf '%s\\n' \"$OPENAI_API_KEY\"" in wrapped
+
+files = module.build_workspace_instruction_files("claude", "agent/claude", "/workspace/eight-queens-agent-e2e-claude")
+assert files["AGENTS.md"].startswith("# Repo-E2E Instructions")
+assert files["AGENT.md"] == files["AGENTS.md"]
+assert files["SKILLS.md"].startswith("# Skills")
+assert files["CLAUDE.md"].startswith("# CLAUDE.md")
+assert "agent/claude" in files["AGENTS.md"]
+assert "/state/bootstrap/known-local-tools.md" in files["AGENTS.md"]
+
+module.materialize_workspace_instruction_files(
+    "container-123",
+    "/workspace/eight-queens-agent-e2e-claude",
+    mode="claude",
+    branch="agent/claude",
+    timeout_seconds=17,
+)
+materialize_wrapped = captured["cmd"][-1]
+assert "python3 -c" in materialize_wrapped
+assert "/workspace/eight-queens-agent-e2e-claude" in materialize_wrapped
 
 publish_ok, publish_detail = module.publish_workspace_changes(
     "container-123",

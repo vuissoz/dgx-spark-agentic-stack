@@ -440,6 +440,7 @@ Exemples:
 Notes:
 - `agent repo-e2e` diffuse maintenant une progression live sur `stderr` et conserve le JSON final sur `stdout`. En mode live avec OpenClaw sélectionné, la commande échoue immédiatement si `repo.eight_queens.solve` n'est pas présent dans l'allowlist d'outils effective OpenClaw.
 - Les conteneurs agents baseline publient maintenant `/state/bootstrap/known-local-tools.md` et `/state/bootstrap/known-local-tools.json` ; les prompts `repo-e2e` s'appuient sur ces manifests pour orienter les agents vers un jeu de commandes shell local revu au lieu d'inventer des schémas d'outils.
+- `repo-e2e` injecte aussi des fichiers d'instructions locaux ignores dans chaque workspace clone (`AGENTS.md`, `AGENT.md`, `SKILLS.md`, plus un fichier specifique au harness comme `CLAUDE.md` ou `CODEX.md`) afin que chaque CLI voie d'abord des consignes de depot locales.
 - `agent stop` et `agent start` gèrent les cibles `claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|openwebui|openhands|comfyui`.
 - `agent stop/start openclaw` pilote tout le bundle OpenClaw control/execution-plane; `agent stop/start comfyui` pilote `comfyui` et `comfyui-loopback` ensemble.
 - `agent trtllm stop` arrête proprement uniquement le service `trtllm`; `agent trtllm start` le remonte et attend son healthcheck.

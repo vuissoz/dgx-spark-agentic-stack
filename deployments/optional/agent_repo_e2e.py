@@ -45,6 +45,19 @@ VALIDATION_POLICY = "at_least_one_success"
 SUCCESS_THRESHOLD = 1
 OPENCLAW_REPO_SOLVER_TOOL = "repo.eight_queens.solve"
 OPENCLAW_TOKEN_FILE = "/run/secrets/openclaw.token"
+COMMON_INSTRUCTION_FILES = ("AGENTS.md", "AGENT.md", "SKILLS.md")
+MODE_INSTRUCTION_FILE = {
+    "codex": "CODEX.md",
+    "claude": "CLAUDE.md",
+    "opencode": "OPENCODE.md",
+    "kilo": "KILOCODE.md",
+    "openhands": "OPENHANDS.md",
+    "pi": "PI-MONO.md",
+    "goose": "GOOSE.md",
+    "vibe": "VIBESTRAL.md",
+    "hermes": "HERMES.md",
+    "openclaw": "OPENCLAW.md",
+}
 
 AGENT_MATRIX = {
     "codex": {"service": "agentic-codex", "branch": "agent/codex", "mode": "codex"},
@@ -230,8 +243,72 @@ def sanitize_name(value: str) -> str:
     return "".join(cleaned).strip("-") or "run"
 
 
-def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
+def instruction_files_for_mode(mode: str) -> list[str]:
+    files = list(COMMON_INSTRUCTION_FILES)
+    mode_file = MODE_INSTRUCTION_FILE.get(mode)
+    if mode_file:
+        files.append(mode_file)
+    return files
+
+
+def build_workspace_instruction_files(mode: str, branch: str, workspace: str) -> dict[str, str]:
+    mode_file = MODE_INSTRUCTION_FILE.get(mode, "AGENT.md")
+    generic = (
+        "# Repo-E2E Instructions\n\n"
+        "This repository is a stack-managed reference task for a non-interactive agent harness.\n\n"
+        "## Task\n\n"
+        f"- Implement `solve_eight_queens()` in `{REFERENCE_PROBLEM_FILE}`.\n"
+        "- Do not rename files or add unrelated changes.\n"
+        "- Verify with `python3 -m pytest -q`.\n\n"
+        "## Runtime Contract\n\n"
+        f"- Workspace root: `{workspace}`\n"
+        f"- Branch to publish: `{branch}`\n"
+        "- Shell contract: `/bin/sh`\n"
+        f"- Known local tools manifest: `{KNOWN_LOCAL_TOOLS_MD}` and `{KNOWN_LOCAL_TOOLS_JSON}`\n"
+        "- Prefer direct shell commands from the known-tools manifest.\n"
+        "- Do not invent tool schemas, pseudo-XML tool tags, or approval metadata.\n"
+        "- Do not guess alternate paths; inspect the checked out repository directly.\n\n"
+        "## Publish Contract\n\n"
+        "- Start with `git pull --ff-only origin <branch>`.\n"
+        f"- Stage only `{REFERENCE_PROBLEM_FILE}`.\n"
+        '- Commit with `git commit -m "Implement solve_eight_queens()"`.\n'
+        "- Push with `git push origin HEAD:<branch>`.\n"
+        "- Leave the worktree clean after push.\n"
+    )
+    skills = (
+        "# Skills\n\n"
+        "For this reference task, no external skill system is assumed.\n\n"
+        "Use this sequence:\n\n"
+        "1. Read `AGENTS.md` and the harness-specific instruction file.\n"
+        "2. Read the known local tools manifest.\n"
+        "3. Inspect `src/eight_queens.py` and `tests/test_eight_queens.py`.\n"
+        "4. Edit only the target solver file.\n"
+        "5. Run `python3 -m pytest -q`.\n"
+        "6. Commit and push only after tests pass.\n"
+    )
+    harness = (
+        f"# {mode_file}\n\n"
+        f"This workspace is being executed through the `{mode}` repo-e2e harness.\n\n"
+        "Harness-specific rules:\n\n"
+        "- Use ordinary shell commands and file edits, not synthetic tool-call wrappers.\n"
+        "- Do not emit placeholder plans instead of making the change.\n"
+        "- Do not stop after inspection; implement the fix and run the tests.\n"
+        "- If a command fails, correct course inside the same workspace instead of switching paths.\n"
+        "- Use the repo root as the only working tree.\n"
+    )
+    return {
+        "AGENTS.md": generic,
+        "AGENT.md": generic,
+        "SKILLS.md": skills,
+        mode_file: harness,
+    }
+
+
+def build_standard_prompt(repo_name: str, branch: str, workspace: str, mode: str) -> str:
+    instruction_files = instruction_files_for_mode(mode)
+    instruction_hint = ", ".join(f"'{name}'" for name in instruction_files)
     tool_check_hint = (
+        f"Read the project-scoped instruction files at the repository root first: {instruction_hint}. "
         "Before you act, read the known local tool manifest at "
         f"'{KNOWN_LOCAL_TOOLS_MD}' or '{KNOWN_LOCAL_TOOLS_JSON}', then inspect the tools and commands actually "
         "available in your runtime and only use ones you have confirmed are present there. "
@@ -262,6 +339,42 @@ def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
         "Leave a clean worktree with local HEAD matching origin after your push. "
         "Do not push to main."
     )
+
+
+def materialize_workspace_instruction_files(
+    container_id: str,
+    workspace: str,
+    *,
+    mode: str,
+    branch: str,
+    timeout_seconds: int,
+) -> subprocess.CompletedProcess[str]:
+    payload = build_workspace_instruction_files(mode, branch, workspace)
+    payload_b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    script = """
+import base64
+import json
+import pathlib
+import sys
+
+workspace = pathlib.Path(sys.argv[1])
+payload = json.loads(base64.b64decode(sys.argv[2]).decode("utf-8"))
+exclude_path = workspace / ".git" / "info" / "exclude"
+existing = set()
+if exclude_path.exists():
+    existing = {line.strip() for line in exclude_path.read_text(encoding="utf-8").splitlines() if line.strip()}
+for name, content in payload.items():
+    (workspace / name).write_text(content, encoding="utf-8")
+    if name not in existing:
+        with exclude_path.open("a", encoding="utf-8") as fh:
+            fh.write(name + "\\n")
+        existing.add(name)
+"""
+    command = (
+        f"cd {shlex.quote(workspace)} && "
+        f"python3 -c {shlex.quote(script)} {shlex.quote(workspace)} {shlex.quote(payload_b64)}"
+    )
+    return docker_exec(container_id, command, timeout_seconds=timeout_seconds)
 
 
 def build_attempt_statistics(attempt_results: list[dict[str, object]]) -> dict[str, object]:
@@ -342,7 +455,23 @@ def prepare_workspace(
             "git clean -fd",
         ]
     )
-    return docker_exec(container_id, command, timeout_seconds=timeout_seconds)
+    clone_proc = docker_exec(container_id, command, timeout_seconds=timeout_seconds)
+    if clone_proc.returncode != 0:
+        return clone_proc
+
+    instruction_proc = materialize_workspace_instruction_files(
+        container_id,
+        workspace,
+        mode=mode,
+        branch=branch,
+        timeout_seconds=timeout_seconds,
+    )
+    return subprocess.CompletedProcess(
+        instruction_proc.args,
+        instruction_proc.returncode,
+        (clone_proc.stdout or "") + (instruction_proc.stdout or ""),
+        (clone_proc.stderr or "") + (instruction_proc.stderr or ""),
+    )
 
 
 def collect_git_artifacts(container_id: str, workspace: str, artifact_dir: pathlib.Path) -> None:
@@ -1003,7 +1132,7 @@ def run_agent_once(
     branch = str(config["branch"])
     mode = str(config["mode"])
     workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
-    prompt = build_standard_prompt(repo_name, branch, workspace)
+    prompt = build_standard_prompt(repo_name, branch, workspace, mode)
 
     result: dict[str, object] = {
         "agent": agent_name,
@@ -1230,7 +1359,7 @@ def build_agent_result(
     branch = str(config["branch"])
     mode = str(config["mode"])
     workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
-    prompt = build_standard_prompt(repo_name, branch, workspace)
+    prompt = build_standard_prompt(repo_name, branch, workspace, mode)
 
     plan_payload = {
         "clone_url": clone_url,
@@ -1518,7 +1647,7 @@ def main() -> None:
                         "workspace": workspace,
                         "branch": branch,
                         "mode": mode,
-                        "prompt": build_standard_prompt(repo_name, branch, workspace),
+                        "prompt": build_standard_prompt(repo_name, branch, workspace, mode),
                         "attempts_requested": args.attempts,
                         "attempt": attempt,
                         "validation_policy": VALIDATION_POLICY,
