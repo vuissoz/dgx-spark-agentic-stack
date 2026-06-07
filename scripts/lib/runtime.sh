@@ -478,7 +478,16 @@ agentic_trtllm_nvfp4_host_dir() {
   return 1
 }
 
-AGENTIC_DEFAULT_TRTLLM_MODEL_URL="${AGENTIC_DEFAULT_TRTLLM_MODEL_URL:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}"
+if [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]]; then
+  _agentic_default_trtllm_model_url="https://huggingface.co/nvidia/Qwen3-32B-FP4"
+  _agentic_default_trtllm_native_max_num_tokens="8192"
+  _agentic_default_trtllm_native_max_seq_len="98304"
+else
+  _agentic_default_trtllm_model_url="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+  _agentic_default_trtllm_native_max_num_tokens="262144"
+  _agentic_default_trtllm_native_max_seq_len="262144"
+fi
+AGENTIC_DEFAULT_TRTLLM_MODEL_URL="${AGENTIC_DEFAULT_TRTLLM_MODEL_URL:-${_agentic_default_trtllm_model_url}}"
 AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE="${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE:-$(trtllm_strip_hf_url "${AGENTIC_DEFAULT_TRTLLM_MODEL_URL}")}"
 AGENTIC_DEFAULT_TRTLLM_NVFP4_REPO="${AGENTIC_DEFAULT_TRTLLM_NVFP4_REPO:-${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE}}"
 AGENTIC_DEFAULT_TRTLLM_NVFP4_REVISION="${AGENTIC_DEFAULT_TRTLLM_NVFP4_REVISION:-main}"
@@ -488,8 +497,8 @@ _agentic_trtllm_native_model_policy_raw="${TRTLLM_NATIVE_MODEL_POLICY-}"
 TRTLLM_MODELS="${TRTLLM_MODELS:-${AGENTIC_DEFAULT_TRTLLM_MODEL_URL}}"
 TRTLLM_NATIVE_MODEL_POLICY="${TRTLLM_NATIVE_MODEL_POLICY:-auto}"
 TRTLLM_NATIVE_MAX_BATCH_SIZE="${TRTLLM_NATIVE_MAX_BATCH_SIZE:-1}"
-TRTLLM_NATIVE_MAX_NUM_TOKENS="${TRTLLM_NATIVE_MAX_NUM_TOKENS:-262144}"
-TRTLLM_NATIVE_MAX_SEQ_LEN="${TRTLLM_NATIVE_MAX_SEQ_LEN:-262144}"
+TRTLLM_NATIVE_MAX_NUM_TOKENS="${TRTLLM_NATIVE_MAX_NUM_TOKENS:-${_agentic_default_trtllm_native_max_num_tokens}}"
+TRTLLM_NATIVE_MAX_SEQ_LEN="${TRTLLM_NATIVE_MAX_SEQ_LEN:-${_agentic_default_trtllm_native_max_seq_len}}"
 TRTLLM_NATIVE_ENABLE_CUDA_GRAPH="${TRTLLM_NATIVE_ENABLE_CUDA_GRAPH:-false}"
 TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE="${TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE:-1}"
 TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING="${TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING:-false}"
@@ -497,6 +506,7 @@ TRTLLM_NVFP4_LOCAL_MODEL_DIR="${TRTLLM_NVFP4_LOCAL_MODEL_DIR:-${AGENTIC_DEFAULT_
 TRTLLM_NVFP4_HF_REPO="${TRTLLM_NVFP4_HF_REPO:-$(trtllm_strip_hf_url "${TRTLLM_MODELS}")}"
 TRTLLM_NVFP4_HF_REVISION="${TRTLLM_NVFP4_HF_REVISION:-${AGENTIC_DEFAULT_TRTLLM_NVFP4_REVISION}}"
 TRTLLM_NVFP4_PREPARE_ENABLED="${TRTLLM_NVFP4_PREPARE_ENABLED:-auto}"
+unset _agentic_default_trtllm_model_url _agentic_default_trtllm_native_max_num_tokens _agentic_default_trtllm_native_max_seq_len
 
 if [[ -z "${_agentic_trtllm_native_model_policy_raw}" ]] \
   && agentic_csv_contains "trt" "${COMPOSE_PROFILES:-}" \

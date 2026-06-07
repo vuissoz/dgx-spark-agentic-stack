@@ -36,24 +36,24 @@ Vérification:
 Activation optionnelle du backend TRT-LLM (interne uniquement):
 
 ```bash
-./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+./agent onboard --compose-profiles trt --trtllm-models https://huggingface.co/nvidia/Qwen3-32B-FP4
 source .runtime/env.generated.sh
 ./agent up core
 ```
 
 En mode interactif, `./agent onboard` propose aussi explicitement l'activation TRT quand `COMPOSE_PROFILES` ne contient pas encore `trt`, puis demande la liste `TRTLLM_MODELS`.
 Le service `trtllm` essaie désormais de lancer un vrai backend NVIDIA TRT-LLM quand `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide; sinon il retombe volontairement sur le mode `mock` pour garder des tests déterministes.
-Par défaut (`TRTLLM_NATIVE_MODEL_POLICY=auto`), le runtime natif expose un seul modèle TRT piloté par `TRTLLM_MODELS`, avec `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` comme valeur par défaut.
+Par défaut (`TRTLLM_NATIVE_MODEL_POLICY=auto`), le runtime natif expose un seul modèle TRT piloté par `TRTLLM_MODELS`. En `rootless-dev`, la valeur par défaut est `Qwen3-32B-FP4`; en `strict-prod`, on garde `NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`.
 Un mode durci `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` existe maintenant pour DGX Spark: il n'accepte qu'un seul alias exposé a la fois (`TRTLLM_MODELS`) et force le chargement depuis un seul répertoire local `TRTLLM_NVFP4_LOCAL_MODEL_DIR`, sans fallback silencieux.
-Pour les UIs comme OpenWebUI, le catalogue TRT derive aussi un alias lisible a partir du modele TRT effectivement configure. Avec le defaut Nano actuel, cela donne `trtllm/nvidia-nemotron-3-nano-30b-a3b-fp8`, tout en gardant l'URL Hugging Face comme identifiant canonique pour les appels directs et les tests.
+Pour les UIs comme OpenWebUI, le catalogue TRT derive aussi un alias lisible a partir du modele TRT effectivement configure. Avec le defaut `rootless-dev` actuel, cela donne `trtllm/qwen3-32b-fp4`, tout en gardant l'URL Hugging Face comme identifiant canonique pour les appels directs et les tests.
 Le chemin `OpenWebUI -> ollama-gate -> trtllm` supporte maintenant le vrai streaming SSE/chunked pour `/v1/chat/completions`: le gate relaie les chunks TRT au fil de l'eau au lieu d'attendre la réponse complète.
-Sur ce chemin Nano par defaut, le runtime borne aussi `TRTLLM_NATIVE_MAX_NUM_TOKENS=4096`, `TRTLLM_NATIVE_MAX_SEQ_LEN=32768` et laisse `TRTLLM_NATIVE_ENABLE_CUDA_GRAPH=false` pour eviter les warm-ups DGX Spark qui restent bloques sur `max_seq_len=262144`.
-Quand `COMPOSE_PROFILES` contient `trt` et que `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide, `./agent up core` precharge uniquement le cache Hugging Face du modèle TRT exposé par défaut `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`. Le répertoire local strict n'est jamais bootstrapé automatiquement; il reste opt-in via `./agent trtllm prepare`.
+Sur le chemin par défaut `rootless-dev`, le runtime borne aussi `TRTLLM_NATIVE_MAX_NUM_TOKENS=8192`, `TRTLLM_NATIVE_MAX_SEQ_LEN=98304` et laisse `TRTLLM_NATIVE_ENABLE_CUDA_GRAPH=false` pour rester dans l'enveloppe du runtime local.
+Quand `COMPOSE_PROFILES` contient `trt` et que `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` est non vide, `./agent up core` precharge uniquement le cache Hugging Face du modèle TRT exposé par défaut. Le répertoire local strict n'est jamais bootstrapé automatiquement; il reste opt-in via `./agent trtllm prepare`.
 Exemple d'activation:
 
 ```bash
 export TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only
-export TRTLLM_MODELS=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+export TRTLLM_MODELS=https://huggingface.co/nvidia/Qwen3-32B-FP4
 export TRTLLM_NVFP4_LOCAL_MODEL_DIR=/srv/agentic/trtllm/models/trtllm-model
 ./agent up core
 ```

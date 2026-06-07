@@ -131,10 +131,10 @@ compose_dump="$(
 )"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_MODELS: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' \
   || fail "compose config must expose Super NVFP4 as the default TRTLLM_MODELS alias"
-printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_NUM_TOKENS: "262144"' \
-  || fail "compose config must expose the full Super context as TRTLLM_NATIVE_MAX_NUM_TOKENS on DGX Spark"
-printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_SEQ_LEN: "262144"' \
-  || fail "compose config must expose the full Super context as TRTLLM_NATIVE_MAX_SEQ_LEN on DGX Spark"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_NUM_TOKENS: "8192"' \
+  || fail "compose config must expose the rootless-dev TRT token cap as TRTLLM_NATIVE_MAX_NUM_TOKENS"
+printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_MAX_SEQ_LEN: "98304"' \
+  || fail "compose config must expose the rootless-dev TRT context cap as TRTLLM_NATIVE_MAX_SEQ_LEN"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NATIVE_ENABLE_CUDA_GRAPH: "false"' \
   || fail "compose config must disable CUDA graph by default for Super startup safety"
 printf '%s\n' "${compose_dump}" | grep -q 'TRTLLM_NVFP4_HF_REPO: nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' \

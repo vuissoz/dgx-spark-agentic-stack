@@ -107,10 +107,10 @@ grep -q "^export TRTLLM_MODELS='${trt_models}'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_MODELS"
 grep -q "^export TRTLLM_NATIVE_MAX_BATCH_SIZE='1'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_BATCH_SIZE"
-grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='262144'$" "${env_file}" \
-  || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_NUM_TOKENS=262144"
-grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='262144'$" "${env_file}" \
-  || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_SEQ_LEN=262144"
+grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='8192'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_NUM_TOKENS=8192"
+grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='98304'$" "${env_file}" \
+  || fail "full setup onboarding env must export TRTLLM_NATIVE_MAX_SEQ_LEN=98304"
 grep -q "^export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH='false'$" "${env_file}" \
   || fail "full setup onboarding env must export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH"
 if grep -q '^export TRTLLM_ACTIVE_MODEL_KEY=' "${env_file}"; then

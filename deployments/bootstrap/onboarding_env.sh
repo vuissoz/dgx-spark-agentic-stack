@@ -345,6 +345,33 @@ default_limits_ollama_mem_for_profile() {
   fi
 }
 
+default_trtllm_models_for_profile() {
+  local profile="$1"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "https://huggingface.co/nvidia/Qwen3-32B-FP4"
+  else
+    printf '%s\n' "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+  fi
+}
+
+default_trtllm_native_max_num_tokens_for_profile() {
+  local profile="$1"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "8192"
+  else
+    printf '%s\n' "262144"
+  fi
+}
+
+default_trtllm_native_max_seq_len_for_profile() {
+  local profile="$1"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "98304"
+  else
+    printf '%s\n' "262144"
+  fi
+}
+
 default_limits_stack_cpus_for_profile() {
   local profile="$1"
   local stack="$2"
@@ -1529,8 +1556,8 @@ export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW=$(shell_quote "${default_model_conte
 export OLLAMA_CONTEXT_LENGTH=$(shell_quote "${default_model_context_window}")
 export TRTLLM_MODELS=$(shell_quote "${trtllm_models}")
 export TRTLLM_NATIVE_MAX_BATCH_SIZE='1'
-export TRTLLM_NATIVE_MAX_NUM_TOKENS='262144'
-export TRTLLM_NATIVE_MAX_SEQ_LEN='262144'
+export TRTLLM_NATIVE_MAX_NUM_TOKENS=$(shell_quote "$(default_trtllm_native_max_num_tokens_for_profile "${profile}")")
+export TRTLLM_NATIVE_MAX_SEQ_LEN=$(shell_quote "$(default_trtllm_native_max_seq_len_for_profile "${profile}")")
 export TRTLLM_NATIVE_ENABLE_CUDA_GRAPH='false'
 export TRTLLM_NATIVE_CUDA_GRAPH_MAX_BATCH_SIZE='1'
 export TRTLLM_NATIVE_CUDA_GRAPH_ENABLE_PADDING='false'
@@ -2197,7 +2224,7 @@ collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_oll
 collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 warn_agentic_tool_call_model_regression "AGENTIC_DEFAULT_MODEL" "${default_model}" || die "invalid AGENTIC_DEFAULT_MODEL"
 collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model. Onboarding may recommend a different value later once AGENTIC_LIMIT_OLLAMA_MEM is known."
-trtllm_models="${trtllm_models_override:-${TRTLLM_MODELS:-https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}}"
+  trtllm_models="${trtllm_models_override:-$(default_trtllm_models_for_profile "${profile}")}"
 trt_profile_enabled=0
 if compose_profile_enabled "trt" "${compose_profiles}"; then
   trt_profile_enabled=1

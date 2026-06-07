@@ -10,6 +10,7 @@ wizard_script="${REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
 [[ -x "${wizard_script}" ]] || fail "onboarding wizard is missing or not executable: ${wizard_script}"
 
 default_trt_model="https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+rootless_default_trt_model="https://huggingface.co/nvidia/Qwen3-32B-FP4"
 
 work_dir="${REPO_ROOT}/.runtime/test-onboarding-env-$$"
 default_env_file="${work_dir}/default.env.generated.sh"
@@ -33,6 +34,9 @@ mkdir -p "${work_dir}"
 run_default_answers() {
   if ! printf '\n%.0s' {1..80} \
     | AGENTIC_PROFILE=strict-prod \
+      TRTLLM_MODELS= \
+      TRTLLM_NATIVE_MAX_NUM_TOKENS= \
+      TRTLLM_NATIVE_MAX_SEQ_LEN= \
       AGENTIC_OLLAMA_ESTIMATOR_TAGS_FILE="${ollama_fixtures_dir}/tags.context-estimator.json" \
       AGENTIC_OLLAMA_ESTIMATOR_SHOW_FILE="${ollama_fixtures_dir}/show.nemotron-cascade-2-30b.json" \
       "${wizard_script}" --output "${default_env_file}" >"${default_log}" 2>&1; then
@@ -417,7 +421,11 @@ grep -q "^export LOKI_MAX_QUERY_LOOKBACK='7d'$" "${override_env_file}" \
 assert_git_ignored "${override_env_file}"
 ok "wizard override flow writes custom values"
 
-if ! AGENTIC_PROFILE=strict-prod "${wizard_script}" \
+if ! AGENTIC_PROFILE=strict-prod \
+  TRTLLM_MODELS= \
+  TRTLLM_NATIVE_MAX_NUM_TOKENS= \
+  TRTLLM_NATIVE_MAX_SEQ_LEN= \
+  "${wizard_script}" \
   --non-interactive \
   --profile rootless-dev \
   --root "${work_dir}/rootless-default-root" \
@@ -462,8 +470,12 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='50909'$" "${rootless_defa
   || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 50909"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${rootless_default_env_file}" \
   || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 50909"
-grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${rootless_default_env_file}" \
-  || fail "rootless default TRTLLM_MODELS must stay ${default_trt_model}"
+grep -q "^export TRTLLM_MODELS='${rootless_default_trt_model}'$" "${rootless_default_env_file}" \
+  || fail "rootless default TRTLLM_MODELS must stay ${rootless_default_trt_model}"
+grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='8192'$" "${rootless_default_env_file}" \
+  || fail "rootless default TRTLLM_NATIVE_MAX_NUM_TOKENS must be 8192"
+grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='98304'$" "${rootless_default_env_file}" \
+  || fail "rootless default TRTLLM_NATIVE_MAX_SEQ_LEN must be 98304"
 if grep -q '^export TRTLLM_ACTIVE_MODEL_KEY=' "${rootless_default_env_file}"; then
   fail "rootless default onboarding env must not export TRTLLM_ACTIVE_MODEL_KEY anymore"
 fi
