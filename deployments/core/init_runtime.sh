@@ -564,19 +564,49 @@ ensure_gate_default_trtllm_route() {
   local default_handle="${AGENTIC_DEFAULT_TRTLLM_MODEL_HANDLE:-nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4}"
 
   [[ -f "${routes_file}" ]] || return 0
-  if grep -Fq 'name: default-trtllm-model' "${routes_file}" \
-    || { grep -Fq "${default_url}" "${routes_file}" && grep -Fq "${default_handle}" "${routes_file}"; }; then
-    return 0
-  fi
+  python3 - "${routes_file}" "${default_url}" "${default_handle}" <<'PY'
+from pathlib import Path
+import sys
 
-  cat >>"${routes_file}" <<EOF
-  - name: default-trtllm-model
-    backend: trtllm
-    match:
-      - "${default_url}"
-      - "${default_handle}"
-EOF
-  log "ensured gate route for default TRT model: ${default_url}"
+routes_path = Path(sys.argv[1])
+default_url = sys.argv[2]
+default_handle = sys.argv[3]
+desired_block = [
+    "  - name: default-trtllm-model\n",
+    "    backend: trtllm\n",
+    "    match:\n",
+    f'      - "{default_url}"\n',
+    f'      - "{default_handle}"\n',
+]
+
+lines = routes_path.read_text().splitlines(keepends=True)
+start = None
+end = None
+for idx, line in enumerate(lines):
+    if line.strip() == "- name: default-trtllm-model":
+        start = idx
+        end = len(lines)
+        for jdx in range(idx + 1, len(lines)):
+            if lines[jdx].startswith("  - name: "):
+                end = jdx
+                break
+        break
+
+if start is None:
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    if lines and lines[-1].strip():
+        lines.append("\n")
+    lines.extend(desired_block)
+else:
+    current_block = lines[start:end]
+    if current_block == desired_block:
+        raise SystemExit(0)
+    lines[start:end] = desired_block
+
+routes_path.write_text("".join(lines))
+PY
+  log "normalized gate route for default TRT model: ${default_url}"
 }
 
 ensure_gate_mode_file() {

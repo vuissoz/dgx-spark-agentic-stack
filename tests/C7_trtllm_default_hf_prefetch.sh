@@ -85,4 +85,56 @@ grep -q 'nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' "${routes_template}" \
   || fail "core model routes template must route the default Super NVFP4 handle to trtllm"
 ok "core model routes template pins the default Super NVFP4 alias to trtllm"
 
+rewrite_fixture="${tmp_root}/stale-model_routes.yml"
+cat > "${rewrite_fixture}" <<'YAML'
+routes:
+  - name: default-trtllm-model
+    backend: trtllm
+    match:
+      - "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+      - "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+  - name: nvfp4-to-trtllm
+    backend: trtllm
+    match:
+      - "*nvfp4*"
+YAML
+
+python3 - "${rewrite_fixture}" <<'PY'
+from pathlib import Path
+import sys
+
+routes_path = Path(sys.argv[1])
+default_url = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+default_handle = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+desired_block = [
+    "  - name: default-trtllm-model\n",
+    "    backend: trtllm\n",
+    "    match:\n",
+    f'      - "{default_url}"\n',
+    f'      - "{default_handle}"\n',
+]
+
+lines = routes_path.read_text().splitlines(keepends=True)
+for idx, line in enumerate(lines):
+    if line.strip() == "- name: default-trtllm-model":
+        for jdx in range(idx + 1, len(lines)):
+            if lines[jdx].startswith("  - name: "):
+                lines[idx:jdx] = desired_block
+                break
+        else:
+            lines[idx:] = desired_block
+        break
+
+routes_path.write_text("".join(lines))
+PY
+
+grep -q 'https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' "${rewrite_fixture}" \
+  || fail "runtime route normalization must replace the stale Nano URL alias"
+grep -q 'nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' "${rewrite_fixture}" \
+  || fail "runtime route normalization must replace the stale Nano handle alias"
+if grep -q 'NVIDIA-Nemotron-3-Nano-30B-A3B-FP8' "${rewrite_fixture}"; then
+  fail "runtime route normalization must drop the stale Nano aliases"
+fi
+ok "runtime route normalization rewrites stale TRT aliases to the default Super NVFP4 model"
+
 ok "C7_trtllm_default_hf_prefetch passed"

@@ -44,8 +44,8 @@ routes:
   - name: default-trtllm-model
     backend: trtllm
     match:
-      - "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
-      - "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+      - "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+      - "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
   - name: nvfp4-to-trtllm
     backend: trtllm
     match:
