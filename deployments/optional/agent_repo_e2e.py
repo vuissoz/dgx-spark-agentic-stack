@@ -35,6 +35,8 @@ REFERENCE_PROBLEM_SENTINEL = 'raise NotImplementedError("Implement solve_eight_q
 GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
 PYTEST_IMPORT_CHECK = "python3 -c 'import pytest' >/dev/null"
 AGENT_DEFAULTS_FILE = "/state/bootstrap/ollama-gate-defaults.env"
+KNOWN_LOCAL_TOOLS_MD = "/state/bootstrap/known-local-tools.md"
+KNOWN_LOCAL_TOOLS_JSON = "/state/bootstrap/known-local-tools.json"
 OLLAMA_SMOKE_SCRIPT = REPO_ROOT / "deployments" / "ollama" / "smoke_generate.sh"
 OLLAMA_SMOKE_API_URL = "http://127.0.0.1:11434"
 OLLAMA_SMOKE_TIMEOUT_SECONDS = 120
@@ -230,8 +232,13 @@ def sanitize_name(value: str) -> str:
 
 def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
     tool_check_hint = (
-        "Before you act, inspect the tools and commands actually available in your runtime and only use ones "
-        "you have confirmed are present. "
+        "Before you act, read the known local tool manifest at "
+        f"'{KNOWN_LOCAL_TOOLS_MD}' or '{KNOWN_LOCAL_TOOLS_JSON}', then inspect the tools and commands actually "
+        "available in your runtime and only use ones you have confirmed are present there. "
+        "Prefer direct shell commands from that manifest for this task: "
+        "'pwd', 'ls', 'find', 'sed', 'cat', 'git', 'python3', and 'pytest'. "
+        "Avoid invented tool schemas, pseudo-XML tool tags, or extra approval metadata. "
+        "Do not guess alternate workspace paths; stay inside the checked out repository root. "
     )
     publish_hint = (
         "The shell is '/bin/sh', so use POSIX-compatible commands only. "
@@ -248,6 +255,7 @@ def build_standard_prompt(repo_name: str, branch: str, workspace: str) -> str:
         f"Start by running 'git pull --ff-only origin {branch}' yourself. "
         f"{tool_check_hint}"
         "Follow the repository instructions, implement the Python fix, and run the documented tests. "
+        f"The target file is '{REFERENCE_PROBLEM_FILE}'. Use 'python3 -m pytest -q' as the verification command. "
         f"{publish_hint}"
         f"After the tests pass, create a commit on '{branch}' and push it yourself with 'git push origin HEAD:{branch}'. "
         "Finish by writing a concise run summary. Do not ask for clarification. "

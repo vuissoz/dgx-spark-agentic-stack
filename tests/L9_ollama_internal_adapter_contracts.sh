@@ -114,6 +114,16 @@ rg -nF 'base["$schema"] = "https://app.kilo.ai/config.json"' "${entrypoint}" >/d
   || fail "kilocode adapter must set the Kilo config schema"
 ok "kilocode adapter contract is pinned in entrypoint"
 
+rg -nF 'bootstrap_known_local_tools() {' "${entrypoint}" >/dev/null \
+  || fail "entrypoint must define known local tools bootstrap"
+rg -nF 'known-local-tools.json' "${entrypoint}" >/dev/null \
+  || fail "known local tools bootstrap must write known-local-tools.json"
+rg -nF 'known-local-tools.md' "${entrypoint}" >/dev/null \
+  || fail "known local tools bootstrap must write known-local-tools.md"
+rg -nF 'agent-known-tools' "${entrypoint}" >/dev/null \
+  || fail "known local tools bootstrap must install agent-known-tools helper"
+ok "known local tools bootstrap contract is pinned in entrypoint"
+
 rg -n '^openhands_llm_base_url=\"http://ollama-gate:11435/v1\"$' "${onboarding}" >/dev/null \
   || fail "onboarding must default openhands llm_base_url to ollama-gate /v1"
 ok "onboarding contract keeps openhands default LLM endpoint on gate"
@@ -146,13 +156,31 @@ import sys
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
 model = sys.argv[2]
 
-assert payload.get("$schema") == "https://app.kilo.ai/config.json"
-assert payload.get("model") == f"ollama/{model}"
-provider = (payload.get("provider") or {}).get("ollama") or {}
-assert (provider.get("options") or {}).get("baseURL") == "http://ollama-gate:11435/v1"
-assert model in (provider.get("models") or {})
+    assert payload.get("$schema") == "https://app.kilo.ai/config.json"
+    assert payload.get("model") == f"ollama/{model}"
+    provider = (payload.get("provider") or {}).get("ollama") or {}
+    assert (provider.get("options") or {}).get("baseURL") == "http://ollama-gate:11435/v1"
+    assert model in (provider.get("models") or {})
 PY
     rm -f "${kilocode_cfg}" >/dev/null 2>&1 || true
+    kilocode_tools_json="$(mktemp)"
+    docker exec "${kilocode_cid}" sh -lc 'cat /state/bootstrap/known-local-tools.json' >"${kilocode_tools_json}" \
+      || fail "unable to read known local tools json"
+    python3 - "${kilocode_tools_json}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+assert payload.get("shell") == "/bin/sh"
+assert payload.get("workspace_root") == "/workspace"
+commands = {item["name"]: item for item in payload.get("commands") or []}
+for required in ("sh", "pwd", "ls", "find", "sed", "cat", "git", "python3"):
+    assert commands.get(required, {}).get("available") is True
+assert payload.get("preferred_repo_e2e_sequence")
+PY
+    rm -f "${kilocode_tools_json}" >/dev/null 2>&1 || true
+    docker exec "${kilocode_cid}" sh -lc 'agent-known-tools | grep -q "Known Local Tools"' \
+      || fail "agent-known-tools helper must print the manifest"
     ok "running kilocode container keeps adapter endpoint contract"
   else
     warn "agentic-kilocode container not running; runtime adapter assertion skipped"

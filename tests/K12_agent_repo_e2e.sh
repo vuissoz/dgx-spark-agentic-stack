@@ -150,12 +150,19 @@ for agent, branch in expected.items():
     assert plan["success_threshold"] == 1
     assert f"git pull --ff-only origin {branch}" in prompt
     assert f"git push origin HEAD:{branch}" in prompt
+    assert "/state/bootstrap/known-local-tools.md" in prompt
+    assert "/state/bootstrap/known-local-tools.json" in prompt
     assert "inspect the tools and commands actually available in your runtime" in prompt
+    assert "Prefer direct shell commands from that manifest" in prompt
+    assert "Avoid invented tool schemas, pseudo-XML tool tags, or extra approval metadata" in prompt
+    assert "Do not guess alternate workspace paths" in prompt
     assert "The shell is '/bin/sh'" in prompt
     assert "git add src/eight_queens.py" in prompt
     assert 'git commit -m "Implement solve_eight_queens()"' in prompt
     assert "Do not use here-strings, heredocs" in prompt
     assert "the repository must be completely clean" in prompt
+    assert "The target file is 'src/eight_queens.py'" in prompt
+    assert "Use 'python3 -m pytest -q' as the verification command" in prompt
 PY
 
 summary_reset_json="${runtime_root}/summary-reset.json"
