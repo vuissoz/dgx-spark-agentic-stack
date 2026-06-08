@@ -221,6 +221,20 @@ def context_fill_percent(input_tokens: int | None, context_window_tokens: int | 
     return round((float(input_tokens) / float(context_window_tokens)) * 100.0, 2)
 
 
+def print_verbose(message: str, *, enabled: bool) -> None:
+    if enabled:
+        print(message, file=sys.stderr, flush=True)
+
+
+def render_progress_bar(current: int, total: int, width: int = 28) -> str:
+    total = max(total, 1)
+    current = max(0, min(current, total))
+    filled = int(round((current / total) * width))
+    bar = "#" * filled + "-" * (width - filled)
+    percent = int(round((current / total) * 100))
+    return f"[{bar}] {current}/{total} ({percent}%)"
+
+
 def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
     normalized = text.strip()
     if len(normalized) <= max_chars:
@@ -368,6 +382,7 @@ def main() -> int:
     parser.add_argument("--model", default=os.environ.get("AGENTIC_DEFAULT_MODEL", "unknown"))
     parser.add_argument("--workdir", default="/workspace")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
     manifest = load_manifest(Path(args.corpus_manifest)) if args.corpus_manifest else load_manifest(None)
@@ -383,6 +398,7 @@ def main() -> int:
     books: list[dict] = []
     for book in manifest:
         destination = downloads_dir / f"{book['id']}.txt"
+        print_verbose(f"[download] {book['title']}", enabled=args.verbose)
         try:
             resolved_url = download_text([book["url"], *book.get("fallback_urls", [])], destination, args.download_timeout_sec)
         except RuntimeError as exc:
@@ -406,6 +422,10 @@ def main() -> int:
     for index, book in enumerate(books, start=1):
         load_chunks = split_text_into_chunks(book["text"], args.max_chars_per_load_turn)
         book["load_turns"] = []
+        print_verbose(
+            f"[load] {book['title']} {render_progress_bar(0, len(load_chunks))}",
+            enabled=args.verbose,
+        )
         for part_index, chunk_text in enumerate(load_chunks, start=1):
             load_prompt = build_load_prompt(book, chunk_text, part_index, len(load_chunks))
             load_output = turns_dir / f"{index:02d}-{book['id']}-load-part-{part_index:02d}.jsonl"
@@ -428,6 +448,11 @@ def main() -> int:
                     "usage": load_result["usage"],
                     "chunk_chars": len(chunk_text),
                 }
+            )
+            print_verbose(
+                f"[load] {book['title']} {render_progress_bar(part_index, len(load_chunks))} "
+                f"chunk_chars={len(chunk_text)} input_tokens={int(load_result['usage'].get('input_tokens') or 0)}",
+                enabled=args.verbose,
             )
 
         summary_prompt = build_summary_prompt(book)
@@ -454,6 +479,16 @@ def main() -> int:
             "context_window_tokens": context_window_tokens,
             "context_fill_percent": context_fill_percent(input_tokens, context_window_tokens),
         }
+        print_verbose(
+            "\n".join(
+                [
+                    f"[summary] Texte: {book['title']}",
+                    f"[summary] Input tokens={input_tokens} cached={cached_input_tokens} fill={book['summary_turn']['context_fill_percent']}%",
+                    book["summary"],
+                ]
+            ),
+            enabled=args.verbose,
+        )
         del book["text"]
 
     final_output = turns_dir / "final-summary.jsonl"
@@ -477,6 +512,16 @@ def main() -> int:
         "context_window_tokens": context_window_tokens,
         "context_fill_percent": context_fill_percent(int(final_usage.get("input_tokens") or 0), context_window_tokens),
     }
+    print_verbose(
+        "\n".join(
+            [
+                "[summary] Texte: synthese finale",
+                f"[summary] Input tokens={final_summary['input_tokens']} cached={final_summary['cached_input_tokens']} fill={final_summary['context_fill_percent']}%",
+                final_summary["summary"],
+            ]
+        ),
+        enabled=args.verbose,
+    )
 
     finished_at = datetime.now(timezone.utc).isoformat()
     payload = {

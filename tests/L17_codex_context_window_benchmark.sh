@@ -74,7 +74,8 @@ set +e
   --output-dir "${output_dir}" \
   --request-timeout-sec "${AGENTIC_CODEX_CONTEXT_BENCH_TEST_TIMEOUT_SECONDS:-900}" \
   --download-timeout-sec 30 \
-  --json >"${stdout_path}" 2>"${stderr_path}"
+  --json \
+  --verbose >"${stdout_path}" 2>"${stderr_path}"
 rc=$?
 set -e
 
@@ -156,5 +157,13 @@ if "## Synthese finale" not in report_text:
     raise SystemExit("markdown report missing final synthesis section")
 PY
 
+grep -Fq "[load] Vingt mille lieues sous les mers [" "${stderr_path}" \
+  || fail "verbose mode must print a load progress bar for the first text"
+grep -Fq "[summary] Texte: Vingt mille lieues sous les mers" "${stderr_path}" \
+  || fail "verbose mode must identify each intermediate summary by text title"
+grep -Fq "[summary] Texte: synthese finale" "${stderr_path}" \
+  || fail "verbose mode must print the final synthesis label"
+
 ok "codex bench-context produced report artifacts and monotonically growing context usage"
+ok "codex bench-context verbose mode emits progress and labeled summaries on stderr"
 ok "L17_codex_context_window_benchmark passed"

@@ -55,7 +55,7 @@ Usage:
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
   agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|comfyui> [project]
-  agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json]
+  agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json] [--verbose]
   agent openclaw init [project]
   agent openclaw status [--json]
   agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
@@ -3414,6 +3414,7 @@ cmd_codex_bench_context() {
   local context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${OLLAMA_CONTEXT_LENGTH:-}}"
   local model="${AGENTIC_DEFAULT_MODEL:-}"
   local emit_json=0
+  local verbose=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -3456,16 +3457,21 @@ cmd_codex_bench_context() {
         emit_json=1
         shift
         ;;
+      --verbose)
+        verbose=1
+        shift
+        ;;
       -h|--help|help)
         cat <<USAGE
 Usage:
-  agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json]
+  agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json] [--verbose]
 
 Description:
   Download the default French Jules Verne corpus from Project Gutenberg, load
   each novel into the same Codex session, request a summary after each one, then
   request a final synthesis of all summaries while logging Codex-reported input
-  token usage against the configured context window.
+  token usage against the configured context window. With --verbose, progress is
+  streamed to stderr for each load turn and each summary.
 USAGE
         return 0
         ;;
@@ -3504,6 +3510,9 @@ USAGE
   fi
   if [[ "${emit_json}" == "1" ]]; then
     extra_args+=(--json)
+  fi
+  if [[ "${verbose}" == "1" ]]; then
+    extra_args+=(--verbose)
   fi
 
   python3 "${AGENT_CODEX_CONTEXT_BENCH_SCRIPT}" "${extra_args[@]}"
