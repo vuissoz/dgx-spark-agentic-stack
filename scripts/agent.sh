@@ -24,6 +24,7 @@ AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollb
 AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch.sh"
 AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_drift_watch_schedule.sh"
 AGENT_OLLAMA_CHAT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_chat_benchmark.py"
+AGENT_CODEX_CONTEXT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/codex_context_window_benchmark.py"
 AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
 AGENT_TUNNEL_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/tunnel_matrix.py"
 AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py"
@@ -54,6 +55,7 @@ Usage:
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
   agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|comfyui> [project]
+  agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json]
   agent openclaw init [project]
   agent openclaw status [--json]
   agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
@@ -3403,6 +3405,110 @@ cmd_ollama() {
   esac
 }
 
+cmd_codex_bench_context() {
+  local output_dir="${AGENTIC_ROOT}/codex/logs/context-bench/$(date -u +%Y%m%dT%H%M%SZ)"
+  local corpus_manifest=""
+  local request_timeout_sec="${AGENTIC_CODEX_CONTEXT_BENCH_TIMEOUT_SECONDS:-1800}"
+  local download_timeout_sec="${AGENTIC_CODEX_CONTEXT_BENCH_DOWNLOAD_TIMEOUT_SECONDS:-120}"
+  local max_chars_per_load_turn="${AGENTIC_CODEX_CONTEXT_BENCH_MAX_CHARS_PER_LOAD_TURN:-250000}"
+  local context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-${OLLAMA_CONTEXT_LENGTH:-}}"
+  local model="${AGENTIC_DEFAULT_MODEL:-}"
+  local emit_json=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --output-dir)
+        [[ $# -ge 2 ]] || die "missing value for --output-dir"
+        output_dir="$2"
+        shift 2
+        ;;
+      --corpus-manifest)
+        [[ $# -ge 2 ]] || die "missing value for --corpus-manifest"
+        corpus_manifest="$2"
+        shift 2
+        ;;
+      --request-timeout-sec)
+        [[ $# -ge 2 ]] || die "missing value for --request-timeout-sec"
+        request_timeout_sec="$2"
+        shift 2
+        ;;
+      --download-timeout-sec)
+        [[ $# -ge 2 ]] || die "missing value for --download-timeout-sec"
+        download_timeout_sec="$2"
+        shift 2
+        ;;
+      --context-window)
+        [[ $# -ge 2 ]] || die "missing value for --context-window"
+        context_window="$2"
+        shift 2
+        ;;
+      --max-chars-per-load-turn)
+        [[ $# -ge 2 ]] || die "missing value for --max-chars-per-load-turn"
+        max_chars_per_load_turn="$2"
+        shift 2
+        ;;
+      --model)
+        [[ $# -ge 2 ]] || die "missing value for --model"
+        model="$2"
+        shift 2
+        ;;
+      --json)
+        emit_json=1
+        shift
+        ;;
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json]
+
+Description:
+  Download the default French Jules Verne corpus from Project Gutenberg, load
+  each novel into the same Codex session, request a summary after each one, then
+  request a final synthesis of all summaries while logging Codex-reported input
+  token usage against the configured context window.
+USAGE
+        return 0
+        ;;
+      *)
+        die "Unknown codex bench-context argument: $1"
+        ;;
+    esac
+  done
+
+  ensure_runtime_env
+  ensure_agents_runtime
+  [[ -x "${AGENT_CODEX_CONTEXT_BENCH_SCRIPT}" ]] || die "benchmark script missing or not executable: ${AGENT_CODEX_CONTEXT_BENCH_SCRIPT}"
+
+  local codex_cid
+  codex_cid="$(service_container_id "agentic-codex" || true)"
+  [[ -n "${codex_cid}" ]] || die "Codex service is not running. Start it with: agent up agents"
+
+  install -d -m 0755 "${output_dir}"
+
+  local -a extra_args=(
+    --codex-container "${codex_cid}"
+    --output-dir "${output_dir}"
+    --request-timeout-sec "${request_timeout_sec}"
+    --download-timeout-sec "${download_timeout_sec}"
+    --max-chars-per-load-turn "${max_chars_per_load_turn}"
+    --workdir "/workspace"
+  )
+  if [[ -n "${corpus_manifest}" ]]; then
+    extra_args+=(--corpus-manifest "${corpus_manifest}")
+  fi
+  if [[ -n "${context_window}" ]]; then
+    extra_args+=(--context-window "${context_window}")
+  fi
+  if [[ -n "${model}" ]]; then
+    extra_args+=(--model "${model}")
+  fi
+  if [[ "${emit_json}" == "1" ]]; then
+    extra_args+=(--json)
+  fi
+
+  python3 "${AGENT_CODEX_CONTEXT_BENCH_SCRIPT}" "${extra_args[@]}"
+}
+
 trtllm_model_prepared() {
   local host_dir
 
@@ -5275,7 +5381,19 @@ case "$cmd" in
         ;;
     esac
     ;;
-  claude|codex|opencode|kilocode|vibestral|hermes|pi-mono|goose)
+  codex)
+    case "${2:-}" in
+      bench-context)
+        shift 2
+        cmd_codex_bench_context "$@"
+        ;;
+      *)
+        shift
+        cmd_tool_attach "${cmd}" "${1:-}"
+        ;;
+    esac
+    ;;
+  claude|opencode|kilocode|vibestral|hermes|pi-mono|goose)
     shift
     cmd_tool_attach "${cmd}" "${1:-}"
     ;;
