@@ -38,9 +38,21 @@ trap cleanup EXIT
 
 mkdir -p "${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo"
 mkdir -p "${AGENTIC_ROOT}/claude/state"
+mkdir -p "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/telegram"
+mkdir -p "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/cron/runs"
+mkdir -p "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/delivery-queue"
+mkdir -p "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/plugin-state"
+mkdir -p "${AGENTIC_ROOT}/openclaw/relay/state"
+mkdir -p "${AGENTIC_ROOT}/openclaw/sandbox/state"
 mkdir -p "${AGENTIC_ROOT}/secrets/runtime"
 printf 'version-one\n' >"${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/readme.txt"
 printf 'marker-one\n' >"${AGENTIC_ROOT}/claude/state/marker.txt"
+printf '{"session":"one"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/telegram/session.json"
+printf '{"lastRun":"one"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/cron/runs/job.json"
+printf '{"status":"queued"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/delivery-queue/task.json"
+printf '{"plugin":"enabled"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/plugin-state/runtime.json"
+printf '{"queue":"ready"}\n' >"${AGENTIC_ROOT}/openclaw/relay/state/queue.json"
+printf '{"operator":"bound"}\n' >"${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
 printf 'super-secret-key\n' >"${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
 
 run1_output="$("${agent_bin}" backup run)"
@@ -64,6 +76,12 @@ ok "second backup snapshot is incremental (changed_entries=${changed2})"
 
 printf 'version-two\n' >"${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/readme.txt"
 printf 'marker-two\n' >"${AGENTIC_ROOT}/claude/state/marker.txt"
+printf '{"session":"two"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/telegram/session.json"
+printf '{"lastRun":"two"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/cron/runs/job.json"
+printf '{"status":"retry"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/delivery-queue/task.json"
+printf '{"plugin":"reloaded"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/plugin-state/runtime.json"
+printf '{"queue":"updated"}\n' >"${AGENTIC_ROOT}/openclaw/relay/state/queue.json"
+printf '{"operator":"rebound"}\n' >"${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
 printf 'private-key-material\n' >"${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/key.PEM"
 
 sleep 1
@@ -76,10 +94,18 @@ changed3="$(printf '%s\n' "${run3_output}" | sed -n 's/^changed_entries=//p' | t
 
 grep -q 'agent-workspaces/codex/workspaces/demo/readme.txt' "${snapshots_root}/${id3}/metadata/rsync.changes" \
   || fail "snapshot #3 delta does not include updated codex workspace file"
+grep -q 'openclaw/state/cli/openclaw-home/.openclaw/telegram/session.json' "${snapshots_root}/${id3}/metadata/rsync.changes" \
+  || fail "snapshot #3 delta does not include updated OpenClaw telegram state"
 ok "targeted modifications are captured in incremental delta"
 
 printf 'corrupted\n' >"${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/readme.txt"
 rm -f "${AGENTIC_ROOT}/claude/state/marker.txt"
+printf '{"session":"corrupted"}\n' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/telegram/session.json"
+rm -f "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/cron/runs/job.json"
+rm -f "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/delivery-queue/task.json"
+rm -f "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/plugin-state/runtime.json"
+rm -f "${AGENTIC_ROOT}/openclaw/relay/state/queue.json"
+rm -f "${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json"
 
 "${agent_bin}" backup restore "${id3}" --yes >/tmp/agent-f8-restore.out \
   || fail "backup restore failed for snapshot ${id3}"
@@ -88,6 +114,18 @@ grep -q '^version-two$' "${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/
   || fail "backup restore did not restore codex workspace file content"
 grep -q '^marker-two$' "${AGENTIC_ROOT}/claude/state/marker.txt" \
   || fail "backup restore did not restore claude state file"
+grep -q '"session":"two"' "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/telegram/session.json" \
+  || fail "backup restore did not restore OpenClaw telegram state"
+grep -q '"lastRun":"two"' "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/cron/runs/job.json" \
+  || fail "backup restore did not restore OpenClaw cron state"
+grep -q '"status":"retry"' "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/delivery-queue/task.json" \
+  || fail "backup restore did not restore OpenClaw delivery queue state"
+grep -q '"plugin":"reloaded"' "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/plugin-state/runtime.json" \
+  || fail "backup restore did not restore OpenClaw plugin state"
+grep -q '"queue":"updated"' "${AGENTIC_ROOT}/openclaw/relay/state/queue.json" \
+  || fail "backup restore did not restore OpenClaw relay state"
+grep -q '"operator":"rebound"' "${AGENTIC_ROOT}/openclaw/sandbox/state/openclaw-state-registry.v1.json" \
+  || fail "backup restore did not restore OpenClaw sandbox state"
 [[ ! -f "${AGENTIC_AGENT_WORKSPACES_ROOT}/codex/workspaces/demo/key.PEM" ]] \
   || fail "backup restore should remove excluded key material patterns"
 ok "backup restore restored targeted persistent files"

@@ -142,6 +142,7 @@ The UI baseline also includes Forgejo, even though its Compose service names kee
   - `${AGENTIC_ROOT}/openclaw/state`
   - `${AGENTIC_ROOT}/openclaw/logs`
   - `${AGENTIC_OPENCLAW_WORKSPACES_DIR}` (default: `${AGENTIC_ROOT}/openclaw/workspaces`)
+  - must-keep state under `${AGENTIC_ROOT}/openclaw/state` includes the CLI state file plus `.openclaw/telegram`, `.openclaw/cron`, `.openclaw/delivery-queue`, `.openclaw/plugin-state`, `${AGENTIC_ROOT}/openclaw/state/approvals`, `${AGENTIC_ROOT}/openclaw/relay/state`, and `${AGENTIC_ROOT}/openclaw/sandbox/state`
 
 ### `openclaw-gateway`
 - Role: upstream OpenClaw Web UI + Gateway WS bridge for operators.

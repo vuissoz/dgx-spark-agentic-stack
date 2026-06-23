@@ -294,10 +294,11 @@ Si vous voulez retrouver un etat "comme un premier demarrage", il faut supprimer
 Important:
 - ces commandes sont destructives (perte historique sessions/config locale OpenClaw),
 - faites un backup avant si vous avez des artefacts a conserver.
+- l'etat OpenClaw a conserver ne se limite pas aux workspaces: Telegram, cron, delivery queue, plugin-state, approvals, relay state et sandbox state vivent aussi sous `${AGENTIC_ROOT}/openclaw/...`.
 
 ### 8.1 Reset CLI seulement (conserve policies + secrets)
 
-Ce mode reset la CLI OpenClaw (home/config/sessions) et les workspaces, mais garde vos fichiers de politique (`dm_allowlist`, `tool_allowlist`, profil) et vos secrets runtime.
+Ce mode reset la CLI OpenClaw (home/config/sessions) et les workspaces, mais garde vos fichiers de politique (`dm_allowlist`, `tool_allowlist`, profil) et vos secrets runtime. Il supprime aussi les etats Telegram/cron/plugin-state/delivery-queue stockes dans `openclaw-home`.
 
 ```bash
 ./agent stop openclaw

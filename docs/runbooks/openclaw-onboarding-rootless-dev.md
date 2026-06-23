@@ -339,6 +339,24 @@ CLI runtime now uses four explicit layers:
   - `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json`
   - plus `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/` and `${AGENTIC_ROOT}/openclaw/workspaces/`
 
+OpenClaw persistence is broader than the workspace alone. In this stack, the following paths are treated as must-keep runtime state and are expected to survive backup/restore:
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json`
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/telegram/`
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/cron/`
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/delivery-queue/`
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/plugin-state/`
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/extensions/`
+- `${AGENTIC_ROOT}/openclaw/state/approvals/`
+- `${AGENTIC_ROOT}/openclaw/relay/state/`
+- `${AGENTIC_ROOT}/openclaw/sandbox/state/`
+- `${AGENTIC_ROOT}/openclaw/workspaces/`
+
+Nice-to-keep but less critical operator artefacts usually live under:
+- `${AGENTIC_ROOT}/openclaw/logs/`
+- `${AGENTIC_ROOT}/openclaw/relay/logs/`
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/logs/`
+- `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/media/`
+
 `OPENCLAW_CONFIG_PATH` now points to a derived tmpfs file (`/tmp/openclaw.effective.json`) regenerated from those layers before each CLI invocation; it is no longer the source of truth.
 
 Provider secret file contract used by the bridge:
