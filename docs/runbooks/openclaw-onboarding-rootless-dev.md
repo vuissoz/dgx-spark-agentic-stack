@@ -339,7 +339,7 @@ CLI runtime now uses four explicit layers:
   - `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json`
   - plus `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/` and `${AGENTIC_ROOT}/openclaw/workspaces/`
 
-OpenClaw persistence is broader than the workspace alone. In this stack, the following paths are treated as must-keep runtime state and are expected to survive backup/restore:
+OpenClaw persistence is broader than the workspace alone. In this stack, the following paths are treated as must-keep runtime state and are expected to survive backup/restore and full container recreation (`./agent down core` then `./agent up core`):
 - `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json`
 - `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/telegram/`
 - `${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw/cron/`
