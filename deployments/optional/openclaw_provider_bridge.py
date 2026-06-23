@@ -138,6 +138,8 @@ def ensure_whatsapp_plugin(plugin_spec: str) -> tuple[bool, str]:
 
 
 def build_bridge_config() -> tuple[dict[str, Any], dict[str, Any]]:
+    gate_queue_timeout_sec = os.environ.get("OPENCLAW_PROVIDER_BRIDGE_GATE_QUEUE_TIMEOUT_SEC", "180").strip() or "180"
+    gate_project = os.environ.get("OPENCLAW_PROVIDER_BRIDGE_GATE_PROJECT", "openclaw").strip() or "openclaw"
     channels: dict[str, Any] = {}
     models: dict[str, Any] = {
         "providers": {
@@ -147,6 +149,10 @@ def build_bridge_config() -> tuple[dict[str, Any], dict[str, Any]]:
                 "apiKey": "local-gate",
                 "request": {
                     "allowPrivateNetwork": True,
+                    "headers": {
+                        "X-Agent-Project": gate_project,
+                        "X-Gate-Queue-Timeout-Seconds": gate_queue_timeout_sec,
+                    },
                 },
             }
         }
@@ -154,6 +160,10 @@ def build_bridge_config() -> tuple[dict[str, Any], dict[str, Any]]:
     status: dict[str, Any] = {
         "ready": True,
         "synced_at": now_ts(),
+        "local_model_request": {
+            "gate_project": gate_project,
+            "gate_queue_timeout_seconds": gate_queue_timeout_sec,
+        },
         "providers": {},
         "warnings": [],
     }

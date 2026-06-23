@@ -27,6 +27,7 @@ project_name="openclaw-init-k11"
 workspace_dir="/workspace/${project_name}"
 workspace_host_dir="${AGENTIC_OPENCLAW_WORKSPACES_DIR:-${agentic_root}/openclaw/workspaces}/${project_name}"
 overlay_file="${agentic_root}/openclaw/config/overlay/openclaw.operator-overlay.json"
+relay_targets_file="${agentic_root}/openclaw/config/relay_targets.json"
 export AGENTIC_OPENCLAW_INIT_PROJECT="${project_name}"
 
 install -d -m 0700 "${agentic_root}/secrets/runtime"
@@ -54,6 +55,20 @@ if [[ "${EUID}" -eq 0 ]]; then
     "${agentic_root}/secrets/runtime/slack.bot_token" \
     "${agentic_root}/secrets/runtime/slack.app_token"
 fi
+
+cat >"${relay_targets_file}" <<'JSON'
+{
+  "providers": {
+    "telegram": {
+      "target": "discord:user:test"
+    },
+    "whatsapp": {
+      "target": "discord:user:test"
+    }
+  }
+}
+JSON
+chmod 0640 "${relay_targets_file}"
 
 telegram_bot_token="123456:k11-telegram"
 "${agent_bin}" openclaw init "${project_name}" >/tmp/agent-k11-init.out \
@@ -105,9 +120,29 @@ assert ((payload.get("agents") or {}).get("defaults") or {}).get("workspace") ==
 PY
 [[ $? -eq 0 ]] || fail "managed init must persist the OpenClaw workspace in the validated overlay"
 
+python3 - "${relay_targets_file}" <<'PY' >/dev/null
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+providers = payload.get("providers") or {}
+assert (providers.get("telegram") or {}).get("target") == "telegram:user:example"
+assert (providers.get("whatsapp") or {}).get("target") == "whatsapp:user:example"
+PY
+[[ $? -eq 0 ]] || fail "managed init must repair legacy relay target placeholders back to provider-safe defaults"
+
 provider_allow_private_network="$(docker exec "${openclaw_cid}" sh -lc 'openclaw config get models.providers.custom-ollama-gate-11435.request.allowPrivateNetwork')"
 [[ "${provider_allow_private_network}" == "true" ]] \
   || fail "managed init must allow the stack-managed OpenClaw provider to reach internal ollama-gate"
+
+provider_queue_timeout="$(docker exec "${openclaw_cid}" sh -lc 'openclaw config get models.providers.custom-ollama-gate-11435.request.headers.X-Gate-Queue-Timeout-Seconds')"
+[[ "${provider_queue_timeout}" == "180" ]] \
+  || fail "managed init must raise the gate queue timeout budget for the stack-managed OpenClaw provider"
+
+provider_project_header="$(docker exec "${openclaw_cid}" sh -lc 'openclaw config get models.providers.custom-ollama-gate-11435.request.headers.X-Agent-Project')"
+[[ "${provider_project_header}" == "openclaw" ]] \
+  || fail "managed init must tag the stack-managed OpenClaw provider requests with the openclaw project header"
 
 configured_workspace="$(docker exec "${openclaw_cid}" sh -lc 'openclaw config get agents.defaults.workspace')"
 [[ "${configured_workspace}" == "${workspace_dir}" ]] \

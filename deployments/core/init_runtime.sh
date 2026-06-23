@@ -351,6 +351,53 @@ state_path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", enc
 PY
 }
 
+repair_openclaw_relay_targets() {
+  local relay_targets_file="$1"
+  local relay_targets_template="$2"
+  python3 - "${relay_targets_file}" "${relay_targets_template}" <<'PY'
+import json
+import pathlib
+import sys
+
+runtime_path = pathlib.Path(sys.argv[1])
+template_path = pathlib.Path(sys.argv[2])
+
+if not runtime_path.exists() or not template_path.exists():
+    raise SystemExit(0)
+
+runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+template = json.loads(template_path.read_text(encoding="utf-8"))
+providers = runtime.get("providers")
+template_providers = template.get("providers")
+if not isinstance(providers, dict) or not isinstance(template_providers, dict):
+    raise SystemExit(0)
+
+legacy_placeholders = {
+    "discord:user:test",
+    "discord:user:example",
+    "whatsapp:user:example",
+    "telegram:user:example",
+}
+changed = False
+
+for provider_name in ("telegram", "whatsapp"):
+    entry = providers.get(provider_name)
+    template_entry = template_providers.get(provider_name)
+    if not isinstance(entry, dict) or not isinstance(template_entry, dict):
+        continue
+    target = str(entry.get("target", "")).strip()
+    template_target = str(template_entry.get("target", "")).strip()
+    if not target or not template_target:
+        continue
+    if target in legacy_placeholders and target != template_target:
+        entry["target"] = template_target
+        changed = True
+
+if changed:
+    runtime_path.write_text(json.dumps(runtime, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+PY
+}
+
 set_openclaw_runtime_permissions() {
   local openclaw_config_dir="${AGENTIC_ROOT}/openclaw/config"
   local openclaw_config_bridge_dir="${AGENTIC_ROOT}/openclaw/config/bridge"
@@ -720,6 +767,7 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.provider-bridge.v1.json" "${AGENTIC_ROOT}/openclaw/config/bridge/openclaw.provider-bridge.json" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.operator-overlay.v1.json" "${AGENTIC_ROOT}/openclaw/config/overlay/openclaw.operator-overlay.json" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.relay_targets.json" "${AGENTIC_ROOT}/openclaw/config/relay_targets.json" 0640
+  repair_openclaw_relay_targets "${AGENTIC_ROOT}/openclaw/config/relay_targets.json" "${OPTIONAL_TEMPLATE_DIR}/openclaw.relay_targets.json"
   if [[ ! -f "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json" ]]; then
     install -D -m 0600 /dev/null "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
     printf '%s\n' '{}' >"${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/openclaw.state.json"
