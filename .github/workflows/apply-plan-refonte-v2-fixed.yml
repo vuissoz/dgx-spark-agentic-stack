@@ -1,0 +1,76 @@
+name: Apply PLAN refonte v2 fixed
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-plan:
+    if: github.head_ref == 'plan/refonte-v2-collab'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: plan/refonte-v2-collab
+          fetch-depth: 0
+      - name: Recover section, update PLAN, and self-clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 4ce4711ab6e22ee2925df99c59c4b7103953bd8a:.github/workflows/apply-plan-refonte-v2.yml > /tmp/original-workflow.yml
+          python3 - <<'PY'
+          from pathlib import Path
+
+          raw = Path('/tmp/original-workflow.yml').read_text(encoding='utf-8')
+          begin = "cat > /tmp/plan-h3.md <<'SECTION'\n"
+          end = "\nSECTION\n"
+          if begin not in raw:
+              raise SystemExit('section begin marker missing')
+          tail = raw.split(begin, 1)[1]
+          if end not in tail:
+              raise SystemExit('section end marker missing')
+          section = tail.split(end, 1)[0].strip() + '\n'
+
+          path = Path('PLAN.md')
+          text = path.read_text(encoding='utf-8')
+          old_title = '## H — UIs web demandées : OpenWebUI + OpenHands (durci)'
+          new_title = '## H — UIs web, portail unifié et collaboration humain–agents'
+          if old_title in text:
+              text = text.replace(old_title, new_title, 1)
+          elif new_title not in text:
+              raise SystemExit('section H title anchor not found')
+
+          marker = '\n---\n\n## I — ComfyUI (GPU) : génération d’images sous contrôle\n'
+          heading = '### H3 Refonte v2 : décisions structurantes et trajectoire de migration'
+          if heading not in text:
+              if text.count(marker) != 1:
+                  raise SystemExit(f'expected exactly one H/I marker, found {text.count(marker)}')
+              text = text.replace(marker, '\n' + section + marker, 1)
+          path.write_text(text, encoding='utf-8')
+
+          required = [
+              heading,
+              '### H10 Mattermost',
+              '### H11 Dify',
+              'mattermost-agent-gateway',
+              '### H14 Adapters OpenClaw et Hermes',
+              '### H19 Documentation',
+              'identifiant Beads à créer',
+          ]
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit('missing plan markers: ' + ', '.join(missing))
+          if Path('Plan.md').exists():
+              raise SystemExit('forbidden Plan.md exists')
+          PY
+          rm -f .github/workflows/apply-plan-refonte-v2-fixed.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'docs(plan): add v2 and collaboration roadmap'
+          git push origin HEAD:plan/refonte-v2-collab
