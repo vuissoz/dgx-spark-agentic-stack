@@ -134,7 +134,7 @@ Aucun agent existant ne peut disparaître derrière « autres agents ».
 | OpenCode | adapter CLI générique | workspace, config et état persistant | vague CLI 2 | scénario dépôt complet et accès modèle via gate |
 | KiloCode | adapter CLI générique | workspace et configuration | vague CLI 2 | démarrage, tâche, outils, reprise et arrêt propres |
 | Mistral Vibe / VibeStral | adapter CLI générique | workspace, configuration, modèle et contexte | vague CLI 2 | analyse/modification de dépôt, test et publication |
-| Hermes | adapter CLI spécialisé puis générique | `HERMES_HOME`, mémoire utile, sessions et workspace | vague CLI 2 | session persistante, annulation, reprise et modèle via gate |
+| Hermes | adapter CLI + dashboard web natif | `HERMES_HOME`, mémoire utile, sessions, profils, configuration du dashboard et workspace | vague CLI 2 | CLI, chat web natif, reprise de session, connexion Desktop distante et modèle via gate |
 | Pi Coding Agent | adapter CLI générique optionnel | workspace et configuration | vague CLI 3 | même contrat agent, profil optionnel |
 | Goose | adapter CLI générique optionnel | sessions, workspace et limite de contexte | vague CLI 3 | même contrat agent, compaction cohérente |
 | OpenClaw | adapter service/API | config immuable, overlay, état, approvals, relay, pièces jointes, skills, workspaces | vague services | API authentifiée, sandbox, approvals et reprise |
@@ -146,8 +146,12 @@ Aucun agent existant ne peut disparaître derrière « autres agents ».
 | Composant v1 | Exigence v2 |
 |---|---|
 | OpenWebUI | conservé, accessible par portail, modèles uniquement via gate |
+| Hermes Web Dashboard | exposé uniquement derrière le portail/reverse proxy authentifié ; chat natif, sessions, profils et administration préservés |
+| Hermes Desktop | client optionnel pouvant se connecter au même backend Hermes distant ; ne crée pas une seconde identité d’agent |
 | ComfyUI | conservé, profil GPU planifiable, modèles globaux, sorties cataloguées |
 | Forgejo | conservé, comptes/identités agents, branches protégées, dépôts et hooks migrés |
+| DGX Dashboard NVIDIA | proposé dans le portail aux administrateurs ; monitoring système, mises à jour et accès JupyterLab sans exposition directe du port interne |
+| JupyterLab intégré DGX | accessible depuis la fiche DGX Spark selon les droits de l’utilisateur, via le mécanisme sécurisé retenu |
 | Portainer | optionnel ; ne doit pas devenir un contournement du plan de contrôle |
 | Prometheus/Grafana/Loki/exporters | conservés ou remplacés par équivalents couvrant les mêmes métriques |
 | Qdrant/RAG retriever/worker | migrés vers le catalogue et le RAG gouverné |
@@ -167,6 +171,8 @@ Chaque agent, application ou fonction opérateur doit posséder un **point d’a
 - soit directement dans un terminal par une commande du CLI `agent` ;
 - soit dans le navigateur depuis l’interface du portail ;
 - soit par les deux lorsque cela apporte une vraie valeur.
+
+Les applications Desktop, extensions d’éditeur et plateformes de messagerie peuvent constituer des surfaces supplémentaires, mais ne remplacent pas l’obligation d’un accès principal par CLI ou portail.
 
 Aucun utilisateur ne doit connaître un port, un nom de conteneur, une commande Docker, un fichier Compose ou un identifiant interne pour accéder à un composant.
 
@@ -205,7 +211,17 @@ Les détails techniques — conteneur, `tmux`, runtime, réseau, reprise de sess
 
 Le portail est le point d’entrée web unique. Il présente uniquement les applications et fonctions autorisées à l’utilisateur et ouvre, si nécessaire, l’application dans un nouvel onglet derrière le reverse proxy authentifié.
 
-L’utilisateur ne saisit jamais directement l’adresse ou le port d’OpenWebUI, OpenHands, ComfyUI, Forgejo, Grafana, Mattermost ou Dify.
+L’utilisateur ne saisit jamais directement l’adresse ou le port d’OpenWebUI, OpenHands, ComfyUI, Forgejo, Grafana, Hermes Web Dashboard, DGX Dashboard, JupyterLab, Mattermost ou Dify.
+
+Le portail doit notamment proposer :
+
+- **Hermes** : ouverture du dashboard web natif et accès direct à son onglet Chat ;
+- **DGX Spark** : ouverture sécurisée du dashboard NVIDIA, réservée par défaut aux administrateurs ;
+- **JupyterLab DGX** : ouverture de l’instance intégrée correspondant à l’utilisateur autorisé ;
+- **Observabilité** : accès à Grafana et aux vues de diagnostic ;
+- **Applications** : OpenWebUI, OpenHands, ComfyUI, Forgejo et autres services autorisés.
+
+Pour le DGX Dashboard et JupyterLab, le portail utilise un tunnel sécurisé, NVIDIA Sync ou un reverse proxy strictement contrôlé. Le port natif `11000` et les ports JupyterLab ne sont jamais exposés directement sur le LAN. Les actions système sensibles restent soumises aux droits `sudo` du compte DGX et à une réauthentification administrateur lorsque le portail les relaie.
 
 Le portail gère également les fonctions transversales :
 
@@ -224,27 +240,31 @@ Le portail n’est pas un passage obligatoire pour utiliser un agent CLI comme C
 
 #### 5.1.3 Matrice d’accès obligatoire
 
-| Composant | Accès terminal par `agent` | Accès web depuis le portail | Accès principal |
-|---|---:|---:|---|
-| Claude Code | oui | facultatif, via terminal web ultérieur | terminal |
-| Codex | oui | facultatif, via terminal web ultérieur | terminal |
-| OpenCode | oui | facultatif | terminal |
-| KiloCode | oui | facultatif | terminal |
-| VibeStral | oui | facultatif | terminal |
-| Hermes | oui | facultatif puis Mattermost | terminal |
-| Pi Coding Agent | oui | facultatif | terminal |
-| Goose | oui | facultatif | terminal |
-| OpenClaw | oui pour exploitation et session | oui pour ses surfaces conversationnelles autorisées | les deux |
-| OpenHands | commandes de gestion seulement | oui | portail |
-| OpenWebUI | commandes de gestion seulement | oui | portail |
-| ComfyUI | commandes de gestion seulement | oui | portail |
-| Forgejo | commandes de gestion seulement | oui | portail |
-| Grafana / observabilité | diagnostics CLI | oui | portail |
-| Catalogue / RAG | oui pour automatisation | oui | portail |
-| Modèles / Ollama gate | oui pour administration autorisée | oui | les deux |
-| Scheduler / quotas / coûts | oui pour automatisation et diagnostic | oui | portail |
-| Sauvegarde / update / rollback / doctor | oui | oui pour les opérations guidées | les deux |
-| Mattermost / Dify | gestion CLI seulement | oui | portail |
+| Composant | Accès terminal par `agent` | Accès web depuis le portail | Surface supplémentaire officielle | Accès principal |
+|---|---:|---:|---|---|
+| Claude Code | oui | facultatif, via terminal web ultérieur | à auditer : Desktop/éditeur officiels | terminal |
+| Codex | oui | facultatif, via terminal web ultérieur | à auditer : application/éditeur officiels | terminal |
+| OpenCode | oui | facultatif | à auditer : web/éditeur officiels | terminal |
+| KiloCode | oui | facultatif | extension d’éditeur à auditer | terminal |
+| VibeStral | oui | facultatif | à auditer | terminal |
+| Hermes | oui | oui, dashboard web natif avec Chat | Hermes Desktop et messageries | terminal ou portail |
+| Pi Coding Agent | oui | facultatif | à auditer | terminal |
+| Goose | oui | facultatif | à auditer : Desktop/éditeur officiels | terminal |
+| OpenClaw | oui pour exploitation et session | oui pour ses surfaces conversationnelles autorisées | messageries/clients à auditer | les deux |
+| OpenHands | commandes de gestion seulement | oui | éventuels clients officiels à auditer | portail |
+| OpenWebUI | commandes de gestion seulement | oui | application web native | portail |
+| ComfyUI | commandes de gestion seulement | oui | application web native | portail |
+| Forgejo | commandes de gestion seulement | oui | clients Git standards | portail |
+| DGX Dashboard NVIDIA | tunnel ou commande d’ouverture | oui, administrateurs | NVIDIA Sync | portail |
+| JupyterLab intégré DGX | tunnel ou commande d’ouverture | oui, utilisateur autorisé | client Jupyter | portail |
+| Grafana / observabilité | diagnostics CLI | oui | application web native | portail |
+| Catalogue / RAG | oui pour automatisation | oui | API documentée | portail |
+| Modèles / Ollama gate | oui pour administration autorisée | oui | API OpenAI/Ollama | les deux |
+| Scheduler / quotas / coûts | oui pour automatisation et diagnostic | oui | API documentée | portail |
+| Sauvegarde / update / rollback / doctor | oui | oui pour les opérations guidées | aucune requise | les deux |
+| Mattermost / Dify | gestion CLI seulement | oui | clients Desktop/mobile officiels | portail |
+
+Les mentions « à auditer » sont des obligations de la phase M1, pas des décisions de suppression. Pour chaque composant, la documentation officielle doit être examinée afin de recenser les interfaces CLI, web natives, Desktop, extensions d’éditeur, mobiles et messageries. Les surfaces retenues doivent pointer vers la même identité, le même état et les mêmes permissions lorsque le produit le permet.
 
 Cette matrice est un minimum. Une application peut obtenir une seconde surface plus tard, mais aucune fonctionnalité ne peut être déclarée terminée sans au moins un chemin utilisateur opérationnel.
 
@@ -278,12 +298,18 @@ Docker durci OpenShell Kubernetes futur
     Ollama        TensorRT-LLM
 ```
 
+Les applications web natives, le dashboard Hermes et le dashboard DGX restent des services distincts derrière le reverse proxy du portail. Ils ne sont pas réimplémentés inutilement dans le frontend central.
+
 #### 5.1.5 Tests de parcours utilisateur
 
 - `agent codex` ouvre ou reprend Codex sans demander d’abord un projet ;
 - `agent codex ARTANY` ouvre directement le workspace ARTANY ;
 - une déconnexion puis reconnexion SSH retrouve la session ;
 - le changement de projet ne change pas d’agent et n’expose aucune donnée du projet précédent ;
+- Hermes est accessible à la fois par `agent hermes` et par son dashboard web natif depuis le portail ;
+- Hermes Desktop peut se connecter au même backend distant sans créer un agent séparé ;
+- le DGX Dashboard est ouvrable depuis le portail par un administrateur sans exposition directe de son port ;
+- JupyterLab DGX est ouvrable uniquement par l’utilisateur ou l’administrateur autorisé ;
 - chaque application web est ouvrable depuis le portail sans connaître son port ;
 - un utilisateur ne voit pas une application ou une commande hors de ses droits ;
 - chaque ligne de la matrice possède au moins un test de disponibilité, d’authentification et de persistance ;
@@ -517,8 +543,8 @@ La documentation fait partie du produit et possède sa propre porte de validatio
 - `docs/migration/` : inventaire, sauvegarde, imports, canari, bascule, rollback ;
 - `docs/runbooks/` : installation, utilisateurs, agents, modèles, ressources, incidents, backup/restore, update/rollback ;
 - `docs/security/` : modèle de menace, secrets, egress, supply chain, délégations, prompt injection ;
-- `docs/user/` : portail, projets, collections, approvals, rapports ;
-- `docs/agents/` : contrat adapter et guide par runtime ;
+- `docs/user/` : portail, projets, collections, approvals, rapports et surfaces d’accès ;
+- `docs/agents/` : contrat adapter, guide par runtime et inventaire des interfaces officielles ;
 - `docs/api/` : OpenAPI générée, événements, exemples ;
 - `docs/operations/` : métriques, alertes, capacité, maintenance ;
 - `CHANGELOG.md` et guide de version.
@@ -538,7 +564,7 @@ La documentation fait partie du produit et possède sa propre porte de validatio
 - OpenAPI générée depuis le code ;
 - aide `agent --help` comparée à la documentation ;
 - matrice ports/volumes/secrets générée depuis les manifestes ;
-- matrice des accès CLI/portail générée et testée ;
+- matrice des accès CLI/portail/surfaces officielles générée et testée ;
 - chaque phase met à jour la documentation avant fermeture.
 
 ## 8. Stratégie de tests
@@ -575,7 +601,8 @@ Le scénario commun obligatoire pour chaque agent :
 11. arrêt/checkpoint puis reprise ;
 12. publication du résultat ;
 13. audit complet et absence de secret ;
-14. accès par la surface principale annoncée dans la matrice 5.1.3.
+14. accès par la surface principale annoncée dans la matrice 5.1.3 ;
+15. cohérence de l’identité et de l’état entre les surfaces multiples retenues.
 
 Les différences de capacités sont déclarées, jamais masquées.
 
@@ -586,11 +613,14 @@ Conserver et porter :
 - canari rapide « huit reines » ;
 - dépôt réaliste multi-fichiers volontairement cassé ;
 - scénarios OpenClaw relay/approvals/pièces jointes ;
+- Hermes CLI + dashboard web + reprise de session ;
 - OpenHands UI + tâche code ;
 - OpenWebUI + modèle local ;
 - ComfyUI + image de sortie ;
 - RAG avec source et passage ;
 - Forgejo avec protection de branche ;
+- DGX Dashboard ouvert depuis le portail avec contrôle administrateur ;
+- JupyterLab DGX ouvert avec isolation utilisateur ;
 - update/rollback par digest ;
 - restauration complète ;
 - ouverture de chaque application web depuis le portail ;
@@ -625,13 +655,16 @@ Conserver et porter :
 - aucune fonction `retire` sans décision humaine ;
 - créer les epics et tâches Beads réels ;
 - établir les scénarios de parité ;
-- attribuer à chaque composant une surface CLI, portail ou les deux.
+- attribuer à chaque composant une surface CLI, portail ou les deux ;
+- auditer dans la documentation officielle les interfaces web natives, Desktop, extensions d’éditeur, mobiles et messageries de chaque agent/application ;
+- décider quelles surfaces sont conservées, intégrées, déléguées ou explicitement non supportées.
 
 **Porte G1**
 
 - aucune fonctionnalité ou agent sans propriétaire, phase et test ;
 - couverture explicite de Claude, Codex, OpenCode, KiloCode, VibeStral, Hermes, Pi, Goose, OpenClaw et OpenHands ;
-- aucune application sans chemin d’accès utilisateur défini.
+- aucune application sans chemin d’accès utilisateur défini ;
+- aucune surface officielle découverte sans décision documentée.
 
 ### Phase M2 — Documentation et contrats v2 avant code
 
@@ -640,7 +673,7 @@ Conserver et porter :
 - réécrire `AGENTS.md` ;
 - créer ADR architecture/identités/runtime/gateway/réseau/migration ;
 - définir OpenAPI, schémas YAML, `AgentRuntimeAdapter`, `SandboxRuntime`, tâche, approval, usage et événement ;
-- définir le contrat de surface utilisateur CLI/portail ;
+- définir le contrat de surface utilisateur CLI/portail/clients officiels ;
 - créer le squelette documentaire v2 ;
 - transformer le README en page de transition claire.
 
@@ -648,7 +681,7 @@ Conserver et porter :
 
 - contrats validés par tests de schéma ;
 - documentation de développement non contradictoire ;
-- matrice CLI/portail complète ;
+- matrice CLI/portail/surfaces officielles complète ;
 - aucun code v2 autorisé avant cette porte.
 
 ### Phase M3 — Squelette du plan de contrôle
@@ -731,7 +764,7 @@ Ils servent de canaris du contrat générique et du parcours `agent <nom> [proje
 
 #### Vague 2 : OpenCode, KiloCode, VibeStral et Hermes
 
-Hermes peut garder un adapter spécialisé si ses capacités l’exigent, mais il respecte le même contrat externe.
+Hermes conserve son CLI, son dashboard web natif, son chat navigateur et la possibilité de connecter Hermes Desktop au même backend distant. Il peut garder un adapter spécialisé si ses capacités l’exigent, mais il respecte le même contrat externe.
 
 #### Vague 3 : Pi et Goose
 
@@ -745,6 +778,7 @@ Modules optionnels mais entièrement supportés avant retrait v1.
 - sélection facultative du projet ;
 - reprise après arrêt ou déconnexion ;
 - aucune régression de workspace ;
+- surfaces web/Desktop officielles retenues testées ;
 - gate, outils, RAG, secrets, quotas et audit validés.
 
 La phase ne ferme pas avec un simple succès Codex.
@@ -773,13 +807,16 @@ La phase ne ferme pas avec un simple succès Codex.
 - état persistant après redémarrage ;
 - approvals et sandbox non contournables.
 
-### Phase M9 — Migration des services utilisateurs
+### Phase M9 — Migration des services utilisateurs et système
 
 **Travaux**
 
 - OpenWebUI ;
+- Hermes Web Dashboard derrière le portail ;
 - ComfyUI ;
 - Forgejo et comptes agents ;
+- DGX Dashboard NVIDIA et JupyterLab intégré, avec accès sécurisé et contrôles de rôle ;
+- Grafana/observabilité ;
 - MCP catalog ;
 - Portainer optionnel avec restrictions ;
 - portail comme launcher et contrôle d’accès ;
@@ -789,6 +826,8 @@ La phase ne ferme pas avec un simple succès Codex.
 
 - parité fonctionnelle et données ;
 - chaque application web est accessible depuis le portail ;
+- Hermes retrouve les mêmes profils et sessions en CLI et dans le dashboard ;
+- le DGX Dashboard et JupyterLab sont accessibles sans exposition directe de ports et sans élévation implicite ;
 - aucun utilisateur n’a besoin de connaître un port ;
 - branches Forgejo protégées ;
 - ComfyUI planifiable et sorties cataloguées.
@@ -864,7 +903,7 @@ La phase ne ferme pas avec un simple succès Codex.
 
 - période d’observation sans perte ;
 - matrice de parité complète ;
-- matrice d’accès CLI/portail complète ;
+- matrice d’accès CLI/portail/surfaces officielles complète ;
 - écarts résolus ou acceptés explicitement ;
 - plan de rollback chronométré.
 
@@ -875,7 +914,9 @@ La phase ne ferme pas avec un simple succès Codex.
 - un administrateur ;
 - un projet ;
 - Codex accessible par `agent codex [projet]` ;
+- Hermes accessible par CLI et dashboard web ;
 - une application accessible depuis le portail ;
+- le DGX Dashboard accessible au seul administrateur ;
 - un agent service ;
 - un modèle existant ;
 - un corpus RAG ;
@@ -945,6 +986,8 @@ La refonte est terminée seulement si :
 - toutes les fonctions v1 conservées figurent dans le registre et sont validées ;
 - portail, CLI `agent` et configuration déclarative sont cohérents ;
 - chaque agent ou application possède au moins un accès utilisateur testé par CLI ou portail ;
+- les surfaces officielles supplémentaires retenues partagent correctement identité, état et permissions ;
+- le DGX Dashboard NVIDIA et JupyterLab sont accessibles depuis le portail selon les droits ;
 - le premier démarrage est vide et simple ;
 - LAN, Tailscale optionnel et hors ligne sont documentés et testés ;
 - aucun service non autorisé n’est exposé ;
@@ -968,7 +1011,7 @@ M0 sauvegarde
 → M6 sandbox/scheduler
 → M7 agents CLI
 → M8 OpenClaw/OpenHands
-→ M9 services utilisateurs
+→ M9 services utilisateurs et système
 → M10 catalogue/RAG
 → M11 exploitation/backup
 → M12 collaboration
