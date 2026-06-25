@@ -1096,7 +1096,7 @@ Suivi Beads : `dgx-spark-agentic-stack-eus`
 
 ---
 
-## H — UIs web demandées : OpenWebUI + OpenHands (durci)
+## H — UIs web, portail unifié et collaboration humain–agents
 
 ### H1 OpenWebUI (auth obligatoire, via gate)
 **Implémentation**
@@ -1124,6 +1124,395 @@ Suivi Beads : `dgx-spark-agentic-stack-eus`
 - port local-only
 - `docker inspect` : aucun mount docker.sock
 - OpenHands utilise gate (preuve logs gate)
+
+### H3 Refonte v2 : décisions structurantes et trajectoire de migration
+Suivi Beads : **identifiant Beads à créer** (umbrella), puis un identifiant réel par sous-tâche avant implémentation.
+
+**Implémentation**
+- conserver ce dépôt comme dépôt canonique et réaliser la refonte sur une trajectoire v2 interne ; ne pas créer un second dépôt.
+- assumer une rupture nette : pas de couche de compatibilité obligatoire avec le script monolithique `./agent` ; le nouveau CLI canonique est `sparkctl`, client léger de la même API que le portail et les fichiers déclaratifs.
+- conserver l’ancien code uniquement comme référence et source de migration ; ne pas prolonger `scripts/agent.sh` comme plan de contrôle.
+- première release utilisable : portail, API de contrôle, ordonnanceur de ressources, passerelle LLM, identités, agents et Docker durci ; Mattermost/Dify/gateway arrivent au deuxième incrément, après stabilisation du cœur.
+- socle du plan de contrôle : FastAPI/Python, PostgreSQL dédié, workers Python, frontend React ou Next.js, API REST + WebSocket versionnée.
+- runtime local initial : Docker existant, piloté seulement par le plan de contrôle de confiance ; aucune sandbox agent ne reçoit `/var/run/docker.sock`.
+- définir une interface `SandboxRuntime` stable : backend `docker-hardened` supporté en premier, backend OpenShell expérimental et remplaçable, backend Kubernetes ultérieur.
+- cible cluster : Kubernetes comme extension si plusieurs DGX/NVIDIA sont nécessaires ; aucune dépendance Kubernetes pour le chemin mono-DGX.
+- licence Apache 2.0 conservée.
+- fonctionnement par défaut : une DGX Spark de développement, installation/désinstallation réversibles, prérequis hôte explicites, données sous une racine dédiée, aucun changement global silencieux de Docker, du pare-feu ou des pilotes.
+- capacité cible initiale : environ 3 humains et 30 agents persistants, dont les conteneurs restent dormants lorsqu’ils ne travaillent pas.
+- premier démarrage : portail vide ; création de projet minimale, configuration ultérieure des agents, catalogues, collections, quotas et profils de calcul.
+
+**Artefacts prévus**
+- `docs/decisions/ADR-v2-control-plane-and-runtime.md` ;
+- `docs/architecture/v2-boundaries.md` ;
+- manifeste de migration v1 -> v2 ne conservant par défaut que le stockage de modèles et les secrets explicitement exportés ;
+- schéma OpenAPI versionné du plan de contrôle.
+
+**Test** : `tests/H3_v2_architecture_contract.sh`
+- échoue si le portail, le CLI et le moteur déclaratif n’utilisent pas la même API/source de vérité ;
+- échoue si un agent ou un gateway monte le socket Docker ;
+- vérifie que le backend Docker fonctionne sans OpenShell ni Kubernetes ;
+- vérifie que le portail initial ne crée aucun projet, corpus ou collection implicite ;
+- vérifie que la licence reste Apache 2.0.
+
+### H4 Portail unifié, identités et surfaces d’accès
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- fournir un portail unique agréable, orienté rôle, ouvrant les applications autorisées dans de nouveaux onglets ; chaque humain ou agent ne voit que son scope.
+- surfaces minimales : état matériel, services, agents, projets, approbations, planning, quotas, modèles, catalogues, RAG, rapports, journaux et terminal.
+- authentification locale initiale ; prévoir OpenID Connect/SAML institutionnel ultérieur sans modifier le modèle d’autorisation.
+- rôles humains initiaux : administrateur principal, utilisateur de confiance, utilisateur standard, invité.
+- agents = identités organisationnelles persistantes de premier rang : nom, rôle, équipe, responsable humain, prérogatives, historique, quotas imputés et filiation.
+- un agent peut créer et encadrer des sous-agents, mais leurs droits sont l’intersection des droits du parent, de la politique projet et de la politique globale ; aucun accroissement de privilège.
+- ressources communes par défaut ; niveaux explicites `commun`, `projet`, `privé utilisateur`, `secret`.
+- accès LAN par défaut depuis tous les appareils authentifiés ; le portail/API écoute sur l’adresse LAN explicitement choisie, jamais sur `0.0.0.0` ; Tailscale reste une option distante.
+- les applications internes, Mattermost et Dify restent sur réseau privé ou loopback et sont publiées uniquement via le portail/reverse proxy contrôlé.
+- fonctionnement offline-first : aucune dépendance cloud pour démarrer, administrer, discuter avec les modèles ou utiliser le RAG local.
+- notifications mobiles optionnelles : métadonnées minimales via Apple/Google, détail et décision uniquement dans le portail local après passkey/biométrie téléphone ; méthode de secours locale documentée.
+- terminal hôte DGX réservé aux administrateurs, session `tmux` persistante, élévation `sudo` explicite ; audit connexions, durées, commandes, codes de sortie et sudo, sans enregistrer les sorties complètes.
+- rétention uniforme des audits : 30 jours.
+
+**Artefacts prévus**
+- frontend portail ; service FastAPI ; schéma PostgreSQL identités/roles/scopes/délégations ; reverse proxy ; `sparkctl` ; configuration YAML déclarative exportable/importable.
+
+**Test** : `tests/H4_portal_identity_scope.sh`
+- vérifie qu’un utilisateur ne voit ni n’ouvre une ressource hors scope ;
+- vérifie qu’un sous-agent ne peut recevoir un droit absent du parent ;
+- vérifie LAN sur adresse explicite et absence de wildcard ;
+- vérifie fonctionnement du cœur avec Internet indisponible ;
+- vérifie terminal hôte inaccessible aux non-administrateurs et rétention d’audit 30 jours.
+
+### H5 Passerelle LLM LAN compatible OpenAI et Ollama
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- `ollama-gate` reste le seul point d’accès aux modèles locaux ou distants ; le port Ollama natif `11434` n’est jamais exposé aux utilisateurs.
+- exposer via le portail/gateway, avec clés API individuelles :
+  - API OpenAI compatible `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings` ;
+  - API Ollama d’inférence `/api/chat`, `/api/generate`, `/api/embed` et fallback `/api/embeddings` si requis par un client ancien.
+- ne pas exposer aux utilisateurs les opérations administratives Ollama de pull, create, copy ou delete.
+- administration des modèles uniquement depuis portail/CLI/config, avec confirmation humaine pour téléchargement, import, conversion, création ou suppression.
+- un modèle déjà présent peut être chargé automatiquement seulement si l’admission prédit l’absence de perturbation non autorisée ; sinon créer une demande d’approbation.
+- modèles autorisés, concurrence, requêtes/tokens et priorités configurables par utilisateur/projet.
+- conserver un catalogue global de modèles Ollama, Hugging Face, ComfyUI et TensorRT-LLM ; stockage physique unique et déduplication par empreinte lorsque les formats sont réellement identiques ; distinguer source, conversion, moteur et cache.
+- aucune suppression automatique, y compris des caches régénérables ; proposer un plan de nettoyage et attendre une décision humaine.
+- migration v2 : réutiliser le stockage existant sans copie ni retéléchargement ; transférer les secrets pénibles à recréer via export/import chiffré ; le reste peut être abandonné.
+
+**Test** : `tests/H5_llm_gateway_lan.sh`
+- prouve les deux familles d’API avec la même identité/quota ;
+- prouve que `11434` n’est pas joignable depuis le LAN ;
+- refuse pull/create/delete via l’API utilisateur ;
+- refuse un téléchargement sans approbation ;
+- prouve qu’un modèle existant n’est ni copié ni retéléchargé pendant migration.
+
+### H6 Ordonnanceur de ressources, réservations et préemption coopérative
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- politique `interactive-first` ; services protégés par défaut : portail, terminal, Ollama, OpenWebUI.
+- Ollama peut être arrêté pendant un créneau exclusif si la tâche n’en dépend pas, par exemple ComfyUI ou entraînement GPU.
+- modes `normal`, `burst`, `exclusive` ; profils standards (`agent-ollama`, `pytorch-training`, `comfyui`, `compilation`, `cpu-batch`, `heavy-inference`, `light`) et profils personnalisables.
+- chaque tâche déclare ressources, dépendances, services à conserver/arrêter, politique de checkpoint, délai maximal de libération, reprise et caractère préemptible.
+- contrat obligatoire : `checkpointable`, `pausable` ou `non_preemptible` ; une simple pause de conteneur n’est pas considérée comme libération GPU.
+- avant un créneau prioritaire, envoyer une demande `drain`; la tâche répond avec action et délai estimé ; le planning recalcule le début/fin en garantissant la durée de calcul.
+- à expiration du délai de grâce, l’administrateur peut imposer checkpoint, arrêt ou kill ; l’administrateur est décisionnaire final.
+- les agents peuvent demander des créneaux et négocier entre eux par propositions structurées, objections et compromis audités ; pas de débat opaque comme seule entrée de décision.
+- priorité de base par utilisateur, puis ajustement borné par projet et type de tâche.
+- concurrence adaptative mesurée sur CPU, mémoire unifiée, GPU, entrées-sorties et latence interactive ; limites dures administrables.
+- planning web : demandes, négociations, approbations, délai de libération, début estimé/réel, consommation et dépassements.
+
+**Test** : `tests/H6_resource_scheduler.sh`
+- simule tâche checkpointable, pausable et non préemptible ;
+- vérifie le délai annoncé et le décalage du créneau ;
+- vérifie restauration des services après succès et échec ;
+- vérifie que l’administrateur peut forcer l’arrêt ;
+- vérifie que ComfyUI exclusif peut arrêter Ollama mais qu’une tâche `agent-ollama` le conserve ;
+- vérifie que la latence interactive déclenche réduction de concurrence.
+
+### H7 Quotas, coûts et rapports
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- quotas globaux croisés par utilisateur et projet, partagés par leurs agents ; pas de budget rigide par agent par défaut.
+- métriques : heures GPU, temps CPU, mémoire, tokens, stockage, bande passante, tâches simultanées, créneaux exclusifs et durée.
+- seuils souples : alerte, puis mise en attente des nouvelles consommations ; dépassement seulement après approbation humaine limitée en temps ou volume.
+- coût estimé : électricité à partir de profils de charge/durée et prix du kWh configurables, amortissement matériel configurable, stockage et services externes éventuels ; toujours distinguer mesure, estimation et facturation réelle.
+- ventilation croisée par utilisateur, projet et type de ressource.
+- rapport mensuel automatique et rapport à la demande, disponibles dans le portail, export CSV/PDF, sans envoi courriel automatique.
+
+**Test** : `tests/H7_quotas_costs_reports.sh`
+- dépassement sans approbation refusé ; exception temporaire acceptée puis expirée ;
+- total global = sommes ventilées utilisateur/projet ;
+- rapport mensuel généré avec hypothèses de coût visibles ;
+- aucun rapport n’est envoyé à l’extérieur.
+
+### H8 Secrets, délégations et actions externes
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- secrets entièrement locaux ; courtier local, injection temporaire par fichier en mémoire, jeton court ou proxy d’action ; ne jamais considérer une variable d’environnement comme non lisible par le processus.
+- aucun secret brut dans image, config, logs, mémoire agent ou base de connaissances.
+- accès automatique si inclus dans les prérogatives ; demande humaine sinon.
+- accès générique possible au secret ; la restriction fine repose donc sur le scope du compte/jeton ; secrets individuels ou partagés par équipe/projet, avec propriétaire humain et rotation.
+- un agent agit librement sous sa propre identité et dans son scope ; lorsqu’il agit au nom d’un humain sans délégation explicite, validation humaine à chaque action.
+- délégations bornées par action, ressource, durée, volume et option de preview ; révocation immédiate ; journal acteur réel, mandant et autorisation.
+- actions sensibles/irréversibles : publication, email, push au nom d’un autre, suppression externe, changement de droits, exposition de service, interruption prioritaire.
+
+**Test** : `tests/H8_secrets_delegations.sh`
+- l’agent utilise un secret autorisé sans pouvoir l’afficher dans les surfaces normales ;
+- accès hors prérogative crée une demande et refuse avant approbation ;
+- action au nom d’un humain sans délégation est bloquée ;
+- délégation expirée/révoquée est refusée ;
+- scan des logs et mémoires ne retrouve aucune valeur sentinelle.
+
+### H9 Catalogue local, mémoire et RAG gouverné
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- portail vide au premier démarrage ; les projets déclarent ensuite les répertoires à cataloguer.
+- découverte automatique sans copie : chemin, taille, format, empreinte, provenance, licence, confidentialité, droits, disponibilité et projets utilisateurs.
+- gros jeux de données et imagerie : catalogue + métadonnées/documentation, sans indexation binaire aveugle.
+- tous formats visés progressivement (PDF, Office, Markdown/texte, code, pages web archivées, images avec texte), mais aucun corpus implicite.
+- fichier compatible découvert = `candidat à indexer`; première indexation validée par tout humain ayant lecture sur la source ; modifications ultérieures réindexées automatiquement ; changement de droits/structure/confidentialité exige nouvelle validation.
+- une source peut appartenir à plusieurs collections ; mutualiser chunks/embeddings lorsque modèle, découpage et version sont identiques.
+- embedding local par défaut via `ollama-gate` et endpoint `/api/embed`; préférence initiale `nomic-embed-text`, configurable.
+- droits de retrieval = intersection source, collection, utilisateur/agent ; aucune indexation ne peut élargir les droits.
+- agents autorisés à créer des collections privées/projet et à les publier dans le socle commun.
+- mémoire globale par agent pour compétences/méthodes, mais confidentialité par projet ; partage inter-agent seulement par publication explicite dans le socle commun.
+- contenus publiés par agents utilisables immédiatement avec provenance/confiance/statut non validé ; validation humaine ultérieure valorise sans effacer historique, contradictions ou réserves.
+- recherche : collections prioritaires explicites, sinon recherche générale sur tout le scope accessible.
+- réponse RAG : sources et passages exacts toujours présents, avec version et collection ; fallback connaissance générale autorisé sans fausse référence ; réponses mixtes fluides avec marquage discret.
+
+**Test** : `tests/H9_catalog_rag_governance.sh`
+- installation neuve = zéro source/collection ;
+- découverte n’indexe rien avant validation ;
+- réindexation incrémentale après modification ;
+- suppression retire les chunks ;
+- même source dans deux collections ne duplique pas les embeddings compatibles ;
+- aucun résultat hors scope ;
+- chaque réponse RAG contient passage/source ; le fallback général ne fabrique aucune citation.
+
+### H10 Mattermost auto-hébergé : collaboration humain–agents
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- deuxième incrément, après cœur v2 stable ; domaine optionnel `collab`, non démarré par le premier démarrage tant que coût mémoire et ARM64 ne sont pas validés.
+- ajouter, après validation des conventions, `compose/compose.collab.yml` avec Mattermost et PostgreSQL dédiés.
+- images épinglées par version et digest ; étape bloquante d’inspection des manifestes `linux/arm64`.
+- persistance : `${AGENTIC_ROOT}/mattermost/{config,data,logs,plugins,client-plugins,db,backups}`.
+- Mattermost écoute uniquement sur réseau privé ; éventuel bind hôte strictement `127.0.0.1:${MATTERMOST_HOST_PORT}` ; accès LAN/distant via portail contrôlé, tunnel SSH ou Tailscale, jamais exposition Internet publique.
+- authentification obligatoire ; bootstrap non interactif, idempotent et secret-safe de l’administrateur initial, équipe, canaux, comptes bots distincts par agent visible et jetons.
+- désactiver/limiter les fonctions cloud inutiles ; documenter notifications mobiles et connexions externes, avec opt-in et métadonnées minimales.
+- healthcheck applicatif ; sauvegarde/restauration cohérente base + fichiers + config ; aucun mot de passe/jeton committé.
+- contrôle des pièces jointes : taille, nombre, types MIME, quarantaine/analyse et sanitation avant passage à un agent.
+
+**Test** : `tests/H10_mattermost.sh`
+- serveur healthy, bind conforme, accès non authentifié refusé ;
+- admin/équipe/canaux/bots créés deux fois sans doublon ;
+- jetons absents du Compose rendu et des logs ;
+- persistance après redémarrage ; restauration d’un backup vérifiée.
+
+### H11 Dify auto-hébergé : workflows, mémoire et validation humaine
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- Dify ne remplace pas les adapters d’agents et n’exécute pas directement n’importe quel CLI persistant.
+- intégrer la topologie officielle réellement requise par la version retenue : web, API, worker, plugin daemon, sandbox, PostgreSQL, Redis, stockage, base vectorielle et autres dépendances obligatoires confirmées.
+- dépendances dédiées à Dify par défaut ; toute mutualisation PostgreSQL/Redis/Qdrant exige une ADR prouvant isolation, absence de couplage de versions, sauvegardes compatibles et sécurité réseau.
+- interface Dify seulement loopback/réseau privé ; aucun port hôte pour PostgreSQL, Redis, vector store, sandbox ou plugin daemon.
+- Dify utilise exclusivement `ollama-gate` comme fournisseur modèle ; aucun accès direct à Ollama ou TRT-LLM ; proxy d’egress obligatoire.
+- aucun GPU attribué à Dify ; limites CPU, mémoire, stockage, workers et conversations adaptées à la DGX Spark et mode minimal `rootless-dev`.
+- secrets hors Git, images par version/digest, healthchecks, backups/migrations et validation ARM64.
+
+**Test** : `tests/H11_dify.sh`
+- services essentiels healthy ; workflow/chatflow test appelable par API ;
+- appel modèle corrélé dans les logs `ollama-gate` ;
+- aucun accès direct à Ollama/TRT-LLM ;
+- conversation persistante après redémarrage ;
+- aucune ressource GPU visible dans Dify.
+
+### H12 Architecture Mattermost + Dify + gateway + adapters
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- inscrire l’architecture cible :
+
+```text
+Humain
+  │
+  ▼
+Mattermost
+  │  REST + WebSocket, bots, fils
+  ▼
+mattermost-agent-gateway
+  │
+  ├── Dify chatflow/workflow
+  │      ├── routage
+  │      ├── mémoire
+  │      ├── approbation humaine
+  │      └── appels d’outils
+  │
+  ├── OpenClaw adapter ──► interface interne OpenClaw
+  ├── Hermes adapter ────► runtime Hermes
+  └── autres adapters ───► agents compatibles
+                             │
+                             ▼
+                         ollama-gate
+```
+
+- produire une ADR comparant : intégration Mattermost native OpenClaw ; gateway générique ; bot unique Dify ; compte bot distinct par agent.
+- décision recommandée : gateway central, adapters versionnés, compte bot distinct par agent visible, Dify pour orchestration/workflows ; réutiliser le plugin natif OpenClaw seulement s’il respecte routage, audit, sécurité et validation humaine.
+- aucun chemin direct contournant `ollama-gate`, le proxy d’egress ou les contrôles ; aucun `docker.sock`, aucun pilotage par `docker exec`.
+- échanges par API réseau privée authentifiée ; file locale contrôlée seulement si aucune interface réseau fiable n’existe et après ADR.
+
+**Test** : `tests/H12_collab_architecture_contract.sh`
+- analyse statique et runtime prouvant absence de socket Docker, `docker exec`, direct Ollama/TRT et egress direct ;
+- prouve qu’un message routé possède identifiants Mattermost, Dify, gateway, adapter et gate corrélables.
+
+### H13 `mattermost-agent-gateway` et protocole d’adapter
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- service interne `mattermost-agent-gateway` : événements Mattermost via WebSocket ou mécanisme officiel, déduplication persistante, rejet des bots non autorisés, anti-boucle.
+- mapper équipe, canal, fil, utilisateur, agent demandé, conversation Dify et session agent.
+- router `@hermes`, `@openclaw`, `@agents`; réponse dans le même fil avec le compte bot correspondant.
+- timeouts, annulation, reprise, erreurs, contrôle débit/concurrence, contexte maximal, logs structurés sans secret, `/healthz` et `/metrics`.
+- contrat indicatif à confirmer contre les interfaces réelles :
+  - `POST /v1/agent/run` ;
+  - `POST /v1/agent/cancel` ;
+  - `GET /v1/agent/runs/{id}` ;
+  - `GET /healthz` ;
+  - `GET /metrics`.
+- persistance : `${AGENTIC_ROOT}/collab-gateway/{config,state,logs}`.
+- sanitation des messages/pièces jointes ; protection replay, messages forgés et boucles ; idempotency key durable.
+- première version : pas de boucle autonome illimitée entre agents.
+
+**Test** : `tests/H13_gateway_dedup_loop.sh`
+- même événement reçu deux fois = une seule exécution ;
+- message d’un bot non autorisé ignoré/refusé ;
+- réponses bots non réingérées ;
+- mentions croisées ne créent pas de boucle ;
+- rate limit, cancel, timeout et reprise ont un résultat binaire auditable.
+
+### H14 Adapters OpenClaw et Hermes, puis autres agents
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- premier incrément d’adapters limité à OpenClaw et Hermes.
+- OpenClaw : réutiliser l’API interne, relay webhook ou plugin Mattermost seulement s’ils respectent les invariants ; préserver approvals, sandbox et egress ; empêcher une seconde connexion Mattermost causant des doubles réponses ; documenter plugin natif vs gateway.
+- Hermes : ne jamais traiter `tmux` comme API implicite ; créer un adapter stack-managed avec état de conversation, limites de concurrence/sérialisation, timeout et annulation explicites ; modèle uniquement via `ollama-gate`.
+- contrat adapter stable avant Codex, Claude, OpenCode, OpenHands, Vibestral et autres.
+
+**Test** : `tests/H14_hermes_mattermost_e2e.sh`
+1. un humain envoie `@hermes réponds exactement HERMES_OK` ;
+2. événement reçu une fois ;
+3. Dify applique le routage ;
+4. adapter Hermes exécute ;
+5. modèle passe par `ollama-gate` ;
+6. bot Hermes répond `HERMES_OK` dans le même fil ;
+7. corrélation complète dans les journaux ;
+8. aucun secret exposé.
+
+**Test** : `tests/H15_openclaw_mattermost_e2e.sh`
+- scénario équivalent `@openclaw ... OPENCLAW_OK` ;
+- aucune double réponse plugin/gateway ;
+- approvals OpenClaw respectées ;
+- contexte du fil conservé ;
+- modèle uniquement via `ollama-gate`.
+
+### H15 Validation humaine dans Mattermost
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- distinguer conversation, lecture fichier, écriture workspace, accès réseau, outil, action destructive et action au nom d’un humain.
+- demande non ambiguë avec acteur, cible, impact, durée, provenance et expiration ; refus par défaut.
+- seul un humain Mattermost autorisé peut approuver ; un agent ou bot ne peut jamais approuver.
+- relier approbation, identité Mattermost, délégation éventuelle, exécution et résultat dans l’audit.
+- options : autoriser une fois, pour la tâche, le projet, une durée ; refus ; aucune autorisation globale implicite.
+
+**Test** : `tests/H16_collab_human_approval.sh`
+- outil sensible non exécuté avant validation ; refus bloque ; bot approbateur refusé ; approbation expirée refusée ; humain autorisé accepté et audité.
+
+### H16 Compatibilité ARM64, ressources et mode minimal
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- avant implémentation Mattermost/Dify : inspecter chaque manifeste pour `linux/arm64`; tester binaires natifs, notamment sandbox et plugin daemon.
+- si image officielle absente : image ARM64 locale reproductible, versions/digests épinglés ; aucune émulation x86 implicite en production.
+- abandonner/remplacer un composant dont le support ARM64 fiable n’est pas démontré.
+- budgets configurables : Mattermost, PostgreSQL, Dify API/workers, Redis, vector store, gateway, nombre workers/conversations, pièces jointes, messages/logs/artefacts.
+- mode minimal `rootless-dev` ; collab exclu du premier démarrage tant que benchmark mémoire/ARM64 non vert.
+
+**Test** : `tests/H17_collab_compose_arm64.sh`
+- `docker compose config` réussit ;
+- toutes images requises ont `linux/arm64` ;
+- aucun `latest` non résolu ;
+- seuls Mattermost et Dify peuvent avoir un bind hôte, toujours `127.0.0.1` ;
+- aucune DB, sandbox, adapter ou gateway publiée ;
+- aucun socket Docker ;
+- mode minimal reste sous le budget configuré.
+
+### H17 Sauvegarde, rollback et stockage persistant collab
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- arborescence :
+  - `${AGENTIC_ROOT}/mattermost/{config,data,logs,plugins,client-plugins,db,backups}` ;
+  - `${AGENTIC_ROOT}/dify/{storage,plugins,db,redis,vector,logs,backups}` ;
+  - `${AGENTIC_ROOT}/collab-gateway/{config,state,logs}`.
+- sauvegarde quotidienne locale chiffrée/versionnée sur disque externe, objectif de point de reprise 24 h et remise en service 24 h ; disque en lecture seule hors fenêtre et inaccessible aux agents.
+- exclure modèles, gros jeux de données et caches régénérables ; inclure identités, secrets chiffrés, bases, mémoires, connaissances, config, code, résultats importants et catalogues.
+- release globale testée, proposée puis validée humainement ; environnement éphémère, modèles en lecture seule, tests GPU séquentiels, courte coupure acceptée, rollback complet.
+- Mattermost/Dify : backups cohérents avec migrations DB et manifest de versions.
+
+**Test** : `tests/H18_collab_backup_rollback.sh`
+- restaure Mattermost et Dify ;
+- vérifie versions/digests dans manifest ;
+- rollback ne perd pas la configuration non secrète ;
+- aucun modèle/gros dataset dans backup ;
+- test de restauration respecte RPO/RTO documentés.
+
+### H18 CLI, `doctor`, hardening et observabilité transversaux
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- CLI v2 canonique sans compatibilité obligatoire :
+  - `sparkctl stack up|down collab` ;
+  - `sparkctl collab init|status|doctor` ;
+  - `sparkctl logs mattermost|dify-api|mattermost-agent-gateway` ;
+  - `sparkctl forget mattermost|dify|collab --yes`.
+- conserver dans l’ADR de migration la correspondance demandée avec l’ancien vocabulaire : `agent up/down collab`, `agent collab init/status/doctor`, `agent logs ...`, `agent forget ...`; ne pas implémenter une couche de compatibilité si elle contredit la rupture v2.
+- `forget` : backup préalable par défaut, double confirmation hors `--yes`, isolation Mattermost/Dify/agents, secrets gérés séparément.
+- étendre `doctor`, matrice hardening, snapshots/releases, tunnel catalog, monitoring et définition globale de terminé.
+- hardening : utilisateurs minimaux, `cap_drop: ALL`, NNP, rootfs read-only sauf volumes documentés ; toute exception `read_only`/non-root justifiée service par service.
+- Prometheus/Loki : santé, requêtes, files, erreurs, approvals, déduplication, latence et consommation ; rétention audit 30 jours.
+- accès web sortant des agents : passerelle contrôlée, blocage réseaux locaux/adresses sensibles/malware-phishing connus, contenu Web toujours non fiable pour l’autorisation ; override humain temporaire ; aucune prétention qu’une liste de domaines protège des prompt injections.
+
+**Test** : `tests/H19_collab_security_doctor.sh`
+- `doctor` échoue sur bind public, secret manquant, bot mal configuré, accès direct Ollama, egress direct ou service sans hardening ;
+- bases et services internes inaccessibles depuis l’hôte ;
+- métriques et logs corrélés présents sans contenu secret ;
+- `forget mattermost` ne touche pas Dify et inversement.
+
+### H19 Documentation, hors périmètre et définition de terminé
+Suivi Beads : **identifiant Beads à créer**.
+
+**Implémentation**
+- livrer : ADR Mattermost+Dify+gateway ; diagramme flux/frontières ; modèle de menace ; runbooks installation, bots/rotation, ajout adapter, backup/restore, update, accès SSH/Tailscale ; README FR/EN ; matrice `rootless-dev`/`strict-prod`.
+- mettre à jour l’arborescence cible, commandes, `doctor`, hardening, `forget`, snapshots/rollback, observabilité, UIs locales et définition finale de terminé.
+- non-objectifs initiaux : fédération Mattermost, haute disponibilité, audio/vidéo, Internet public, exécution privilégiée hôte, orchestration autonome illimitée, support immédiat de tous les agents, remplacement du CLI par Mattermost, mutualisation prématurée des DB Dify.
+- les profils existants gardent leur sens durant la transition ; v2 ajoute des profils d’exposition `local-lan` par défaut, `tailscale`, `https-public`, `https-tunnel`, sans wildcard bind et sans dépendance Internet.
+- la trajectoire A→L reste inchangée ; ces travaux H3+ ne renumérotent ni ne rouvrent les éléments clos.
+
+**Test documentaire** : `tests/H20_collab_plan_docs_contract.sh`
+- Markdown valide ; liens internes présents ; aucun `Plan.md` concurrent ;
+- chaque H3+ possède artefact et test binaire ;
+- scénarios Hermes/OpenClaw distincts ;
+- ARM64, sécurité, egress, secrets, persistance, rollback explicites ;
+- Dify ne remplace pas les adapters ; aucun socket Docker/direct Ollama/image `latest` non résolue ;
+- `collab` optionnel et hors premier démarrage ;
+- compatibilité des décisions v2 : même dépôt, cœur avant collab, Docker stable/OpenShell expérimental, FastAPI/PostgreSQL/React, Apache 2.0.
 
 ---
 
