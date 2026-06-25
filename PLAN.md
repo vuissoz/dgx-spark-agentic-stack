@@ -130,7 +130,7 @@ Aucun agent existant ne peut disparaître derrière « autres agents ».
 | Agent/runtime v1 | Type cible | État à préserver | Phase de migration | Condition de parité |
 |---|---|---|---|---|
 | Claude Code | adapter CLI générique | workspace, config utile, secrets délégués, historique de tâches utile | vague CLI 1 | dépôt modifié, tests exécutés, reprise et audit |
-| Codex | adapter CLI générique | workspace, config, contexte, dépôts et branches | vague CLI 1 | même scénario E2E que v1, plus annulation/checkpoint |
+| Codex | adapter CLI générique | workspace, config, contexte, dépôts et branches | vague CLI 1 | même scénario de bout en bout que v1, plus annulation/checkpoint |
 | OpenCode | adapter CLI générique | workspace, config et état persistant | vague CLI 2 | scénario dépôt complet et accès modèle via gate |
 | KiloCode | adapter CLI générique | workspace et configuration | vague CLI 2 | démarrage, tâche, outils, reprise et arrêt propres |
 | Mistral Vibe / VibeStral | adapter CLI générique | workspace, configuration, modèle et contexte | vague CLI 2 | analyse/modification de dépôt, test et publication |
@@ -200,7 +200,7 @@ Socle retenu :
 - PostgreSQL comme état canonique ;
 - workers Python ;
 - frontend React ou Next.js ;
-- REST pour les opérations, WebSocket/SSE pour les événements ;
+- API REST pour les opérations, WebSocket / Server-Sent Events (SSE) pour les événements ;
 - `sparkctl` comme client API, pas comme second moteur métier ;
 - fichiers YAML déclaratifs importables/exportables, validés par schéma ;
 - migrations de base versionnées ;
@@ -242,7 +242,7 @@ La v2 ne reproduit pas une allowlist trop restrictive pour les usages ordinaires
 Politique par défaut :
 
 - HTTPS Web autorisé pour les agents dans leur scope ;
-- blocage des réseaux privés non autorisés, metadata cloud, loopback hôte et endpoints sensibles ;
+- blocage des réseaux privés non autorisés, services de métadonnées des clouds, loopback hôte et endpoints sensibles ;
 - blocage de destinations malveillantes/phishing connues ;
 - DNS et egress audités ;
 - contenu Web toujours considéré comme non fiable ;
@@ -284,8 +284,8 @@ Interface `SandboxRuntime` :
 
 - création et destruction contrôlées ;
 - image et provenance ;
-- UID/GID non root ;
-- rootfs en lecture seule quand possible ;
+- identifiants utilisateur et groupe non root ;
+- système de fichiers racine en lecture seule quand possible ;
 - volumes déclarés ;
 - CPU, mémoire, GPU et stockage ;
 - réseau et egress ;
@@ -389,7 +389,7 @@ Pour chaque runtime :
 
 ### 6.3 Modèles
 
-Pendant le fonctionnement en omre :
+Pendant le fonctionnement en ombre :
 
 - store v1 monté en lecture seule côté v2 ;
 - téléchargements v2 dans un espace séparé ;
@@ -453,7 +453,7 @@ La documentation fait partie du produit et possède sa propre porte de validatio
 4. tests de composants ;
 5. tests d’intégration ;
 6. tests agent-par-agent ;
-7. tests E2E multi-services ;
+7. tests de bout en bout multi-services ;
 8. tests migration/import ;
 9. tests backup/restore ;
 10. tests performance et admission ;
@@ -659,7 +659,7 @@ La phase ne ferme pas avec un simple succès Codex.
 
 **Porte G8**
 
-- scénarios E2E dédiés verts ;
+- scénarios de bout en bout dédiés verts ;
 - état persistant après redémarrage ;
 - approvals et sandbox non contournables.
 
@@ -717,7 +717,7 @@ La phase ne ferme pas avec un simple succès Codex.
 - restauration v2 complète ;
 - rollback applicatif et données ;
 - modèles/gros datasets exclus mais catalogués ;
-- RPO 24 h et RTO 24 h documentés et testés.
+- perte maximale de données de 24 h et remise en service en 24 h documentées et testées.
 
 ### Phase M12 — Collaboration Mattermost/Dify
 
