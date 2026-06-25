@@ -41,7 +41,7 @@ La v2 ne peut remplacer la v1 que si les conditions suivantes sont toutes vraies
 1. le snapshot de la v1 a été restauré et validé au moins une fois ;
 2. chaque fonction v1 conservée possède un test v2 équivalent ou supérieur ;
 3. chaque agent existant possède un statut explicite, un adapter, un chemin de migration et un test de parité ;
-4. le portail, `sparkctl` et la configuration déclarative utilisent la même API et la même base d’état ;
+4. le portail, le CLI `agent` et la configuration déclarative utilisent la même API et la même base d’état ;
 5. aucun agent, adapter, gateway, Dify ou service UI ne monte le socket Docker ;
 6. `ollama-gate` est le seul chemin d’accès aux modèles pour les utilisateurs et les agents ;
 7. les modèles existants sont réutilisés sans copie ni retéléchargement inutile ;
@@ -156,41 +156,138 @@ Aucun agent existant ne peut disparaître derrière « autres agents ».
 | workspaces `shared-ro/shared-rw` | remplacés par des montages déclaratifs et autorisés, avec compatibilité de migration |
 | update/rollback par digest | obligatoire en v2 |
 | backup/restore | obligatoire et testé |
-| `doctor`, onboarding, cleanup, forget, logs, status | remplacés par surfaces `sparkctl` + portail avec parité fonctionnelle |
+| `doctor`, onboarding, cleanup, forget, logs, status | conservés derrière le point d’entrée unique `agent` et complétés par le portail, avec parité fonctionnelle |
 
 ## 5. Architecture cible v2
 
-### 5.1 Principe général
+### 5.1 Principe d’accès utilisateur : CLI ou portail
+
+Chaque agent, application ou fonction opérateur doit posséder un **point d’accès utilisateur explicite et testé** :
+
+- soit directement dans un terminal par une commande du CLI `agent` ;
+- soit dans le navigateur depuis l’interface du portail ;
+- soit par les deux lorsque cela apporte une vraie valeur.
+
+Aucun utilisateur ne doit connaître un port, un nom de conteneur, une commande Docker, un fichier Compose ou un identifiant interne pour accéder à un composant.
+
+Le point d’entrée dépend de la nature du composant :
+
+- un agent CLI se rejoint naturellement dans un terminal ;
+- une application graphique s’ouvre naturellement depuis le portail ;
+- une fonction d’administration importante est disponible dans le portail et, lorsque pertinent, par le CLI `agent` pour l’automatisation.
+
+#### 5.1.1 Accès direct aux agents CLI
+
+L’expérience v1 est conservée comme contrat utilisateur :
+
+```bash
+agent codex
+agent codex ARTANY
+agent claude ARTANY
+agent hermes SEGMENTATION-RTMRI
+```
+
+`agent codex` ouvre ou reprend directement la session persistante de Codex. Le projet est facultatif et désigne seulement le workspace actif de cet agent. L’utilisateur choisit donc **à qui il parle**, puis éventuellement le dossier sur lequel cet agent travaille.
+
+Sans projet explicite, le dernier projet utilisé par cet utilisateur avec cet agent est repris. Si aucun projet n’existe, l’agent s’ouvre sans projet et peut discuter ; il demande un projet seulement lorsqu’une opération sur des fichiers l’exige.
+
+Le changement de projet s’effectue depuis l’agent ou par le CLI, sans retourner à un portail de sélection et sans changer d’agent. La v2 doit définir une commande simple et cohérente, par exemple :
+
+```bash
+agent project SEGMENTATION-RTMRI
+```
+
+Le changement remplace automatiquement le workspace, les permissions, les collections RAG, les quotas et les références de secrets applicables. La mémoire générale de l’agent reste disponible, mais aucune information confidentielle d’un projet ne traverse vers un autre projet.
+
+Les détails techniques — conteneur, `tmux`, runtime, réseau, reprise de session — sont masqués. Une déconnexion SSH ne détruit pas le travail en cours.
+
+#### 5.1.2 Accès aux applications web
+
+Le portail est le point d’entrée web unique. Il présente uniquement les applications et fonctions autorisées à l’utilisateur et ouvre, si nécessaire, l’application dans un nouvel onglet derrière le reverse proxy authentifié.
+
+L’utilisateur ne saisit jamais directement l’adresse ou le port d’OpenWebUI, OpenHands, ComfyUI, Forgejo, Grafana, Mattermost ou Dify.
+
+Le portail gère également les fonctions transversales :
+
+- état des agents et tâches ;
+- approbations ;
+- calendrier et ressources ;
+- modèles ;
+- utilisateurs et droits ;
+- projets ;
+- catalogue et RAG ;
+- quotas et coûts ;
+- sauvegardes, mises à jour et rollback ;
+- journaux, alertes et rapports.
+
+Le portail n’est pas un passage obligatoire pour utiliser un agent CLI comme Codex.
+
+#### 5.1.3 Matrice d’accès obligatoire
+
+| Composant | Accès terminal par `agent` | Accès web depuis le portail | Accès principal |
+|---|---:|---:|---|
+| Claude Code | oui | facultatif, via terminal web ultérieur | terminal |
+| Codex | oui | facultatif, via terminal web ultérieur | terminal |
+| OpenCode | oui | facultatif | terminal |
+| KiloCode | oui | facultatif | terminal |
+| VibeStral | oui | facultatif | terminal |
+| Hermes | oui | facultatif puis Mattermost | terminal |
+| Pi Coding Agent | oui | facultatif | terminal |
+| Goose | oui | facultatif | terminal |
+| OpenClaw | oui pour exploitation et session | oui pour ses surfaces conversationnelles autorisées | les deux |
+| OpenHands | commandes de gestion seulement | oui | portail |
+| OpenWebUI | commandes de gestion seulement | oui | portail |
+| ComfyUI | commandes de gestion seulement | oui | portail |
+| Forgejo | commandes de gestion seulement | oui | portail |
+| Grafana / observabilité | diagnostics CLI | oui | portail |
+| Catalogue / RAG | oui pour automatisation | oui | portail |
+| Modèles / Ollama gate | oui pour administration autorisée | oui | les deux |
+| Scheduler / quotas / coûts | oui pour automatisation et diagnostic | oui | portail |
+| Sauvegarde / update / rollback / doctor | oui | oui pour les opérations guidées | les deux |
+| Mattermost / Dify | gestion CLI seulement | oui | portail |
+
+Cette matrice est un minimum. Une application peut obtenir une seconde surface plus tard, mais aucune fonctionnalité ne peut être déclarée terminée sans au moins un chemin utilisateur opérationnel.
+
+#### 5.1.4 Architecture interne correspondante
 
 ```text
-Utilisateurs LAN / Tailscale optionnel
-                 │
-                 ▼
-      Reverse proxy authentifié
-                 │
-       ┌─────────┴─────────┐
-       ▼                   ▼
-    Portail             API LLM
-       │                   │
-       ▼                   ▼
- control-api ────────── ollama-gate
-       │                   │
-       ├── identity        ├── Ollama
-       ├── projects        ├── TensorRT-LLM
-       ├── approvals       └── providers distants autorisés
-       ├── scheduler
-       ├── quotas
-       ├── catalog/RAG
-       ├── secret broker
-       └── runtime-controller
-                 │
-                 ▼
-           SandboxRuntime
-       ┌─────────┼─────────┐
-       ▼         ▼         ▼
- Docker durci  OpenShell  Kubernetes
-  supporté     expérim.    futur
+Utilisateur terminal                     Utilisateur navigateur
+        │                                         │
+        ▼                                         ▼
+agent <composant> [projet]                    portail web
+        │                                         │
+        └───────────────► control-api ◄───────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+      runtime-controller    scheduler      identités/approbations
+              │
+              ▼
+       AgentRuntimeAdapter
+              │
+              ▼
+        SandboxRuntime
+      ┌───────┼────────┐
+      ▼       ▼        ▼
+Docker durci OpenShell Kubernetes futur
+              │
+              ▼
+          ollama-gate
+       ┌──────┴─────────┐
+       ▼                ▼
+    Ollama        TensorRT-LLM
 ```
+
+#### 5.1.5 Tests de parcours utilisateur
+
+- `agent codex` ouvre ou reprend Codex sans demander d’abord un projet ;
+- `agent codex ARTANY` ouvre directement le workspace ARTANY ;
+- une déconnexion puis reconnexion SSH retrouve la session ;
+- le changement de projet ne change pas d’agent et n’expose aucune donnée du projet précédent ;
+- chaque application web est ouvrable depuis le portail sans connaître son port ;
+- un utilisateur ne voit pas une application ou une commande hors de ses droits ;
+- chaque ligne de la matrice possède au moins un test de disponibilité, d’authentification et de persistance ;
+- aucun vocabulaire Docker ou Compose n’apparaît dans le parcours utilisateur normal.
 
 ### 5.2 Plan de contrôle
 
@@ -201,7 +298,7 @@ Socle retenu :
 - workers Python ;
 - frontend React ou Next.js ;
 - API REST pour les opérations, WebSocket / Server-Sent Events (SSE) pour les événements ;
-- `sparkctl` comme client API, pas comme second moteur métier ;
+- le CLI `agent` devient un client léger de l’API, pas un second moteur métier ;
 - fichiers YAML déclaratifs importables/exportables, validés par schéma ;
 - migrations de base versionnées ;
 - journal d’événements et identifiants de corrélation de bout en bout.
@@ -439,8 +536,9 @@ La documentation fait partie du produit et possède sa propre porte de validatio
 - liens vérifiés ;
 - schémas de configuration validés ;
 - OpenAPI générée depuis le code ;
-- aide `sparkctl --help` comparée à la documentation ;
+- aide `agent --help` comparée à la documentation ;
 - matrice ports/volumes/secrets générée depuis les manifestes ;
+- matrice des accès CLI/portail générée et testée ;
 - chaque phase met à jour la documentation avant fermeture.
 
 ## 8. Stratégie de tests
@@ -458,7 +556,7 @@ La documentation fait partie du produit et possède sa propre porte de validatio
 9. tests backup/restore ;
 10. tests performance et admission ;
 11. tests panne/rollback ;
-12. tests documentation.
+12. tests documentation et parcours utilisateur.
 
 ### 8.2 Matrice de parité agent
 
@@ -476,7 +574,8 @@ Le scénario commun obligatoire pour chaque agent :
 10. métriques et coûts attribués ;
 11. arrêt/checkpoint puis reprise ;
 12. publication du résultat ;
-13. audit complet et absence de secret.
+13. audit complet et absence de secret ;
+14. accès par la surface principale annoncée dans la matrice 5.1.3.
 
 Les différences de capacités sont déclarées, jamais masquées.
 
@@ -493,7 +592,9 @@ Conserver et porter :
 - RAG avec source et passage ;
 - Forgejo avec protection de branche ;
 - update/rollback par digest ;
-- restauration complète.
+- restauration complète ;
+- ouverture de chaque application web depuis le portail ;
+- accès à chaque agent CLI par `agent <nom> [projet]`.
 
 ## 9. Phases de migration et portes de validation
 
@@ -523,12 +624,14 @@ Conserver et porter :
 - associer chaque fonction à `preserve`, `replace`, `rebuild` ou `retire`;
 - aucune fonction `retire` sans décision humaine ;
 - créer les epics et tâches Beads réels ;
-- établir les scénarios de parité.
+- établir les scénarios de parité ;
+- attribuer à chaque composant une surface CLI, portail ou les deux.
 
 **Porte G1**
 
 - aucune fonctionnalité ou agent sans propriétaire, phase et test ;
-- couverture explicite de Claude, Codex, OpenCode, KiloCode, VibeStral, Hermes, Pi, Goose, OpenClaw et OpenHands.
+- couverture explicite de Claude, Codex, OpenCode, KiloCode, VibeStral, Hermes, Pi, Goose, OpenClaw et OpenHands ;
+- aucune application sans chemin d’accès utilisateur défini.
 
 ### Phase M2 — Documentation et contrats v2 avant code
 
@@ -537,6 +640,7 @@ Conserver et porter :
 - réécrire `AGENTS.md` ;
 - créer ADR architecture/identités/runtime/gateway/réseau/migration ;
 - définir OpenAPI, schémas YAML, `AgentRuntimeAdapter`, `SandboxRuntime`, tâche, approval, usage et événement ;
+- définir le contrat de surface utilisateur CLI/portail ;
 - créer le squelette documentaire v2 ;
 - transformer le README en page de transition claire.
 
@@ -544,13 +648,14 @@ Conserver et porter :
 
 - contrats validés par tests de schéma ;
 - documentation de développement non contradictoire ;
+- matrice CLI/portail complète ;
 - aucun code v2 autorisé avant cette porte.
 
 ### Phase M3 — Squelette du plan de contrôle
 
 **Travaux**
 
-- FastAPI, PostgreSQL, migrations, workers, frontend vide, `sparkctl` ;
+- FastAPI, PostgreSQL, migrations, workers, frontend vide, CLI `agent` ;
 - même source d’état ;
 - healthchecks, logs, métriques et corrélation ;
 - installation/désinstallation sans modification globale cachée ;
@@ -558,7 +663,7 @@ Conserver et porter :
 
 **Porte G3**
 
-- portail, CLI et YAML produisent le même état ;
+- portail, CLI `agent` et YAML produisent le même état ;
 - backup/restore de la base ;
 - aucune dépendance à Internet ;
 - aucun projet implicite.
@@ -622,7 +727,7 @@ Conserver et porter :
 
 #### Vague 1 : Codex et Claude Code
 
-Ils servent de canaris du contrat générique.
+Ils servent de canaris du contrat générique et du parcours `agent <nom> [projet]`.
 
 #### Vague 2 : OpenCode, KiloCode, VibeStral et Hermes
 
@@ -636,7 +741,9 @@ Modules optionnels mais entièrement supportés avant retrait v1.
 
 - import d’état documenté ;
 - scénario de parité complet ;
-- reprise après arrêt ;
+- ouverture directe par `agent <nom>` ;
+- sélection facultative du projet ;
+- reprise après arrêt ou déconnexion ;
 - aucune régression de workspace ;
 - gate, outils, RAG, secrets, quotas et audit validés.
 
@@ -647,19 +754,22 @@ La phase ne ferme pas avec un simple succès Codex.
 **OpenClaw**
 
 - API, gateway, relay, sandbox, approvals, overlays, pièces jointes, skills, mémoire et workspaces ;
+- accès CLI d’exploitation et surface conversationnelle web autorisée ;
 - aucune double exécution ;
 - export/import d’état ;
 - chat status et surfaces opérateur.
 
 **OpenHands**
 
-- UI, conversations, workspace, modèle, outils et persistance ;
+- UI accessible depuis le portail, conversations, workspace, modèle, outils et persistance ;
+- commandes CLI de gestion ;
 - aucun socket Docker ;
 - limites ressources et intégration scheduler.
 
 **Porte G8**
 
 - scénarios de bout en bout dédiés verts ;
+- chemins CLI/portail conformes à la matrice ;
 - état persistant après redémarrage ;
 - approvals et sandbox non contournables.
 
@@ -672,12 +782,14 @@ La phase ne ferme pas avec un simple succès Codex.
 - Forgejo et comptes agents ;
 - MCP catalog ;
 - Portainer optionnel avec restrictions ;
-- portail comme launcher et contrôle d’accès.
+- portail comme launcher et contrôle d’accès ;
+- commandes `agent` de gestion pour les applications concernées.
 
 **Porte G9**
 
 - parité fonctionnelle et données ;
-- tous les accès passent par le portail/reverse proxy autorisé ;
+- chaque application web est accessible depuis le portail ;
+- aucun utilisateur n’a besoin de connaître un port ;
 - branches Forgejo protégées ;
 - ComfyUI planifiable et sorties cataloguées.
 
@@ -727,6 +839,8 @@ La phase ne ferme pas avec un simple succès Codex.
 - Mattermost, Dify, gateway et adapters ;
 - comptes bots ;
 - approbations humaines ;
+- ouverture depuis le portail ;
+- commandes CLI de gestion ;
 - OpenClaw et Hermes canaris, puis contrat appliqué aux autres agents.
 
 **Porte G12**
@@ -750,6 +864,7 @@ La phase ne ferme pas avec un simple succès Codex.
 
 - période d’observation sans perte ;
 - matrice de parité complète ;
+- matrice d’accès CLI/portail complète ;
 - écarts résolus ou acceptés explicitement ;
 - plan de rollback chronométré.
 
@@ -759,7 +874,9 @@ La phase ne ferme pas avec un simple succès Codex.
 
 - un administrateur ;
 - un projet ;
-- Codex et un agent service ;
+- Codex accessible par `agent codex [projet]` ;
+- une application accessible depuis le portail ;
+- un agent service ;
 - un modèle existant ;
 - un corpus RAG ;
 - services v1 toujours disponibles.
@@ -826,7 +943,8 @@ La refonte est terminée seulement si :
 - la branche d’archive et les sauvegardes sont restaurables ;
 - tous les agents listés ont leur test de parité vert ;
 - toutes les fonctions v1 conservées figurent dans le registre et sont validées ;
-- portail, `sparkctl` et configuration déclarative sont cohérents ;
+- portail, CLI `agent` et configuration déclarative sont cohérents ;
+- chaque agent ou application possède au moins un accès utilisateur testé par CLI ou portail ;
 - le premier démarrage est vide et simple ;
 - LAN, Tailscale optionnel et hors ligne sont documentés et testés ;
 - aucun service non autorisé n’est exposé ;
