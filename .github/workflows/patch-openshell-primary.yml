@@ -1,5 +1,11 @@
-# Temporary workflow retired
+name: Retired temporary workflow
 
-This file is intentionally inert. It was used only to attempt an automated PLAN.md patch on the planning branch.
+on:
+  workflow_dispatch:
 
-It must be removed before the pull request is merged.
+jobs:
+  retired:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Retired temporary workflow; remove before merge."
