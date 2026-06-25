@@ -1,0 +1,313 @@
+name: Promote OpenShell and NemoClaw
+
+on:
+  push:
+    branches:
+      - plan/refonte-v2-collab
+    paths:
+      - .github/workflows/patch-openshell-primary.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: plan/refonte-v2-collab
+          fetch-depth: 0
+
+      - name: Make OpenShell the primary agent runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('PLAN.md')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace(
+              '- extensible vers OpenShell puis Kubernetes sans imposer ces technologies au chemin mono-DGX ;',
+              '- fondée dès le cœur sur OpenShell pour l’exécution des agents, avec Docker comme pilote local et Kubernetes comme évolution de déploiement ;',
+          )
+
+          text = text.replace(
+              'Le plan de contrôle de confiance peut piloter Docker. Aucun autre composant ne reçoit ce privilège.',
+              'Le plan de contrôle de confiance pilote OpenShell et, pour les services de plateforme ou le fallback de migration, Docker. Aucun agent ni composant non fiable ne reçoit directement ces privilèges.',
+          )
+
+          text = text.replace(
+              '- `ollama-gate` expose les API OpenAI `/v1/...` et Ollama d’inférence `/api/...` ;',
+              '- `ollama-gate` expose les API OpenAI `/v1/...` et Ollama d’inférence `/api/...` ;\n- les providers OpenShell `inference.local` et les blueprints NemoClaw routent leurs appels vers `ollama-gate` : ils ne constituent jamais un chemin parallèle vers Ollama ou TensorRT-LLM ;',
+          )
+
+          start = text.index('### 5.7 Sandbox et runtime agents')
+          end = text.index('### 5.8 Ordonnanceur et ressources')
+          replacement = '''### 5.7 OpenShell, NemoClaw et runtime des agents
+
+#### 5.7.1 Décision d’architecture
+
+**OpenShell est le runtime principal et obligatoire des agents en v2.** Il n’est plus traité comme une expérience tardive. Tous les nouveaux adapters et toutes les migrations d’agents visent OpenShell en premier.
+
+La répartition est la suivante :
+
+- **Docker/Compose** exécute les services de confiance de la plateforme : portail, PostgreSQL, reverse proxy, Forgejo, OpenWebUI, ComfyUI, Grafana, Qdrant et services d’exploitation ;
+- **OpenShell** crée, isole, gouverne et observe les sandboxes des agents ;
+- le premier pilote de calcul OpenShell est **Docker**, officiellement supporté pour une gateway locale mono-machine ;
+- **NemoClaw** est le blueprint de référence pour OpenClaw et Hermes, et la source prioritaire des pratiques de durcissement, d’inférence routée, de politiques réseau et de gestion de cycle de vie ;
+- le backend Docker direct `docker-hardened` ne subsiste que comme outil de migration, diagnostic et rollback jusqu’à validation de la parité OpenShell ;
+- Kubernetes devient ultérieurement un pilote OpenShell supplémentaire, sans modifier les contrats utilisateurs ni agents ;
+- le pilote MicroVM OpenShell est évalué après la bascule pour les projets nécessitant une isolation renforcée.
+
+OpenShell supporte Linux `arm64` et son pilote Docker est supporté pour les gateways mono-machine. Ce chemin est donc retenu comme architecture normale de la DGX Spark, pas comme simple preuve de concept.
+
+#### 5.7.2 Contrat `AgentRuntimeAdapter`
+
+L’interface canonique reste indépendante du moteur :
+
+- `capabilities()` ;
+- `prepare()` ;
+- `start()` / `stop()` / `status()` ;
+- `create_session()` / `resume_session()` ;
+- `run_task()` avec streaming ;
+- `cancel()` ;
+- `checkpoint()` / `restore()` lorsque supporté ;
+- `mount_workspace()` ;
+- `inject_secret_reference()` ;
+- `collect_usage()` ;
+- `health()` ;
+- `export_state()` / `import_state()`.
+
+L’implémentation v2 par défaut de ce contrat est `OpenShellAgentRuntime`. Les adapters spécifiques ne peuvent pas contourner OpenShell pour gagner du temps.
+
+#### 5.7.3 Politiques et isolation OpenShell
+
+Chaque agent possède :
+
+- une image ou un blueprint versionné et signé ;
+- une politique de fichiers et montages ;
+- une politique réseau et d’egress ;
+- une politique de processus et d’appels système ;
+- un provider d’inférence routé exclusivement vers `ollama-gate` ;
+- des références de secrets temporaires, jamais des secrets persistants dans le sandbox ;
+- des limites CPU, mémoire, GPU, processus et stockage ;
+- des journaux d’autorisations, refus, outils et consommation ;
+- une procédure d’export/import et de reprise.
+
+Landlock est utilisé en mode `hard_requirement` lorsque le noyau de la DGX et le profil le permettent ; sinon le mode et la dégradation sont explicites, testés et affichés. `seccomp` reste obligatoire.
+
+#### 5.7.4 NemoClaw en production
+
+NemoClaw n’est pas une démonstration annexe. Il devient :
+
+- le blueprint initial d’OpenClaw ;
+- le blueprint initial d’Hermes lorsque ses fonctions CLI, dashboard, mémoire, outils et gateway sont préservées ;
+- la référence de structure pour les politiques réseau, le routage d’inférence et le cycle de vie des agents permanents ;
+- un composant versionné et épinglé, dont les écarts avec notre plateforme sont documentés plutôt que réimplémentés silencieusement.
+
+NemoClaw étant encore annoncé comme projet alpha, son adoption est accompagnée de tests de non-régression, d’un pinning strict et d’un rollback. Son statut alpha n’autorise pas à le reléguer : il impose une validation plus rigoureuse.
+
+#### 5.7.5 Couverture des agents
+
+- Claude Code : politique OpenShell officielle à couverture complète, adaptée à `ollama-gate` ;
+- Codex : image disponible mais politique personnalisée obligatoire avant production ;
+- OpenCode : politique officielle partielle à compléter ;
+- Pi : sandbox OpenShell communautaire dédiée ;
+- Hermes : NemoClaw/OpenShell comme chemin principal ;
+- OpenClaw : NemoClaw/OpenShell comme chemin principal ;
+- KiloCode, VibeStral et Goose : images et politiques OpenShell spécifiques à produire et tester ;
+- OpenHands : service UI conservé, mais toute exécution de code non fiable passe par OpenShell ou un adapter démontré équivalent et approuvé.
+
+#### 5.7.6 Sortie du fallback Docker direct
+
+Le fallback `docker-hardened` direct est désactivé par défaut après la bascule. Il est retiré du chemin normal dès que :
+
+1. tous les agents obligatoires passent leur scénario de parité sous OpenShell ;
+2. les scénarios GPU, réseau, secrets, reprise et hors ligne sont verts ;
+3. OpenClaw et Hermes passent leurs scénarios NemoClaw ;
+4. deux cycles de fonctionnement en ombre ne montrent aucune régression bloquante ;
+5. le rollback vers la v1 reste possible sans ce fallback.
+
+Il ne peut pas devenir un second runtime permanent par inertie.
+
+'''
+          text = text[:start] + replacement + text[end:]
+
+          text = text.replace(
+              '- `docs/agents/` : contrat adapter, guide par runtime et inventaire des interfaces officielles ;',
+              '- `docs/agents/` : contrat adapter, guide par runtime, blueprints OpenShell/NemoClaw, politiques par agent et inventaire des interfaces officielles ;',
+          )
+          text = text.replace(
+              '3. tests Compose statiques et hardening ;',
+              '3. tests Compose, OpenShell, NemoClaw, politiques et hardening ;',
+          )
+          text = text.replace(
+              '2. runtime préparé ;',
+              '2. sandbox OpenShell préparée avec image, politique, provider d’inférence et limites attendues ;',
+          )
+          text = text.replace(
+              '15. cohérence de l’identité et de l’état entre les surfaces multiples retenues.',
+              '15. cohérence de l’identité et de l’état entre les surfaces multiples retenues ;\n16. preuve qu’aucun appel modèle, secret, accès réseau ou montage fichier ne contourne OpenShell et `ollama-gate`.',
+          )
+          text = text.replace(
+              '- scénarios OpenClaw relay/approvals/pièces jointes ;',
+              '- scénarios OpenClaw sous NemoClaw/OpenShell : relay, approvals, pièces jointes et reprise ;',
+          )
+          text = text.replace(
+              '- Hermes CLI + dashboard web + reprise de session ;',
+              '- Hermes sous NemoClaw/OpenShell : CLI, dashboard web, outils, mémoire et reprise de session ;\n- Codex sous OpenShell avec politique personnalisée et refus réseau/fichier testés ;\n- comparaison contrôlée OpenShell contre le fallback Docker direct avant retrait de ce dernier ;',
+          )
+
+          text = text.replace(
+              '- créer ADR architecture/identités/runtime/gateway/réseau/migration ;',
+              '- créer ADR architecture/identités/runtime/gateway/réseau/migration, dont une ADR imposant OpenShell comme runtime principal et NemoClaw comme blueprint de référence ;',
+          )
+          text = text.replace(
+              '- définir OpenAPI, schémas YAML, `AgentRuntimeAdapter`, `SandboxRuntime`, tâche, approval, usage et événement ;',
+              '- définir OpenAPI, schémas YAML, `AgentRuntimeAdapter`, politiques OpenShell, blueprints NemoClaw, tâche, approval, usage et événement ;',
+          )
+          text = text.replace(
+              '- secret broker ;',
+              '- secret broker intégré aux références temporaires OpenShell et aux besoins NemoClaw ;',
+          )
+          text = text.replace(
+              '- egress révisé ;',
+              '- egress révisé et traduit en politiques OpenShell testables ;',
+          )
+          text = text.replace(
+              '- porter `ollama-gate` ;',
+              '- porter `ollama-gate` et le déclarer comme provider d’inférence unique pour OpenShell et NemoClaw ;',
+          )
+
+          start = text.index('### Phase M6 — Sandbox Docker et ordonnanceur')
+          end = text.index('### Phase M7 — Migration des agents CLI')
+          replacement = '''### Phase M6 — OpenShell, NemoClaw et ordonnanceur
+
+**Travaux**
+
+- installer et épingler OpenShell sur la DGX Spark ARM64 ;
+- déployer la gateway OpenShell avec son pilote Docker mono-machine ;
+- implémenter `OpenShellAgentRuntime` comme backend par défaut de `AgentRuntimeAdapter` ;
+- intégrer l’identité, les projets, les workspaces, les références de secrets, l’egress et `ollama-gate` dans les politiques OpenShell ;
+- intégrer NemoClaw comme blueprint de production pour OpenClaw et Hermes ;
+- scheduler, admission, profils, drain, checkpoint et reprise ;
+- quotas utilisateur/projet et estimation des coûts ;
+- builder isolé, signatures, provenance et épinglage des images et blueprints ;
+- valider seccomp, Landlock, réseau, hors ligne, GPU et mémoire unifiée sur la DGX Spark ;
+- conserver un fallback Docker direct uniquement pour migration et rollback, désactivable par feature flag administrateur.
+
+**Porte G6**
+
+- OpenShell est le chemin par défaut de création de toute sandbox agent ;
+- OpenShell et NemoClaw fonctionnent sur ARM64 avec versions épinglées ;
+- aucun socket Docker dans les runtimes non fiables ;
+- aucun appel modèle ne contourne `ollama-gate` ;
+- politiques fichiers, réseau, processus, secrets et inférence testées par autorisations et refus ;
+- scénarios GPU et mémoire unifiée validés ou limitations explicitement bloquantes avant migration ;
+- tâches normales, burst et exclusives validées ;
+- préemption coopérative et force admin testées ;
+- latence interactive protégée ;
+- rollback vers le runtime v1 et fallback Docker direct démontré.
+
+'''
+          text = text[:start] + replacement + text[end:]
+
+          start = text.index('### Phase M7 — Migration des agents CLI')
+          end = text.index('### Phase M8 — Migration d’OpenClaw et OpenHands')
+          replacement = '''### Phase M7 — Migration des agents CLI sous OpenShell
+
+#### Vague 1 : Claude Code et Codex
+
+Claude Code utilise la politique OpenShell officielle comme base. Codex reçoit immédiatement une politique personnalisée complète : le fait que la couverture officielle soit absente n’autorise pas un passage durable en Docker direct. Les deux servent de canaris du contrat `agent <nom> [projet]`.
+
+#### Vague 2 : OpenCode, KiloCode, VibeStral et Hermes
+
+OpenCode complète sa couverture partielle. KiloCode et VibeStral reçoivent leurs images et politiques propres. Hermes est migré via NemoClaw/OpenShell tout en conservant son CLI, son dashboard web natif, son chat navigateur, sa mémoire, ses profils et la connexion Hermes Desktop au même backend.
+
+#### Vague 3 : Pi et Goose
+
+Pi part de la sandbox OpenShell dédiée. Goose reçoit une politique spécifique. Ces modules restent optionnels à l’installation, mais entièrement supportés avant retrait v1.
+
+**Porte G7 par agent**
+
+- import d’état documenté ;
+- image/blueprint et politique OpenShell versionnés ;
+- scénario de parité complet ;
+- ouverture directe par `agent <nom>` ;
+- sélection facultative du projet ;
+- reprise après arrêt ou déconnexion ;
+- aucune régression de workspace ;
+- surfaces web/Desktop officielles retenues testées ;
+- gate, outils, RAG, secrets, quotas et audit validés ;
+- tests négatifs fichiers/réseau/processus/secrets verts ;
+- absence de recours au fallback Docker direct dans le parcours normal.
+
+La phase ne ferme pas avec un simple succès Codex et Claude : tous les agents obligatoires doivent avoir leur chemin OpenShell.
+
+'''
+          text = text[:start] + replacement + text[end:]
+
+          text = text.replace(
+              '**OpenClaw**\n\n- API, gateway, relay, sandbox, approvals, overlays, pièces jointes, skills, mémoire et workspaces ;',
+              '**OpenClaw via NemoClaw/OpenShell**\n\n- NemoClaw est le blueprint de déploiement principal ;\n- API, gateway, relay, sandbox, approvals, overlays, pièces jointes, skills, mémoire et workspaces ;',
+          )
+          text = text.replace(
+              '- UI accessible depuis le portail, conversations, workspace, modèle, outils et persistance ;',
+              '- UI accessible depuis le portail, conversations, workspace, modèle, outils et persistance ;\n- exécution de code et outils non fiables délégués à OpenShell ;',
+          )
+          text = text.replace(
+              '- métriques hôte, conteneurs, GPU, modèles, agents, scheduler, quotas et gateway ;',
+              '- métriques hôte, conteneurs, OpenShell, NemoClaw, politiques, GPU, modèles, agents, scheduler, quotas et gateways ;',
+          )
+          text = text.replace(
+              '- comparaison résultats, latence, ressources, erreurs et audit ;',
+              '- comparaison résultats, latence, ressources, erreurs et audit ;\n- comparaison explicite entre v1/Docker direct et v2/OpenShell, puis extinction progressive du fallback ;\n- exercices NemoClaw dédiés à Hermes et OpenClaw ;',
+          )
+          text = text.replace(
+              '- plan de rollback chronométré.',
+              '- plan de rollback chronométré ;\n- aucun agent obligatoire ne dépend du fallback Docker direct pour son parcours normal.',
+              1,
+          )
+          text = text.replace(
+              '- Codex accessible par `agent codex [projet]` ;',
+              '- Codex accessible par `agent codex [projet]` dans une sandbox OpenShell avec politique personnalisée ;',
+          )
+          text = text.replace(
+              '- Hermes accessible par CLI et dashboard web ;',
+              '- Hermes accessible par CLI et dashboard web depuis son blueprint NemoClaw/OpenShell ;',
+          )
+          text = text.replace(
+              '- un agent service ;',
+              '- OpenClaw déployé par NemoClaw/OpenShell comme agent service ;',
+          )
+          text = text.replace(
+              '- changement des endpoints/launcher ;',
+              '- changement des endpoints/launcher et activation d’OpenShell comme runtime agent par défaut ;',
+          )
+          text = text.replace(
+              '- arrêter les services v1 ;',
+              '- arrêter les services v1 ;\n- désactiver puis retirer le fallback Docker direct des parcours agents après satisfaction des critères de sortie de la section 5.7.6 ;',
+          )
+
+          text = text.replace(
+              '- aucun runtime non fiable ne possède le socket Docker ;',
+              '- aucun runtime non fiable ne possède le socket Docker ;\n- OpenShell est le runtime normal de tous les agents obligatoires ;\n- NemoClaw est le blueprint de production validé pour Hermes et OpenClaw ;\n- le fallback Docker direct est désactivé par défaut et n’est plus requis pour les parcours agents ;',
+          )
+          text = text.replace(
+              '→ M6 sandbox/scheduler',
+              '→ M6 OpenShell/NemoClaw/scheduler',
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/patch-openshell-primary.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'docs(plan): make OpenShell and NemoClaw primary runtimes'
+          git push origin HEAD:plan/refonte-v2-collab
