@@ -1,580 +1,711 @@
-# DGX Spark Agentic Platform v2 — Plan canonique
+# DGX Spark Agentic Platform v2 — Plan stratégique de réécriture et de migration
 
-## 0. Statut et gouvernance
+## 0. Statut, méthode et gouvernance
 
-Ce document remplace l’ancienne roadmap comme plan actif de la plateforme.
+Ce document est le plan actif de la v2. La v1 reste la référence fonctionnelle jusqu’à validation explicite de chaque domaine migré.
 
-Référence v1 conservée :
+Référence v1 :
 
 - branche : `archive/pre-v2-rewrite-2026-06-25`
 - commit : `f76778e342d43fdafaa17e05ad887f6e9853aa7d`
 
-Règles :
+La pull request reste en brouillon tant que les décisions bloquantes de la section 15 ne sont pas closes.
 
-- `PLAN.md` décrit l’architecture, les invariants, les phases et les portes de validation ;
+### 0.1 Vocabulaire de décision
+
+Chaque affirmation structurante doit porter l’un des statuts suivants :
+
+- **DÉCISION** : choix interne sous notre contrôle ;
+- **CIBLE** : direction retenue, soumise à validation technique avant généralisation ;
+- **HYPOTHÈSE** : capacité plausible mais non démontrée ;
+- **BLOQUANT** : point à résoudre avant la phase qui en dépend.
+
+Une hypothèse ne peut pas devenir implicitement une dépendance de production.
+
+### 0.2 Règles de gouvernance
+
+- `PLAN.md` définit le produit, les responsabilités, les contrats, la transition et les portes de validation ;
 - Beads reste l’unique backlog opérationnel ;
-- aucun identifiant Beads n’est inventé ici ;
-- aucune phase n’est close sans tests, documentation et validation de sa porte ;
-- la migration reste réversible jusqu’au retrait explicite de la v1.
+- aucun identifiant Beads n’est inventé dans ce document ;
+- chaque fonctionnalité v1 possède un propriétaire, un test de parité et une décision `conserver`, `remplacer`, `reconstruire` ou `retirer` ;
+- `retirer` exige une décision humaine documentée ;
+- toute dépendance externe est épinglée par version ou digest et entourée d’un adapter ;
+- aucune bascule ne partage en écriture un même état entre v1 et v2 ;
+- la restauration est testée avant la migration, pas après l’incident.
 
-## 1. Objectif
+## 1. Contrat produit
 
-Transformer la stack actuelle en plateforme locale multi-utilisateur et multi-agent :
+La v2 doit rester exploitable par une petite équipe et administrable par une personne compétente sans devoir maintenir une constellation de microservices artisanaux.
 
-- simple à installer, utiliser, mettre à jour et retirer ;
-- adaptée à une DGX Spark de développement ;
-- accessible en local et sur le réseau local avec authentification ;
-- utilisable hors Internet pour toutes les fonctions locales ;
-- capable de gérer environ trente identités d’agents persistantes avec runtimes à la demande ;
-- capable de planifier CPU, mémoire unifiée, GPU et stockage ;
-- conservant les agents, applications, données et parcours v1 ;
-- utilisant **OpenShell comme runtime principal des agents** ;
-- utilisant **NemoClaw comme blueprint de référence pour Hermes et OpenClaw** ;
-- utilisant Docker/Compose pour les services de confiance et comme pilote local d’OpenShell ;
-- préparée à utiliser Kubernetes comme pilote OpenShell futur.
+### 1.1 Expérience attendue
 
-## 2. Invariants de réussite
+- l’utilisateur choisit d’abord un agent, comme un collaborateur permanent ;
+- le projet est un contexte facultatif de travail, pas le point d’entrée principal ;
+- chaque agent ou application est accessible par CLI, portail web, ou les deux ;
+- l’utilisateur ne manipule ni Docker, ni OpenShell, ni les ports internes ;
+- les interfaces officielles utiles sont préservées : terminal, dashboard web, Desktop, éditeur ou messagerie ;
+- les droits et l’état restent cohérents entre les surfaces d’un même agent ;
+- la plateforme fonctionne localement et conserve un mode hors ligne explicite ;
+- aucune mise à jour, suppression de données ou téléchargement lourd n’est silencieux.
 
-La bascule v2 exige :
+### 1.2 Principes d’implémentation
 
-1. snapshot v1 restauré avec succès ;
-2. parité fonctionnelle de chaque fonction conservée ;
-3. parité testée de chaque agent ;
-4. même API et même état pour portail, CLI `agent` et configuration déclarative ;
-5. aucun agent ni service non fiable avec accès direct au socket Docker ;
-6. OpenShell comme chemin normal de tous les agents obligatoires ;
-7. NemoClaw validé pour Hermes et OpenClaw ;
-8. `ollama-gate` comme seul chemin vers Ollama, TensorRT-LLM ou un fournisseur distant ;
-9. modèles réutilisés sans duplication inutile ;
-10. workspaces, dépôts, états, mémoires et catalogues migrés ou explicitement régénérables ;
-11. sauvegarde, restauration, mode LAN, hors ligne et rollback validés ;
-12. documentation alignée avec le déploiement réel ;
-13. approbation humaine de la bascule.
+- préserver les **capacités**, pas nécessairement les implémentations v1 ;
+- préférer un composant amont mature à une réécriture locale lorsque son contrat est réellement couvert ;
+- éviter les doubles sources de vérité ;
+- commencer par un monolithe modulaire de contrôle, pas par une architecture distribuée ;
+- livrer des parcours verticaux utilisables avant les fonctions avancées ;
+- garder les adapters minces et testables ;
+- faire de la compatibilité v1 une fonctionnalité transitoire explicite.
 
-## 3. Préservation de la v1
+## 2. Registre obligatoire des capacités v1
 
-Avant tout code v2 :
+La v2 doit générer et maintenir un registre de parité à partir de `agent --help`, des fichiers Compose, des répertoires persistants et des tests existants.
 
-- créer le tag `v1-pre-v2-migration` ;
-- sauvegarder Compose effectif, images, digests, bases, volumes, workspaces, dépôts, états agents, Forgejo, OpenWebUI, OpenHands, OpenClaw, RAG et observabilité ;
-- sauvegarder les secrets dans une archive chiffrée séparée ;
-- cataloguer modèles et gros jeux de données sans les recopier ;
-- restaurer la v1 dans une racine isolée ;
-- exécuter `doctor`, un appel modèle, un agent CLI et les applications critiques ;
-- bloquer la suite si la restauration n’est pas reproductible.
+Le registre couvre au minimum :
 
-Deux racines sont conservées pendant la transition :
+### 2.1 Exploitation
 
-- `V1_ROOT` pour la v1 ;
-- `SPARK_ROOT` pour la v2.
+- profil `rootless-dev` et validation `strict-prod` ;
+- onboarding, prérequis, premier démarrage ;
+- démarrage et arrêt par stack, service et cible ;
+- `ls`, `status`, `ps`, logs et diagnostic ;
+- `doctor` et suites de tests ;
+- création, test et nettoyage de machine virtuelle de validation ;
+- sauvegarde, liste et restauration ;
+- nettoyage et oubli sélectif ;
+- mise à jour, snapshots de release et rollback ;
+- configuration réseau, tunnels et accès distants ;
+- contrôle d’horloge GPU et diagnostics matériels.
 
-## 4. Fonctions et agents à préserver
+### 2.2 Agents et applications
 
-### 4.1 Services fondamentaux
-
-| Fonction | Exigence v2 |
-|---|---|
-| Ollama | interne, jamais exposé directement |
-| `ollama-gate` | passerelle OpenAI + Ollama, identités, quotas, priorité, audit |
-| TensorRT-LLM | backend interne optionnel |
-| routage local/distant | explicite, audité, sans fallback silencieux |
-| modèles globaux | dédupliqués, aucune suppression automatique |
-| fonctionnement hors ligne | obligatoire |
-| egress | gouverné par politiques OpenShell et contrôles plateforme |
-
-### 4.2 Agents
-
-| Agent | Runtime cible | Exigence de parité |
-|---|---|---|
-| Claude Code | OpenShell + CLI | politique officielle adaptée à `ollama-gate`, dépôt, tests, reprise |
-| Codex | OpenShell + CLI | politique personnalisée complète, dépôt, tests, reprise, checkpoint |
-| OpenCode | OpenShell + CLI | compléter la couverture officielle partielle |
-| KiloCode | OpenShell + CLI | image et politique spécifiques |
-| VibeStral | OpenShell + CLI | image et politique spécifiques |
-| Hermes | NemoClaw/OpenShell + CLI + dashboard | mémoire, profils, sessions, dashboard, Desktop distant |
-| Pi | sandbox OpenShell dédiée + CLI | profil optionnel mais supporté |
-| Goose | OpenShell + CLI | politique spécifique, compaction, reprise |
-| OpenClaw | NemoClaw/OpenShell + service/API | relay, approvals, pièces jointes, skills, mémoire, reprise |
-| OpenHands | UI/service, code non fiable via OpenShell | UI, outils, persistance, aucun socket Docker |
-| futurs agents | manifeste OpenShell déclaratif | image, politique, outils, permissions, tests automatiques |
-
-### 4.3 Applications et interfaces
-
-Le portail doit donner accès aux interfaces natives autorisées :
-
-- OpenWebUI ;
-- Hermes Web Dashboard et son onglet Chat ;
-- Hermes Desktop comme client optionnel du même backend distant ;
+- Claude Code, Codex, OpenCode, KiloCode, VibeStral, Hermes, Pi, Goose ;
+- OpenClaw, ses approvals, politiques, relay, pièces jointes et sandboxes ;
 - OpenHands ;
-- ComfyUI ;
+- OpenWebUI ;
+- ComfyUI et installation Flux ;
 - Forgejo ;
-- Grafana ;
-- DGX Dashboard NVIDIA ;
-- JupyterLab intégré DGX ;
-- plus tard Mattermost et Dify.
+- observabilité ;
+- modules optionnels.
 
-Aucun utilisateur ne doit connaître un port interne.
+### 2.3 Modèles et données
 
-## 5. Architecture cible
+- modes local, hybride et distant ;
+- sélection Ollama, TensorRT-LLM ou fournisseur distant ;
+- contexte et compaction ;
+- benchmark, préchargement, chargement et déchargement des modèles ;
+- surveillance de dérive Ollama ;
+- liens et droits du store de modèles ;
+- indexation RAG, suivi de tâche, configuration et backend lexical ;
+- test de dépôt de bout en bout pour chaque agent.
 
-### 5.1 Accès utilisateur
+### 2.4 Contrat de compatibilité CLI
 
-Chaque composant possède au moins un accès clair :
+**DÉCISION :** le binaire `agent` reste la façade utilisateur pendant toute la transition.
 
-- terminal via `agent` ;
-- portail web ;
-- parfois les deux ;
-- éventuellement Desktop, extension d’éditeur, mobile ou messagerie comme surface supplémentaire.
+Chaque commande v1 reçoit :
 
-Exemples :
+- un identifiant de capacité stable ;
+- une implémentation `v1`, `v2` ou `hybride` ;
+- les mêmes codes de sortie utiles ;
+- un format JSON stable lorsqu’il existe ;
+- un test de compatibilité ;
+- une date et une condition de retrait si elle devient obsolète.
+
+Le routage v1/v2 est activable par utilisateur, agent, projet et capacité. Aucun script existant ne doit casser simplement parce qu’une fonction a migré.
+
+## 3. Architecture générale
+
+### 3.1 Plan de contrôle
+
+**DÉCISION :** démarrer avec un monolithe modulaire :
+
+- API FastAPI/Python ;
+- worker séparé pour les tâches longues ;
+- PostgreSQL ;
+- frontend React ou Next.js ;
+- REST versionné pour les commandes ;
+- Server-Sent Events ou WebSocket pour les flux ;
+- table d’outbox PostgreSQL pour les événements, sans ajouter un bus distribué au départ ;
+- reconciler comparant état désiré et état observé ;
+- identifiants de corrélation et clés d’idempotence.
+
+Le plan de contrôle ne réimplémente pas les bases internes de Forgejo, OpenWebUI, OpenShell ou Qdrant. Il conserve leurs références, l’état désiré, les droits et une projection de leur état observé.
+
+### 3.2 Zones de confiance
+
+| Niveau | Exemples | Politique |
+|---|---|---|
+| Contrôle de confiance | portail, API, scheduler, broker de modèles, courtier de secrets | accès privilégié minimal, audit complet |
+| Services gérés | PostgreSQL, Forgejo, Grafana, Qdrant, reverse proxy | Docker/Compose durci, réseau interne |
+| Applications extensibles | OpenWebUI avec extensions, ComfyUI et custom nodes, JupyterLab | isolation renforcée, droits minimaux, aucune socket Docker |
+| Exécution de code | agents, tâches OpenHands, outils autonomes | sandbox OpenShell cible |
+| Administration de rupture | Portainer, shell hôte, OpenShell TUI direct | administrateur, réauthentification, audit, non visible par défaut |
+
+Une application n’est pas considérée « de confiance » simplement parce qu’elle possède une interface web.
+
+### 3.3 Déploiement
+
+- Docker/Compose reste le socle des services gérés sur la DGX Spark ;
+- OpenShell utilise initialement son pilote Docker pour les sandboxes ;
+- Kubernetes n’est pas requis pour la v2 mono-machine ;
+- MicroVM et Kubernetes restent des adapters futurs, sans modifier les contrats de haut niveau ;
+- aucune fonctionnalité utilisateur ne dépend directement d’un nom de conteneur.
+
+## 4. Modèle d’état et sources de vérité
+
+La viabilité dépend d’une propriété claire de chaque donnée.
+
+| Domaine | Source de vérité | Réplique ou projection |
+|---|---|---|
+| utilisateurs, rôles, projets, délégations | PostgreSQL du plan de contrôle | caches du portail |
+| définitions d’agents et surfaces | PostgreSQL + manifestes versionnés | OpenShell/NemoClaw |
+| état désiré d’un runtime | plan de contrôle | reconciler |
+| état observé de sandbox | OpenShell | projection dans PostgreSQL |
+| conversation et session native | stockage de l’agent concerné | index de recherche facultatif |
+| dépôts et branches | Forgejo/Git | références dans le plan de contrôle |
+| fichiers de projet | workspace persistant | sandbox montée ou synchronisée |
+| secrets | SecretStore canonique | providers OpenShell ou fichiers temporaires de service |
+| catalogue de modèles et politiques | plan de contrôle | broker de modèles |
+| fichiers de modèles | store global sur disque | index du catalogue |
+| sources documentaires | emplacement d’origine | catalogue et index RAG |
+| embeddings et recherche vectorielle | Qdrant, régénérable | métadonnées dans PostgreSQL |
+| logs | Loki ou stockage structuré retenu | liens et résumés dans PostgreSQL |
+| métriques | Prometheus | tableaux de bord Grafana |
+| sauvegardes | manifeste de sauvegarde | exports cohérents de chaque store |
+
+**Invariant :** aucune donnée métier mutable ne possède deux sources de vérité actives.
+
+## 5. Identité d’agent, projet et session
+
+### 5.1 Objets distincts
+
+- **AgentDefinition** : type d’agent, image, capacités, surfaces et politique par défaut ;
+- **AgentIdentity** : collaborateur logique persistant visible par l’utilisateur ;
+- **RuntimeContext** : exécution d’un agent pour un utilisateur et un contexte ;
+- **Session** : conversation ou tâche native de l’agent ;
+- **Project** : droits, workspace, secrets, modèles et collections associés.
+
+### 5.2 Clé de runtime
+
+**DÉCISION :** un contexte d’exécution est identifié par :
+
+```text
+utilisateur + identité d’agent + projet
+```
+
+Le contexte sans projet est un contexte personnel explicite.
+
+OpenShell verrouille les politiques fichiers et processus à la création de la sandbox. Par conséquent, changer de projet ne remonte pas un nouveau workspace dans une sandbox existante. Le CLI et le portail se reconnectent à un autre `RuntimeContext`, créé ou repris.
 
 ```bash
 agent codex
 agent codex ARTANY
-agent claude ARTANY
-agent hermes SEGMENTATION-RTMRI
-```
-
-L’utilisateur choisit d’abord l’agent. Le projet est un contexte de travail facultatif. Le changement de projet ne change pas d’agent :
-
-```bash
 agent project SEGMENTATION-RTMRI
 ```
 
-La session survit à une déconnexion SSH. OpenShell, Docker, les identifiants de sandbox et les ports sont masqués.
+Le dernier exemple change le contexte actif, pas l’identité logique de Codex.
 
-### 5.2 Portail
+### 5.3 Persistance réelle
 
-Le portail est le point d’entrée web unique et authentifié. Il propose :
-
-- agents, tâches et approbations ;
-- projets et droits ;
-- modèles et quotas ;
-- calendrier et ressources ;
-- catalogue et RAG ;
-- sauvegardes, mises à jour et rollback ;
-- journaux, alertes et rapports ;
-- applications web natives.
+Trois niveaux sont distingués :
 
-Entrées obligatoires :
+1. **reconnexion chaude** : la sandbox et le processus sont encore vivants ;
+2. **reprise froide** : la sandbox est recréée depuis image, manifeste et politique épinglés, puis rattache son état persistant ;
+3. **reprise native** : l’agent reprend une session grâce à sa propre fonction de reprise.
 
-- Hermes Dashboard avec accès direct au Chat ;
-- DGX Dashboard NVIDIA, administrateurs par défaut ;
-- JupyterLab DGX selon l’utilisateur ;
-- Grafana ;
-- OpenWebUI, OpenHands, ComfyUI et Forgejo.
-
-Le DGX Dashboard et JupyterLab restent derrière tunnel sécurisé, NVIDIA Sync ou reverse proxy strict. Le port `11000` et les ports Jupyter ne sont pas exposés directement au LAN.
+Un checkpoint mémoire générique n’est pas supposé. Il reste une capacité facultative par adapter. Les tâches non reprenables sont marquées comme telles et ne sont pas préemptées de force hors décision administrateur.
 
-### 5.3 Plan de contrôle
+### 5.4 Séparation des données
 
-Socle :
+Chaque contexte dispose de :
 
-- FastAPI/Python ;
-- PostgreSQL ;
-- workers Python ;
-- React ou Next.js ;
-- REST pour les opérations ;
-- WebSocket ou Server-Sent Events pour les événements ;
-- CLI `agent` comme client léger de la même API ;
-- YAML déclaratif validé par schéma ;
-- migrations versionnées et journal d’événements.
+- workspace projet persistant ;
+- état agent-projet persistant ;
+- scratch runtime éphémère ;
+- préférences utilisateur-agent limitées et contrôlées ;
+- références de secrets, jamais les secrets eux-mêmes.
 
-Le plan de contrôle de confiance pilote OpenShell et, uniquement pour les services de plateforme ou le fallback de migration, Docker.
+Un HOME mutable partagé entre projets est interdit par défaut afin d’éviter les fuites de contexte.
 
-### 5.4 Réseau et identité
+## 6. Broker de modèles et inférence
 
-- rôles : administrateur principal, utilisateur de confiance, standard, invité ;
-- agents comme identités persistantes ;
-- délégation explicite lorsqu’un agent agit au nom d’un humain ;
-- niveaux : commun, projet, privé utilisateur, secret ;
-- profils réseau : local, LAN, Tailscale optionnel, HTTPS avancé ;
-- aucun bind wildcard ;
-- aucune base, gateway agent, sandbox ou backend modèle exposé directement ;
-- Tailscale reste sur l’hôte.
+### 6.1 Contrat, pas implémentation imposée
 
-### 5.5 Egress
+**DÉCISION :** la capacité s’appelle `ModelBroker`. `ollama-gate` est l’adapter de compatibilité v1, pas une implémentation éternelle imposée.
 
-Par défaut :
+Le choix entre évolution du gate actuel et adoption d’un gateway existant est décidé après un benchmark de contrat.
 
-- HTTPS autorisé dans le scope ;
-- blocage réseaux privés non autorisés, métadonnées cloud, loopback hôte et destinations malveillantes ;
-- DNS et egress audités ;
-- contenu Web considéré comme non fiable ;
-- aucune instruction Web ne peut accorder un droit ;
-- override humain temporaire et tracé ;
-- mode allowlist strict pour projets sensibles ;
-- traduction en politiques OpenShell testables.
+### 6.2 Responsabilités du ModelBroker
 
-### 5.6 Modèles
+- API OpenAI nécessaire aux clients ;
+- API Ollama nécessaire à la compatibilité ;
+- embeddings ;
+- catalogue et alias de modèles ;
+- routage Ollama, TensorRT-LLM, vLLM ou fournisseur distant autorisé ;
+- disponibilité et santé des backends ;
+- streaming homogène ;
+- identité utilisateur/agent/projet/tâche vérifiée ;
+- quotas, priorité, attribution d’usage et coûts ;
+- décision explicite de fallback ;
+- admission avec le scheduler avant chargement ou bascule GPU.
 
-- `ollama-gate` expose les API OpenAI `/v1/...` et Ollama `/api/...` ;
-- OpenShell `inference.local` et NemoClaw pointent exclusivement vers `ollama-gate` ;
-- embeddings : `/api/embed` avec `input`, fallback `/api/embeddings` avec `prompt` ;
-- préférence initiale `nomic-embed-text` ;
-- téléchargement, import, conversion et suppression réservés à l’administration avec confirmation ;
-- aucune suppression automatique.
+### 6.3 Responsabilités d’OpenShell
 
-### 5.7 OpenShell et NemoClaw
+OpenShell gère pour les agents :
 
-#### 5.7.1 Décision
+- politique réseau du sandbox ;
+- autorisation d’atteindre le ModelBroker ;
+- injection d’un jeton court ou d’un placeholder de credential ;
+- blocage des accès directs aux backends modèles ;
+- journalisation des autorisations et refus réseau.
 
-**OpenShell est obligatoire et prioritaire pour les agents dès M6.** Il n’est plus une expérimentation tardive.
+OpenShell ne possède pas le catalogue global, les quotas projet, le scheduler GPU ni le choix dynamique multi-backend de la plateforme.
 
-Répartition :
+### 6.4 Usage de `inference.local`
 
-- Docker/Compose exécute les services de confiance ;
-- OpenShell crée, isole, gouverne et observe les agents ;
-- le premier pilote OpenShell est Docker, officiellement supporté en mono-machine ;
-- NemoClaw est le blueprint initial de Hermes et OpenClaw ;
-- Kubernetes devient un pilote OpenShell futur ;
-- MicroVM est évalué après bascule pour les projets sensibles ;
-- Docker direct `docker-hardened` ne sert qu’à la migration, au diagnostic et au rollback.
-
-OpenShell supporte Linux ARM64. L’architecture DGX Spark est donc une cible normale, pas une preuve de concept.
+OpenShell configure actuellement `inference.local` au niveau de la gateway avec un provider et un modèle appliqués aux sandboxes. Il peut réécrire le modèle demandé.
 
-#### 5.7.2 Contrat agent
+**DÉCISION :**
 
-`AgentRuntimeAdapter` expose au minimum :
+- utiliser `inference.local` seulement pour un profil volontairement à modèle fixe ;
+- pour le choix dynamique, autoriser le sandbox à joindre le ModelBroker interne avec un jeton court injecté par OpenShell ;
+- interdire l’accès direct à Ollama, TensorRT-LLM, vLLM et fournisseurs distants ;
+- tester que le modèle demandé et l’identité arrivent intacts au ModelBroker.
 
-- capacités ;
-- préparation ;
-- démarrage, arrêt, état ;
-- création et reprise de session ;
-- exécution avec streaming ;
-- annulation ;
-- checkpoint et restauration si disponibles ;
-- montage workspace ;
-- références de secrets ;
-- usage, santé, export et import d’état.
+### 6.5 Jeton d’identité
 
-L’implémentation par défaut est `OpenShellAgentRuntime`. Aucun adapter ne contourne OpenShell pour aller plus vite.
+Le plan de contrôle émet un jeton court signé contenant :
 
-#### 5.7.3 Politiques OpenShell
-
-Chaque agent possède :
-
-- image ou blueprint versionné et signé ;
-- politique fichiers et montages ;
-- politique réseau ;
-- politique processus et appels système ;
-- provider d’inférence vers `ollama-gate` ;
-- secrets temporaires ;
-- limites CPU, mémoire, GPU, processus et stockage ;
-- journaux d’autorisations et refus ;
-- export/import et reprise.
+- utilisateur ;
+- agent ;
+- projet ;
+- tâche ou session ;
+- scopes modèles ;
+- expiration ;
+- identifiant de corrélation.
 
-`seccomp` est obligatoire. Landlock utilise `hard_requirement` lorsque le noyau et le profil le permettent ; toute dégradation est explicite et testée.
+Le ModelBroker ne fait jamais confiance à des en-têtes d’identité librement définis par le client.
 
-#### 5.7.4 NemoClaw
+## 7. OpenShell et NemoClaw
 
-NemoClaw devient :
+### 7.1 Positionnement
 
-- blueprint de production d’OpenClaw ;
-- blueprint initial d’Hermes si toutes ses fonctions CLI, dashboard, mémoire, outils et gateway sont préservées ;
-- référence de structure pour réseau, inférence routée, durcissement et cycle de vie des agents permanents.
-
-Son statut alpha impose versions épinglées, tests renforcés et rollback ; il ne justifie pas son exclusion du chemin principal.
-
-#### 5.7.5 Couverture
+**CIBLE :** OpenShell est le runtime principal des agents.
 
-- Claude Code : couverture OpenShell complète comme base ;
-- Codex : image disponible, politique personnalisée obligatoire ;
-- OpenCode : couverture partielle à compléter ;
-- Pi : sandbox dédiée ;
-- Hermes et OpenClaw : NemoClaw/OpenShell ;
-- KiloCode, VibeStral et Goose : images et politiques spécifiques ;
-- OpenHands : exécution non fiable via OpenShell.
+**DÉCISION :** OpenShell reste derrière `AgentRuntimeAdapter`. Le plan de contrôle est la frontière multi-utilisateur et le seul client normal de la gateway OpenShell. Les utilisateurs ne reçoivent pas un accès direct à son API.
 
-#### 5.7.6 Retrait du fallback Docker direct
-
-Le fallback est désactivé par défaut après bascule et retiré lorsque :
-
-1. tous les agents obligatoires passent sous OpenShell ;
-2. GPU, réseau, secrets, reprise et hors ligne sont verts ;
-3. Hermes et OpenClaw passent sous NemoClaw ;
-4. deux cycles de fonctionnement en ombre sont concluants ;
-5. le rollback v1 ne dépend plus du fallback.
-
-Il ne peut pas devenir un second runtime permanent par inertie.
-
-### 5.8 Ordonnanceur
-
-- priorités interactives ;
-- modes normal, burst, exclusif ;
-- quotas utilisateur/projet ;
-- tâches checkpointables, pausables ou non préemptibles ;
-- drain coopératif ;
-- décision administrateur après délai de grâce ;
-- admission selon CPU, mémoire, GPU, stockage et services à préserver ;
-- création et destruction des sandboxes via OpenShell.
-
-### 5.9 Secrets
-
-- courtier local ;
-- stockage chiffré ;
-- injection temporaire ;
-- aucun secret dans image, workspace, mémoire, RAG ou logs ;
-- scopes utilisateur, équipe et projet ;
-- rotation et propriétaire ;
-- délégation et audit du mandant réel.
-
-### 5.10 Catalogue, mémoire et RAG
-
-- portail initial vide ;
-- sources déclarées par projet ;
-- découverte sans copie ;
-- provenance, droits et confidentialité ;
-- première indexation validée par un humain ;
-- réindexation automatique après modification autorisée ;
-- déduplication des chunks et embeddings compatibles ;
-- mémoire globale d’agent avec confidentialité par projet ;
-- toute réponse RAG affiche sources et passages exacts.
-
-### 5.11 Mattermost et Dify
-
-Deuxième incrément après stabilisation du cœur :
-
-- Mattermost pour la collaboration humains-agents ;
-- Dify pour workflows et validations ;
-- compte bot distinct par agent ;
-- OpenClaw et Hermes comme canaris ;
-- chaque tâche agent passe par OpenShell/NemoClaw ;
-- aucun accès direct Docker ou modèle ;
-- anti-boucle, déduplication et corrélation complète.
+La topologie initiale visée est une gateway interne par hôte DGX. Une gateway séparée par domaine de sécurité reste possible si les tests montrent que l’isolation logique est insuffisante.
 
-## 6. Migration des données
+### 7.2 Limites à ne pas masquer
 
-Pour chaque agent :
+- OpenShell est encore annoncé en alpha et en mode initial mono-utilisateur ;
+- les politiques fichiers et processus sont statiques à la création ;
+- le scheduler et les réservations globales ne sont pas fournis par OpenShell ;
+- les limites CPU et mémoire sont appliquées par le pilote, mais la planification globale reste notre responsabilité ;
+- le GPU et ses API évoluent encore ;
+- aucune fonction générique de checkpoint mémoire n’est considérée acquise ;
+- les upgrades alpha peuvent exiger de recréer les sandboxes.
 
-1. arrêt propre ou checkpoint ;
-2. export manifeste, versions et état ;
-3. workspace v1 monté en lecture seule ;
-4. image, blueprint et politique OpenShell produits ;
-5. configuration et secrets importés par références ;
-6. scénario de parité sous OpenShell ;
-7. source v1 conservée jusqu’à validation ;
-8. rapport d’import produit.
+Ces limites sont intégrées dans les contrats et les tests, pas reléguées dans une note.
 
-Modèles : store v1 en lecture seule pendant l’ombre, comparaison par empreinte, aucune copie si identique, transfert explicite du rôle d’écriture après bascule.
+### 7.3 AgentRuntimeAdapter
 
-RAG : snapshots officiels si compatibles, sinon réindexation depuis les sources cataloguées avec conservation des droits et provenance.
+Le contrat couvre :
 
-## 7. Documentation
+- capacités réellement disponibles ;
+- création, connexion, état, arrêt et suppression ;
+- exécution interactive et non interactive ;
+- service web exposé par forwarding contrôlé ;
+- création avec image, politique, providers, ressources et labels ;
+- export du manifeste reproductible ;
+- collecte d’état et logs ;
+- suppression des credentials ;
+- reprise chaude et froide ;
+- checkpoint uniquement si supporté.
 
-À réécrire ou créer :
+### 7.4 NemoClaw
 
-- README FR/EN ;
-- `AGENTS.md` ;
-- architecture et frontières de confiance ;
-- ADR, dont OpenShell obligatoire et NemoClaw de référence ;
-- migration et retrait du fallback Docker direct ;
-- runbooks OpenShell, NemoClaw, agents, modèles, incidents et restauration ;
-- sécurité, politiques, secrets, egress et supply chain ;
-- guide portail et interfaces ;
-- guide par agent avec image, blueprint et politique ;
-- API, opérations et changelog.
+**CIBLE :**
 
-La documentation est exécutable : commandes testées, liens vérifiés, OpenAPI générée, schémas validés, matrices ports/volumes/secrets/politiques générées.
+- NemoClaw est le chemin privilégié pour OpenClaw ;
+- NemoClaw est évalué en priorité pour Hermes.
 
-## 8. Tests
+Hermes est officiellement indiqué comme testé avec limitations et sans affirmation de parité de production avec OpenClaw. La bascule Hermes exige donc un test complet du dashboard, des sessions, de la mémoire, des outils, des modèles et des messageries.
 
-### 8.1 Niveaux
+Si NemoClaw ne préserve pas le contrat Hermes, la solution n’est ni de perdre des fonctions ni de contourner OpenShell : un blueprint Hermes spécifique est maintenu derrière le même adapter.
 
-- contrats et schémas ;
-- unitaires ;
-- Compose, OpenShell, NemoClaw et politiques ;
-- composants et intégration ;
-- agent par agent ;
-- bout en bout ;
-- migration et import ;
-- backup/restore ;
-- performance, admission, panne et rollback ;
-- documentation et parcours utilisateur.
+## 8. Applications, portail et surfaces
 
-### 8.2 Scénario commun par agent
+### 8.1 Portail agent-first
 
-1. identité et projet ;
-2. sandbox OpenShell avec image, politique, provider et limites ;
-3. dépôt Forgejo ;
-4. branche agent, jamais `main` ;
-5. modification multi-fichiers ;
-6. tests ;
-7. modèle uniquement via OpenShell puis `ollama-gate` ;
-8. outils et RAG selon droits ;
-9. approbation d’une action sensible ;
-10. usage et coûts ;
-11. arrêt/checkpoint et reprise ;
-12. publication ;
-13. audit sans secret ;
-14. cohérence des interfaces ;
-15. tests négatifs fichiers, réseau, processus et secrets.
+Accueil : annuaire des agents visibles par l’utilisateur.
 
-### 8.3 Canaris obligatoires
+Page agent :
 
-- Codex avec politique OpenShell personnalisée ;
-- Claude Code sous OpenShell ;
-- OpenCode avec couverture complétée ;
-- Hermes sous NemoClaw/OpenShell, CLI et dashboard ;
-- OpenClaw sous NemoClaw/OpenShell ;
-- OpenHands avec code non fiable dans OpenShell ;
-- comparaison OpenShell contre fallback Docker avant retrait ;
-- OpenWebUI, ComfyUI, Forgejo, RAG, DGX Dashboard et JupyterLab ;
-- update/rollback et restauration complète.
+- identité, rôle et état ;
+- projet actif ;
+- ouvrir/reprendre une session ;
+- changer de contexte ;
+- ouvrir l’interface web native si elle existe ;
+- commande CLI équivalente ;
+- tâches, approvals, usage et incidents récents.
 
-## 9. Phases et portes
+Sections séparées :
 
-### M0 — Gel et sauvegarde
+- Applications ;
+- Projets ;
+- Modèles ;
+- Ressources ;
+- Données et RAG ;
+- Système et administration.
 
-Archive, tag, snapshot, secrets chiffrés et restauration v1.
+### 8.2 Surfaces natives
 
-**G0 :** restauration v1 complète et rapport validé.
+- Hermes Dashboard est exposé par le mécanisme de service OpenShell ou un reverse proxy validé ;
+- Hermes Desktop se connecte au même backend si le flux distant est officiellement supporté et testé ;
+- DGX Dashboard et JupyterLab sont lancés par un chemin supporté : lien, tunnel ou proxy validé ;
+- aucune intégration par iframe ou réécriture de sous-chemin n’est supposée fonctionner ;
+- Grafana, Forgejo, OpenWebUI, OpenHands et ComfyUI utilisent leurs interfaces natives derrière authentification et droits.
 
-### M1 — Inventaire et parité
+### 8.3 Applications exécutant du code
 
-Inventorier fonctions, interfaces, données, agents, images et couverture OpenShell. Décider pour chaque agent : politique officielle, politique à compléter, blueprint NemoClaw ou politique spécifique.
+- les tâches OpenHands s’exécutent dans OpenShell ou un runtime équivalent validé ;
+- ComfyUI avec custom nodes reçoit une politique et un réseau restrictifs ;
+- JupyterLab n’est pas assimilé à une simple page de dashboard ;
+- Portainer reste une fonction de rupture, administrateur uniquement, désactivée par défaut.
 
-**G1 :** aucun agent ni composant sans propriétaire, accès, runtime et test.
+## 9. Secrets
 
-### M2 — Contrats et documentation avant code
+**DÉCISION :** un seul `SecretStore` canonique.
 
-ADR OpenShell/NemoClaw, API, schémas, contrat agent, politiques, blueprints et documentation initiale.
+Le SecretStore assure :
 
-**G2 :** contrats testés et matrices complètes.
+- chiffrement au repos ;
+- séparation utilisateur, équipe et projet ;
+- rotation et expiration ;
+- journalisation des accès ;
+- absence de valeur secrète dans PostgreSQL, logs, RAG ou mémoire agent.
 
-### M3 — Plan de contrôle
+Les providers OpenShell sont un mécanisme de livraison et de rotation dans les sandboxes, pas une seconde source de vérité. Les services Docker reçoivent des fichiers temporaires ou secrets montés en lecture seule.
 
-FastAPI, PostgreSQL, workers, portail vide, CLI `agent`, état et événements communs.
+Le choix technique du SecretStore est une décision bloquante : solution locale chiffrée simple ou produit dédié, évalués selon restauration, rotation, mode hors ligne et charge d’exploitation.
 
-**G3 :** portail, CLI et YAML cohérents ; backup de la base.
+## 10. Scheduler et ressources
 
-### M4 — Identités et sécurité
+### 10.1 Responsabilité
 
-Rôles, projets, délégations, courtier de secrets, réseau, egress et politiques OpenShell.
+Le scheduler du plan de contrôle possède :
 
-**G4 :** séparation des droits, refus testés, aucun secret exposé.
+- file d’attente et priorité ;
+- réservations ;
+- quotas utilisateurs et projets ;
+- admission CPU, mémoire, GPU et stockage ;
+- politiques normal, burst et exclusif ;
+- drain et délais de grâce ;
+- coordination avec le ModelBroker et les services GPU.
 
-### M5 — Modèles
+OpenShell applique les limites demandées au sandbox mais ne remplace pas ce scheduler.
 
-`ollama-gate`, providers OpenShell/NemoClaw, catalogue, import modèles, TensorRT-LLM optionnel.
+### 10.2 Stratégie progressive
 
-**G5 :** aucun contournement de `ollama-gate`, aucune exposition `11434`.
+1. admission simple et limites fixes ;
+2. métriques et refus explicites ;
+3. priorités et files ;
+4. réservations et calendrier ;
+5. préemption coopérative ;
+6. optimisation adaptative.
 
-### M6 — OpenShell, NemoClaw et scheduler
+Les fonctions avancées ne bloquent pas le premier parcours Codex, mais aucune promesse de préemption n’est faite avant la reprise réelle des tâches.
 
-- OpenShell épinglé sur DGX Spark ARM64 ;
-- gateway avec pilote Docker ;
-- `OpenShellAgentRuntime` par défaut ;
-- NemoClaw intégré pour Hermes et OpenClaw ;
-- politiques identité, workspaces, secrets, egress et inférence ;
-- scheduler, quotas, checkpoint, GPU et mémoire unifiée ;
-- fallback Docker direct uniquement migration/rollback.
+## 11. Catalogue, mémoire et RAG
 
-**G6 :** OpenShell par défaut, ARM64 validé, politiques positives et négatives vertes, GPU validé, rollback démontré.
+- les fichiers source restent la vérité ;
+- le catalogue, les droits et la provenance sont dans PostgreSQL ;
+- Qdrant contient un index régénérable ;
+- les contrôles d’accès sont appliqués côté serveur, jamais seulement dans l’interface ;
+- les collections sensibles sont séparées ou filtrées par un mécanisme testé contre les fuites ;
+- la première indexation requiert une autorisation humaine ;
+- la réindexation est idempotente ;
+- chaque réponse RAG expose sources et passages ;
+- la mémoire globale de l’agent et la mémoire projet sont distinctes ;
+- aucune conversation privée ne devient automatiquement une source commune.
 
-### M7 — Agents CLI sous OpenShell
+## 12. Stratégie de migration
 
-- vague 1 : Claude Code et Codex ;
-- vague 2 : OpenCode, KiloCode, VibeStral et Hermes ;
-- vague 3 : Pi et Goose.
+### 12.1 Pattern d’étranglement
 
-**G7 par agent :** image/blueprint, politique, parité, reprise, interfaces, refus de sécurité et absence de fallback dans le parcours normal.
+La commande `agent` reste la façade. Chaque capacité est routée vers v1 ou v2 par feature flag.
 
-### M8 — OpenClaw et OpenHands
-
-OpenClaw sous NemoClaw/OpenShell. OpenHands conserve son UI mais délègue toute exécution non fiable à OpenShell.
-
-**G8 :** scénarios dédiés verts, approvals non contournables.
-
-### M9 — Applications et système
-
-OpenWebUI, Hermes Dashboard, ComfyUI, Forgejo, Grafana, DGX Dashboard et JupyterLab dans le portail.
-
-**G9 :** accès sans connaissance des ports, droits et données préservés.
-
-### M10 — Catalogue et RAG
-
-Sources, collections, publication, droits, déduplication et citations.
-
-**G10 :** aucune fuite inter-projet, toute réponse RAG sourcée.
-
-### M11 — Exploitation et sauvegarde
-
-Métriques OpenShell/NemoClaw, GPU, agents, scheduler, sauvegarde chiffrée, release et rollback.
-
-**G11 :** restauration v2 complète et rollback testé.
-
-### M12 — Mattermost/Dify
-
-Collaboration, bots, workflows, approvals et routage vers OpenShell/NemoClaw.
-
-**G12 :** corrélation complète et aucun accès direct Docker/modèles.
-
-### M13 — Fonctionnement en ombre
-
-Comparer v1/Docker direct et v2/OpenShell ; exécuter les canaris NemoClaw ; répéter les imports.
-
-**G13 :** deux cycles sans perte et aucun agent obligatoire dépendant du fallback.
-
-### M14 — Canari et bascule
-
-Canari : Codex, Claude Code, Hermes, OpenClaw, une application, un modèle, un corpus et DGX Dashboard.
-
-Bascule : gel court, import final, activation OpenShell par défaut, désactivation du fallback direct, tests rapides et surveillance.
-
-**G14 :** validation humaine, OpenShell/NemoClaw réellement utilisés, rollback possible.
-
-### M15 — Retrait v1 et fallback
-
-Après validation : arrêter v1, retirer le fallback Docker direct des parcours agents, conserver archives et sauvegardes, proposer le nettoyage sans suppression automatique.
-
-## 10. Mise à jour et release
-
-- versions et digests OpenShell, NemoClaw, images et services épinglés ;
-- aucune mise à jour automatique ;
-- validation isolée ;
-- snapshot avant bascule ;
-- tests GPU séquentiels ;
-- rollback global ;
-- migrations de base versionnées.
-
-## 11. Définition de terminé
-
-La refonte est terminée uniquement si :
-
-- v1 et v2 sont restaurables ;
-- tous les agents ont leur parité verte ;
-- OpenShell est le runtime normal des agents obligatoires ;
-- NemoClaw est validé pour Hermes et OpenClaw ;
-- le fallback Docker direct est désactivé par défaut et inutile aux parcours normaux ;
-- portail, CLI et configuration déclarative sont cohérents ;
-- toutes les interfaces retenues fonctionnent avec la même identité et le même état ;
-- aucun service non autorisé n’est exposé ;
-- aucun runtime non fiable n’a le socket Docker ;
-- tous les modèles passent par `ollama-gate` ;
-- scheduler, quotas, secrets, RAG, sauvegarde, update et rollback sont opérationnels ;
-- documentation FR/EN et runbooks sont à jour ;
-- l’administrateur approuve la bascule et le retrait de la v1.
-
-## 12. Ordre impératif
+La migration se fait par **parcours vertical** :
 
 ```text
-M0 sauvegarde
-→ M1 inventaire
-→ M2 contrats et documentation
-→ M3 plan de contrôle
-→ M4 identités et sécurité
-→ M5 modèles
-→ M6 OpenShell/NemoClaw/scheduler
-→ M7 agents CLI sous OpenShell
-→ M8 OpenClaw/OpenHands
-→ M9 applications et système
-→ M10 catalogue/RAG
-→ M11 exploitation/backup
-→ M12 collaboration
-→ M13 ombre
-→ M14 canari/bascule
-→ M15 retrait v1 et fallback Docker direct
+utilisateur → CLI/portail → identité → projet → runtime → modèle → workspace → logs → sauvegarde
 ```
 
-Aucune phase ne peut être sautée. Une fonction ou un agent existant ne peut être retiré sans décision humaine documentée.
+Un parcours n’est pas déclaré migré si un de ces maillons dépend encore d’un contournement manuel.
+
+### 12.2 Règles de données
+
+- v1 et v2 utilisent des racines distinctes ;
+- les modèles peuvent être partagés en lecture seule pendant l’ombre ;
+- les écritures concurrentes dans un même store sont interdites ;
+- les importeurs sont versionnés, idempotents, exécutables en dry-run et produisent un rapport ;
+- chaque domaine possède un moment de gel, un import final, un test et un rollback ;
+- la double écriture est interdite sauf journal append-only explicitement conçu pour cela.
+
+### 12.3 Sauvegarde
+
+Le snapshot `rsync` v1 est conservé comme filet de migration mais ne devient pas la stratégie finale unique.
+
+La v2 réalise des exports cohérents :
+
+- PostgreSQL par outil natif ;
+- Forgejo par procédure officielle ;
+- Qdrant par snapshot ;
+- états applicatifs selon leur procédure ;
+- workspaces par snapshot fichier ;
+- secrets dans une archive chiffrée séparée ;
+- manifeste avec versions, digests, empreintes et dépendances.
+
+La restauration complète est répétée dans une racine isolée.
+
+## 13. Phases de livraison
+
+### M0 — Preuves et gel v1
+
+- tag, archive, inventaire des commandes et services ;
+- baseline de performance et ressources ;
+- sauvegarde et restauration complète ;
+- registre de parité initial.
+
+**G0 :** v1 restaurée et toutes les capacités visibles dans le registre.
+
+### M1 — Contrats produit et architecture
+
+- contrats CLI, API, données, agents, modèles et secrets ;
+- matrice des sources de vérité ;
+- modèle utilisateur-agent-projet-runtime ;
+- classification des applications ;
+- ADR principales.
+
+**G1 :** aucune responsabilité dupliquée ou sans propriétaire.
+
+### M2 — Spikes bloquants sur la DGX
+
+- OpenShell Docker/ARM64, auth interne et labels d’ownership ;
+- limites CPU, mémoire et GPU ;
+- contexte par projet et reprise froide ;
+- service forwarding pour Hermes Dashboard ;
+- NemoClaw OpenClaw et Hermes ;
+- ModelBroker dynamique sans conflit avec `inference.local` ;
+- accès DGX Dashboard et JupyterLab ;
+- SecretStore et restauration.
+
+**G2 :** chaque hypothèse reçoit `validée`, `remplacée` ou `abandonnée`, avec preuve reproductible.
+
+### M3 — Walking skeleton
+
+Un parcours minimal utilisable :
+
+- un administrateur et un utilisateur ;
+- Codex ;
+- contexte personnel et un projet ;
+- CLI `agent codex [projet]` ;
+- portail agent-first minimal ;
+- OpenShell via adapter ;
+- ModelBroker via adapter de compatibilité ;
+- workspace, logs, arrêt et reprise froide ;
+- sauvegarde du parcours.
+
+**G3 :** parcours complet sans commande Docker/OpenShell manuelle.
+
+### M4 — Fondation de production
+
+- authentification, rôles et délégations ;
+- reconciler et idempotence ;
+- SecretStore ;
+- audit ;
+- observabilité ;
+- admission simple ;
+- installation, désinstallation et upgrade épinglé.
+
+**G4 :** séparation utilisateurs/projets et restauration validées.
+
+### M5 — Plan modèle
+
+- contrat ModelBroker complet ;
+- décision évoluer/remplacer `ollama-gate` ;
+- Ollama, TensorRT-LLM et fournisseur distant autorisé ;
+- embeddings, quotas, identité, streaming et admission GPU ;
+- migration des commandes modèle v1.
+
+**G5 :** aucun accès direct aux backends et parité des commandes modèle.
+
+### M6 — Agents de code
+
+- Claude Code, Codex, OpenCode ;
+- KiloCode, VibeStral ;
+- Pi et Goose ;
+- politique, image, reprise et interfaces par agent ;
+- test dépôt réel et isolation inter-projet.
+
+**G6 :** chaque agent obligatoire passe son contrat vertical et ses tests négatifs.
+
+### M7 — Hermes, OpenClaw et OpenHands
+
+- OpenClaw via NemoClaw si parité ;
+- Hermes via NemoClaw ou blueprint spécifique ;
+- dashboards, Desktop et messageries retenues ;
+- approvals, relay, pièces jointes, mémoire et outils ;
+- exécution OpenHands isolée.
+
+**G7 :** aucune régression des fonctions v1 et aucune élévation implicite.
+
+### M8 — Applications et portail complet
+
+- OpenWebUI, ComfyUI, Forgejo, Grafana ;
+- DGX Dashboard et JupyterLab ;
+- catalogue d’applications et droits ;
+- commandes de gestion CLI correspondantes.
+
+**G8 :** toutes les applications accessibles sans port interne et selon leur niveau de confiance.
+
+### M9 — RAG, catalogue et données
+
+- import des sources v1 ;
+- ACL, collections, citations et réindexation ;
+- mémoire globale/projet ;
+- tests de fuite et restauration.
+
+**G9 :** aucune fuite inter-projet et index entièrement régénérable.
+
+### M10 — Scheduler avancé et collaboration
+
+- files, priorités, réservations et calendrier ;
+- Mattermost et Dify seulement après stabilisation ;
+- bots distincts et boucles contrôlées.
+
+**G10 :** charge et conflits maîtrisés sans casser l’interactif.
+
+### M11 — Ombre, canari et bascule par domaine
+
+- tâches miroir non destructives ;
+- canaris par utilisateur, agent, projet et capacité ;
+- comparaison résultats, performance, coûts et incidents ;
+- gel et import final par domaine ;
+- rollback chronométré.
+
+**G11 :** deux cycles représentatifs sans perte et décision humaine de bascule.
+
+### M12 — Retrait contrôlé
+
+- retrait des routes v1 validées ;
+- conservation archives et dernière sauvegarde ;
+- retrait du fallback Docker agent seulement lorsqu’il n’est plus utilisé ;
+- nettoyage proposé, jamais automatique.
+
+## 14. Tests et critères de qualité
+
+### 14.1 Contrats
+
+- CLI v1/v2 ;
+- API versionnée ;
+- adapters runtime, modèle, secrets et applications ;
+- import/export ;
+- compatibilité des versions épinglées.
+
+### 14.2 Sécurité
+
+- lecture et écriture fichiers refusées ;
+- fuite inter-projet ;
+- réseau, méthodes et chemins refusés ;
+- secret absent des logs, environnements persistants et sorties ;
+- accès direct aux backends modèles refusé ;
+- séparation des rôles ;
+- actions administrateur réauthentifiées.
+
+### 14.3 Résilience
+
+- redémarrage API, worker, OpenShell et backend modèle ;
+- sandbox perdue puis recréée ;
+- modèle indisponible ;
+- disque presque plein ;
+- migration interrompue ;
+- rollback code et rollback données distincts ;
+- restauration sur racine vierge.
+
+### 14.4 Utilisabilité
+
+- premier démarrage guidé ;
+- état vide compréhensible ;
+- `agent codex` sans projet ;
+- changement de projet ;
+- reprise après déconnexion ;
+- ouverture des dashboards ;
+- erreurs actionnables ;
+- aucune terminologie d’infrastructure imposée à l’utilisateur.
+
+### 14.5 Performance
+
+Les seuils sont établis à partir de la baseline v1 :
+
+- temps d’ouverture chaud et froid d’un agent ;
+- latence ajoutée par les proxies ;
+- débit et streaming modèle ;
+- consommation au repos ;
+- temps de sauvegarde et restauration ;
+- comportement sous concurrence.
+
+Aucune régression importante n’est acceptée sans justification documentée.
+
+## 15. Registre des risques et décisions bloquantes
+
+| Risque | Conséquence | Traitement obligatoire |
+|---|---|---|
+| OpenShell alpha et mode initial mono-utilisateur | isolation ou upgrade fragile | gateway interne, adapter, pinning, spike multi-utilisateur |
+| `inference.local` global et modèle réécrit | perte du routage dynamique | ModelBroker direct autorisé par politique |
+| politiques fichiers statiques | changement de projet dangereux | un RuntimeContext par projet |
+| absence de checkpoint générique | préemption destructrice | reprise chaude/froide/native séparées |
+| scheduler absent d’OpenShell | surallocation | scheduler du plan de contrôle |
+| GPU et API ressources en évolution | incompatibilité DGX | tests épinglés et capability discovery |
+| Hermes NemoClaw avec limitations | perte dashboard/mémoire/outils | parité complète ou blueprint spécifique |
+| double emploi `ollama-gate`/OpenShell | complexité et incohérence | contrat ModelBroker et décision build/adopt |
+| applications web exécutant du code | compromission hôte | classification et runtime restreint |
+| proxy des dashboards supposé | interface cassée ou auth contournée | utiliser seulement un chemin officiellement validé |
+| sauvegarde fichier non cohérente | restauration invalide | exports natifs orchestrés |
+| réécriture trop large avant validation | projet interminable | walking skeleton puis vertical slices |
+| trop de composants optionnels | coût d’exploitation | baseline minimale, modules désactivés par défaut |
+
+## 16. Mise à jour et exploitation
+
+- versions et digests épinglés ;
+- manifeste de compatibilité entre plateforme, OpenShell, NemoClaw, agents et backends ;
+- aucune mise à jour automatique de production ;
+- validation dans une racine ou machine de test ;
+- migrations de base sauvegardées avant exécution ;
+- rollback code par digest ;
+- rollback données par restauration, sans supposer des migrations descendantes fiables ;
+- génération de SBOM, vérification de provenance et scan de vulnérabilités ;
+- mode break-glass documenté ;
+- runbooks d’incident et de capacité.
+
+## 17. Définition de terminé
+
+La v2 est viable et la v1 peut être retirée seulement si :
+
+- 100 % des capacités v1 ont une décision et un test ;
+- les parcours principaux CLI et portail sont utilisables sans connaissance de l’infrastructure ;
+- les sources de vérité sont uniques et restaurables ;
+- la séparation utilisateur/projet est démontrée ;
+- le ModelBroker n’entre pas en conflit avec OpenShell ;
+- les agents obligatoires ont un runtime reproductible et une reprise documentée ;
+- les applications exécutant du code sont isolées ;
+- l’upgrade et le rollback ont été répétés ;
+- les sauvegardes ont été restaurées sur une racine vierge ;
+- les dépendances alpha sont épinglées et remplaçables derrière des adapters ;
+- les ressources au repos et en charge restent compatibles avec la DGX Spark ;
+- la documentation utilisateur, opérateur, développeur et sécurité correspond au système réel ;
+- une seule personne peut diagnostiquer, sauvegarder, restaurer et mettre à jour la plateforme à l’aide des runbooks ;
+- l’administrateur approuve explicitement chaque retrait de domaine v1.
