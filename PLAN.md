@@ -97,10 +97,34 @@ Le registre couvre au minimum :
 - benchmark, préchargement, chargement et déchargement des modèles ;
 - surveillance de dérive Ollama ;
 - liens et droits du store de modèles ;
-- indexation RAG, suivi de tâche, configuration et backend lexical ;
 - test de dépôt de bout en bout pour chaque agent.
 
-### 2.4 Contrat de compatibilité CLI
+### 2.4 Service RAG v1 existant
+
+**DÉCISION :** le RAG n’est pas une fonction à reconstruire. La v1 possède déjà un service composé de :
+
+- `rag-retriever`, API de recherche hybride ;
+- `rag-worker`, service d’indexation et de suivi des tâches ;
+- Qdrant pour l’index dense ;
+- OpenSearch optionnel pour l’index lexical ;
+- `ollama-gate` pour les embeddings dans l’implémentation v1 ;
+- un schéma documentaire, des états persistants et des journaux d’audit.
+
+Les capacités à préserver comprennent :
+
+- `agent rag index`, `agent rag task`, `agent rag config` et `agent rag bootstrap-lexical` ;
+- recherche dense ;
+- recherche lexicale optionnelle ;
+- fusion RRF ;
+- reranking configurable ;
+- passages, chemins de sources et métadonnées dans les résultats ;
+- indexation asynchrone, suivi d’état, healthchecks et journaux ;
+- fonctionnement sans OpenSearch lorsque le backend lexical est désactivé.
+
+La v2 intègre ce service derrière un `RAGServiceAdapter`. Elle peut faire évoluer son implémentation, mais elle ne réimplémente pas la recherche, la fusion ou le reranking dans le portail ou le plan de contrôle.
+
+### 2.5 Contrat de compatibilité CLI
+
 
 **DÉCISION :** le binaire `agent` reste la façade utilisateur pendant toute la transition.
 
@@ -131,14 +155,14 @@ Le routage v1/v2 est activable par utilisateur, agent, projet et capacité. Aucu
 - reconciler comparant état désiré et état observé ;
 - identifiants de corrélation et clés d’idempotence.
 
-Le plan de contrôle ne réimplémente pas les bases internes de Forgejo, OpenWebUI, OpenShell ou Qdrant. Il conserve leurs références, l’état désiré, les droits et une projection de leur état observé.
+Le plan de contrôle ne réimplémente pas les bases internes de Forgejo, OpenWebUI, OpenShell ou Qdrant. Il ne réimplémente pas non plus le moteur de `rag-retriever` ni les traitements de `rag-worker`. Il conserve leurs références, l’état désiré, les droits et une projection de leur état observé.
 
 ### 3.2 Zones de confiance
 
 | Niveau | Exemples | Politique |
 |---|---|---|
 | Contrôle de confiance | portail, API, scheduler, broker de modèles, courtier de secrets | accès privilégié minimal, audit complet |
-| Services gérés | PostgreSQL, Forgejo, Grafana, Qdrant, reverse proxy | Docker/Compose durci, réseau interne |
+| Services gérés | PostgreSQL, Forgejo, Grafana, `rag-retriever`, `rag-worker`, Qdrant, OpenSearch optionnel, reverse proxy | Docker/Compose durci, réseau interne |
 | Applications extensibles | OpenWebUI avec extensions, ComfyUI et custom nodes, JupyterLab | isolation renforcée, droits minimaux, aucune socket Docker |
 | Exécution de code | agents, tâches OpenHands, outils autonomes | sandbox OpenShell cible |
 | Administration de rupture | Portainer, shell hôte, OpenShell TUI direct | administrateur, réauthentification, audit, non visible par défaut |
@@ -169,8 +193,12 @@ La viabilité dépend d’une propriété claire de chaque donnée.
 | secrets | SecretStore canonique | providers OpenShell ou fichiers temporaires de service |
 | catalogue de modèles et politiques | plan de contrôle | broker de modèles |
 | fichiers de modèles | store global sur disque | index du catalogue |
-| sources documentaires | emplacement d’origine | catalogue et index RAG |
-| embeddings et recherche vectorielle | Qdrant, régénérable | métadonnées dans PostgreSQL |
+| documents sources | emplacement d’origine | catalogue et références dans PostgreSQL |
+| droits, provenance et collections RAG | PostgreSQL du plan de contrôle | filtres et métadonnées transmis au service RAG |
+| logique de recherche hybride | `rag-retriever` derrière `RAGServiceAdapter` | contrat et état observé dans le plan de contrôle |
+| tâches d’indexation | `rag-worker` | références et progression dans le plan de contrôle |
+| index dense et embeddings | Qdrant, régénérable | manifestes de version et snapshots |
+| index lexical | OpenSearch optionnel, régénérable | manifestes de version et snapshots |
 | logs | Loki ou stockage structuré retenu | liens et résumés dans PostgreSQL |
 | métriques | Prometheus | tableaux de bord Grafana |
 | sauvegardes | manifeste de sauvegarde | exports cohérents de chaque store |
@@ -419,18 +447,126 @@ OpenShell applique les limites demandées au sandbox mais ne remplace pas ce sch
 
 Les fonctions avancées ne bloquent pas le premier parcours Codex, mais aucune promesse de préemption n’est faite avant la reprise réelle des tâches.
 
-## 11. Catalogue, mémoire et RAG
+## 11. Service RAG v1, catalogue et mémoire
 
-- les fichiers source restent la vérité ;
-- le catalogue, les droits et la provenance sont dans PostgreSQL ;
-- Qdrant contient un index régénérable ;
-- les contrôles d’accès sont appliqués côté serveur, jamais seulement dans l’interface ;
-- les collections sensibles sont séparées ou filtrées par un mécanisme testé contre les fuites ;
-- la première indexation requiert une autorisation humaine ;
-- la réindexation est idempotente ;
-- chaque réponse RAG expose sources et passages ;
-- la mémoire globale de l’agent et la mémoire projet sont distinctes ;
-- aucune conversation privée ne devient automatiquement une source commune.
+### 11.1 Baseline à préserver
+
+Le service RAG v1 est une application existante et testable, pas une fonction interne du futur portail. Sa baseline comprend :
+
+- `rag-retriever` et son API `/v1/retrieve` ;
+- `rag-worker` et son mécanisme de tâches d’indexation ;
+- Qdrant et ses collections ;
+- OpenSearch et ses index lorsque le profil lexical est activé ;
+- recherche dense, recherche lexicale, fusion RRF et reranking ;
+- génération d’embeddings par le gate modèle ;
+- schéma documentaire, métadonnées de source, passages et journaux d’audit ;
+- commandes CLI v1 et healthchecks.
+
+Avant toute évolution, M0 capture :
+
+- versions, configuration effective et variables non secrètes ;
+- modèle d’embedding et dimension des vecteurs ;
+- collections Qdrant et index OpenSearch ;
+- nombre de documents et chunks ;
+- tâches en cours ou échouées ;
+- corpus et requêtes de référence avec résultats attendus ;
+- état réel de `RAG_GATE_DRY_RUN` ;
+- volumes, journaux, temps d’indexation et latence de recherche.
+
+### 11.2 Contrat `RAGServiceAdapter`
+
+Le plan de contrôle utilise un adapter stable exposant au minimum :
+
+- `health()` et `capabilities()` ;
+- `config()` ;
+- `submit_index_job()` ;
+- `job_status()` et `cancel_job()` lorsque possible ;
+- `retrieve()` ;
+- `list_collections()` ;
+- `snapshot()` et `restore()` ;
+- `rebuild_index()` ;
+- `collect_usage()`.
+
+La première implémentation de cet adapter appelle le service RAG v1. Le portail affiche et orchestre ses fonctions, mais ne recode pas ses algorithmes.
+
+### 11.3 Répartition des responsabilités
+
+Le plan de contrôle possède :
+
+- projets, utilisateurs et droits ;
+- catalogue des sources ;
+- provenance et confidentialité ;
+- autorisation d’indexer ;
+- choix des collections accessibles ;
+- suivi transversal des tâches ;
+- politiques de réindexation et de rétention.
+
+Le service RAG possède :
+
+- ingestion technique des documents ;
+- découpage selon le schéma retenu ;
+- demande d’embeddings au `ModelBroker` ;
+- écriture et interrogation des index ;
+- fusion, reranking et normalisation des résultats ;
+- état détaillé des tâches RAG ;
+- journaux techniques et métriques de recherche.
+
+Qdrant et OpenSearch ne sont jamais considérés comme la source de vérité documentaire. Les fichiers d’origine et leur catalogue permettent de reconstruire les index.
+
+### 11.4 Multi-utilisateur et multi-projet
+
+Le service v1 utilise initialement des noms de collection et d’index globaux et son API ne constitue pas à elle seule une frontière d’autorisation multi-projet.
+
+La v2 doit ajouter, côté serveur :
+
+- identité signée utilisateur, agent, projet et tâche ;
+- collections séparées ou filtres de payload obligatoires ;
+- ACL appliquées avant la recherche et avant la restitution ;
+- refus d’une source devenue inaccessible ;
+- aucune confiance dans un `project_id` fourni librement par le client ;
+- journalisation de l’identité, du scope et des sources retournées ;
+- tests systématiques de fuite inter-projet.
+
+Le choix entre collection par projet, collection par domaine de confidentialité ou collection partagée filtrée est une décision de M2 fondée sur les performances, la simplicité de restauration et la solidité des ACL.
+
+### 11.5 Modèles d’embedding et versionnement
+
+Un changement de modèle, de dimension, de stratégie de chunking ou de schéma crée une nouvelle version d’index. Il ne modifie pas silencieusement une collection en production.
+
+Chaque version enregistre :
+
+- modèle et digest ;
+- dimension ;
+- schéma et stratégie de chunking ;
+- date de construction ;
+- sources et empreintes ;
+- collection Qdrant et index OpenSearch associés.
+
+La réindexation est idempotente et s’effectue en parallèle dans une nouvelle version, puis une bascule atomique sélectionne la version active après validation.
+
+### 11.6 Migration, sauvegarde et restauration
+
+La migration privilégie la conservation lorsque les versions sont compatibles :
+
+1. geler les nouvelles indexations ;
+2. exporter configuration, schéma et manifestes ;
+3. prendre un snapshot Qdrant ;
+4. sauvegarder OpenSearch si activé ;
+5. sauvegarder les états et journaux du retriever et du worker ;
+6. restaurer dans une racine isolée ;
+7. exécuter le corpus et les requêtes de référence ;
+8. ne réindexer que si la compatibilité ou les ACL l’exigent ;
+9. produire un rapport des documents, chunks, index et écarts.
+
+Si une réindexation est nécessaire, l’ancien index reste lisible jusqu’à validation du nouveau. Aucun index v1 n’est supprimé automatiquement.
+
+### 11.7 Mémoire et restitution
+
+- la mémoire globale d’un agent et la mémoire d’un projet sont distinctes ;
+- une conversation privée ne devient pas automatiquement une source RAG ;
+- toute publication dans une collection commune est explicite et auditée ;
+- chaque réponse RAG expose les sources, passages et version d’index utilisés ;
+- le système peut compléter une réponse avec la connaissance générale du modèle, mais ne lui attribue pas de fausse source.
 
 ## 12. Stratégie de migration
 
@@ -478,7 +614,8 @@ La restauration complète est répétée dans une racine isolée.
 - tag, archive, inventaire des commandes et services ;
 - baseline de performance et ressources ;
 - sauvegarde et restauration complète ;
-- registre de parité initial.
+- registre de parité initial ;
+- inventaire et baseline du service RAG v1, de ses collections, index, configurations et requêtes de référence.
 
 **G0 :** v1 restaurée et toutes les capacités visibles dans le registre.
 
@@ -501,7 +638,8 @@ La restauration complète est répétée dans une racine isolée.
 - NemoClaw OpenClaw et Hermes ;
 - ModelBroker dynamique sans conflit avec `inference.local` ;
 - accès DGX Dashboard et JupyterLab ;
-- SecretStore et restauration.
+- SecretStore et restauration ;
+- identité et ACL du service RAG, stratégie de collections, snapshot/restore et compatibilité des index existants.
 
 **G2 :** chaque hypothèse reçoit `validée`, `remplacée` ou `abandonnée`, avec preuve reproductible.
 
@@ -539,7 +677,8 @@ Un parcours minimal utilisable :
 - décision évoluer/remplacer `ollama-gate` ;
 - Ollama, TensorRT-LLM et fournisseur distant autorisé ;
 - embeddings, quotas, identité, streaming et admission GPU ;
-- migration des commandes modèle v1.
+- migration des commandes modèle v1 ;
+- compatibilité des embeddings du service RAG avec le `ModelBroker`, sans changement silencieux de modèle ou de dimension.
 
 **G5 :** aucun accès direct aux backends et parité des commandes modèle.
 
@@ -572,14 +711,19 @@ Un parcours minimal utilisable :
 
 **G8 :** toutes les applications accessibles sans port interne et selon leur niveau de confiance.
 
-### M9 — RAG, catalogue et données
+### M9 — Migration et sécurisation du service RAG v1
 
-- import des sources v1 ;
-- ACL, collections, citations et réindexation ;
-- mémoire globale/projet ;
-- tests de fuite et restauration.
+- brancher le service existant derrière `RAGServiceAdapter` ;
+- préserver les commandes CLI, schémas, tâches, recherche dense, lexical optionnel, fusion RRF, reranking et journaux ;
+- rediriger les embeddings vers le `ModelBroker` validé ;
+- importer ou restaurer les collections Qdrant et index OpenSearch compatibles ;
+- introduire identité signée, ACL serveur et scopes projet ;
+- ajouter catalogue des sources, provenance et gestion des versions d’index ;
+- rendre indexation et réindexation idempotentes ;
+- exposer gestion et suivi dans le portail sans déplacer le moteur RAG dans le plan de contrôle ;
+- distinguer mémoire globale, mémoire projet et publications communes.
 
-**G9 :** aucune fuite inter-projet et index entièrement régénérable.
+**G9 :** parité des commandes et des requêtes de référence, aucune fuite inter-projet, snapshots restaurés, index régénérables et ancien index conservé jusqu’à validation.
 
 ### M10 — Scheduler avancé et collaboration
 
@@ -614,12 +758,13 @@ Un parcours minimal utilisable :
 - API versionnée ;
 - adapters runtime, modèle, secrets et applications ;
 - import/export ;
+- contrat `RAGServiceAdapter` et compatibilité des commandes RAG v1 ;
 - compatibilité des versions épinglées.
 
 ### 14.2 Sécurité
 
 - lecture et écriture fichiers refusées ;
-- fuite inter-projet ;
+- fuite inter-projet, y compris par filtres Qdrant/OpenSearch et résultats RAG ;
 - réseau, méthodes et chemins refusés ;
 - secret absent des logs, environnements persistants et sorties ;
 - accès direct aux backends modèles refusé ;
@@ -634,7 +779,8 @@ Un parcours minimal utilisable :
 - disque presque plein ;
 - migration interrompue ;
 - rollback code et rollback données distincts ;
-- restauration sur racine vierge.
+- restauration sur racine vierge ;
+- restauration des snapshots RAG et reconstruction complète depuis les sources.
 
 ### 14.4 Utilisabilité
 
@@ -672,6 +818,10 @@ Aucune régression importante n’est acceptée sans justification documentée.
 | GPU et API ressources en évolution | incompatibilité DGX | tests épinglés et capability discovery |
 | Hermes NemoClaw avec limitations | perte dashboard/mémoire/outils | parité complète ou blueprint spécifique |
 | double emploi `ollama-gate`/OpenShell | complexité et incohérence | contrat ModelBroker et décision build/adopt |
+| service RAG v1 global sans frontière multi-projet suffisante | fuite documentaire | identité signée, ACL serveur et tests négatifs |
+| changement de modèle ou dimension d’embedding | index incohérent ou indisponible | versions d’index séparées et bascule atomique |
+| Qdrant/OpenSearch traités comme source documentaire | perte irréversible | sources et catalogue canoniques, index régénérables |
+| réimplémentation du RAG dans le portail | divergence et maintenance double | `RAGServiceAdapter` et conservation du moteur existant |
 | applications web exécutant du code | compromission hôte | classification et runtime restreint |
 | proxy des dashboards supposé | interface cassée ou auth contournée | utiliser seulement un chemin officiellement validé |
 | sauvegarde fichier non cohérente | restauration invalide | exports natifs orchestrés |
@@ -700,6 +850,9 @@ La v2 est viable et la v1 peut être retirée seulement si :
 - les sources de vérité sont uniques et restaurables ;
 - la séparation utilisateur/projet est démontrée ;
 - le ModelBroker n’entre pas en conflit avec OpenShell ;
+- le service RAG v1 conserve ses capacités derrière `RAGServiceAdapter` ;
+- les commandes et requêtes RAG de référence ont une parité validée ;
+- les ACL RAG multi-projet et la restauration des index sont démontrées ;
 - les agents obligatoires ont un runtime reproductible et une reprise documentée ;
 - les applications exécutant du code sont isolées ;
 - l’upgrade et le rollback ont été répétés ;
