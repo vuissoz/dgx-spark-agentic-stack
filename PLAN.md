@@ -1,231 +1,266 @@
 # DGX Spark Agentic Platform v2 — Plan stratégique de réécriture et de migration
 
-## 0. Statut, méthode et gouvernance
+## 0. Statut et gouvernance
 
-Ce document est le plan actif de la v2. La v1 reste la référence fonctionnelle jusqu’à validation explicite de chaque domaine migré.
+Ce document est la source de vérité du projet v2. La v1 reste la référence fonctionnelle jusqu’à validation explicite de chaque domaine migré.
 
 Référence v1 :
 
-- branche : `archive/pre-v2-rewrite-2026-06-25`
-- commit : `f76778e342d43fdafaa17e05ad887f6e9853aa7d`
+- branche : `archive/pre-v2-rewrite-2026-06-25` ;
+- commit : `f76778e342d43fdafaa17e05ad887f6e9853aa7d`.
 
-La pull request reste en brouillon tant que les décisions bloquantes de la section 15 ne sont pas closes.
+La pull request reste en brouillon tant que les décisions bloquantes ne sont pas closes.
 
-### 0.1 Vocabulaire de décision
-
-Chaque affirmation structurante doit porter l’un des statuts suivants :
+### 0.1 Statuts de décision
 
 - **DÉCISION** : choix interne sous notre contrôle ;
-- **CIBLE** : direction retenue, soumise à validation technique avant généralisation ;
+- **CIBLE** : direction retenue, à valider avant généralisation ;
 - **HYPOTHÈSE** : capacité plausible mais non démontrée ;
-- **BLOQUANT** : point à résoudre avant la phase qui en dépend.
+- **BLOQUANT** : preuve nécessaire avant la phase dépendante.
 
-Une hypothèse ne peut pas devenir implicitement une dépendance de production.
+Une hypothèse ne devient jamais implicitement une dépendance de production.
 
-### 0.2 Règles de gouvernance
+### 0.2 Règles
 
-- `PLAN.md` définit le produit, les responsabilités, les contrats, la transition et les portes de validation ;
 - Beads reste l’unique backlog opérationnel ;
-- aucun identifiant Beads n’est inventé dans ce document ;
-- chaque fonctionnalité v1 possède un propriétaire, un test de parité et une décision `conserver`, `remplacer`, `reconstruire` ou `retirer` ;
+- chaque capacité v1 reçoit `conserver`, `remplacer`, `reconstruire` ou `retirer` ;
 - `retirer` exige une décision humaine documentée ;
 - toute dépendance externe est épinglée par version ou digest et entourée d’un adapter ;
-- aucune bascule ne partage en écriture un même état entre v1 et v2 ;
-- la restauration est testée avant la migration, pas après l’incident.
+- aucune bascule ne partage en écriture un état mutable entre v1 et v2 ;
+- toute migration possède dry-run, rapport, validation et rollback ;
+- sauvegarde et restauration sont testées avant la migration ;
+- toute affirmation sur une capacité amont est reliée à une documentation officielle, une version et un test reproductible.
 
 ## 1. Contrat produit
 
-La v2 doit rester exploitable par une petite équipe et administrable par une personne compétente sans devoir maintenir une constellation de microservices artisanaux.
+La v2 doit être administrable sur une seule DGX Spark par une petite équipe, sans constellation inutile de microservices et sans exiger des utilisateurs qu’ils comprennent Docker, OpenShell ou les ports internes.
 
 ### 1.1 Expérience attendue
 
-- l’utilisateur choisit d’abord un agent, comme un collaborateur permanent ;
-- le projet est un contexte facultatif de travail, pas le point d’entrée principal ;
-- chaque agent ou application est accessible par CLI, portail web, ou les deux ;
-- l’utilisateur ne manipule ni Docker, ni OpenShell, ni les ports internes ;
-- les interfaces officielles utiles sont préservées : terminal, dashboard web, Desktop, éditeur ou messagerie ;
-- les droits et l’état restent cohérents entre les surfaces d’un même agent ;
-- la plateforme fonctionne localement et conserve un mode hors ligne explicite ;
-- aucune mise à jour, suppression de données ou téléchargement lourd n’est silencieux.
+- l’utilisateur choisit d’abord un agent, puis éventuellement un projet ;
+- un projet est un contexte de travail, pas le point d’entrée principal ;
+- chaque agent ou application possède une surface explicite : CLI, portail, interface native, ou plusieurs ;
+- une déconnexion SSH ne détruit pas une session reprenable ;
+- les interfaces officielles utiles sont préservées : terminal, web, Desktop, IDE, ACP ou messagerie ;
+- les permissions et l’état restent cohérents entre les surfaces ;
+- la plateforme reste utilisable hors Internet pour les capacités locales ;
+- aucun téléchargement lourd, update, publication ou effacement n’est silencieux ;
+- les erreurs sont actionnables et désignent le composant réellement en cause.
 
 ### 1.2 Principes d’implémentation
 
-- préserver les **capacités**, pas nécessairement les implémentations v1 ;
-- préférer un composant amont mature à une réécriture locale lorsque son contrat est réellement couvert ;
-- éviter les doubles sources de vérité ;
-- commencer par un monolithe modulaire de contrôle, pas par une architecture distribuée ;
-- livrer des parcours verticaux utilisables avant les fonctions avancées ;
-- garder les adapters minces et testables ;
+- préserver les capacités, pas nécessairement les implémentations v1 ;
+- préférer un composant amont mature si son contrat est réellement couvert ;
+- commencer par un monolithe modulaire de contrôle ;
+- conserver agents, applications humaines et services comme objets distincts ;
+- livrer des parcours verticaux complets avant les fonctions avancées ;
+- garder les adapters minces, versionnés et testables ;
+- ne jamais forcer tous les harnesses à utiliser le même protocole modèle ;
+- respecter les orchestrations multi-agent natives au lieu de les réécrire ;
+- maintenir une seule source de vérité par donnée mutable ;
 - faire de la compatibilité v1 une fonctionnalité transitoire explicite.
 
-## 2. Registre obligatoire des capacités v1
+## 2. Inventaire canonique de la v1
 
-La v2 doit générer et maintenir un registre de parité à partir de `agent --help`, des fichiers Compose, des répertoires persistants et des tests existants.
-
-Le registre couvre au minimum :
+Le registre de parité est généré à partir de `agent --help`, Compose, des répertoires persistants, des README, des tests et de `.beads/issues.jsonl`.
 
 ### 2.1 Exploitation
 
-- profil `rootless-dev` et validation `strict-prod` ;
-- onboarding, prérequis, premier démarrage ;
-- démarrage et arrêt par stack, service et cible ;
-- `ls`, `status`, `ps`, logs et diagnostic ;
+À préserver :
+
+- profils `rootless-dev` et `strict-prod` ;
+- onboarding, prérequis et premier démarrage ;
+- `up`, `down`, `ls`, `ps`, `status`, logs et diagnostic ;
 - `doctor` et suites de tests ;
-- création, test et nettoyage de machine virtuelle de validation ;
-- sauvegarde, liste et restauration ;
-- nettoyage et oubli sélectif ;
-- mise à jour, snapshots de release et rollback ;
-- configuration réseau, tunnels et accès distants ;
-- contrôle d’horloge GPU et diagnostics matériels.
+- VM de validation strict-prod ;
+- backup, liste et restauration ;
+- cleanup et oubli sélectif ;
+- update, release, snapshot et rollback ;
+- réseau, tunnels et accès distants ;
+- diagnostics GPU, contexte et capacité mémoire ;
+- commandes modèles Ollama et TensorRT-LLM ;
+- `agent ollama bench` et le runner `repo-e2e`.
 
-### 2.2 Agents et applications
+### 2.2 Harnesses et runtimes agentiques
 
-- Claude Code, Codex, OpenCode, KiloCode, VibeStral, Hermes, Pi, Goose ;
-- OpenClaw, ses approvals, politiques, relay, pièces jointes et sandboxes ;
-- OpenHands ;
+- Claude Code ;
+- Codex ;
+- OpenCode ;
+- KiloCode ;
+- Mistral Vibe/VibeStral ;
+- Hermes ;
+- Pi, appelé `pi-mono` dans certains tests v1 ;
+- Goose ;
+- OpenClaw, gateway multi-agent permanent ;
+- OpenHands, objet hybride combinant application, agent platform et runtime de code.
+
+### 2.3 Applications principalement destinées aux humains
+
 - OpenWebUI ;
-- ComfyUI et installation Flux ;
+- ComfyUI et Flux ;
 - Forgejo ;
-- observabilité ;
-- modules optionnels.
+- Grafana et les vues d’observabilité ;
+- DGX Dashboard NVIDIA ;
+- JupyterLab ;
+- Portainer, uniquement comme outil administrateur de rupture.
 
-### 2.3 Modèles et données
+Une application humaine ne devient pas artificiellement un `AgentRuntime`. Elle utilise un `ApplicationAdapter` et, si elle exécute du code ou des tâches GPU, un contrat spécialisé supplémentaire.
 
-- modes local, hybride et distant ;
-- sélection Ollama, TensorRT-LLM ou fournisseur distant ;
-- contexte et compaction ;
-- benchmark, préchargement, chargement et déchargement des modèles ;
-- surveillance de dérive Ollama ;
-- liens et droits du store de modèles ;
-- test de dépôt de bout en bout pour chaque agent.
+### 2.4 Services gérés
 
-### 2.4 Service RAG v1 existant
+- `ollama-gate`, futur adapter du `ModelBroker` ;
+- Ollama ;
+- TensorRT-LLM ;
+- service RAG v1 ;
+- Qdrant et OpenSearch optionnel ;
+- PostgreSQL ;
+- reverse proxy, DNS et egress ;
+- Prometheus, Loki et exporters.
 
-**DÉCISION :** le RAG n’est pas une fonction à reconstruire. La v1 possède déjà un service composé de :
+### 2.5 Service RAG v1 existant
 
-- `rag-retriever`, API de recherche hybride ;
-- `rag-worker`, service d’indexation et de suivi des tâches ;
-- Qdrant pour l’index dense ;
-- OpenSearch optionnel pour l’index lexical ;
-- `ollama-gate` pour les embeddings dans l’implémentation v1 ;
-- un schéma documentaire, des états persistants et des journaux d’audit.
+**DÉCISION :** le RAG n’est pas reconstruit dans le portail. La v1 possède déjà :
 
-Les capacités à préserver comprennent :
+- `rag-retriever`, recherche dense et lexicale, fusion RRF et reranking ;
+- `rag-worker`, indexation asynchrone et suivi des tâches ;
+- Qdrant ;
+- OpenSearch optionnel ;
+- embeddings via le gate modèle ;
+- schéma documentaire, états, healthchecks et journaux d’audit ;
+- commandes `agent rag index`, `task`, `config` et `bootstrap-lexical`.
 
-- `agent rag index`, `agent rag task`, `agent rag config` et `agent rag bootstrap-lexical` ;
-- recherche dense ;
-- recherche lexicale optionnelle ;
-- fusion RRF ;
-- reranking configurable ;
-- passages, chemins de sources et métadonnées dans les résultats ;
-- indexation asynchrone, suivi d’état, healthchecks et journaux ;
-- fonctionnement sans OpenSearch lorsque le backend lexical est désactivé.
+La première v2 l’utilise derrière `RAGServiceAdapter` et préserve les commandes, schémas, résultats de référence et index compatibles.
 
-La v2 intègre ce service derrière un `RAGServiceAdapter`. Elle peut faire évoluer son implémentation, mais elle ne réimplémente pas la recherche, la fusion ou le reranking dans le portail ou le plan de contrôle.
+### 2.6 Skills, rôles et workflows retrouvés dans les Beads
 
-### 2.5 Contrat de compatibilité CLI
+Le Bead historique `dgx-spark-agentic-stack-dy95` mentionne : `Capability Evolver`, `Capability Evolver++`, `Clawflows`, `GOG`, `GitHub`, `Summarize`, `Knowledge Base`, `Mission Control`, `Code Reviewer`, `Decision Assistant`, `Red Team`, `Pre-Mortem`, `Literature Scout`, `Paper Reviewer`, `Grant Writer`, `Citation Auditor`, `Architecture Reviewer`, `Documentation Builder`, `Dependency Auditor`, `Test Engineer`, `Knowledge Curator`, `Knowledge Gap Detector`, `Workspace Cartographer`, `Agent Security Watcher` et `Meeting Synthesizer`.
 
+**DÉCISION :** ces noms sont initialement des `SkillPackage`, `AgentProfile`, `WorkflowTemplate` ou connecteurs OpenClaw. Ils ne sont pas de nouveaux harnesses tant qu’une implémentation indépendante, un état propre et un cycle de vie distinct ne sont pas démontrés.
 
-**DÉCISION :** le binaire `agent` reste la façade utilisateur pendant toute la transition.
+Le registre distingue toujours :
 
-Chaque commande v1 reçoit :
+- le harness qui exécute ;
+- l’identité ou le profil spécialisé ;
+- les skills et outils ;
+- le workflow ;
+- les applications externes appelées.
 
-- un identifiant de capacité stable ;
-- une implémentation `v1`, `v2` ou `hybride` ;
-- les mêmes codes de sortie utiles ;
+Les anciens noms comme `Clawdbot` sont des alias historiques d’OpenClaw lorsqu’ils désignent la même lignée.
+
+### 2.7 Compatibilité CLI
+
+**DÉCISION :** `agent` reste la façade pendant la transition.
+
+Chaque commande possède :
+
+- un identifiant de capacité ;
+- une route v1, v2 ou hybride ;
 - un format JSON stable lorsqu’il existe ;
-- un test de compatibilité ;
-- une date et une condition de retrait si elle devient obsolète.
+- des codes de sortie compatibles ;
+- un test de parité ;
+- une condition de retrait.
 
-Le routage v1/v2 est activable par utilisateur, agent, projet et capacité. Aucun script existant ne doit casser simplement parce qu’une fonction a migré.
+Le routage peut être activé par utilisateur, agent, projet et capacité.
 
 ## 3. Architecture générale
 
-### 3.1 Plan de contrôle
+### 3.1 Monolithe modulaire de contrôle
 
-**DÉCISION :** démarrer avec un monolithe modulaire :
+Le plan de contrôle initial comprend :
 
 - API FastAPI/Python ;
-- worker séparé pour les tâches longues ;
+- worker du même codebase pour les tâches longues ;
 - PostgreSQL ;
 - frontend React ou Next.js ;
-- REST versionné pour les commandes ;
-- Server-Sent Events ou WebSocket pour les flux ;
-- table d’outbox PostgreSQL pour les événements, sans ajouter un bus distribué au départ ;
-- reconciler comparant état désiré et état observé ;
-- identifiants de corrélation et clés d’idempotence.
+- REST versionné ;
+- SSE ou WebSocket pour les flux ;
+- outbox PostgreSQL plutôt qu’un bus distribué au départ ;
+- reconciler état désiré/observé ;
+- idempotence et identifiants de corrélation.
 
-Le plan de contrôle ne réimplémente pas les bases internes de Forgejo, OpenWebUI, OpenShell ou Qdrant. Il ne réimplémente pas non plus le moteur de `rag-retriever` ni les traitements de `rag-worker`. Il conserve leurs références, l’état désiré, les droits et une projection de leur état observé.
+Le monolithe concerne le contrôle, pas les produits externes. Il ne recopie pas les bases internes d’OpenShell, Hermes, OpenClaw, OpenHands, Forgejo, OpenWebUI, ComfyUI, Qdrant ou du service RAG.
 
-### 3.2 Zones de confiance
+### 3.2 Contrats d’adaptation
 
-| Niveau | Exemples | Politique |
+- `HarnessAdapter` : protocole modèle, sessions, sous-agents, outils, permissions et surfaces ;
+- `AgentRuntimeAdapter` : enveloppe d’exécution OpenShell ;
+- `ApplicationAdapter` : démarrage, santé, URL, droits, sauvegarde et update d’une application ;
+- `GPUJobAdapter` : admission et observation d’une tâche GPU, notamment ComfyUI ;
+- `ManagedServiceAdapter` : service interne ;
+- `ModelBrokerAdapter` : protocoles et backends modèles ;
+- `RAGServiceAdapter` : service RAG v1 ;
+- `GitProviderAdapter` : Forgejo/GitHub ;
+- `ExternalAccessBroker` : GitHub, Hugging Face et futurs services externes.
+
+OpenHands utilise plusieurs contrats : application, harness et runtime. Les adapters exposent les capacités disponibles ; ils ne simulent pas une capacité absente.
+
+### 3.3 Zones de confiance
+
+| Niveau | Exemples | Exigence |
 |---|---|---|
-| Contrôle de confiance | portail, API, scheduler, broker de modèles, courtier de secrets | accès privilégié minimal, audit complet |
-| Services gérés | PostgreSQL, Forgejo, Grafana, `rag-retriever`, `rag-worker`, Qdrant, OpenSearch optionnel, reverse proxy | Docker/Compose durci, réseau interne |
-| Applications extensibles | OpenWebUI avec extensions, ComfyUI et custom nodes, JupyterLab | isolation renforcée, droits minimaux, aucune socket Docker |
-| Exécution de code | agents, tâches OpenHands, outils autonomes | sandbox OpenShell cible |
-| Administration de rupture | Portainer, shell hôte, OpenShell TUI direct | administrateur, réauthentification, audit, non visible par défaut |
+| contrôle de confiance | API, portail, scheduler, brokers | privilèges minimaux et audit complet |
+| services gérés | PostgreSQL, Forgejo, RAG, Grafana | Docker/Compose durci et réseau interne |
+| applications extensibles | OpenWebUI, ComfyUI, JupyterLab | plugins contrôlés, droits minimaux |
+| exécution de code | agents, OpenHands runtime, outils autonomes | OpenShell cible |
+| rupture | Portainer, shell hôte, TUI OpenShell direct | admin, réauthentification, audit |
 
-Une application n’est pas considérée « de confiance » simplement parce qu’elle possède une interface web.
+Une interface web n’est pas automatiquement un service de confiance.
 
-### 3.3 Déploiement
+### 3.4 Déploiement
 
-- Docker/Compose reste le socle des services gérés sur la DGX Spark ;
-- OpenShell utilise initialement son pilote Docker pour les sandboxes ;
-- Kubernetes n’est pas requis pour la v2 mono-machine ;
-- MicroVM et Kubernetes restent des adapters futurs, sans modifier les contrats de haut niveau ;
-- aucune fonctionnalité utilisateur ne dépend directement d’un nom de conteneur.
+- Docker/Compose exécute les services gérés ;
+- OpenShell utilise initialement son pilote Docker ;
+- les agents n’accèdent jamais au socket Docker ;
+- Kubernetes n’est pas requis pour la v2 mono-DGX ;
+- MicroVM et Kubernetes restent des drivers futurs ;
+- aucun parcours utilisateur ne dépend d’un nom de conteneur ou d’un port interne.
 
-## 4. Modèle d’état et sources de vérité
+## 4. Sources de vérité
 
-La viabilité dépend d’une propriété claire de chaque donnée.
-
-| Domaine | Source de vérité | Réplique ou projection |
+| Domaine | Source canonique | Projection |
 |---|---|---|
-| utilisateurs, rôles, projets, délégations | PostgreSQL du plan de contrôle | caches du portail |
-| définitions d’agents et surfaces | PostgreSQL + manifestes versionnés | OpenShell/NemoClaw |
-| état désiré d’un runtime | plan de contrôle | reconciler |
-| état observé de sandbox | OpenShell | projection dans PostgreSQL |
-| conversation et session native | stockage de l’agent concerné | index de recherche facultatif |
-| dépôts et branches | Forgejo/Git | références dans le plan de contrôle |
-| fichiers de projet | workspace persistant | sandbox montée ou synchronisée |
-| secrets | SecretStore canonique | providers OpenShell ou fichiers temporaires de service |
-| catalogue de modèles et politiques | plan de contrôle | broker de modèles |
-| fichiers de modèles | store global sur disque | index du catalogue |
-| documents sources | emplacement d’origine | catalogue et références dans PostgreSQL |
-| droits, provenance et collections RAG | PostgreSQL du plan de contrôle | filtres et métadonnées transmis au service RAG |
-| logique de recherche hybride | `rag-retriever` derrière `RAGServiceAdapter` | contrat et état observé dans le plan de contrôle |
-| tâches d’indexation | `rag-worker` | références et progression dans le plan de contrôle |
-| index dense et embeddings | Qdrant, régénérable | manifestes de version et snapshots |
-| index lexical | OpenSearch optionnel, régénérable | manifestes de version et snapshots |
-| logs | Loki ou stockage structuré retenu | liens et résumés dans PostgreSQL |
-| métriques | Prometheus | tableaux de bord Grafana |
-| sauvegardes | manifeste de sauvegarde | exports cohérents de chaque store |
+| utilisateurs, projets, rôles | PostgreSQL contrôle | portail |
+| définitions et profils agents | PostgreSQL + manifestes Git | harness/OpenShell |
+| état désiré runtime | plan de contrôle | reconciler |
+| état observé sandbox | OpenShell | PostgreSQL |
+| sessions/conversations | harness natif | références PostgreSQL |
+| arbre multi-agent | harness natif | projection pour quotas/audit |
+| dépôts internes | Forgejo/Git | références contrôle |
+| dépôts GitHub | GitHub | références et miroirs autorisés |
+| workspaces | stockage persistant | montages runtime |
+| secrets | SecretStore | credentials temporaires |
+| catalogue modèles | plan de contrôle | ModelBroker |
+| fichiers modèles | store global | catalogue et empreintes |
+| sources RAG | emplacement original | catalogue PostgreSQL |
+| logique RAG | `rag-retriever` | adapter |
+| tâches RAG | `rag-worker` | progression contrôle |
+| index dense | Qdrant, régénérable | snapshots |
+| index lexical | OpenSearch, régénérable | snapshots |
+| logs | Loki ou store structuré | liens contrôle |
+| métriques | Prometheus | Grafana |
 
-**Invariant :** aucune donnée métier mutable ne possède deux sources de vérité actives.
+Aucune donnée mutable ne possède deux sources actives.
 
-## 5. Identité d’agent, projet et session
+## 5. Identité, projet, session et multi-agent
 
-### 5.1 Objets distincts
+### 5.1 Objets
 
-- **AgentDefinition** : type d’agent, image, capacités, surfaces et politique par défaut ;
-- **AgentIdentity** : collaborateur logique persistant visible par l’utilisateur ;
-- **RuntimeContext** : exécution d’un agent pour un utilisateur et un contexte ;
-- **Session** : conversation ou tâche native de l’agent ;
-- **Project** : droits, workspace, secrets, modèles et collections associés.
+- `AgentDefinition` : harness, version, image, capacités et surfaces ;
+- `AgentIdentity` : collaborateur logique persistant ;
+- `RuntimeContext` : exécution pour utilisateur + agent + projet ;
+- `Session` : conversation ou tâche native ;
+- `Run` : exécution corrélée, éventuellement parent ou enfant ;
+- `Project` : droits, workspace, secrets, modèles et collections.
 
-### 5.2 Clé de runtime
+### 5.2 Contextes
 
-**DÉCISION :** un contexte d’exécution est identifié par :
+La clé d’un contexte est :
 
 ```text
 utilisateur + identité d’agent + projet
 ```
 
-Le contexte sans projet est un contexte personnel explicite.
-
-OpenShell verrouille les politiques fichiers et processus à la création de la sandbox. Par conséquent, changer de projet ne remonte pas un nouveau workspace dans une sandbox existante. Le CLI et le portail se reconnectent à un autre `RuntimeContext`, créé ou repris.
+Le contexte sans projet est personnel. Changer de projet rejoint ou crée un autre `RuntimeContext`, car les politiques fichiers OpenShell sont fixées à la création.
 
 ```bash
 agent codex
@@ -233,632 +268,516 @@ agent codex ARTANY
 agent project SEGMENTATION-RTMRI
 ```
 
-Le dernier exemple change le contexte actif, pas l’identité logique de Codex.
+### 5.3 Persistance
 
-### 5.3 Persistance réelle
+- reconnexion chaude : sandbox et processus vivants ;
+- reprise froide : recréation depuis image, manifeste et politique, puis rattachement de l’état ;
+- reprise native : mécanisme du harness ;
+- checkpoint mémoire : seulement si réellement supporté.
 
-Trois niveaux sont distingués :
+Un HOME mutable partagé entre projets est interdit par défaut.
 
-1. **reconnexion chaude** : la sandbox et le processus sont encore vivants ;
-2. **reprise froide** : la sandbox est recréée depuis image, manifeste et politique épinglés, puis rattache son état persistant ;
-3. **reprise native** : l’agent reprend une session grâce à sa propre fonction de reprise.
+### 5.4 Orchestration multi-agent
 
-Un checkpoint mémoire générique n’est pas supposé. Il reste une capacité facultative par adapter. Les tâches non reprenables sont marquées comme telles et ne sont pas préemptées de force hors décision administrateur.
+Hermes, OpenClaw, OpenHands, Goose, KiloCode, OpenCode, Claude Code et certaines extensions Pi peuvent créer des sous-agents.
 
-### 5.4 Séparation des données
+Chaque profil déclare :
 
-Chaque contexte dispose de :
+- `orchestration_mode` : `none`, `native`, `platform` ou `external-provider` ;
+- profondeur et concurrence maximales ;
+- annulation, reprise et inspection ;
+- héritage des outils, modèles, secrets et droits ;
+- remontée d’usage par enfant.
 
-- workspace projet persistant ;
-- état agent-projet persistant ;
-- scratch runtime éphémère ;
-- préférences utilisateur-agent limitées et contrôlées ;
-- références de secrets, jamais les secrets eux-mêmes.
+Invariants :
 
-Un HOME mutable partagé entre projets est interdit par défaut afin d’éviter les fuites de contexte.
+- un enfant ne reçoit jamais plus de droits que son parent et son projet ;
+- CPU, mémoire, GPU, tokens, coûts et accès externes sont agrégés sur l’arbre ;
+- chaque événement porte `run_id` et `parent_run_id` ;
+- annulation et drainage des orphelins sont testés ;
+- la délégation inter-harness est interdite par défaut ;
+- les cycles Hermes → Goose → Codex → Hermes sont refusés ;
+- la plateforme ne remplace pas l’orchestration native ; elle impose l’enveloppe de ressources et de sécurité.
 
-## 6. Broker de modèles et inférence
+## 6. ModelBroker et compatibilité des harnesses
 
-### 6.1 Contrat, pas implémentation imposée
+### 6.1 Contrat
 
-**DÉCISION :** la capacité s’appelle `ModelBroker`. `ollama-gate` est l’adapter de compatibilité v1, pas une implémentation éternelle imposée.
+`ModelBroker` est la capacité cible. `ollama-gate` est l’adapter v1 jusqu’à décision documentée de l’étendre ou de le remplacer.
 
-Le choix entre évolution du gate actuel et adoption d’un gateway existant est décidé après un benchmark de contrat.
+Responsabilités :
 
-### 6.2 Responsabilités du ModelBroker
-
-- API OpenAI nécessaire aux clients ;
-- API Ollama nécessaire à la compatibilité ;
+- APIs réellement nécessaires aux clients ;
+- catalogue, alias et santé des modèles ;
+- routage Ollama, TensorRT-LLM, vLLM ou fournisseur distant ;
 - embeddings ;
-- catalogue et alias de modèles ;
-- routage Ollama, TensorRT-LLM, vLLM ou fournisseur distant autorisé ;
-- disponibilité et santé des backends ;
-- streaming homogène ;
-- identité utilisateur/agent/projet/tâche vérifiée ;
-- quotas, priorité, attribution d’usage et coûts ;
-- décision explicite de fallback ;
-- admission avec le scheduler avant chargement ou bascule GPU.
+- streaming ;
+- identité signée utilisateur/agent/projet/run ;
+- quotas, priorité, usage et coûts ;
+- fallback explicite ;
+- admission GPU avec le scheduler.
 
-### 6.3 Responsabilités d’OpenShell
+OpenShell contrôle l’autorisation réseau et injecte un credential court. Il ne possède ni le catalogue global, ni les quotas projet, ni le scheduler.
 
-OpenShell gère pour les agents :
+### 6.2 `inference.local`
 
-- politique réseau du sandbox ;
-- autorisation d’atteindre le ModelBroker ;
-- injection d’un jeton court ou d’un placeholder de credential ;
-- blocage des accès directs aux backends modèles ;
-- journalisation des autorisations et refus réseau.
+`inference.local` est réservé aux profils à modèle fixe. Pour le routage dynamique, le sandbox joint directement le ModelBroker interne par une route OpenShell autorisée. Les backends Ollama/TRT/vLLM restent inaccessibles aux agents.
 
-OpenShell ne possède pas le catalogue global, les quotas projet, le scheduler GPU ni le choix dynamique multi-backend de la plateforme.
+### 6.3 Protocoles par composant
 
-### 6.4 Usage de `inference.local`
+| Composant | Protocole à préserver | Validation obligatoire |
+|---|---|---|
+| Claude Code | Anthropic Messages `/v1/messages` | outils, streaming, usage, hooks, sous-agents |
+| Codex | OpenAI Responses `/v1/responses` | événements, outils, approvals, erreurs |
+| OpenCode | Chat Completions ou Responses selon provider | agents, permissions, serveur headless |
+| KiloCode | Ollama natif ou OpenAI-compatible | contexte, timeouts, outils, sous-agents |
+| Vibe | endpoint compatible configuré | agents TOML, trust projet, ACP, hors ligne |
+| Pi | Chat, Responses, Messages ou extension | drapeaux compatibilité, extensions |
+| Goose | provider d’extension/recipe | recipes, ACP, sous-agents externes |
+| Hermes | `chat_completions`, `codex_responses` ou `anthropic_messages` | profils, délégation et dashboard |
+| OpenClaw | Ollama/OpenAI-compatible par agent | sessions, canaux, outils, sous-agents |
+| OpenHands | backend LiteLLM/OpenAI-compatible retenu | outils, streaming, coût, SDK |
+| OpenWebUI | API OpenAI ModelBroker | modèles, streaming, RBAC, outils autorisés |
 
-OpenShell configure actuellement `inference.local` au niveau de la gateway avec un provider et un modèle appliqués aux sandboxes. Il peut réécrire le modèle demandé.
+Un simple `Hello` ne prouve pas la compatibilité. Les tests couvrent tool calling, contexte, usage, erreurs, streaming et fonctions multi-agent.
 
-**DÉCISION :**
+`ollama launch` sert d’oracle de configuration pour les intégrations qu’il supporte, notamment Claude Code, Codex, OpenCode, Pi et OpenClaw. La production utilise ensuite des profils versionnés générés par la stack.
 
-- utiliser `inference.local` seulement pour un profil volontairement à modèle fixe ;
-- pour le choix dynamique, autoriser le sandbox à joindre le ModelBroker interne avec un jeton court injecté par OpenShell ;
-- interdire l’accès direct à Ollama, TensorRT-LLM, vLLM et fournisseurs distants ;
-- tester que le modèle demandé et l’identité arrivent intacts au ModelBroker.
+## 7. OpenShell, NemoClaw, Hermes et OpenHands
 
-### 6.5 Jeton d’identité
+### 7.1 OpenShell
 
-Le plan de contrôle émet un jeton court signé contenant :
+**CIBLE :** runtime principal des agents, derrière `AgentRuntimeAdapter`.
 
-- utilisateur ;
-- agent ;
-- projet ;
-- tâche ou session ;
-- scopes modèles ;
-- expiration ;
-- identifiant de corrélation.
+Limites intégrées au design :
 
-Le ModelBroker ne fait jamais confiance à des en-têtes d’identité librement définis par le client.
+- projet encore alpha et initialement mono-utilisateur ;
+- politiques fichiers/processus statiques à la création ;
+- pas de scheduler global ;
+- limites CPU/mémoire appliquées par le driver, admission globale externe ;
+- GPU et APIs ressources à valider ;
+- pas de checkpoint générique supposé ;
+- upgrade susceptible de recréer les sandboxes.
 
-## 7. OpenShell et NemoClaw
+Le plan de contrôle est la frontière multi-utilisateur et le seul client normal de la gateway.
 
-### 7.1 Positionnement
+### 7.2 OpenClaw avec ou sans NemoClaw
 
-**CIBLE :** OpenShell est le runtime principal des agents.
+NemoClaw est privilégié pour OpenClaw seulement après parité complète : gateway, agents, workspaces, `agentDir`, sessions, mémoire, skills, canaux, approvals, relay, pièces jointes, Control UI et sous-agents.
 
-**DÉCISION :** OpenShell reste derrière `AgentRuntimeAdapter`. Le plan de contrôle est la frontière multi-utilisateur et le seul client normal de la gateway OpenShell. Les utilisateurs ne reçoivent pas un accès direct à son API.
+OpenClaw reste propriétaire de son arbre d’agents, de ses bindings de canaux et de ses sessions. Le plan de contrôle projette l’état pour quotas et audit sans l’aplatir.
 
-La topologie initiale visée est une gateway interne par hôte DGX. Une gateway séparée par domaine de sécurité reste possible si les tests montrent que l’isolation logique est insuffisante.
+### 7.3 Deux chemins Hermes
 
-### 7.2 Limites à ne pas masquer
+**Hermes natif — référence de production :**
 
-- OpenShell est encore annoncé en alpha et en mode initial mono-utilisateur ;
-- les politiques fichiers et processus sont statiques à la création ;
-- le scheduler et les réservations globales ne sont pas fournis par OpenShell ;
-- les limites CPU et mémoire sont appliquées par le pilote, mais la planification globale reste notre responsabilité ;
-- le GPU et ses API évoluent encore ;
-- aucune fonction générique de checkpoint mémoire n’est considérée acquise ;
-- les upgrades alpha peuvent exiger de recréer les sandboxes.
+- `HermesNativeAdapter` dans une enveloppe OpenShell ;
+- profils indépendants, configurations, mémoire, sessions, skills, cron, messageries et base d’état ;
+- dashboard web, Chat et Desktop ;
+- sous-agents natifs isolés ;
+- Kanban durable partagé entre profils ;
+- limites de concurrence, profondeur et budget ;
+- protocole modèle choisi par profil.
 
-Ces limites sont intégrées dans les contrats et les tests, pas reléguées dans une note.
+**Hermes NemoClaw — canari :**
 
-### 7.3 AgentRuntimeAdapter
+- `HermesNemoClawAdapter` et blueprint épinglé ;
+- racine d’état indépendante ;
+- aucun partage en écriture de `HERMES_HOME`, sessions ou base avec le natif ;
+- imports/exports en dry-run ;
+- activation seulement après parité CLI, dashboard, profils, mémoire, outils, délégation, Kanban, cron, messageries, Desktop et reprise.
 
-Le contrat couvre :
+Si la parité échoue, Hermes natif reste le chemin de production.
 
-- capacités réellement disponibles ;
-- création, connexion, état, arrêt et suppression ;
-- exécution interactive et non interactive ;
-- service web exposé par forwarding contrôlé ;
-- création avec image, politique, providers, ressources et labels ;
-- export du manifeste reproductible ;
-- collecte d’état et logs ;
-- suppression des credentials ;
-- reprise chaude et froide ;
-- checkpoint uniquement si supporté.
+### 7.4 OpenHands et la double sandbox
 
-### 7.4 NemoClaw
+OpenHands est une application et un harness multi-agent avec son propre runtime. M2 compare :
 
-**CIBLE :**
+1. UI/contrôle OpenHands avec agent-server piloté par OpenShell ;
+2. runtime natif derrière une enveloppe externe minimale ;
+3. intégration directe de l’Agent SDK OpenHands.
 
-- NemoClaw est le chemin privilégié pour OpenClaw ;
-- NemoClaw est évalué en priorité pour Hermes.
+Le choix préserve sous-agents, terminal, navigateur, fichiers, WebSocket, GitHub et reprise. L’édition locale étant mono-utilisateur, la v2 utilise une instance par utilisateur/domaine de sécurité ou une édition officiellement multi-tenant. Aucune superposition de sandboxes n’est acceptée sans bénéfice mesuré.
 
-Hermes est officiellement indiqué comme testé avec limitations et sans affirmation de parité de production avec OpenClaw. La bascule Hermes exige donc un test complet du dashboard, des sessions, de la mémoire, des outils, des modèles et des messageries.
+## 8. Profils d’intégration des harnesses v1
 
-Si NemoClaw ne préserve pas le contrat Hermes, la solution n’est ni de perdre des fonctions ni de contourner OpenShell : un blueprint Hermes spécifique est maintenu derrière le même adapter.
+Chaque profil contient version amont, digest, architecture ARM64, protocole modèle, fichiers persistants, surfaces, permissions, sous-agents et tests.
 
-## 8. Applications, portail et surfaces
+| Harness | État à préserver | Particularités |
+|---|---|---|
+| Claude Code | `CLAUDE.md`, `.claude/agents`, hooks, plugins/skills, MCP, sessions utiles | hooks de permission, sous-agents avec outils propres, Messages API |
+| Codex | `config.toml`, providers, sessions, approvals, règles sandbox | Responses API, CLI principal, app/IDE optionnels |
+| OpenCode | `opencode.json`, auth séparée, agents, permissions, sessions | Chat ou Responses explicite, serveur headless protégé |
+| KiloCode | `.kilo/agents`, modes, permissions, sessions | CLI, IDE, console web, sous-agents natifs, contexte benchmarké |
+| Vibe | `VIBE_HOME`, `config.toml`, agents TOML, `AGENTS.md`, skills | CLI/VS Code/ACP, trust répertoires, local hors ligne, cloud désactivé par défaut |
+| Pi | modèles, packages/extensions, sessions | minimal par défaut ; aucun sous-agent supposé sans package épinglé ; auth hors workspace |
+| Goose | recipes, extensions, sessions, ACP | sous-agents internes/externes, garde anti-récursion |
+| Hermes | profils, dashboard, mémoire, sessions, skills, cron, Kanban | natif et NemoClaw séparés, multi-agent natif |
+| OpenClaw | gateway, agents, `agentDir`, sessions, canaux, relay, UI | processus permanent, multi-agent/multi-canal |
+| OpenHands | UI, settings, conversations, skills/hooks, GitHub, runtime | application + harness ; stratégie sandbox et utilisateur explicites |
 
-### 8.1 Portail agent-first
+Les tests vérifient le vrai binaire officiel, pas seulement un wrapper présent dans le PATH. Ils valident la configuration attendue par la version amont, afin d’éviter les faux positifs déjà rencontrés avec Vibe.
 
-Accueil : annuaire des agents visibles par l’utilisateur.
+## 9. Applications humaines
 
-Page agent :
+### 9.1 Portail
 
-- identité, rôle et état ;
-- projet actif ;
-- ouvrir/reprendre une session ;
-- changer de contexte ;
-- ouvrir l’interface web native si elle existe ;
-- commande CLI équivalente ;
-- tâches, approvals, usage et incidents récents.
+Accueil : agents visibles. Sections séparées :
 
-Sections séparées :
-
+- Agents ;
 - Applications ;
 - Projets ;
 - Modèles ;
 - Ressources ;
-- Données et RAG ;
-- Système et administration.
+- Données/RAG ;
+- Système.
 
-### 8.2 Surfaces natives
+Une application peut invoquer un modèle ou un agent sans devenir une identité d’agent.
 
-- Hermes Dashboard est exposé par le mécanisme de service OpenShell ou un reverse proxy validé ;
-- Hermes Desktop se connecte au même backend si le flux distant est officiellement supporté et testé ;
-- DGX Dashboard et JupyterLab sont lancés par un chemin supporté : lien, tunnel ou proxy validé ;
-- aucune intégration par iframe ou réécriture de sous-chemin n’est supposée fonctionner ;
-- Grafana, Forgejo, OpenWebUI, OpenHands et ComfyUI utilisent leurs interfaces natives derrière authentification et droits.
+### 9.2 Profils applicatifs
 
-### 8.3 Applications exécutant du code
+| Application | Contrat | Exigences |
+|---|---|---|
+| OpenWebUI | `ApplicationAdapter` | multi-utilisateur/RBAC, ModelBroker uniquement, sauvegarde |
+| ComfyUI | `ApplicationAdapter` + `GPUJobAdapter` | WebSocket/API, Flux, racine persistante unique, admission GPU |
+| Forgejo | `ApplicationAdapter` + `GitProviderAdapter` | forge interne, comptes, SSH, hooks, branches protégées |
+| Grafana | `ApplicationAdapter` | dashboards/datasources versionnés, lecture majoritaire |
+| DGX Dashboard | launcher admin supporté | pas d’iframe/proxy supposé sans test |
+| JupyterLab | application de code | isolation utilisateur, quotas, accès externes explicites |
+| Portainer | break-glass | désactivé par défaut, admin uniquement |
 
-- les tâches OpenHands s’exécutent dans OpenShell ou un runtime équivalent validé ;
-- ComfyUI avec custom nodes reçoit une politique et un réseau restrictifs ;
-- JupyterLab n’est pas assimilé à une simple page de dashboard ;
-- Portainer reste une fonction de rupture, administrateur uniquement, désactivée par défaut.
+### 9.3 Extensions à risque
 
-## 9. Secrets
+- OpenWebUI Tools, Functions et Pipelines peuvent exécuter du Python : création/import désactivés par défaut, allowlist et revue ;
+- le RAG natif OpenWebUI ne devient pas une seconde source de vérité : il est désactivé ou relié explicitement au RAG de la stack ;
+- ComfyUI custom nodes sont du code tiers : versions/digests, provenance, allowlist, scan et test ;
+- JupyterLab est traité comme un environnement de code, pas une simple page web ;
+- les tâches OpenHands restent sous leur politique runtime validée.
 
-**DÉCISION :** un seul `SecretStore` canonique.
+### 9.4 Surfaces natives
 
-Le SecretStore assure :
+- Hermes Dashboard et Desktop ;
+- OpenHands UI ;
+- Kilo CLI/IDE/console ;
+- Vibe CLI/VS Code/ACP ;
+- Goose ACP ;
+- OpenWebUI, ComfyUI, Forgejo et Grafana ;
+- DGX Dashboard et JupyterLab.
 
-- chiffrement au repos ;
-- séparation utilisateur, équipe et projet ;
-- rotation et expiration ;
-- journalisation des accès ;
-- absence de valeur secrète dans PostgreSQL, logs, RAG ou mémoire agent.
+Aucun iframe ou reverse proxy par sous-chemin n’est supposé compatible sans preuve. Le portail utilise une URL, un tunnel ou un proxy officiellement validé.
 
-Les providers OpenShell sont un mécanisme de livraison et de rotation dans les sandboxes, pas une seconde source de vérité. Les services Docker reçoivent des fichiers temporaires ou secrets montés en lecture seule.
+## 10. Secrets, GitHub et Hugging Face
 
-Le choix technique du SecretStore est une décision bloquante : solution locale chiffrée simple ou produit dédié, évalués selon restauration, rotation, mode hors ligne et charge d’exploitation.
+### 10.1 SecretStore
 
-## 10. Scheduler et ressources
+Une seule source canonique assure chiffrement, scopes, rotation, expiration et audit. Aucune valeur secrète n’est stockée dans PostgreSQL, logs, RAG, image ou HOME persistant.
 
-### 10.1 Responsabilité
+Les providers OpenShell et les fichiers temporaires de service sont des mécanismes de livraison, pas des sources de vérité.
 
-Le scheduler du plan de contrôle possède :
+### 10.2 ExternalAccessBroker
 
-- file d’attente et priorité ;
-- réservations ;
-- quotas utilisateurs et projets ;
-- admission CPU, mémoire, GPU et stockage ;
-- politiques normal, burst et exclusif ;
-- drain et délais de grâce ;
-- coordination avec le ModelBroker et les services GPU.
+Les agents peuvent accéder à GitHub et Hugging Face par capacités explicites.
 
-OpenShell applique les limites demandées au sandbox mais ne remplace pas ce scheduler.
+Capacités minimales :
 
-### 10.2 Stratégie progressive
+- `github.contents.read/write` ;
+- `github.pull_requests.read/write` ;
+- `github.issues.read/write` ;
+- `github.actions.read`, les droits d’administration étant séparés ;
+- `hf.models.read/write` ;
+- `hf.datasets.read/write` ;
+- `hf.spaces.read/write`.
 
-1. admission simple et limites fixes ;
-2. métriques et refus explicites ;
-3. priorités et files ;
-4. réservations et calendrier ;
-5. préemption coopérative ;
-6. optimisation adaptative.
+#### GitHub
 
-Les fonctions avancées ne bloquent pas le premier parcours Codex, mais aucune promesse de préemption n’est faite avant la reprise réelle des tâches.
+- préférer une GitHub App avec jeton d’installation court, dépôts sélectionnés et permissions minimales ;
+- utiliser un PAT finement granulaire par utilisateur si nécessaire ;
+- distinguer clone/fetch, push, branche, PR, issue, release et workflow ;
+- exiger une politique ou une approbation pour les écritures, releases et workflows ;
+- conserver Forgejo comme forge interne canonique ; synchronisation ou miroir GitHub seulement si demandé.
 
-## 11. Service RAG v1, catalogue et mémoire
+#### Hugging Face
 
-### 11.1 Baseline à préserver
+- tokens fins limités aux ressources nécessaires ;
+- lecture et publication séparées ;
+- cache central `snapshot_download`/HF Hub pour éviter les téléchargements dupliqués ;
+- révision, digest, licence et provenance enregistrés ;
+- publication, suppression et modification de model card soumises à autorisation ;
+- téléchargements lourds soumis au scheduler et aux budgets disque/réseau.
 
-Le service RAG v1 est une application existante et testable, pas une fonction interne du futur portail. Sa baseline comprend :
+Les credentials courts sont liés à utilisateur, agent, projet et run. `git`, `gh`, `huggingface_hub`, CLI HF ou MCP GitHub les consomment temporairement. Les politiques OpenShell limitent domaines, méthodes et chemins.
 
-- `rag-retriever` et son API `/v1/retrieve` ;
-- `rag-worker` et son mécanisme de tâches d’indexation ;
-- Qdrant et ses collections ;
-- OpenSearch et ses index lorsque le profil lexical est activé ;
-- recherche dense, recherche lexicale, fusion RRF et reranking ;
-- génération d’embeddings par le gate modèle ;
-- schéma documentaire, métadonnées de source, passages et journaux d’audit ;
-- commandes CLI v1 et healthchecks.
+## 11. Scheduler et ressources
 
-Avant toute évolution, M0 capture :
+Le scheduler possède :
 
-- versions, configuration effective et variables non secrètes ;
-- modèle d’embedding et dimension des vecteurs ;
-- collections Qdrant et index OpenSearch ;
-- nombre de documents et chunks ;
-- tâches en cours ou échouées ;
-- corpus et requêtes de référence avec résultats attendus ;
-- état réel de `RAG_GATE_DRY_RUN` ;
-- volumes, journaux, temps d’indexation et latence de recherche.
+- admission CPU, mémoire unifiée, GPU, stockage et réseau ;
+- files, priorités et quotas ;
+- modes normal, burst et exclusif ;
+- réservations et calendrier ;
+- drain et délai de grâce ;
+- coordination ModelBroker, ComfyUI, OpenHands et téléchargements HF ;
+- agrégation parent/enfants des harnesses multi-agent ;
+- séparation interactif/tâche de fond.
 
-### 11.2 Contrat `RAGServiceAdapter`
+Progression : limites fixes, métriques/refus, files, réservations, préemption coopérative, optimisation adaptative. Aucune préemption forcée n’est promise avant validation de la reprise des tâches.
 
-Le plan de contrôle utilise un adapter stable exposant au minimum :
+OpenShell applique les limites d’une sandbox mais ne remplace pas ce scheduler.
 
-- `health()` et `capabilities()` ;
-- `config()` ;
-- `submit_index_job()` ;
-- `job_status()` et `cancel_job()` lorsque possible ;
-- `retrieve()` ;
-- `list_collections()` ;
-- `snapshot()` et `restore()` ;
-- `rebuild_index()` ;
-- `collect_usage()`.
+## 12. RAG, documents et autorisations par lot
 
-La première implémentation de cet adapter appelle le service RAG v1. Le portail affiche et orchestre ses fonctions, mais ne recode pas ses algorithmes.
+### 12.1 Baseline v1
 
-### 11.3 Répartition des responsabilités
+M0 capture : versions, configuration, modèle et dimension d’embedding, schéma, collections Qdrant, index OpenSearch, nombres de documents/chunks, tâches, corpus de référence, requêtes/résultats, état de dry-run, volumes, latence et journaux.
 
-Le plan de contrôle possède :
+### 12.2 `RAGServiceAdapter`
 
-- projets, utilisateurs et droits ;
-- catalogue des sources ;
-- provenance et confidentialité ;
-- autorisation d’indexer ;
-- choix des collections accessibles ;
-- suivi transversal des tâches ;
-- politiques de réindexation et de rétention.
+- `health`, `capabilities`, `config` ;
+- soumission, statut et annulation de tâche ;
+- `retrieve` ;
+- liste des collections ;
+- snapshot/restore ;
+- reconstruction ;
+- usage.
 
-Le service RAG possède :
+Le plan de contrôle possède catalogue, droits, provenance, autorisation d’indexer et politiques. Le service RAG possède ingestion technique, chunking, embeddings, index, fusion, reranking et état détaillé des tâches.
 
-- ingestion technique des documents ;
-- découpage selon le schéma retenu ;
-- demande d’embeddings au `ModelBroker` ;
-- écriture et interrogation des index ;
-- fusion, reranking et normalisation des résultats ;
-- état détaillé des tâches RAG ;
-- journaux techniques et métriques de recherche.
+### 12.3 Multi-projet
 
-Qdrant et OpenSearch ne sont jamais considérés comme la source de vérité documentaire. Les fichiers d’origine et leur catalogue permettent de reconstruire les index.
+La v2 ajoute côté serveur :
 
-### 11.4 Multi-utilisateur et multi-projet
+- identité signée utilisateur/agent/projet/run ;
+- collection séparée ou filtre payload obligatoire ;
+- ACL avant recherche et restitution ;
+- refus des sources devenues inaccessibles ;
+- audit du scope et des sources retournées ;
+- tests de fuite inter-projet.
 
-Le service v1 utilise initialement des noms de collection et d’index globaux et son API ne constitue pas à elle seule une frontière d’autorisation multi-projet.
+Le choix collection par projet, domaine de confidentialité ou collection filtrée est décidé en M2.
 
-La v2 doit ajouter, côté serveur :
+### 12.4 Autorisations documentaires par lot
 
-- identité signée utilisateur, agent, projet et tâche ;
-- collections séparées ou filtres de payload obligatoires ;
-- ACL appliquées avant la recherche et avant la restitution ;
-- refus d’une source devenue inaccessible ;
-- aucune confiance dans un `project_id` fourni librement par le client ;
-- journalisation de l’identité, du scope et des sources retournées ;
-- tests systématiques de fuite inter-projet.
+`AuthorizationBatch` permet d’autoriser globalement un ensemble de documents selon :
 
-Le choix entre collection par projet, collection par domaine de confidentialité ou collection partagée filtrée est une décision de M2 fondée sur les performances, la simplicité de restauration et la solidité des ACL.
+- fichiers, dossier, collection, projet, type, étiquette ou requête ;
+- action : lire, indexer, rechercher, partager, publier ou supprimer ;
+- bénéficiaires : utilisateurs, groupes, agents ou classes d’agents ;
+- portée : projet, organisation ou globale ;
+- expiration, date de revue ou nombre d’utilisations ;
+- exclusions obligatoires pour secrets, données réglementées et refus explicites.
 
-### 11.5 Modèles d’embedding et versionnement
+Un dry-run affiche nombre, volume, classifications, projets et exclusions. L’option « autoriser globalement tous les documents correspondants » est disponible à l’administrateur, explicite, révocable et auditée. Aucun wildcard caché ne contourne les ACL.
 
-Un changement de modèle, de dimension, de stratégie de chunking ou de schéma crée une nouvelle version d’index. Il ne modifie pas silencieusement une collection en production.
+Les grants sont appliqués côté serveur par le service RAG et les montages fichiers.
 
-Chaque version enregistre :
+### 12.5 Versionnement et restauration
 
-- modèle et digest ;
-- dimension ;
-- schéma et stratégie de chunking ;
-- date de construction ;
-- sources et empreintes ;
-- collection Qdrant et index OpenSearch associés.
+Un changement de modèle, dimension, chunking ou schéma crée une nouvelle version d’index avec modèle/digest, dimension, sources et collections associées. La réindexation se fait en parallèle, puis bascule atomique après validation.
 
-La réindexation est idempotente et s’effectue en parallèle dans une nouvelle version, puis une bascule atomique sélectionne la version active après validation.
+Migration : gel des indexations, export config/schéma, snapshot Qdrant, sauvegarde OpenSearch, états worker/retriever, restauration isolée et requêtes de référence. Aucun ancien index n’est supprimé automatiquement.
 
-### 11.6 Migration, sauvegarde et restauration
+## 13. Migration
 
-La migration privilégie la conservation lorsque les versions sont compatibles :
+### 13.1 Pattern d’étranglement
 
-1. geler les nouvelles indexations ;
-2. exporter configuration, schéma et manifestes ;
-3. prendre un snapshot Qdrant ;
-4. sauvegarder OpenSearch si activé ;
-5. sauvegarder les états et journaux du retriever et du worker ;
-6. restaurer dans une racine isolée ;
-7. exécuter le corpus et les requêtes de référence ;
-8. ne réindexer que si la compatibilité ou les ACL l’exigent ;
-9. produire un rapport des documents, chunks, index et écarts.
-
-Si une réindexation est nécessaire, l’ancien index reste lisible jusqu’à validation du nouveau. Aucun index v1 n’est supprimé automatiquement.
-
-### 11.7 Mémoire et restitution
-
-- la mémoire globale d’un agent et la mémoire d’un projet sont distinctes ;
-- une conversation privée ne devient pas automatiquement une source RAG ;
-- toute publication dans une collection commune est explicite et auditée ;
-- chaque réponse RAG expose les sources, passages et version d’index utilisés ;
-- le système peut compléter une réponse avec la connaissance générale du modèle, mais ne lui attribue pas de fausse source.
-
-## 12. Stratégie de migration
-
-### 12.1 Pattern d’étranglement
-
-La commande `agent` reste la façade. Chaque capacité est routée vers v1 ou v2 par feature flag.
-
-La migration se fait par **parcours vertical** :
+`agent` route chaque capacité vers v1 ou v2. La migration se fait par parcours vertical :
 
 ```text
-utilisateur → CLI/portail → identité → projet → runtime → modèle → workspace → logs → sauvegarde
+utilisateur → CLI/portail → identité → projet → harness/application
+→ runtime → modèle → workspace/données → accès externes → logs → sauvegarde
 ```
 
-Un parcours n’est pas déclaré migré si un de ces maillons dépend encore d’un contournement manuel.
+Aucun parcours n’est migré s’il exige une commande Docker/OpenShell manuelle.
 
-### 12.2 Règles de données
+### 13.2 Données
 
-- v1 et v2 utilisent des racines distinctes ;
-- les modèles peuvent être partagés en lecture seule pendant l’ombre ;
-- les écritures concurrentes dans un même store sont interdites ;
-- les importeurs sont versionnés, idempotents, exécutables en dry-run et produisent un rapport ;
-- chaque domaine possède un moment de gel, un import final, un test et un rollback ;
-- la double écriture est interdite sauf journal append-only explicitement conçu pour cela.
+- racines v1/v2 distinctes ;
+- modèles partagés en lecture seule pendant l’ombre ;
+- aucune double écriture ;
+- importeurs versionnés, idempotents et dry-run ;
+- gel/import final/test/rollback par domaine ;
+- exports natifs PostgreSQL, Forgejo, Qdrant et applications ;
+- workspaces snapshotés ;
+- secrets archivés séparément et chiffrés.
 
-### 12.3 Sauvegarde
+## 14. Phases
 
-Le snapshot `rsync` v1 est conservé comme filet de migration mais ne devient pas la stratégie finale unique.
+### M0 — Preuves v1
 
-La v2 réalise des exports cohérents :
+Inventaire commandes/services/Beads, baseline ressources, `agent ollama bench`, `repo-e2e`, sauvegarde/restauration, baseline RAG et catalogue skills.
 
-- PostgreSQL par outil natif ;
-- Forgejo par procédure officielle ;
-- Qdrant par snapshot ;
-- états applicatifs selon leur procédure ;
-- workspaces par snapshot fichier ;
-- secrets dans une archive chiffrée séparée ;
-- manifeste avec versions, digests, empreintes et dépendances.
+**G0 :** v1 restaurée et 100 % des capacités visibles.
 
-La restauration complète est répétée dans une racine isolée.
+### M1 — Contrats
 
-## 13. Phases de livraison
-
-### M0 — Preuves et gel v1
-
-- tag, archive, inventaire des commandes et services ;
-- baseline de performance et ressources ;
-- sauvegarde et restauration complète ;
-- registre de parité initial ;
-- inventaire et baseline du service RAG v1, de ses collections, index, configurations et requêtes de référence.
-
-**G0 :** v1 restaurée et toutes les capacités visibles dans le registre.
-
-### M1 — Contrats produit et architecture
-
-- contrats CLI, API, données, agents, modèles et secrets ;
-- matrice des sources de vérité ;
-- modèle utilisateur-agent-projet-runtime ;
-- classification des applications ;
-- ADR principales.
+Sources de vérité, adapters, classification harness/application/service/skill, profils d’intégration amont, protocoles modèles et modèle multi-agent.
 
 **G1 :** aucune responsabilité dupliquée ou sans propriétaire.
 
-### M2 — Spikes bloquants sur la DGX
+### M2 — Spikes bloquants sur DGX
 
-- OpenShell Docker/ARM64, auth interne et labels d’ownership ;
-- limites CPU, mémoire et GPU ;
-- contexte par projet et reprise froide ;
-- service forwarding pour Hermes Dashboard ;
-- NemoClaw OpenClaw et Hermes ;
-- ModelBroker dynamique sans conflit avec `inference.local` ;
-- accès DGX Dashboard et JupyterLab ;
-- SecretStore et restauration ;
-- identité et ACL du service RAG, stratégie de collections, snapshot/restore et compatibilité des index existants.
+- OpenShell ARM64, ressources et isolation ;
+- chaque protocole modèle réel et comparaison `ollama launch` ;
+- Hermes natif/NemoClaw ;
+- OpenClaw NemoClaw ;
+- stratégie sandbox OpenHands ;
+- sous-agents et budgets ;
+- GitHub/HF credentials courts et cache ;
+- ACL RAG, `AuthorizationBatch` et snapshots ;
+- surfaces web/desktop ;
+- SecretStore ;
+- benchmarks de sécurité matérielle.
 
-**G2 :** chaque hypothèse reçoit `validée`, `remplacée` ou `abandonnée`, avec preuve reproductible.
+**G2 :** chaque hypothèse est validée, remplacée ou abandonnée avec preuve.
 
 ### M3 — Walking skeleton
 
-Un parcours minimal utilisable :
+Un utilisateur, Codex, contexte personnel/projet, CLI, portail minimal, OpenShell, ModelBroker, workspace, reprise, logs, backup, lecture GitHub et téléchargement HF en cache.
 
-- un administrateur et un utilisateur ;
-- Codex ;
-- contexte personnel et un projet ;
-- CLI `agent codex [projet]` ;
-- portail agent-first minimal ;
-- OpenShell via adapter ;
-- ModelBroker via adapter de compatibilité ;
-- workspace, logs, arrêt et reprise froide ;
-- sauvegarde du parcours.
+**G3 :** parcours complet sans manipulation d’infrastructure.
 
-**G3 :** parcours complet sans commande Docker/OpenShell manuelle.
+### M4 — Fondation production
 
-### M4 — Fondation de production
-
-- authentification, rôles et délégations ;
-- reconciler et idempotence ;
-- SecretStore ;
-- audit ;
-- observabilité ;
-- admission simple ;
-- installation, désinstallation et upgrade épinglé.
+Auth, rôles, délégations, reconciler, SecretStore, ExternalAccessBroker, audit, observabilité, admission simple et upgrade épinglé.
 
 **G4 :** séparation utilisateurs/projets et restauration validées.
 
-### M5 — Plan modèle
+### M5 — Modèles
 
-- contrat ModelBroker complet ;
-- décision évoluer/remplacer `ollama-gate` ;
-- Ollama, TensorRT-LLM et fournisseur distant autorisé ;
-- embeddings, quotas, identité, streaming et admission GPU ;
-- migration des commandes modèle v1 ;
-- compatibilité des embeddings du service RAG avec le `ModelBroker`, sans changement silencieux de modèle ou de dimension.
+Contrat ModelBroker, décision sur `ollama-gate`, Ollama/TRT/remote, embeddings, quotas, admission et tests Messages/Responses/Chat/Ollama.
 
-**G5 :** aucun accès direct aux backends et parité des commandes modèle.
+**G5 :** aucun accès backend direct et parité des commandes modèle.
 
 ### M6 — Agents de code
 
-- Claude Code, Codex, OpenCode ;
-- KiloCode, VibeStral ;
-- Pi et Goose ;
-- politique, image, reprise et interfaces par agent ;
-- test dépôt réel et isolation inter-projet.
+Claude, Codex, OpenCode, Kilo, Vibe, Pi et Goose avec profils, protocoles, extensions, surfaces, sous-agents, GitHub/HF et `repo-e2e`.
 
-**G6 :** chaque agent obligatoire passe son contrat vertical et ses tests négatifs.
+**G6 :** contrat vertical et tests négatifs verts pour chaque agent.
 
-### M7 — Hermes, OpenClaw et OpenHands
+### M7 — Hermes, OpenClaw, OpenHands
 
-- OpenClaw via NemoClaw si parité ;
-- Hermes via NemoClaw ou blueprint spécifique ;
-- dashboards, Desktop et messageries retenues ;
-- approvals, relay, pièces jointes, mémoire et outils ;
-- exécution OpenHands isolée.
+Hermes natif référence, NemoClaw canari isolé, OpenClaw NemoClaw après parité, choix runtime OpenHands, arbres multi-agent, dashboards, canaux et reprise.
 
-**G7 :** aucune régression des fonctions v1 et aucune élévation implicite.
+**G7 :** aucune double écriture, double orchestration ou double sandbox non justifiée.
 
-### M8 — Applications et portail complet
+### M8 — Applications humaines
 
-- OpenWebUI, ComfyUI, Forgejo, Grafana ;
-- DGX Dashboard et JupyterLab ;
-- catalogue d’applications et droits ;
-- commandes de gestion CLI correspondantes.
+OpenWebUI, ComfyUI/Flux, Forgejo, Grafana, DGX Dashboard et JupyterLab avec RBAC, plugins gouvernés, admission GPU et sauvegarde.
 
-**G8 :** toutes les applications accessibles sans port interne et selon leur niveau de confiance.
+**G8 :** accès sans port interne et selon le niveau de confiance.
 
-### M9 — Migration et sécurisation du service RAG v1
+### M9 — RAG et documents
 
-- brancher le service existant derrière `RAGServiceAdapter` ;
-- préserver les commandes CLI, schémas, tâches, recherche dense, lexical optionnel, fusion RRF, reranking et journaux ;
-- rediriger les embeddings vers le `ModelBroker` validé ;
-- importer ou restaurer les collections Qdrant et index OpenSearch compatibles ;
-- introduire identité signée, ACL serveur et scopes projet ;
-- ajouter catalogue des sources, provenance et gestion des versions d’index ;
-- rendre indexation et réindexation idempotentes ;
-- exposer gestion et suivi dans le portail sans déplacer le moteur RAG dans le plan de contrôle ;
-- distinguer mémoire globale, mémoire projet et publications communes.
+Adapter v1, collections/index, identité/ACL, versions, `AuthorizationBatch`, portail et mémoire globale/projet.
 
-**G9 :** parité des commandes et des requêtes de référence, aucune fuite inter-projet, snapshots restaurés, index régénérables et ancien index conservé jusqu’à validation.
+**G9 :** parité des requêtes, aucune fuite, snapshots restaurés.
 
 ### M10 — Scheduler avancé et collaboration
 
-- files, priorités, réservations et calendrier ;
-- Mattermost et Dify seulement après stabilisation ;
-- bots distincts et boucles contrôlées.
+Files, réservations, calendrier, préemption coopérative, Mattermost/Dify, bots et garde anti-boucle.
 
-**G10 :** charge et conflits maîtrisés sans casser l’interactif.
+**G10 :** charge maîtrisée sans casser l’interactif.
 
-### M11 — Ombre, canari et bascule par domaine
+### M11 — Ombre et canaris
 
-- tâches miroir non destructives ;
-- canaris par utilisateur, agent, projet et capacité ;
-- comparaison résultats, performance, coûts et incidents ;
-- gel et import final par domaine ;
-- rollback chronométré.
+Tâches miroir, canaris par utilisateur/agent/application, benchmark complet, endurance, gel/import par domaine et rollback chronométré.
 
-**G11 :** deux cycles représentatifs sans perte et décision humaine de bascule.
+**G11 :** deux cycles représentatifs sans perte ni incident matériel.
 
-### M12 — Retrait contrôlé
+### M12 — Retrait
 
-- retrait des routes v1 validées ;
-- conservation archives et dernière sauvegarde ;
-- retrait du fallback Docker agent seulement lorsqu’il n’est plus utilisé ;
-- nettoyage proposé, jamais automatique.
+Retrait des routes v1 validées et du fallback Docker agent lorsqu’inutile. Archives conservées, nettoyage proposé mais jamais automatique.
 
-## 14. Tests et critères de qualité
+## 15. Tests et benchmarks DGX Spark
 
-### 14.1 Contrats
+### 15.1 Contrats et sécurité
 
-- CLI v1/v2 ;
-- API versionnée ;
-- adapters runtime, modèle, secrets et applications ;
-- import/export ;
-- contrat `RAGServiceAdapter` et compatibilité des commandes RAG v1 ;
-- compatibilité des versions épinglées.
+- CLI v1/v2 et APIs ;
+- adapters ;
+- protocoles modèles ;
+- imports/exports ;
+- refus fichiers/réseau/processus ;
+- fuite inter-projet ;
+- secrets absents des sorties ;
+- droits GitHub/HF ;
+- ACL et lots documentaires ;
+- actions admin réauthentifiées.
 
-### 14.2 Sécurité
+### 15.2 Résilience
 
-- lecture et écriture fichiers refusées ;
-- fuite inter-projet, y compris par filtres Qdrant/OpenSearch et résultats RAG ;
-- réseau, méthodes et chemins refusés ;
-- secret absent des logs, environnements persistants et sorties ;
-- accès direct aux backends modèles refusé ;
-- séparation des rôles ;
-- actions administrateur réauthentifiées.
+Redémarrage API, worker, OpenShell, harness, application et backend modèle ; sandbox perdue ; réseau coupé ; disque presque plein ; téléchargement interrompu ; migration interrompue ; restauration racine vierge ; reconstruction RAG.
 
-### 14.3 Résilience
+### 15.3 Suite DGX Spark
 
-- redémarrage API, worker, OpenShell et backend modèle ;
-- sandbox perdue puis recréée ;
-- modèle indisponible ;
-- disque presque plein ;
-- migration interrompue ;
-- rollback code et rollback données distincts ;
-- restauration sur racine vierge ;
-- restauration des snapshots RAG et reconstruction complète depuis les sources.
+La baseline attend une DGX Spark ARM64 avec 128 Go de mémoire unifiée ; les caractéristiques effectives sont détectées et enregistrées, jamais supposées suffisantes.
 
-### 14.4 Utilisabilité
+**Niveau 0 — matériel :** CPU/GPU, mémoire/bande passante, stockage, réseau, températures, puissance, fréquences, throttling et erreurs.
 
-- premier démarrage guidé ;
-- état vide compréhensible ;
-- `agent codex` sans projet ;
-- changement de projet ;
-- reprise après déconnexion ;
-- ouverture des dashboards ;
-- erreurs actionnables ;
-- aucune terminologie d’infrastructure imposée à l’utilisateur.
+**Niveau 1 — modèles :** chargement/déchargement, mémoire résidente, TTFT, prefill/decode tokens/s, streaming, contextes 8k/32k/64k+, outils et concurrence 1/2/4/8 selon admission.
 
-### 14.5 Performance
+**Niveau 2 — harnesses :** démarrage chaud/froid, reprise, compaction, `repo-e2e`, Git/GitHub, approvals, sous-agents, profondeur, annulation et coûts.
 
-Les seuils sont établis à partir de la baseline v1 :
+**Niveau 3 — applications/données :** OpenWebUI, Flux ComfyUI, tâche OpenHands, RAG index/query, Forgejo, GitHub, HF cache froid/chaud.
 
-- temps d’ouverture chaud et froid d’un agent ;
-- latence ajoutée par les proxies ;
-- débit et streaming modèle ;
-- consommation au repos ;
-- temps de sauvegarde et restauration ;
-- comportement sous concurrence.
+**Niveau 4 — mixte/endurance :** charges 1 h, 6 h et 24 h, panne backend, pression disque, perte réseau et échec de modèle.
 
-Aucune régression importante n’est acceptée sans justification documentée.
+Coupe-circuits : température, erreurs GPU, mémoire disponible, swap, disque et latence du contrôle. La montée en charge est progressive, avec cooldown. Les seuils d’admission sont dérivés des mesures en réservant explicitement les ressources de l’OS et des services critiques.
 
-## 15. Registre des risques et décisions bloquantes
+Les smoke tests CI restent bornés. Les benchmarks lourds ont une fenêtre dédiée et ne chargent jamais plusieurs gros modèles sans admission. Les artefacts enregistrent firmware, noyau, driver, digests, modèles, versions et commit.
 
-| Risque | Conséquence | Traitement obligatoire |
-|---|---|---|
-| OpenShell alpha et mode initial mono-utilisateur | isolation ou upgrade fragile | gateway interne, adapter, pinning, spike multi-utilisateur |
-| `inference.local` global et modèle réécrit | perte du routage dynamique | ModelBroker direct autorisé par politique |
-| politiques fichiers statiques | changement de projet dangereux | un RuntimeContext par projet |
-| absence de checkpoint générique | préemption destructrice | reprise chaude/froide/native séparées |
-| scheduler absent d’OpenShell | surallocation | scheduler du plan de contrôle |
-| GPU et API ressources en évolution | incompatibilité DGX | tests épinglés et capability discovery |
-| Hermes NemoClaw avec limitations | perte dashboard/mémoire/outils | parité complète ou blueprint spécifique |
-| double emploi `ollama-gate`/OpenShell | complexité et incohérence | contrat ModelBroker et décision build/adopt |
-| service RAG v1 global sans frontière multi-projet suffisante | fuite documentaire | identité signée, ACL serveur et tests négatifs |
-| changement de modèle ou dimension d’embedding | index incohérent ou indisponible | versions d’index séparées et bascule atomique |
-| Qdrant/OpenSearch traités comme source documentaire | perte irréversible | sources et catalogue canoniques, index régénérables |
-| réimplémentation du RAG dans le portail | divergence et maintenance double | `RAGServiceAdapter` et conservation du moteur existant |
-| applications web exécutant du code | compromission hôte | classification et runtime restreint |
-| proxy des dashboards supposé | interface cassée ou auth contournée | utiliser seulement un chemin officiellement validé |
-| sauvegarde fichier non cohérente | restauration invalide | exports natifs orchestrés |
-| réécriture trop large avant validation | projet interminable | walking skeleton puis vertical slices |
-| trop de composants optionnels | coût d’exploitation | baseline minimale, modules désactivés par défaut |
+Une release est bloquée sur régression au-delà des budgets validés ou sur OOM, reboot, corruption, fuite de secret ou throttling durable.
 
-## 16. Mise à jour et exploitation
+## 16. Risques bloquants
+
+| Risque | Traitement |
+|---|---|
+| OpenShell alpha/mono-utilisateur initial | adapter, pinning, spike isolation |
+| protocole modèle uniformisé | matrice Messages/Responses/Chat/Ollama |
+| double orchestration | arbre corrélé, mode natif déclaré, anti-cycle |
+| Hermes natif/NemoClaw partageant un état | racines séparées et promotion contrôlée |
+| OpenHands multi-tenant supposé | instance/domaine isolé ou édition adaptée |
+| double sandbox OpenHands | décision M2 mesurée |
+| tokens GitHub/HF persistants | ExternalAccessBroker et credentials courts |
+| téléchargements HF dupliqués | cache central et admission |
+| RAG OpenWebUI parallèle | désactivation ou pont explicite |
+| Tools OpenWebUI/custom nodes ComfyUI | allowlist, pinning, scan, sandbox |
+| changement embedding | version d’index séparée |
+| Qdrant pris pour source canonique | sources et catalogue restaurables |
+| proxy dashboard supposé | chemin officiel testé |
+| sauvegarde fichier incohérente | exports natifs orchestrés |
+| surcharge DGX | benchmark, réserve, admission, coupe-circuits |
+| réécriture trop large | walking skeleton et vertical slices |
+
+## 17. Update et exploitation
 
 - versions et digests épinglés ;
-- manifeste de compatibilité entre plateforme, OpenShell, NemoClaw, agents et backends ;
+- matrice de compatibilité plateforme/harnesses/apps/modèles ;
 - aucune mise à jour automatique de production ;
-- validation dans une racine ou machine de test ;
-- migrations de base sauvegardées avant exécution ;
+- validation dans racine/VM de test ;
 - rollback code par digest ;
-- rollback données par restauration, sans supposer des migrations descendantes fiables ;
-- génération de SBOM, vérification de provenance et scan de vulnérabilités ;
-- mode break-glass documenté ;
-- runbooks d’incident et de capacité.
+- rollback données par restauration ;
+- SBOM, provenance et scan ;
+- mode break-glass ;
+- runbooks incidents, capacité, backup et restauration.
 
-## 17. Définition de terminé
+## 18. Définition de terminé
 
-La v2 est viable et la v1 peut être retirée seulement si :
+La v1 ne peut être retirée que si :
 
-- 100 % des capacités v1 ont une décision et un test ;
-- les parcours principaux CLI et portail sont utilisables sans connaissance de l’infrastructure ;
+- toutes ses capacités ont une décision et un test ;
+- chaque harness/application possède un profil validé contre sa documentation amont ;
+- CLI et portail sont utilisables sans connaissance de l’infrastructure ;
 - les sources de vérité sont uniques et restaurables ;
-- la séparation utilisateur/projet est démontrée ;
-- le ModelBroker n’entre pas en conflit avec OpenShell ;
-- le service RAG v1 conserve ses capacités derrière `RAGServiceAdapter` ;
-- les commandes et requêtes RAG de référence ont une parité validée ;
-- les ACL RAG multi-projet et la restauration des index sont démontrées ;
-- les agents obligatoires ont un runtime reproductible et une reprise documentée ;
-- les applications exécutant du code sont isolées ;
-- l’upgrade et le rollback ont été répétés ;
-- les sauvegardes ont été restaurées sur une racine vierge ;
-- les dépendances alpha sont épinglées et remplaçables derrière des adapters ;
-- les ressources au repos et en charge restent compatibles avec la DGX Spark ;
-- la documentation utilisateur, opérateur, développeur et sécurité correspond au système réel ;
-- une seule personne peut diagnostiquer, sauvegarder, restaurer et mettre à jour la plateforme à l’aide des runbooks ;
-- l’administrateur approuve explicitement chaque retrait de domaine v1.
+- le protocole modèle natif de chaque harness fonctionne ;
+- les sous-agents natifs sont gouvernés sans double orchestration ;
+- Hermes natif est opérationnel et le statut NemoClaw décidé par parité ;
+- OpenHands possède une stratégie runtime et utilisateur démontrée ;
+- GitHub et Hugging Face utilisent des capacités minimales et credentials temporaires ;
+- agents et applications humaines restent correctement séparés ;
+- le service RAG v1 conserve ses capacités, ACL et restauration ;
+- `AuthorizationBatch` est audité et révocable ;
+- les applications exécutant du code sont gouvernées ;
+- benchmarks, endurance et coupe-circuits définissent une enveloppe sûre DGX Spark ;
+- update, rollback et restauration ont été répétés ;
+- une personne peut diagnostiquer, sauvegarder, restaurer et mettre à jour avec les runbooks ;
+- l’administrateur approuve explicitement chaque retrait v1.
