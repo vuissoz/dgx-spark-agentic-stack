@@ -1041,6 +1041,215 @@ Règles de récupération :
 
 La dernière version saine est définie par un commit, des digests, une version de données, un manifeste de ressources et une évaluation verte complète. Un simple commit Git ne constitue pas à lui seul un point de récupération.
 
+### 15.5 Gouvernance de l’expérience utilisateur et décisions de conception
+
+**DÉCISION :** la v2 ne reproduit pas les parcours de la v1 par défaut. La compatibilité fonctionnelle n’implique pas la conservation de son interface, de son organisation, de ses commandes ni de ses concepts visibles. La v1 est un inventaire de capacités et une baseline de non-régression, pas un modèle d’expérience utilisateur.
+
+Le parcours utilisateur idéal n’est pas considéré comme connu au début de la refonte. Il est construit progressivement à partir des usages réels, des difficultés observées dans la v1, de prototypes, d’alternatives comparées, des directives du concepteur, des retours utilisateurs et des mesures d’utilisabilité.
+
+#### 15.5.1 Principes de conception centrée utilisateur
+
+Toute capacité visible doit :
+
+- présenter d’abord l’objectif et le vocabulaire de l’utilisateur, pas l’infrastructure technique ;
+- masquer Docker, OpenShell, les conteneurs, les ports internes, les noms de services et les fichiers internes dans les parcours ordinaires ;
+- proposer un parcours principal simple, avec divulgation progressive des fonctions avancées ;
+- utiliser des valeurs par défaut sûres, compréhensibles et réversibles ;
+- rendre visibles l’état, l’attente, la progression, les conséquences d’une action et la prochaine étape possible ;
+- permettre l’annulation, la reprise, le retry ou le retour arrière lorsqu’ils sont techniquement possibles ;
+- utiliser une terminologie cohérente entre portail, CLI, API et interfaces natives ;
+- fournir des erreurs actionnables, reliées au composant réellement en cause sans exposer inutilement sa complexité ;
+- éviter toute étape manuelle qui n’apporte pas une décision réelle à l’utilisateur ;
+- distinguer le parcours ordinaire du mode expert ou break-glass.
+
+Une fonctionnalité ne doit pas être ajoutée au portail uniquement parce qu’un service ou une API existe. Inversement, une capacité nécessaire à un parcours peut disposer temporairement d’une surface simple et documentée avant son interface définitive.
+
+#### 15.5.2 Détection des choix UX structurants
+
+L’agent d’implémentation doit identifier explicitement les décisions ayant un effet durable sur l’expérience utilisateur. Une revue de conception est requise notamment lorsqu’un changement :
+
+- modifie un parcours principal ;
+- introduit un nouveau concept, terme, écran ou objet visible ;
+- impose une étape manuelle supplémentaire ;
+- expose un détail d’infrastructure ;
+- détermine une valeur par défaut importante ;
+- oppose simplicité, sécurité, performance, flexibilité ou compatibilité ;
+- modifie les droits, la visibilité, la propriété ou la durée de conservation des données ;
+- rend une action destructive, difficilement réversible ou coûteuse à corriger après déploiement ;
+- retire ou remplace une capacité visible de la v1 ;
+- laisse plusieurs alternatives non dominées sans critère objectif suffisant pour les départager.
+
+Un choix local, facilement réversible, conforme à une directive active et sans effet sur un parcours principal peut être pris automatiquement et simplement enregistré.
+
+#### 15.5.3 Alternatives soumises au concepteur
+
+Lorsqu’une décision structurante ne possède pas de solution manifestement supérieure, l’agent ne choisit pas silencieusement. Il soumet au concepteur entre deux et quatre alternatives comprenant au minimum :
+
+- le problème utilisateur et le contexte ;
+- le ou les profils concernés ;
+- le parcours proposé pour chaque alternative ;
+- les avantages et inconvénients ;
+- les conséquences techniques, opérationnelles et de sécurité ;
+- le coût relatif d’implémentation et de maintenance ;
+- la réversibilité et le coût d’un changement ultérieur ;
+- les effets attendus sur les métriques produit/runtime et d’ingénierie ;
+- une recommandation argumentée ;
+- les hypothèses encore incertaines ;
+- les conditions qui justifieraient un réexamen.
+
+Lorsque la solution la plus complète risque de complexifier fortement l’usage, une alternative volontairement simple doit être proposée. Les alternatives peuvent être illustrées par une maquette, une séquence de commandes simulée, un prototype jetable ou un walkthrough documenté.
+
+La demande de décision ne bloque pas les travaux indépendants. L’agent poursuit les tâches qui ne dépendent pas de l’arbitrage et peut prototyper plusieurs options sans les promouvoir en production.
+
+#### 15.5.4 Directives du concepteur
+
+Le concepteur peut définir des directives générales ou particulières, par exemple :
+
+- privilégier la simplicité par rapport à l’exhaustivité ;
+- éviter toute configuration avant le premier résultat utile ;
+- privilégier une surface native, le portail ou la CLI pour un type de tâche ;
+- ne pas exposer une fonction expérimentale aux utilisateurs ordinaires ;
+- imposer une confirmation avant une action déterminée ;
+- préserver un comportement jugé essentiel malgré une implémentation différente.
+
+Les directives sont versionnées dans :
+
+```text
+docs/ux/directives.yaml
+```
+
+Chaque directive contient au minimum :
+
+- `directive_id` ;
+- auteur et date ;
+- portée globale, persona, parcours, capacité ou composant ;
+- texte normatif ;
+- justification lorsqu’elle est connue ;
+- statut `active`, `experimental`, `superseded` ou `revoked` ;
+- directive remplacée, le cas échéant ;
+- conditions ou date de réexamen ;
+- liens vers les décisions et tests concernés.
+
+Une directive active s’applique aux nouvelles décisions dans sa portée. Une directive n’est jamais supprimée de l’historique ; elle est remplacée ou révoquée avec justification.
+
+#### 15.5.5 Registre des décisions UX
+
+Les décisions d’expérience utilisateur sont conservées sous forme de `UX Decision Records` distincts des décisions purement techniques.
+
+Structure cible :
+
+```text
+docs/ux/
+├── principles.md
+├── directives.yaml
+├── open-questions.md
+├── journeys/
+├── prototypes/
+└── decisions/
+    └── UXDR-<number>-<title>.md
+```
+
+Chaque `UXDR` contient au minimum :
+
+- identifiant, statut, auteur et date ;
+- capacité et parcours concernés ;
+- problème utilisateur ;
+- profils concernés ;
+- observations ou difficultés de la v1 à ne pas reproduire ;
+- alternatives étudiées ;
+- prototypes, mesures ou preuves disponibles ;
+- décision retenue et justification ;
+- conséquences connues ;
+- directive applicable ;
+- conditions de réexamen ;
+- tests d’acceptation associés.
+
+Les statuts autorisés sont :
+
+```text
+proposed
+needs-design-review
+accepted
+experimental
+superseded
+rejected
+```
+
+Une décision `experimental` possède obligatoirement une date ou un événement de réévaluation. Une décision `needs-design-review` ne peut pas être promue silencieusement en comportement stable.
+
+#### 15.5.6 Traçabilité de l’expérience utilisateur
+
+Toute fonctionnalité visible doit être reliée à :
+
+- un problème, besoin ou parcours utilisateur ;
+- une directive active ou un `UXDR` ;
+- un test d’acceptation ;
+- les principaux états d’attente et d’erreur ;
+- une procédure de récupération lorsqu’elle est nécessaire ;
+- une métrique ou une observation permettant de juger son usage réel.
+
+Les liens sont enregistrés dans le registre de capacités ou dans un manifeste UX versionné. Une fonctionnalité sans justification utilisateur explicite est mise en quarantaine de conception avant promotion.
+
+#### 15.5.7 Prototypage et réévaluation
+
+Pour les parcours structurants, la séquence privilégiée est :
+
+```text
+problème utilisateur
+→ alternatives
+→ prototype léger
+→ revue du concepteur
+→ walkthrough ou test utilisateur
+→ décision tracée
+→ implémentation
+→ mesure
+→ réévaluation éventuelle
+```
+
+Les prototypes peuvent être des maquettes, des interfaces non connectées, des commandes simulées ou des parcours documentés. Ils ne deviennent pas automatiquement des composants de production et peuvent être supprimés après archivage des enseignements utiles.
+
+Une décision doit être réexaminée lorsqu’au moins une condition survient :
+
+- son hypothèse principale est invalidée ;
+- les utilisateurs échouent ou contournent régulièrement le parcours ;
+- une nouvelle alternative réduit clairement la complexité ;
+- une évolution amont change les possibilités d’intégration ;
+- les métriques montrent une dégradation significative ;
+- le concepteur modifie ou révoque une directive liée.
+
+#### 15.5.8 Mesures d’utilisabilité
+
+La boucle produit/runtime enregistre, lorsque le parcours le permet :
+
+- le temps jusqu’au premier résultat utile ;
+- le nombre d’étapes et de décisions demandées ;
+- le nombre de concepts techniques exposés ;
+- le taux de réussite sans assistance ;
+- les erreurs, retries, abandons et retours arrière ;
+- le recours à la documentation ou au support ;
+- les interventions administrateur nécessaires ;
+- les divergences de comportement entre portail, CLI, API et interfaces natives ;
+- les points où l’utilisateur ne sait pas clairement ce qui se passe ou quoi faire ensuite.
+
+Ces mesures servent à comparer des alternatives et à détecter les régressions. Elles ne remplacent pas le jugement qualitatif du concepteur ni les retours d’utilisateurs représentatifs.
+
+#### 15.5.9 Gate de conception utilisateur
+
+Une capacité visible ne peut être déclarée terminée que si :
+
+- le problème utilisateur est décrit ;
+- un parcours principal et ses états d’erreur sont documentés ;
+- les choix structurants sont reliés à une directive ou à un `UXDR` ;
+- les alternatives pertinentes ont été examinées lorsque nécessaire ;
+- les valeurs par défaut sont justifiées ;
+- les actions destructives et leurs conséquences sont explicites ;
+- le parcours ordinaire ne nécessite aucune manipulation d’infrastructure non prévue ;
+- les erreurs principales sont compréhensibles et actionnables ;
+- les tests d’acceptation sont verts ;
+- toute décision expérimentale possède une condition de réévaluation.
+
+Ce gate ne doit pas multiplier artificiellement les validations humaines. Il empêche les choix d’interface implicites, opportunistes ou dictés uniquement par l’architecture de devenir des comportements durables sans arbitrage conscient.
+
 ## 16. Risques bloquants
 
 | Risque | Traitement |
@@ -1061,6 +1270,8 @@ La dernière version saine est définie par un commit, des digests, une version 
 | sauvegarde fichier incohérente | exports natifs orchestrés |
 | surcharge DGX | benchmark, réserve, admission, coupe-circuits |
 | réécriture trop large | walking skeleton et vertical slices |
+| reproduction implicite de l’UX v1 | alternatives, prototypes, directives et UXDR |
+| décisions d’interface non tracées | gate UX et registre versionné |
 
 ## 17. Update et exploitation
 
@@ -1094,6 +1305,9 @@ La v1 ne peut être retirée que si :
 - benchmarks, endurance et coupe-circuits définissent une enveloppe sûre DGX Spark ;
 - les deux boucles d’optimisation produisent des artefacts conformes, une frontière de Pareto versionnée et des décisions reproductibles ;
 - la non-infériorité P0/P1/P2 et les tolérances temporaires sont vérifiées automatiquement ;
+- chaque capacité visible possède un problème utilisateur, un parcours principal, des tests d’acceptation et une décision UX traçable ;
+- les directives du concepteur et les `UXDR` sont versionnés, reliés à l’implémentation et réexaminés lorsque leurs hypothèses changent ;
+- aucune interface de la v1 n’est reproduite par défaut sans justification explicite ;
 - update, rollback et restauration ont été répétés ;
 - une campagne d’optimisation peut restituer sur demande la DGX dans son état de référence et le `post-restore doctor` est vert ;
 - une personne peut diagnostiquer, sauvegarder, restaurer et mettre à jour avec les runbooks ;
