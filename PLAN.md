@@ -524,6 +524,8 @@ Progression : limites fixes, métriques/refus, files, réservations, préemption
 
 OpenShell applique les limites d’une sandbox mais ne remplace pas ce scheduler.
 
+Les campagnes d’optimisation sont des charges de fond interruptibles, de priorité inférieure aux usages interactifs et aux réservations explicites. Elles doivent pouvoir être mises en pause, drainées puis reprises sans perdre leurs preuves. Un administrateur dispose d’un arrêt global immédiat ; après cet arrêt, aucune campagne ne redémarre sans autorisation explicite. Une campagne ne préempte jamais une charge utilisateur prioritaire. Ces propriétés sont P0.
+
 ## 12. RAG, documents et autorisations par lot
 
 ### 12.1 Baseline v1
@@ -635,6 +637,21 @@ Sources de vérité, adapters, classification harness/application/service/skill,
 Un utilisateur, Codex, contexte personnel/projet, CLI, portail minimal, OpenShell, ModelBroker, workspace, reprise, logs, backup, lecture GitHub et téléchargement HF en cache.
 
 **G3 :** parcours complet sans manipulation d’infrastructure.
+
+### M3U — Première version utilisable
+
+Un utilisateur peut se connecter, lancer Codex dans un contexte personnel ou projet, suivre l’exécution, interrompre puis reprendre une session, accéder aux fichiers produits et comprendre un échec sans connaître Docker, OpenShell, les ports internes ni la disposition des services. Un administrateur peut installer, diagnostiquer, sauvegarder et restaurer ce périmètre par les surfaces officielles. M3U inclut uniquement le minimum de M4 nécessaire à ces parcours.
+
+**G3U :** ces parcours réussissent de bout en bout, leurs erreurs principales sont actionnables et leur récupération est testée avec la boucle produit/runtime.
+
+Non-objectifs de cette première version :
+
+- intégrer simultanément tous les harnesses et toutes les applications ;
+- unifier toutes les interfaces natives ;
+- introduire Kubernetes ;
+- livrer d’emblée le scheduler avancé ou optimal ;
+- remplacer le RAG v1 lorsqu’il fonctionne derrière son adapter ;
+- laisser une capacité hors des parcours M3U retarder la livraison, sauf dépendance P0 démontrée.
 
 ### M4 — Fondation production
 
@@ -768,6 +785,7 @@ La criticité est définie par une liste P0 explicite, puis par des règles de c
 - annulation des descendants, drainage des orphelins et refus des cycles de délégation ;
 - audit corrélé complet des actions sensibles ;
 - absence de reboot, corruption, OOM répété, erreur GPU persistante ou throttling durable ;
+- arrêt administratif immédiat des campagnes d’optimisation, sans redémarrage automatique ni préemption d’un usage prioritaire ;
 - capacité démontrée à restaurer la dernière version saine ;
 - capacité démontrée à restituer la DGX dans l’état de référence enregistré lorsqu’une restitution est demandée.
 
@@ -913,6 +931,7 @@ evaluation/spec/architecture.yaml
 evaluation/spec/metrics.yaml
 evaluation/spec/promotion.yaml
 evaluation/spec/recovery.yaml
+evaluation/spec/retention.yaml
 evaluation/corpora/visible/<corpus_version>/manifest.yaml
 evaluation/tasks/engineering/<corpus_version>/manifest.yaml
 ```
@@ -948,6 +967,8 @@ artifacts/evaluations/<evaluation_id>/
 - raisons structurées, liens vers preuves et version du schéma.
 
 Tous les fichiers JSON sont validés par JSON Schema. Les logs bruts ne sont jamais l’unique preuve d’une décision.
+
+**Confidentialité et rétention :** les métriques et artefacts restent locaux par défaut ; toute télémétrie externe est désactivée sauf consentement explicite. Les secrets sont expurgés avant écriture et les prompts, sorties, traces, diffs et fichiers de travail sont classifiés. Chaque campagne déclare un quota et une politique de rétention distinguant les résumés durables des logs bruts temporaires. Tout nettoyage possède un dry-run et ne peut supprimer une preuve liée à une release active, une décision, un incident non clos ou un rollback encore supporté.
 
 #### 15.4.10 Pipeline de promotion automatique
 
@@ -1100,6 +1121,8 @@ Lorsqu’une décision structurante ne possède pas de solution manifestement su
 Lorsque la solution la plus complète risque de complexifier fortement l’usage, une alternative volontairement simple doit être proposée. Les alternatives peuvent être illustrées par une maquette, une séquence de commandes simulée, un prototype jetable ou un walkthrough documenté.
 
 La demande de décision ne bloque pas les travaux indépendants. L’agent poursuit les tâches qui ne dépendent pas de l’arbitrage et peut prototyper plusieurs options sans les promouvoir en production.
+
+Chaque demande de décision possède une condition ou une date de résolution. En l’absence de réponse, l’agent peut retenir temporairement l’alternative la plus simple, réversible et la moins exposée, avec le statut `experimental`, puis poursuivre. Cette règle ne permet jamais de rendre stable une décision `needs-design-review`, ni de trancher automatiquement une action destructive ou un changement P0 de sécurité, de droits ou de données.
 
 #### 15.5.4 Directives du concepteur
 
@@ -1291,6 +1314,7 @@ La v1 ne peut être retirée que si :
 
 - toutes ses capacités ont une décision et un test ;
 - chaque harness/application possède un profil validé contre sa documentation amont ;
+- la première version utilisable a franchi G3U avant l’élargissement aux capacités avancées ;
 - CLI et portail sont utilisables sans connaissance de l’infrastructure ;
 - les sources de vérité sont uniques et restaurables ;
 - le protocole modèle natif de chaque harness fonctionne ;
@@ -1305,6 +1329,8 @@ La v1 ne peut être retirée que si :
 - benchmarks, endurance et coupe-circuits définissent une enveloppe sûre DGX Spark ;
 - les deux boucles d’optimisation produisent des artefacts conformes, une frontière de Pareto versionnée et des décisions reproductibles ;
 - la non-infériorité P0/P1/P2 et les tolérances temporaires sont vérifiées automatiquement ;
+- les campagnes d’optimisation peuvent être arrêtées administrativement sans redémarrage automatique et sans préempter les usages prioritaires ;
+- les artefacts respectent la politique de confidentialité, de quota et de rétention ;
 - chaque capacité visible possède un problème utilisateur, un parcours principal, des tests d’acceptation et une décision UX traçable ;
 - les directives du concepteur et les `UXDR` sont versionnés, reliés à l’implémentation et réexaminés lorsque leurs hypothèses changent ;
 - aucune interface de la v1 n’est reproduite par défaut sans justification explicite ;
