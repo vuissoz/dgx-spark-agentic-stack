@@ -727,6 +727,320 @@ Les smoke tests CI restent bornés. Les benchmarks lourds ont une fenêtre dédi
 
 Une release est bloquée sur régression au-delà des budgets validés ou sur OOM, reboot, corruption, fuite de secret ou throttling durable.
 
+### 15.4 Boucles d’optimisation automatique de l’implémentation v2
+
+**DÉCISION :** l’implémentation de la v2 est pilotée par deux boucles automatiques complémentaires et normatives :
+
+1. une **boucle produit/runtime**, qui mesure si les parcours réels réussissent de manière sûre, efficiente et récupérable ;
+2. une **boucle d’ingénierie**, qui mesure si l’architecture reste rapide à modifier, vérifiable, réversible et résistante aux régressions.
+
+Ces boucles sont applicables dès M0 pour établir la baseline v1, deviennent obligatoires pour le walking skeleton M3 et conditionnent ensuite toute promotion. Elles ne remplacent pas les gates G0 à G11 : elles fournissent les preuves machine qui permettent de les déclarer satisfaits.
+
+#### 15.4.1 Principe de décision : gates puis frontière de Pareto
+
+Une implémentation candidate est évaluée en deux temps :
+
+1. les critères éliminatoires sont vérifiés ; tout échec rejette ou met en quarantaine le candidat ;
+2. les candidats admissibles sont comparés sur une frontière de Pareto, sans score pondéré unique susceptible de masquer une dégradation critique.
+
+Un candidat est **dominé** s’il n’est meilleur sur aucune métrique retenue et s’il est moins bon sur au moins une métrique, au-delà de la marge d’incertitude et de l’effet minimal significatif définis dans le manifeste d’évaluation.
+
+Une promotion automatique exige que le candidat :
+
+- franchisse tous les gates P0 ;
+- respecte les règles de non-infériorité P0/P1/P2 ;
+- ne soit pas dominé par la dernière version saine ou par un candidat conservé sur la frontière ;
+- améliore au moins une métrique au-delà de son effet minimal significatif, ferme un échec connu ou réduit une dette technique mesurée ;
+- possède un rollback testé et des artefacts complets ;
+- ne repose sur aucune tolérance expirée.
+
+#### 15.4.2 Classification hybride P0, P1 et P2
+
+La criticité est définie par une liste P0 explicite, puis par des règles de classement P1/P2. Une capacité peut être surclassée manuellement. Une capacité P0 ne peut jamais être déclassée automatiquement.
+
+**P0 non négociable :**
+
+- absence de fuite de secrets ou de données entre utilisateurs, projets et domaines de sécurité ;
+- intégrité des données, source de vérité unique et absence de double écriture incohérente ;
+- migrations idempotentes avec dry-run, validation, restauration et rollback ;
+- absence d’accès direct non autorisé au socket Docker, aux backends modèles et aux services internes ;
+- respect des droits, quotas et agrégation des ressources des arbres multi-agents ;
+- annulation des descendants, drainage des orphelins et refus des cycles de délégation ;
+- audit corrélé complet des actions sensibles ;
+- absence de reboot, corruption, OOM répété, erreur GPU persistante ou throttling durable ;
+- capacité démontrée à restaurer la dernière version saine ;
+- capacité démontrée à restituer la DGX dans l’état de référence enregistré lorsqu’une restitution est demandée.
+
+**Règles automatiques :** une capacité touchant aux secrets, droits, données mutables, migrations, identité, isolation, accès externes, GPU, rollback ou cycle de vie multi-agent est P0. Une capacité nécessaire à un parcours utilisateur supporté, à l’observabilité ou à la compatibilité v1 est P1. Une capacité expérimentale, de confort ou non requise pour un parcours supporté est P2, sauf surclassement explicite.
+
+Le registre versionné des capacités contient au minimum : `capability_id`, description, propriétaire, classe, justification, oracle, corpus, métriques, dépendances et règle de retrait.
+
+#### 15.4.3 Tolérances temporaires
+
+Une tolérance n’est possible que pour une exigence P1 ou P2 non liée à la sécurité, à l’isolation, aux secrets, à l’intégrité des données ou à la récupérabilité P0.
+
+Chaque tolérance est un objet versionné contenant :
+
+- `waiver_id` et `capability_id` ;
+- écart maximal autorisé ;
+- justification et preuve ;
+- responsable ;
+- Bead associé ;
+- date de création et date d’expiration ;
+- test prouvant sa suppression ;
+- statut `active`, `expired`, `removed` ou `revoked`.
+
+Une tolérance expirée bloque toute promotion. L’évaluateur candidat ne peut ni créer, ni prolonger, ni élargir une tolérance.
+
+#### 15.4.4 Non-infériorité par rapport à la v1
+
+La v1 est exécutée plusieurs fois en M0 afin de mesurer sa variabilité avant toute comparaison. Les baselines sont épinglées par commit, configuration, corpus, versions, modèles, matériel et conditions thermiques.
+
+Pour le taux de réussite sûr et récupérable, la promotion exige que la borne inférieure à 95 % de la différence appariée `TPSR_v2 - TPSR_v1` respecte :
+
+- P0 : `>= 0,00` ;
+- P1 : `>= -0,03`, uniquement avec une tolérance active ;
+- P2 : `>= -0,05`, uniquement avec une tolérance active.
+
+Sans tolérance active, P1 et P2 doivent également être non inférieurs. Une moyenne favorable ne compense jamais une borne inférieure non conforme.
+
+#### 15.4.5 Boucle produit/runtime
+
+Le critère principal est le **TPSR — taux de parcours sûrs et récupérables** :
+
+```text
+TPSR = nombre de parcours fonctionnellement réussis,
+       sans violation de gate et avec récupération validée
+       / nombre total de tentatives valides
+```
+
+Une tentative n’est comptée comme réussite que si :
+
+- le résultat fonctionnel satisfait l’oracle ;
+- les droits, l’isolation, les quotas et l’audit sont conformes ;
+- aucune ressource orpheline ou altération non déclarée n’est créée ;
+- la panne injectée, lorsqu’elle fait partie du scénario, est détectée et récupérée ;
+- les artefacts nécessaires au diagnostic sont complets.
+
+La boucle produit mesure au minimum :
+
+- TPSR observé et borne inférieure à 95 % ;
+- taux de réussite par capacité et par classe P0/P1/P2 ;
+- latence médiane et p95 ;
+- temps de démarrage froid et chaud ;
+- GPU-secondes, CPU-secondes et pic de mémoire unifiée ;
+- tokens et coût externe lorsqu’ils existent ;
+- énergie mesurée ou estimée, avec méthode enregistrée ;
+- interventions humaines ;
+- temps de détection et temps de récupération ;
+- taux de rollback et de restauration réussis ;
+- erreurs, retries, timeouts et ressources orphelines.
+
+Les objectifs de Pareto maximisent le TPSR et minimisent la latence, les ressources, le coût, les interventions et le temps de récupération. Une métrique indisponible est `null` avec une justification ; elle ne vaut jamais zéro implicitement.
+
+Les cinq parcours initiaux obligatoires du walking skeleton sont :
+
+1. bootstrap, démarrage et `doctor` ;
+2. Codex : modifier, tester, committer et pousser un dépôt autorisé ;
+3. isolation personnel/projet avec test négatif de fuite ;
+4. panne d’un backend modèle, fallback explicite et récupération ;
+5. snapshot, mutation, restauration et rollback.
+
+Le corpus est ensuite étendu aux harnesses, applications, RAG, multi-agent, scheduler et migrations décrits dans ce plan.
+
+#### 15.4.6 Boucle d’ingénierie et de changeabilité
+
+La boucle d’ingénierie part d’un commit candidat et demande à un agent évaluateur indépendant d’effectuer des modifications représentatives dans un workspace jetable. Le résultat n’est pas fusionné : il sert à mesurer la qualité de l’architecture candidate.
+
+Le corpus est hiérarchisé :
+
+- **rapide, à chaque modification** : ajouter une variable de configuration, une commande CLI ou une règle simple ;
+- **complet, avant promotion** : ajouter un adapter modèle, une application, une migration de données, une règle de quota GPU ou une capacité d’audit ;
+- **évolutif** : toute régression ou difficulté réelle produit un scénario candidat, placé en quarantaine avant de rejoindre le corpus de référence.
+
+La boucle mesure au minimum :
+
+- temps jusqu’au premier résultat vert et temps total jusqu’à validation ;
+- taux de réussite au premier essai et nombre d’itérations ;
+- nombre de fichiers, modules et contrats modifiés ;
+- taille du diff, enregistrée mais jamais optimisée isolément ;
+- violations des frontières architecturales ;
+- couverture des tests et mutation score lorsque pertinent ;
+- régressions fonctionnelles ou de sécurité introduites ;
+- duplication ajoutée ou supprimée ;
+- complexité et dette technique selon les analyseurs épinglés ;
+- temps de revert ou de rollback ;
+- complétude de la documentation, des migrations et des tests négatifs.
+
+Un changement plus petit n’est pas automatiquement meilleur : la mesure porte sur la localisation correcte des responsabilités, la vérifiabilité et la réversibilité, pas sur la seule quantité de code.
+
+#### 15.4.7 Corpus visibles, cachés et évolutifs
+
+Chaque corpus possède un identifiant immuable et un `corpus_version`. Il comprend :
+
+- des scénarios visibles stables, utilisables pour le développement ;
+- des scénarios cachés stables, inaccessibles à la branche candidate ;
+- des scénarios issus des incidents, régressions, limites et migrations réelles.
+
+Un nouveau scénario reste en quarantaine jusqu’à ce qu’il ait :
+
+- un oracle non ambigu ;
+- réussi au moins trois relectures indépendantes sur une version saine connue ;
+- démontré qu’il échoue sur la régression qu’il vise lorsqu’un cas reproductible existe ;
+- défini sa classe, son coût, ses timeouts et ses conditions de nettoyage.
+
+L’évaluateur protégé, les tests cachés, les oracles de référence et l’historique signé sont montés en lecture seule depuis une ref, un dépôt ou un store séparé. Le candidat peut modifier librement le code du projet, les tests visibles et le corpus visible, mais ne peut pas modifier les éléments protégés utilisés pour sa propre décision de promotion.
+
+#### 15.4.8 Répétitions et décision statistique
+
+Les tests déterministes doivent réussir à 100 %. Les tests non déterministes utilisent une évaluation séquentielle adaptative :
+
+- P0 : 10 essais minimum, 20 maximum ;
+- P1 : 7 essais minimum, 20 maximum ;
+- P2 : 5 essais minimum, 12 maximum.
+
+Le TPSR utilise une borne inférieure de Wilson à 95 %. Les différences v1/v2 utilisent un intervalle apparié à 95 % par bootstrap à graine enregistrée, ou une méthode exacte documentée si elle est plus adaptée.
+
+L’évaluation s’arrête avant le maximum uniquement si l’intervalle permet déjà de conclure que le candidat est conforme, inférieur ou éliminé. Une exécution invalide pour cause d’évaluateur défaillant ou de matériel indisponible est marquée `invalid` et n’est pas transformée en échec du candidat.
+
+#### 15.4.9 Fichiers de spécification et de sortie
+
+Les spécifications versionnées minimales sont :
+
+```text
+evaluation/spec/capabilities.yaml
+evaluation/spec/architecture.yaml
+evaluation/spec/metrics.yaml
+evaluation/spec/promotion.yaml
+evaluation/spec/recovery.yaml
+evaluation/corpora/visible/<corpus_version>/manifest.yaml
+evaluation/tasks/engineering/<corpus_version>/manifest.yaml
+```
+
+Les artefacts d’une évaluation sont écrits hors du workspace candidat sous :
+
+```text
+artifacts/evaluations/<evaluation_id>/
+├── evaluation.json
+├── manifest.json
+├── gates.json
+├── runtime.json
+├── engineering.json
+├── pareto.json
+├── recovery.json
+├── report.md
+├── logs/
+├── traces/
+└── attempts/
+```
+
+`evaluation.json` est le résumé machine canonique et contient au minimum :
+
+- `schema_version`, `evaluation_id`, `campaign_id` et timestamps ;
+- commits v1, candidat, évaluateur et corpus ;
+- environnement, matériel, firmware, noyau, driver, images, modèles et digests ;
+- statut global et état de la machine de décision ;
+- gates P0/P1/P2 et tolérances appliquées ;
+- TPSR, intervalles de confiance et différences à la baseline ;
+- métriques de Pareto avec unités ;
+- résultats de la boucle d’ingénierie ;
+- décision `reject`, `quarantine`, `pareto`, `promote` ou `rollback` ;
+- raisons structurées, liens vers preuves et version du schéma.
+
+Tous les fichiers JSON sont validés par JSON Schema. Les logs bruts ne sont jamais l’unique preuve d’une décision.
+
+#### 15.4.10 Pipeline de promotion automatique
+
+Le pipeline suit cet ordre :
+
+1. analyse statique, format, types, secrets, dépendances, licences, SBOM et règles d’architecture ;
+2. tests unitaires, propriétés, migrations et contrats d’adapters ;
+3. protocoles modèles et parité sémantique v1/v2 ;
+4. VM ou racine `rootless-dev` ;
+5. VM `strict-prod` ;
+6. campagne contrôlée sur la DGX avec coupe-circuits ;
+7. faute injectée, endurance adaptée au risque et récupération ;
+8. ombre ou canari lorsqu’un parcours existant est remplacé ;
+9. mise à jour de la frontière de Pareto et promotion.
+
+L’agent d’optimisation dispose d’une autonomie C+ dans le périmètre du projet. Il peut créer et modifier des branches, code, tests visibles, documentation, migrations et architecture ; ouvrir, mettre à jour et fusionner des PR ; abandonner une piste ; revenir à une version saine ; et lancer une autre stratégie.
+
+Il ne peut pas :
+
+- affaiblir un gate P0, modifier l’évaluateur protégé ou ses tests cachés ;
+- supprimer un test pour faire disparaître une régression sans décision de corpus tracée ;
+- falsifier ou réécrire les artefacts d’une évaluation terminée ;
+- promouvoir un candidat dont les preuves sont incomplètes ;
+- retirer une capacité v1 sans l’approbation humaine prévue en M12.
+
+La fusion automatique vise la branche d’implémentation v2. Une release de production reste soumise aux règles d’update, d’ombre, de canari et de retrait du présent plan.
+
+#### 15.4.11 Obligation de progression
+
+Une campagne conserve une fenêtre glissante de cinq cycles. Un cycle est considéré comme progressif s’il réalise au moins une des actions suivantes sans introduire d’échec P0 :
+
+- améliore une métrique de Pareto au-delà de son effet minimal significatif ;
+- résout un échec ou une régression identifiée ;
+- réduit une dette technique mesurée ;
+- produit une preuve nouvelle qui invalide une hypothèse et entraîne un changement explicite de stratégie.
+
+Après trois cycles consécutifs sans progrès, la boucle doit changer d’hypothèse, d’outil, de découpage ou de zone du code. Après cinq cycles sans progrès, elle restaure le dernier commit sain, archive la piste, crée ou met à jour le Bead correspondant et sélectionne un autre objectif. Répéter indéfiniment le même essai avec les mêmes paramètres est interdit.
+
+#### 15.4.12 Exécution sur la DGX et restitution différée
+
+Une campagne d’optimisation peut conserver entre ses cycles des conteneurs, caches, volumes, modèles et services dédiés afin d’éviter un nettoyage coûteux à chaque itération. Elle doit toutefois rendre chaque ressource traçable par `campaign_id`, propriétaire, date de création, politique de rétention et état désiré.
+
+Avant la première mutation d’une campagne, la boucle enregistre :
+
+```text
+artifacts/campaigns/<campaign_id>/state-before.json
+artifacts/campaigns/<campaign_id>/resources.json
+artifacts/campaigns/<campaign_id>/restore-plan.json
+```
+
+La DGX n’est pas restaurée après chaque cycle. En revanche, une restitution peut être demandée à tout moment et devient obligatoire à la clôture définitive de la campagne. La commande cible est idempotente, supporte un dry-run et produit :
+
+```text
+artifacts/campaigns/<campaign_id>/restore-report.json
+artifacts/campaigns/<campaign_id>/post-restore-doctor.json
+```
+
+La restitution :
+
+- arrête les agents, jobs, processus et services propres à la campagne ;
+- supprime ou archive selon le manifeste les conteneurs, réseaux, volumes et fichiers temporaires ;
+- libère les ports, la mémoire GPU, la RAM et l’espace disque réservés ;
+- retire les secrets et configurations temporaires ;
+- restaure les services et configurations préexistants modifiés ;
+- conserve uniquement les caches, images, modèles ou artefacts explicitement présents dans l’état initial ou marqués à conserver ;
+- liste tout élément supprimé, restauré, conservé ou non résolu ;
+- exécute un `post-restore doctor` prouvant la disponibilité de la DGX pour d’autres usages.
+
+La capacité de restitution est un gate P0 architectural. Son exécution est testée avant la première promotion sur DGX, à chaque release et après toute modification du cycle de vie, du stockage, du réseau, des secrets ou du scheduler.
+
+#### 15.4.13 Récupération et états de la boucle
+
+La machine d’état minimale est :
+
+```text
+PROPOSED → EVALUATING → PARETO → PROMOTED
+                    ↘ REJECTED
+                    ↘ QUARANTINED → EVALUATING
+PROMOTED → ROLLED_BACK
+CAMPAIGN_ACTIVE → RESTORING → RESTORED
+```
+
+Règles de récupération :
+
+- un échec P0 arrête la progression du candidat, préserve les preuves et déclenche le rollback vers la dernière version saine ;
+- un échec de l’évaluateur invalide l’essai sans pénaliser le candidat ; l’évaluateur est restauré avant reprise ;
+- un coupe-circuit DGX arrête les nouvelles admissions, draine ce qui peut l’être, capture l’état et restaure la plateforme si elle est instable ;
+- un échec post-fusion entraîne un revert automatique et une nouvelle évaluation de la version restaurée ;
+- aucune migration destructive ne peut être rejouée tant que sa récupération précédente n’est pas démontrée ;
+- les artefacts d’un candidat rejeté sont conservés pour empêcher la répétition aveugle de la même stratégie.
+
+La dernière version saine est définie par un commit, des digests, une version de données, un manifeste de ressources et une évaluation verte complète. Un simple commit Git ne constitue pas à lui seul un point de récupération.
+
 ## 16. Risques bloquants
 
 | Risque | Traitement |
@@ -778,6 +1092,9 @@ La v1 ne peut être retirée que si :
 - `AuthorizationBatch` est audité et révocable ;
 - les applications exécutant du code sont gouvernées ;
 - benchmarks, endurance et coupe-circuits définissent une enveloppe sûre DGX Spark ;
+- les deux boucles d’optimisation produisent des artefacts conformes, une frontière de Pareto versionnée et des décisions reproductibles ;
+- la non-infériorité P0/P1/P2 et les tolérances temporaires sont vérifiées automatiquement ;
 - update, rollback et restauration ont été répétés ;
+- une campagne d’optimisation peut restituer sur demande la DGX dans son état de référence et le `post-restore doctor` est vert ;
 - une personne peut diagnostiquer, sauvegarder, restaurer et mettre à jour avec les runbooks ;
 - l’administrateur approuve explicitement chaque retrait v1.
