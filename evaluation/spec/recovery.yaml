@@ -1,0 +1,33 @@
+{
+  "schema_version": "v2-recovery.v0",
+  "source": "PLAN.md sections 13, 15.4.12, and 15.4.13",
+  "state_machine": [
+    "PROPOSED",
+    "EVALUATING",
+    "PARETO",
+    "PROMOTED",
+    "REJECTED",
+    "QUARANTINED",
+    "ROLLED_BACK",
+    "CAMPAIGN_ACTIVE",
+    "RESTORING",
+    "RESTORED"
+  ],
+  "campaign_artifacts": [
+    "artifacts/campaigns/<campaign_id>/state-before.json",
+    "artifacts/campaigns/<campaign_id>/resources.json",
+    "artifacts/campaigns/<campaign_id>/restore-plan.json",
+    "artifacts/campaigns/<campaign_id>/restore-report.json",
+    "artifacts/campaigns/<campaign_id>/post-restore-doctor.json"
+  ],
+  "restore_must": [
+    "stop campaign-owned agents, jobs, processes, and services",
+    "remove or archive campaign-owned containers, networks, volumes, and temporary files according to the manifest",
+    "release ports, GPU memory, RAM, and disk reservations",
+    "remove temporary secrets and configurations",
+    "restore pre-existing modified services and configurations",
+    "retain only explicitly preserved caches, images, models, and evidence",
+    "run a post-restore doctor"
+  ],
+  "destructive_actions_require": ["dry_run", "explicit_operator_confirmation_or_opt_in_script", "rollback_plan"]
+}

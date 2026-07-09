@@ -1,0 +1,49 @@
+{
+  "schema_version": "v2-promotion.v0",
+  "source": "PLAN.md sections 14, 15.4.1, 15.4.4, and 15.4.10",
+  "states": ["reject", "quarantine", "pareto", "promote", "rollback"],
+  "mandatory_gates": [
+    {
+      "gate_id": "p0-no-secret-or-data-leak",
+      "class": "P0",
+      "description": "No secret or data leak across users, projects, or security domains."
+    },
+    {
+      "gate_id": "p0-single-source-of-truth",
+      "class": "P0",
+      "description": "No inconsistent mutable double write or ambiguous source of truth."
+    },
+    {
+      "gate_id": "p0-recovery-proven",
+      "class": "P0",
+      "description": "Rollback and restore to the last healthy version are demonstrated."
+    },
+    {
+      "gate_id": "p0-no-direct-backend-or-docker-sock",
+      "class": "P0",
+      "description": "No unauthorized direct access to docker.sock, model backends, or internal services."
+    },
+    {
+      "gate_id": "p0-audit-correlated",
+      "class": "P0",
+      "description": "Sensitive actions include correlated audit evidence."
+    }
+  ],
+  "non_inferiority": {
+    "baseline": "v1",
+    "confidence_level": 0.95,
+    "paired_difference_metric": "tpsr",
+    "minimum_lower_bound": {
+      "P0": 0.0,
+      "P1_with_active_waiver": -0.03,
+      "P2_with_active_waiver": -0.05
+    }
+  },
+  "promotion_requires": [
+    "all P0 gates pass",
+    "no expired waiver applies",
+    "candidate is not dominated on the Pareto frontier",
+    "rollback artifact is complete",
+    "evaluation artifacts validate against schema"
+  ]
+}

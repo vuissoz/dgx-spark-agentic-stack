@@ -1,0 +1,38 @@
+{
+  "schema_version": "v2-engineering-corpus.v0",
+  "corpus_id": "v2-changeability",
+  "corpus_version": "v0",
+  "source": "PLAN.md section 15.4.6",
+  "tasks": [
+    {
+      "task_id": "add-config-variable",
+      "tier": "quick",
+      "class": "P2",
+      "oracle": "A new non-secret runtime setting is added with docs, validation, and a focused test."
+    },
+    {
+      "task_id": "add-cli-command",
+      "tier": "quick",
+      "class": "P1",
+      "oracle": "A small operator command is added through the public agent facade with stable output and test coverage."
+    },
+    {
+      "task_id": "add-model-adapter",
+      "tier": "complete",
+      "class": "P0",
+      "oracle": "A model adapter is added without backend direct access, with protocol tests and rollback evidence."
+    },
+    {
+      "task_id": "add-application-adapter",
+      "tier": "complete",
+      "class": "P1",
+      "oracle": "An application adapter exposes health, URL, backup, update, and permission metadata without owning app-private state."
+    },
+    {
+      "task_id": "add-audit-rule",
+      "tier": "complete",
+      "class": "P0",
+      "oracle": "A sensitive action emits correlated audit evidence and fails closed when audit persistence is unavailable."
+    }
+  ]
+}
