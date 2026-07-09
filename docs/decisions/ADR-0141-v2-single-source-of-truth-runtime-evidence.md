@@ -32,7 +32,7 @@ The producer marks `p0-single-source-of-truth=pass` only when all of the followi
 - exactly one `gate/state/llm_backend_runtime.json` owner exists and it is coherent with the policy file;
 - exactly one `deployments/current` owner exists and it points to one sealed, valid active release directory.
 
-Test hooks create contradictory duplicate keys and shadow owner files so the evidence fails closed on ambiguous ownership. The host-backed path is threaded through `scripts/aggregate_v2_evidence.py` so the combined evaluator can consume explicit target-root ownership proof.
+Test hooks create contradictory duplicate keys and shadow owner files so the evidence fails closed on ambiguous ownership. The host-backed path is threaded through `scripts/aggregate_v2_evidence.py` so the combined evaluator can consume explicit target-root ownership proof, and `scripts/run_v2_live_single_source_of_truth.py` provides the operator-facing live-target workflow.
 
 ## Consequences
 

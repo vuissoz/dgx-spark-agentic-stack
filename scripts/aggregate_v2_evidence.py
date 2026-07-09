@@ -191,6 +191,8 @@ def default_producer_specs(args: argparse.Namespace) -> list[str]:
                 command.extend(["--compose-project", args.single_source_compose_project])
             if args.single_source_bootstrap_runtime_target:
                 command.append("--bootstrap-runtime-target")
+            if args.single_source_require_live_stack:
+                command.append("--require-live-stack")
         rendered.append(" ".join(shlex.quote(part) for part in command))
     return rendered
 
@@ -244,6 +246,11 @@ def parse_args() -> argparse.Namespace:
         "--single-source-bootstrap-runtime-target",
         action="store_true",
         help="Bootstrap the selected single-source runtime target before inspection.",
+    )
+    parser.add_argument(
+        "--single-source-require-live-stack",
+        action="store_true",
+        help="Require running containers for the selected single-source compose project.",
     )
     return parser.parse_args()
 

@@ -256,6 +256,41 @@ def inspect_active_release(
     return release_dir, {"seal": {"status": seal_status}, "validate": validate}, current_target
 
 
+def inspect_live_stack(compose_project: str, repo_root: Path) -> dict[str, Any]:
+    result = run_cmd(
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"label=com.docker.compose.project={compose_project}",
+            "--format",
+            "{{.Names}}|{{.Status}}",
+        ],
+        repo_root,
+        15,
+    )
+    if result["status"] != "pass":
+        return {
+            "status": "fail",
+            "compose_project": compose_project,
+            "containers": [],
+            "error": result["stderr"] or result["stdout"] or "docker ps failed",
+        }
+    containers = []
+    for raw_line in str(result["stdout"]).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        name, _, status = line.partition("|")
+        containers.append({"name": name, "status": status})
+    return {
+        "status": "pass" if containers else "fail",
+        "compose_project": compose_project,
+        "containers": containers,
+        "error": None if containers else "no running containers found for compose project",
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Produce v2 single-source-of-truth evidence JSON.")
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
@@ -268,6 +303,11 @@ def parse_args() -> argparse.Namespace:
         "--bootstrap-runtime-target",
         action="store_true",
         help="Initialize the selected --agentic-root with repo-owned commands when runtime state is absent.",
+    )
+    parser.add_argument(
+        "--require-live-stack",
+        action="store_true",
+        help="Require running containers for the selected compose project; fail closed when the runtime root is inactive.",
     )
     parser.add_argument(
         "--unsafe-duplicate-runtime-key",
@@ -338,6 +378,7 @@ def main() -> int:
 
     runtime_env = inspect_runtime_env(runtime_env_path)
     backend_state = inspect_backend_state(policy_path, backend_runtime_path)
+    live_stack = inspect_live_stack(args.compose_project, repo_root) if args.require_live_stack else None
 
     domains = {
         "runtime_env": {
@@ -393,6 +434,13 @@ def main() -> int:
             else "fail",
         },
     }
+    if live_stack is not None:
+        domains["live_stack"] = {
+            "compose_project": args.compose_project,
+            "containers": live_stack["containers"],
+            "error": live_stack["error"],
+            "status": live_stack["status"],
+        }
 
     all_domains_pass = all(domain["status"] == "pass" for domain in domains.values())
     gate_status = "pass" if spec_status == "pass" and backend_cmd["status"] == "pass" and all_domains_pass else "fail"
@@ -433,6 +481,7 @@ def main() -> int:
                     "target_mode": target_mode,
                     "profile": args.profile,
                     "compose_project": args.compose_project,
+                    "require_live_stack": args.require_live_stack,
                     "domains": domains,
                     "unsafe_duplicate_runtime_key": args.unsafe_duplicate_runtime_key,
                     "unsafe_shadow_owner_file": args.unsafe_shadow_owner_file,

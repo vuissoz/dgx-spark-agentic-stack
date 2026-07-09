@@ -17,6 +17,40 @@ artifact_root="${tmp_dir}/artifacts/evaluations"
 host_root="${tmp_dir}/host-root"
 duplicate_host_root="${tmp_dir}/host-root-duplicate"
 shadow_host_root="${tmp_dir}/host-root-shadow"
+live_host_root="${tmp_dir}/host-root-live"
+fake_bin="${tmp_dir}/fake-bin"
+
+mkdir -p "${fake_bin}"
+cat >"${fake_bin}/docker" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "ps" ]]; then
+  project=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --filter)
+        if [[ "${2:-}" == label=com.docker.compose.project=* ]]; then
+          project="${2#label=com.docker.compose.project=}"
+        fi
+        shift 2
+        ;;
+      --format)
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+  if [[ "${project}" == "agentic-live-proof" ]]; then
+    printf '%s\n' 'agentic-live-proof-ollama-gate-1|Up 2 minutes'
+  fi
+  exit 0
+fi
+echo "unexpected docker args: $*" >&2
+exit 9
+SH
+chmod +x "${fake_bin}/docker"
 
 "${REPO_ROOT}/scripts/produce_v2_single_source_of_truth_evidence.py" --output "${evidence_file}"
 python3 - "${evidence_file}" <<'PY'
@@ -53,6 +87,45 @@ assert gate["evidence"]["fixture"]["bootstrapped_runtime_target"] is True
 assert data["runtime"]["evidence_kind"] == "host_backed_runtime_contract_owner_probe"
 PY
 ok "single-source-of-truth producer supports host-backed runtime targets"
+
+PATH="${fake_bin}:$PATH" "${REPO_ROOT}/scripts/produce_v2_single_source_of_truth_evidence.py" \
+  --agentic-root "${live_host_root}" \
+  --compose-project agentic-live-proof \
+  --bootstrap-runtime-target \
+  --require-live-stack \
+  --output "${tmp_dir}/live-stack-evidence.json"
+python3 - "${tmp_dir}/live-stack-evidence.json" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+gate = data["gates"]["p0-single-source-of-truth"]
+assert gate["status"] == "pass"
+live = gate["evidence"]["domains"]["live_stack"]
+assert live["status"] == "pass"
+assert len(live["containers"]) == 1
+PY
+ok "single-source-of-truth producer can require a live stack"
+
+set +e
+"${REPO_ROOT}/scripts/produce_v2_single_source_of_truth_evidence.py" \
+  --agentic-root "${tmp_dir}/inactive-live-root" \
+  --bootstrap-runtime-target \
+  --require-live-stack \
+  --output "${tmp_dir}/inactive-live-evidence.json" >/tmp/agent-v2-sot-live-fail.out 2>&1
+inactive_live_rc=$?
+set -e
+[[ "${inactive_live_rc}" -ne 0 ]] || fail "inactive live-stack target must fail evidence production"
+python3 - "${tmp_dir}/inactive-live-evidence.json" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+gate = data["gates"]["p0-single-source-of-truth"]
+assert gate["status"] == "fail"
+live = gate["evidence"]["domains"]["live_stack"]
+assert live["status"] == "fail"
+assert live["error"]
+PY
+ok "single-source-of-truth producer fails closed when live stack is absent"
 
 set +e
 "${REPO_ROOT}/scripts/run_v2_evaluation.py" \

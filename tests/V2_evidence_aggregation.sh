@@ -17,6 +17,39 @@ host_backed_runtime_combined_file="${tmp_dir}/host-backed-runtime-combined-evide
 artifact_root="${tmp_dir}/artifacts/evaluations"
 ready_doctor="${tmp_dir}/doctor-ready.sh"
 host_root="${tmp_dir}/host-root"
+fake_bin="${tmp_dir}/fake-bin"
+
+mkdir -p "${fake_bin}"
+cat >"${fake_bin}/docker" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "ps" ]]; then
+  project=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --filter)
+        if [[ "${2:-}" == label=com.docker.compose.project=* ]]; then
+          project="${2#label=com.docker.compose.project=}"
+        fi
+        shift 2
+        ;;
+      --format)
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+  if [[ "${project}" == "agentic-live-proof" ]]; then
+    printf '%s\n' 'agentic-live-proof-ollama-gate-1|Up 4 minutes'
+  fi
+  exit 0
+fi
+echo "unexpected docker args: $*" >&2
+exit 9
+SH
+chmod +x "${fake_bin}/docker"
 
 cat >"${ready_doctor}" <<'SH'
 #!/usr/bin/env bash
@@ -64,11 +97,13 @@ assert data["gates"]["p0-single-source-of-truth"]["status"] == "pass"
 PY
 ok "v2 evidence aggregator promotes audit gate with runtime bootstrap evidence"
 
-"${REPO_ROOT}/scripts/aggregate_v2_evidence.py" \
+PATH="${fake_bin}:$PATH" "${REPO_ROOT}/scripts/aggregate_v2_evidence.py" \
   --run-bootstrap-doctor \
   --bootstrap-doctor-command "${ready_doctor}" \
   --single-source-agentic-root "${host_root}" \
+  --single-source-compose-project agentic-live-proof \
   --single-source-bootstrap-runtime-target \
+  --single-source-require-live-stack \
   --output "${host_backed_runtime_combined_file}"
 python3 - "${host_backed_runtime_combined_file}" "${host_root}" <<'PY'
 import json
@@ -78,7 +113,8 @@ host_root = sys.argv[2]
 assert data["gates"]["p0-single-source-of-truth"]["status"] == "pass"
 producer = next(item for item in data["runtime"]["producers"] if item.get("producer") == "scripts/produce_v2_single_source_of_truth_evidence.py")
 assert producer["status"] == "pass"
-assert any(host_root in str(value) for value in producer.values())
+assert producer["agentic_root"] == host_root
+assert producer["evidence_kind"] == "host_backed_runtime_contract_owner_probe"
 PY
 ok "v2 evidence aggregator accepts host-backed single-source target"
 
