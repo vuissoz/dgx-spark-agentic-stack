@@ -45,6 +45,8 @@ REQUIRED_ARTIFACTS = (
     "report.md",
 )
 
+EVIDENCE_STATUSES = {"pass", "partial", "fail", "missing"}
+
 
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -130,15 +132,17 @@ def validate_evidence(evidence: dict[str, Any], specs: dict[str, dict[str, Any]]
     for gate in specs["promotion"]["mandatory_gates"]:
         gate_id = gate["gate_id"]
         raw = gate_evidence.get(gate_id)
-        passed = isinstance(raw, dict) and raw.get("status") == "pass" and bool(raw.get("evidence"))
+        raw_status = raw.get("status") if isinstance(raw, dict) else None
+        status = raw_status if raw_status in EVIDENCE_STATUSES else "missing"
+        passed = status == "pass" and bool(raw.get("evidence")) if isinstance(raw, dict) else False
         if not passed:
-            reasons.append(f"P0 gate evidence missing or not passing: {gate_id}")
+            reasons.append(f"P0 gate evidence missing or not passing: {gate_id} status={status}")
         gates.append(
             {
                 "gate_id": gate_id,
                 "class": gate["class"],
                 "description": gate["description"],
-                "status": "pass" if passed else "missing",
+                "status": status,
                 "evidence": redact(raw.get("evidence")) if isinstance(raw, dict) else None,
             }
         )
@@ -146,9 +150,11 @@ def validate_evidence(evidence: dict[str, Any], specs: dict[str, dict[str, Any]]
     for journey in specs["visible_corpus"]["journeys"]:
         journey_id = journey["journey_id"]
         raw = journey_evidence.get(journey_id)
-        passed = isinstance(raw, dict) and raw.get("status") == "pass" and bool(raw.get("evidence"))
+        raw_status = raw.get("status") if isinstance(raw, dict) else None
+        status = raw_status if raw_status in EVIDENCE_STATUSES else "missing"
+        passed = status == "pass" and bool(raw.get("evidence")) if isinstance(raw, dict) else False
         if journey["class"] == "P0" and not passed:
-            reasons.append(f"P0 journey evidence missing or not passing: {journey_id}")
+            reasons.append(f"P0 journey evidence missing or not passing: {journey_id} status={status}")
 
     return gates, reasons
 
@@ -160,14 +166,15 @@ def build_journey_results(specs: dict[str, dict[str, Any]], evidence: dict[str, 
     results: list[dict[str, Any]] = []
     for journey in specs["visible_corpus"]["journeys"]:
         raw = journey_evidence.get(journey["journey_id"])
-        passed = isinstance(raw, dict) and raw.get("status") == "pass" and bool(raw.get("evidence"))
+        raw_status = raw.get("status") if isinstance(raw, dict) else None
+        status = raw_status if raw_status in EVIDENCE_STATUSES else "missing"
         results.append(
             {
                 "journey_id": journey["journey_id"],
                 "capability_id": journey["capability_id"],
                 "class": journey["class"],
                 "oracle": journey["oracle"],
-                "status": "pass" if passed else "missing",
+                "status": status,
                 "evidence": redact(raw.get("evidence")) if isinstance(raw, dict) else None,
             }
         )
