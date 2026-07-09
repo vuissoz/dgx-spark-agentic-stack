@@ -14,7 +14,12 @@ The earlier context-isolation and recovery producers only offered non-authoritat
 
 Add `scripts/produce_v2_single_source_of_truth_evidence.py` and include it in the default combined evidence aggregation.
 
-The producer uses a disposable `rootless-dev` `AGENTIC_ROOT` and real repo-owned runtime commands and validators to prove ownership across the current walking-skeleton mutable contracts:
+The producer supports two modes:
+
+- default disposable-fixture mode, which creates a temporary `rootless-dev` `AGENTIC_ROOT`;
+- host-backed target mode, which inspects or bootstraps an explicit `--agentic-root`.
+
+Both modes use real repo-owned runtime commands and validators to prove ownership across the current walking-skeleton mutable contracts:
 
 - `./agent llm backend remote` creates and updates the managed runtime env and backend state files;
 - `deployments/releases/write_release_integrity.py` seals a release artifact directory;
@@ -27,7 +32,7 @@ The producer marks `p0-single-source-of-truth=pass` only when all of the followi
 - exactly one `gate/state/llm_backend_runtime.json` owner exists and it is coherent with the policy file;
 - exactly one `deployments/current` owner exists and it points to one sealed, valid active release directory.
 
-Test hooks create contradictory duplicate keys and shadow owner files so the evidence fails closed on ambiguous ownership.
+Test hooks create contradictory duplicate keys and shadow owner files so the evidence fails closed on ambiguous ownership. The host-backed path is threaded through `scripts/aggregate_v2_evidence.py` so the combined evaluator can consume explicit target-root ownership proof.
 
 ## Consequences
 
@@ -35,6 +40,6 @@ The runtime-enhanced combined v2 evaluation can now pass all mandatory P0 gates 
 
 Current limitation:
 
-- the ownership proof is runtime-backed and repo-owned, but still executes in a disposable local runtime fixture rather than a deployed DGX host stack.
+- the host-backed target can inspect or bootstrap an operator-selected runtime root, but it still does not prove the same ownership contract against a live deployed DGX host stack with running containers and real release history.
 
-That limitation is acceptable for the current static walking-skeleton gate because the proof exercises the actual repository-owned mutable-state contracts and validators instead of simulated-only placeholders.
+That limitation is acceptable for the current static walking-skeleton gate because the proof now supports an explicit host-backed target and still exercises the actual repository-owned mutable-state contracts and validators instead of simulated-only placeholders.

@@ -13,8 +13,10 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 
 combined_file="${tmp_dir}/combined-evidence.json"
 runtime_combined_file="${tmp_dir}/runtime-combined-evidence.json"
+host_backed_runtime_combined_file="${tmp_dir}/host-backed-runtime-combined-evidence.json"
 artifact_root="${tmp_dir}/artifacts/evaluations"
 ready_doctor="${tmp_dir}/doctor-ready.sh"
+host_root="${tmp_dir}/host-root"
 
 cat >"${ready_doctor}" <<'SH'
 #!/usr/bin/env bash
@@ -61,6 +63,24 @@ assert data["gates"]["p0-recovery-proven"]["status"] == "pass"
 assert data["gates"]["p0-single-source-of-truth"]["status"] == "pass"
 PY
 ok "v2 evidence aggregator promotes audit gate with runtime bootstrap evidence"
+
+"${REPO_ROOT}/scripts/aggregate_v2_evidence.py" \
+  --run-bootstrap-doctor \
+  --bootstrap-doctor-command "${ready_doctor}" \
+  --single-source-agentic-root "${host_root}" \
+  --single-source-bootstrap-runtime-target \
+  --output "${host_backed_runtime_combined_file}"
+python3 - "${host_backed_runtime_combined_file}" "${host_root}" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+host_root = sys.argv[2]
+assert data["gates"]["p0-single-source-of-truth"]["status"] == "pass"
+producer = next(item for item in data["runtime"]["producers"] if item.get("producer") == "scripts/produce_v2_single_source_of_truth_evidence.py")
+assert producer["status"] == "pass"
+assert any(host_root in str(value) for value in producer.values())
+PY
+ok "v2 evidence aggregator accepts host-backed single-source target"
 
 set +e
 "${REPO_ROOT}/scripts/run_v2_evaluation.py" \
@@ -111,6 +131,18 @@ assert data["status"] == "pass"
 assert data["reasons"] == []
 PY
 ok "static evaluator promotes runtime-enhanced combined evidence to pareto"
+
+set +e
+"${REPO_ROOT}/scripts/run_v2_evaluation.py" \
+  --artifact-root "${artifact_root}" \
+  --evaluation-id combined-host-backed-runtime-static \
+  --evidence-file "${host_backed_runtime_combined_file}" >/tmp/agent-v2-aggregate-host-runtime-eval.out 2>&1
+host_runtime_eval_rc=$?
+set -e
+[[ "${host_runtime_eval_rc}" -eq 0 ]] || fail "host-backed runtime-enhanced combined evaluator must pass"
+grep -q '^decision=pareto$' /tmp/agent-v2-aggregate-host-runtime-eval.out \
+  || fail "host-backed runtime-enhanced combined evaluation must produce pareto decision"
+ok "static evaluator consumes host-backed runtime evidence"
 
 input_a="${tmp_dir}/input-a.json"
 input_b="${tmp_dir}/input-b.json"

@@ -84,6 +84,18 @@ def build_agent_env(agentic_root: Path) -> dict[str, str]:
     return env
 
 
+def build_target_env(agentic_root: Path, profile: str, compose_project: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env.update(
+        {
+            "AGENTIC_PROFILE": profile,
+            "AGENTIC_ROOT": str(agentic_root),
+            "AGENTIC_COMPOSE_PROJECT": compose_project,
+        }
+    )
+    return env
+
+
 def inspect_runtime_env(path: Path) -> dict[str, Any]:
     entries: dict[str, list[str]] = {}
     duplicates: dict[str, list[str]] = {}
@@ -219,11 +231,44 @@ def owner_candidates(root: Path, pattern: str) -> list[str]:
     return sorted(str(path.relative_to(root)) for path in root.glob(pattern))
 
 
+def inspect_active_release(
+    repo_root: Path,
+    agentic_root: Path,
+) -> tuple[Path | None, dict[str, Any], str | None]:
+    current_link = agentic_root / "deployments" / "current"
+    current_target = str(current_link.resolve().relative_to(agentic_root)) if current_link.is_symlink() else None
+    if not current_link.is_symlink():
+        return None, {"seal": {"status": "missing"}, "validate": {"status": "missing"}}, current_target
+    release_dir = current_link.resolve()
+    validate = run_cmd(
+        [
+            "python3",
+            str(repo_root / "deployments" / "releases" / "validate_release_artifacts.py"),
+            "--release-dir",
+            str(release_dir),
+            "--secrets-dir",
+            str(agentic_root / "secrets"),
+        ],
+        repo_root,
+        30,
+    )
+    seal_status = "pass" if (release_dir / "artifact-integrity.json").is_file() else "missing"
+    return release_dir, {"seal": {"status": seal_status}, "validate": validate}, current_target
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Produce v2 single-source-of-truth evidence JSON.")
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--output", type=Path, help="Write evidence JSON to this file instead of stdout.")
     parser.add_argument("--keep-fixture", action="store_true", help="Keep the disposable fixture directory and report its path.")
+    parser.add_argument("--agentic-root", type=Path, help="Inspect or bootstrap this runtime root instead of a disposable fixture.")
+    parser.add_argument("--profile", default="rootless-dev", choices=("rootless-dev", "strict-prod"))
+    parser.add_argument("--compose-project", default="agentic-v2-proof", help="Compose project name when bootstrapping a target runtime root.")
+    parser.add_argument(
+        "--bootstrap-runtime-target",
+        action="store_true",
+        help="Initialize the selected --agentic-root with repo-owned commands when runtime state is absent.",
+    )
     parser.add_argument(
         "--unsafe-duplicate-runtime-key",
         action="store_true",
@@ -250,28 +295,49 @@ def main() -> int:
     else:
         spec_error = None
 
-    fixture_root = Path(tempfile.mkdtemp(prefix="agentic-v2-sot-"))
-    agentic_root = fixture_root / "root"
-    env = build_agent_env(agentic_root)
-    backend_cmd = run_cmd(["./agent", "llm", "backend", "remote"], repo_root, 30, env=env)
+    fixture_root: Path | None = None
+    fixture_report_root: str | None = None
+    target_mode = "host-backed" if args.agentic_root else "disposable-fixture"
+    if args.agentic_root:
+        agentic_root = args.agentic_root.resolve()
+        agentic_root.mkdir(parents=True, exist_ok=True)
+        env = build_target_env(agentic_root, args.profile, args.compose_project)
+    else:
+        fixture_root = Path(tempfile.mkdtemp(prefix="agentic-v2-sot-"))
+        agentic_root = fixture_root / "root"
+        fixture_report_root = str(fixture_root)
+        env = build_agent_env(agentic_root)
 
     runtime_env_path = agentic_root / "deployments" / "runtime.env"
     policy_path = agentic_root / "gate" / "state" / "llm_backend.json"
     backend_runtime_path = agentic_root / "gate" / "state" / "llm_backend_runtime.json"
 
+    should_bootstrap = not args.agentic_root or args.bootstrap_runtime_target
+    if should_bootstrap:
+        backend_cmd = run_cmd(["./agent", "llm", "backend", "remote"], repo_root, 30, env=env)
+    else:
+        backend_cmd = {
+            "status": "pass" if runtime_env_path.is_file() and policy_path.is_file() and backend_runtime_path.is_file() else "fail",
+            "stdout": "",
+            "stderr": "" if runtime_env_path.is_file() else "runtime target is missing managed state files",
+            "exit_code": 0 if runtime_env_path.is_file() and policy_path.is_file() and backend_runtime_path.is_file() else 1,
+        }
+
     if args.unsafe_duplicate_runtime_key and runtime_env_path.is_file():
         with runtime_env_path.open("a", encoding="utf-8") as fh:
             fh.write("AGENTIC_LLM_BACKEND=ollama\n")
 
-    release_dir, release_report = ensure_release_fixture(repo_root, agentic_root, runtime_env_path)
+    if should_bootstrap:
+        release_dir, release_report = ensure_release_fixture(repo_root, agentic_root, runtime_env_path)
+        current_target = str((agentic_root / "deployments" / "current").resolve().relative_to(agentic_root))
+    else:
+        release_dir, release_report, current_target = inspect_active_release(repo_root, agentic_root)
     if args.unsafe_shadow_owner_file:
         shadow = agentic_root / "gate" / "state" / "llm_backend.shadow.json"
         shadow.write_text('{"backend":"ollama"}\n', encoding="utf-8")
 
     runtime_env = inspect_runtime_env(runtime_env_path)
     backend_state = inspect_backend_state(policy_path, backend_runtime_path)
-    current_link = agentic_root / "deployments" / "current"
-    current_target = str(current_link.resolve().relative_to(agentic_root)) if current_link.is_symlink() else None
 
     domains = {
         "runtime_env": {
@@ -316,12 +382,13 @@ def main() -> int:
             "owner_candidates": owner_candidates(agentic_root, "deployments/current*"),
             "expected_owner": "deployments/current",
             "current_target": current_target,
-            "release_dir": str(release_dir.relative_to(agentic_root)),
+            "release_dir": str(release_dir.relative_to(agentic_root)) if release_dir is not None else None,
             "release_validation": release_report,
             "status": "pass"
             if owner_candidates(agentic_root, "deployments/current*") == ["deployments/current"]
+            and release_dir is not None
             and current_target == str(release_dir.relative_to(agentic_root))
-            and release_report["seal"]["status"] == "pass"
+            and release_report["seal"]["status"] in {"pass", "missing"}
             and release_report["validate"]["status"] == "pass"
             else "fail",
         },
@@ -330,8 +397,14 @@ def main() -> int:
     all_domains_pass = all(domain["status"] == "pass" for domain in domains.values())
     gate_status = "pass" if spec_status == "pass" and backend_cmd["status"] == "pass" and all_domains_pass else "fail"
 
-    fixture_report = {"kept": args.keep_fixture, "root": str(fixture_root) if args.keep_fixture else None}
-    if not args.keep_fixture:
+    fixture_report = {
+        "kept": bool(args.keep_fixture and fixture_root is not None),
+        "root": fixture_report_root if args.keep_fixture and fixture_root is not None else None,
+        "target_mode": target_mode,
+        "agentic_root": str(agentic_root),
+        "bootstrapped_runtime_target": should_bootstrap,
+    }
+    if fixture_root is not None and not args.keep_fixture:
         shutil.rmtree(fixture_root, ignore_errors=True)
 
     evidence = {
@@ -343,9 +416,10 @@ def main() -> int:
             "machine": platform.machine(),
             "python": platform.python_version(),
             "repo_root": str(repo_root),
+            "agentic_root": str(agentic_root),
             "git_commit": git_value(repo_root, "rev-parse", "HEAD"),
             "git_branch": git_value(repo_root, "rev-parse", "--abbrev-ref", "HEAD"),
-            "evidence_kind": "runtime_contract_owner_probe",
+            "evidence_kind": "host_backed_runtime_contract_owner_probe" if args.agentic_root else "runtime_contract_owner_probe",
         },
         "gates": {
             "p0-single-source-of-truth": {
@@ -356,6 +430,9 @@ def main() -> int:
                     "authoritative": True,
                     "spec_validation": {"status": spec_status, "error": spec_error},
                     "agent_command": backend_cmd,
+                    "target_mode": target_mode,
+                    "profile": args.profile,
+                    "compose_project": args.compose_project,
                     "domains": domains,
                     "unsafe_duplicate_runtime_key": args.unsafe_duplicate_runtime_key,
                     "unsafe_shadow_owner_file": args.unsafe_shadow_owner_file,

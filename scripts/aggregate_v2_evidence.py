@@ -30,6 +30,7 @@ DEFAULT_PRODUCERS = (
     "scripts/produce_v2_single_source_of_truth_evidence.py",
 )
 BOOTSTRAP_PRODUCER = "scripts/produce_v2_bootstrap_evidence.py"
+SINGLE_SOURCE_PRODUCER = "scripts/produce_v2_single_source_of_truth_evidence.py"
 
 STATUS_RANK = {"missing": 0, "pass": 1, "partial": 2, "fail": 3}
 
@@ -87,9 +88,12 @@ def git_value(repo_root: Path, *args: str) -> str | None:
 
 
 def evidence_summary(evidence: dict[str, Any]) -> dict[str, Any]:
+    runtime = evidence.get("runtime") or {}
     return {
         "schema_version": evidence.get("schema_version"),
         "producer": evidence.get("producer"),
+        "evidence_kind": runtime.get("evidence_kind") if isinstance(runtime, dict) else None,
+        "agentic_root": runtime.get("agentic_root") if isinstance(runtime, dict) else None,
         "journeys": sorted((evidence.get("journeys") or {}).keys()),
         "gates": sorted((evidence.get("gates") or {}).keys()),
     }
@@ -172,15 +176,23 @@ def parse_producer_arg(value: str) -> tuple[str, list[str]]:
 
 def default_producer_specs(args: argparse.Namespace) -> list[str]:
     specs = list(DEFAULT_PRODUCERS)
-    if not args.run_bootstrap_doctor:
-        return specs
-    bootstrap_args = [BOOTSTRAP_PRODUCER, "--run-doctor"]
-    if args.bootstrap_doctor_command:
-        bootstrap_args.extend(["--doctor-command", args.bootstrap_doctor_command])
-    return [
-        " ".join(shlex.quote(part) for part in bootstrap_args) if producer == BOOTSTRAP_PRODUCER else producer
-        for producer in specs
-    ]
+    rendered: list[str] = []
+    for producer in specs:
+        command = [producer]
+        if producer == BOOTSTRAP_PRODUCER and args.run_bootstrap_doctor:
+            command.append("--run-doctor")
+            if args.bootstrap_doctor_command:
+                command.extend(["--doctor-command", args.bootstrap_doctor_command])
+        if producer == SINGLE_SOURCE_PRODUCER and args.single_source_agentic_root:
+            command.extend(["--agentic-root", args.single_source_agentic_root])
+            if args.single_source_profile:
+                command.extend(["--profile", args.single_source_profile])
+            if args.single_source_compose_project:
+                command.extend(["--compose-project", args.single_source_compose_project])
+            if args.single_source_bootstrap_runtime_target:
+                command.append("--bootstrap-runtime-target")
+        rendered.append(" ".join(shlex.quote(part) for part in command))
+    return rendered
 
 
 def collect_from_producer(repo_root: Path, producer: str, extra_args: list[str], timeout_sec: int) -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -225,6 +237,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--producer-timeout-sec", type=int, default=60)
     parser.add_argument("--run-bootstrap-doctor", action="store_true", help="Run the bootstrap producer with --run-doctor.")
     parser.add_argument("--bootstrap-doctor-command", help="Doctor command passed to the default bootstrap producer.")
+    parser.add_argument("--single-source-agentic-root", help="Runtime root passed to the default single-source-of-truth producer.")
+    parser.add_argument("--single-source-profile", default="rootless-dev", choices=("rootless-dev", "strict-prod"))
+    parser.add_argument("--single-source-compose-project", default="agentic-v2-proof")
+    parser.add_argument(
+        "--single-source-bootstrap-runtime-target",
+        action="store_true",
+        help="Bootstrap the selected single-source runtime target before inspection.",
+    )
     return parser.parse_args()
 
 
