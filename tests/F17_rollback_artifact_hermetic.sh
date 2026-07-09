@@ -35,11 +35,7 @@ cleanup() {
   docker network rm "${AGENTIC_EGRESS_NETWORK}" >/dev/null 2>&1 || true
   docker network rm "${AGENTIC_LLM_NETWORK}" >/dev/null 2>&1 || true
   docker network rm "${AGENTIC_NETWORK}" >/dev/null 2>&1 || true
-  if [[ -d "${AGENTIC_ROOT}" ]]; then
-    find "${AGENTIC_ROOT}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete || true
-    find "${AGENTIC_ROOT}" -mindepth 1 -depth -type d -empty -delete || true
-    rmdir "${AGENTIC_ROOT}" >/dev/null 2>&1 || true
-  fi
+  purge_runtime_root_test_safe "${AGENTIC_ROOT}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
