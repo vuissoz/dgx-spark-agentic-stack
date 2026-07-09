@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 SPEC_FILES = {
     "capabilities": Path("evaluation/spec/capabilities.yaml"),
@@ -49,8 +49,8 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def load_json_subset_yaml(path: Path) -> dict[str, Any]:
-    full_path = REPO_ROOT / path
+def load_json_subset_yaml(path: Path, repo_root: Path = DEFAULT_REPO_ROOT) -> dict[str, Any]:
+    full_path = repo_root / path
     if not full_path.is_file():
         fail(f"missing required v2 evaluation spec: {path}")
     try:
@@ -166,8 +166,12 @@ def validate_engineering_corpus(data: dict[str, Any]) -> None:
             fail(f"{context} has invalid class {item['class']!r}")
 
 
-def main() -> int:
-    loaded = {name: load_json_subset_yaml(path) for name, path in SPEC_FILES.items()}
+def load_all_specs(repo_root: Path = DEFAULT_REPO_ROOT) -> dict[str, dict[str, Any]]:
+    return {name: load_json_subset_yaml(path, repo_root) for name, path in SPEC_FILES.items()}
+
+
+def validate_all(repo_root: Path = DEFAULT_REPO_ROOT) -> dict[str, dict[str, Any]]:
+    loaded = load_all_specs(repo_root)
     capability_ids = validate_capabilities(loaded["capabilities"])
     validate_architecture(loaded["architecture"])
     validate_promotion(loaded["promotion"])
@@ -178,6 +182,11 @@ def main() -> int:
         if len(loaded[name]) < 3:
             fail(f"{name} spec is too thin to be useful")
 
+    return loaded
+
+
+def main() -> int:
+    validate_all()
     print("OK: v2 evaluation specs validated")
     return 0
 
