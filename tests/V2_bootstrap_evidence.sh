@@ -12,7 +12,25 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
 evidence_file="${tmp_dir}/bootstrap-evidence.json"
+runtime_evidence_file="${tmp_dir}/bootstrap-runtime-evidence.json"
 artifact_root="${tmp_dir}/artifacts/evaluations"
+ready_doctor="${tmp_dir}/doctor-ready.sh"
+failed_doctor="${tmp_dir}/doctor-failed.sh"
+
+cat >"${ready_doctor}" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "OK: doctor result: READY"
+SH
+chmod +x "${ready_doctor}"
+
+cat >"${failed_doctor}" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "WARN: doctor result: NOT READY"
+exit 23
+SH
+chmod +x "${failed_doctor}"
 
 "${REPO_ROOT}/scripts/produce_v2_bootstrap_evidence.py" --output "${evidence_file}"
 python3 - "${evidence_file}" <<'PY'
@@ -24,9 +42,44 @@ assert "bootstrap-doctor" in data["journeys"]
 assert data["journeys"]["bootstrap-doctor"]["status"] in {"partial", "pass"}
 assert data["gates"]["p0-no-secret-or-data-leak"]["status"] == "pass"
 assert data["gates"]["p0-no-direct-backend-or-docker-sock"]["status"] in {"partial", "pass"}
+assert data["gates"]["p0-audit-correlated"]["status"] == "partial"
+assert data["gates"]["p0-audit-correlated"]["evidence"]["authoritative"] is False
 assert data["runtime"]["doctor_executed"] is False
 PY
 ok "bootstrap evidence producer writes expected evidence shape"
+
+"${REPO_ROOT}/scripts/produce_v2_bootstrap_evidence.py" \
+  --run-doctor \
+  --doctor-command "${ready_doctor}" \
+  --output "${runtime_evidence_file}"
+python3 - "${runtime_evidence_file}" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+assert data["runtime"]["doctor_executed"] is True
+assert data["journeys"]["bootstrap-doctor"]["status"] == "pass"
+audit = data["gates"]["p0-audit-correlated"]
+assert audit["status"] == "pass"
+assert audit["evidence"]["authoritative"] is True
+assert audit["evidence"]["doctor_ready"] is True
+PY
+ok "bootstrap evidence producer promotes audit gate with runtime doctor evidence"
+
+"${REPO_ROOT}/scripts/produce_v2_bootstrap_evidence.py" \
+  --run-doctor \
+  --doctor-command "${failed_doctor}" \
+  --output "${tmp_dir}/bootstrap-failed-doctor-evidence.json"
+python3 - "${tmp_dir}/bootstrap-failed-doctor-evidence.json" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+assert data["journeys"]["bootstrap-doctor"]["status"] == "partial"
+audit = data["gates"]["p0-audit-correlated"]
+assert audit["status"] == "fail"
+assert audit["evidence"]["authoritative"] is True
+assert audit["evidence"]["doctor"]["exit_code"] == 23
+PY
+ok "bootstrap evidence producer records runtime doctor refusal"
 
 set +e
 "${REPO_ROOT}/scripts/run_v2_evaluation.py" \

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import shlex
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -27,6 +28,7 @@ DEFAULT_PRODUCERS = (
     "scripts/produce_v2_model_backend_failure_evidence.py",
     "scripts/produce_v2_snapshot_restore_rollback_evidence.py",
 )
+BOOTSTRAP_PRODUCER = "scripts/produce_v2_bootstrap_evidence.py"
 
 STATUS_RANK = {"missing": 0, "pass": 1, "partial": 2, "fail": 3}
 
@@ -96,26 +98,46 @@ def aggregate_status(left: str, right: str) -> str:
     return left if STATUS_RANK.get(left, 0) >= STATUS_RANK.get(right, 0) else right
 
 
+def observation_authoritative(value: dict[str, Any]) -> bool:
+    evidence = value.get("evidence")
+    if isinstance(evidence, dict) and evidence.get("authoritative") is False:
+        return False
+    return True
+
+
+def aggregate_gate_observations(observations: list[dict[str, Any]]) -> str:
+    if any(observation.get("status") == "fail" for observation in observations):
+        return "fail"
+    authoritative = [observation for observation in observations if observation.get("authoritative") is not False]
+    selected = authoritative or observations
+    status = "missing"
+    for observation in selected:
+        status = aggregate_status(status, str(observation.get("status", "missing")))
+    return status
+
+
 def merge_gate(target: dict[str, Any], key: str, value: dict[str, Any], producer: str | None) -> None:
     observation = {
         "producer": producer,
         "status": value.get("status", "missing"),
+        "authoritative": observation_authoritative(value),
         "evidence": value.get("evidence"),
     }
     if key not in target["gates"]:
         target["gates"][key] = {
-            "status": value.get("status", "missing"),
+            "status": aggregate_gate_observations([observation]),
             "evidence": {
                 "type": "aggregated_gate_evidence",
+                "policy": "Any failing observation fails the gate. Otherwise authoritative observations decide status; non-authoritative observations are retained for audit.",
                 "observations": [observation],
             },
         }
         return
     existing = target["gates"][key]
-    existing["status"] = aggregate_status(str(existing.get("status", "missing")), str(value.get("status", "missing")))
     existing_evidence = existing.setdefault("evidence", {"type": "aggregated_gate_evidence", "observations": []})
     observations = existing_evidence.setdefault("observations", [])
     observations.append(observation)
+    existing["status"] = aggregate_gate_observations(observations)
 
 
 def merge_named_section(target: dict[str, Any], source: dict[str, Any], section: str, producer: str | None) -> list[str]:
@@ -138,10 +160,26 @@ def merge_named_section(target: dict[str, Any], source: dict[str, Any], section:
 
 
 def parse_producer_arg(value: str) -> tuple[str, list[str]]:
-    parts = value.split()
+    try:
+        parts = shlex.split(value)
+    except ValueError as exc:
+        fail(f"invalid producer command: {exc}")
     if not parts:
         fail("producer command cannot be empty")
     return parts[0], parts[1:]
+
+
+def default_producer_specs(args: argparse.Namespace) -> list[str]:
+    specs = list(DEFAULT_PRODUCERS)
+    if not args.run_bootstrap_doctor:
+        return specs
+    bootstrap_args = [BOOTSTRAP_PRODUCER, "--run-doctor"]
+    if args.bootstrap_doctor_command:
+        bootstrap_args.extend(["--doctor-command", args.bootstrap_doctor_command])
+    return [
+        " ".join(shlex.quote(part) for part in bootstrap_args) if producer == BOOTSTRAP_PRODUCER else producer
+        for producer in specs
+    ]
 
 
 def collect_from_producer(repo_root: Path, producer: str, extra_args: list[str], timeout_sec: int) -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -184,6 +222,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--no-default-producers", action="store_true", help="Do not run built-in v2 evidence producers.")
     parser.add_argument("--producer-timeout-sec", type=int, default=60)
+    parser.add_argument("--run-bootstrap-doctor", action="store_true", help="Run the bootstrap producer with --run-doctor.")
+    parser.add_argument("--bootstrap-doctor-command", help="Doctor command passed to the default bootstrap producer.")
     return parser.parse_args()
 
 
@@ -214,7 +254,7 @@ def main() -> int:
     }
     conflicts: list[str] = []
 
-    producer_specs = [] if args.no_default_producers else list(DEFAULT_PRODUCERS)
+    producer_specs = [] if args.no_default_producers else default_producer_specs(args)
     producer_specs.extend(args.producer)
     for producer_spec in producer_specs:
         producer, extra_args = parse_producer_arg(producer_spec)

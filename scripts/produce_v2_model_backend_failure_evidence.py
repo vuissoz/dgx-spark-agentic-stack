@@ -177,6 +177,7 @@ def main() -> int:
                 "evidence": {
                     "type": "local_broker_decision_audit_shape",
                     "generated_at": generated_at,
+                    "authoritative": not failure_handled,
                     "correlation_id": "local-simulated-run",
                     "broker_decision": broker_scenario["decision"],
                     "note": "This producer records the audit shape; durable deployed audit persistence is not implemented here.",

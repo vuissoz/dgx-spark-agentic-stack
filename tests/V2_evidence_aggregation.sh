@@ -12,7 +12,16 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
 combined_file="${tmp_dir}/combined-evidence.json"
+runtime_combined_file="${tmp_dir}/runtime-combined-evidence.json"
 artifact_root="${tmp_dir}/artifacts/evaluations"
+ready_doctor="${tmp_dir}/doctor-ready.sh"
+
+cat >"${ready_doctor}" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "OK: doctor result: READY"
+SH
+chmod +x "${ready_doctor}"
 
 "${REPO_ROOT}/scripts/aggregate_v2_evidence.py" --output "${combined_file}"
 python3 - "${combined_file}" <<'PY'
@@ -30,6 +39,24 @@ assert data["journeys"]["snapshot-restore-rollback"]["status"] == "pass"
 assert len(data["runtime"]["producers"]) == 4
 PY
 ok "v2 evidence aggregator writes combined walking-skeleton evidence"
+
+"${REPO_ROOT}/scripts/aggregate_v2_evidence.py" \
+  --run-bootstrap-doctor \
+  --bootstrap-doctor-command "${ready_doctor}" \
+  --output "${runtime_combined_file}"
+python3 - "${runtime_combined_file}" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+assert data["aggregation"]["status"] == "pass"
+assert data["journeys"]["bootstrap-doctor"]["status"] == "pass"
+audit = data["gates"]["p0-audit-correlated"]
+assert audit["status"] == "pass"
+observations = audit["evidence"]["observations"]
+assert any(item["authoritative"] is True and item["status"] == "pass" for item in observations)
+assert any(item["authoritative"] is False and item["status"] == "partial" for item in observations)
+PY
+ok "v2 evidence aggregator promotes audit gate with runtime bootstrap evidence"
 
 set +e
 "${REPO_ROOT}/scripts/run_v2_evaluation.py" \
@@ -53,6 +80,25 @@ assert journeys["bootstrap-doctor"] in {"partial", "pass"}
 assert any("p0-single-source-of-truth" in reason for reason in data["reasons"])
 PY
 ok "static evaluator consumes combined evidence file"
+
+set +e
+"${REPO_ROOT}/scripts/run_v2_evaluation.py" \
+  --artifact-root "${artifact_root}" \
+  --evaluation-id combined-runtime-static \
+  --evidence-file "${runtime_combined_file}" >/tmp/agent-v2-aggregate-runtime-eval.out 2>&1
+runtime_eval_rc=$?
+set -e
+[[ "${runtime_eval_rc}" -eq 2 ]] || fail "remaining partial gates must keep runtime-enhanced combined evaluator in quarantine"
+python3 - "${artifact_root}/combined-runtime-static/gates.json" <<'PY'
+import json
+import sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+gates = {item["gate_id"]: item for item in data["gates"]}
+assert gates["p0-audit-correlated"]["status"] == "pass"
+assert gates["p0-single-source-of-truth"]["status"] == "partial"
+assert any("p0-single-source-of-truth" in reason for reason in data["reasons"])
+PY
+ok "static evaluator records upgraded audit gate without promoting incomplete run"
 
 input_a="${tmp_dir}/input-a.json"
 input_b="${tmp_dir}/input-b.json"

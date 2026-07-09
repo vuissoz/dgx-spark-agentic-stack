@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import platform
+import shlex
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -51,6 +52,16 @@ def run_cmd(args: list[str], cwd: Path, timeout_sec: int) -> dict[str, Any]:
         "stdout": proc.stdout[-4000:],
         "stderr": proc.stderr[-4000:],
     }
+
+
+def parse_doctor_command(value: str) -> list[str]:
+    try:
+        parts = shlex.split(value)
+    except ValueError as exc:
+        raise SystemExit(f"invalid --doctor-command: {exc}") from exc
+    if not parts:
+        raise SystemExit("--doctor-command cannot be empty")
+    return parts
 
 
 def git_value(repo_root: Path, *args: str) -> str | None:
@@ -154,6 +165,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--output", type=Path, help="Write evidence JSON to this file instead of stdout.")
     parser.add_argument("--run-doctor", action="store_true", help="Run ./agent doctor with a bounded timeout.")
+    parser.add_argument("--doctor-command", default="./agent doctor", help="Doctor command to execute when --run-doctor is set.")
     parser.add_argument("--doctor-timeout-sec", type=int, default=60)
     return parser.parse_args()
 
@@ -174,7 +186,7 @@ def main() -> int:
     static_security = scan_static_security(repo_root)
     doctor_result: dict[str, Any] | None = None
     if args.run_doctor:
-        doctor_result = run_cmd(["./agent", "doctor"], repo_root, args.doctor_timeout_sec)
+        doctor_result = run_cmd(parse_doctor_command(args.doctor_command), repo_root, args.doctor_timeout_sec)
 
     static_preflight_pass = (
         spec_status == "pass"
@@ -184,7 +196,17 @@ def main() -> int:
         and not static_security["likely_secret_hits"]
     )
     doctor_pass = bool(doctor_result and doctor_result["status"] == "pass")
-    bootstrap_status = "pass" if static_preflight_pass and doctor_pass else "partial" if static_preflight_pass else "fail"
+    doctor_ready = bool(doctor_pass and "doctor result: READY" in str(doctor_result.get("stdout", "")))
+    bootstrap_status = "pass" if static_preflight_pass and doctor_ready else "partial" if static_preflight_pass else "fail"
+    audit_status = (
+        "pass"
+        if static_preflight_pass and doctor_ready
+        else "fail"
+        if args.run_doctor
+        else "partial"
+        if static_preflight_pass
+        else "fail"
+    )
 
     evidence = {
         "schema_version": "v2-bootstrap-evidence.v0",
@@ -198,6 +220,7 @@ def main() -> int:
             "git_commit": git_value(repo_root, "rev-parse", "HEAD"),
             "git_branch": git_value(repo_root, "rev-parse", "--abbrev-ref", "HEAD"),
             "doctor_executed": bool(args.run_doctor),
+            "doctor_command": args.doctor_command if args.run_doctor else None,
         },
         "gates": {
             "p0-no-secret-or-data-leak": {
@@ -230,6 +253,23 @@ def main() -> int:
                         "release_validator": paths["release_validator"],
                     },
                     "note": "Actual restore and rollback execution is not performed by this producer.",
+                },
+            },
+            "p0-audit-correlated": {
+                "status": audit_status,
+                "evidence": {
+                    "type": "runtime_doctor_audit_correlation" if doctor_ready else "bootstrap_doctor_audit_preflight",
+                    "generated_at": generated_at,
+                    "authoritative": audit_status != "partial",
+                    "doctor_executed": bool(args.run_doctor),
+                    "doctor_ready": doctor_ready,
+                    "doctor": doctor_result
+                    if doctor_result is not None
+                    else {
+                        "status": "not_run",
+                        "reason": "Run with --run-doctor to require runtime doctor audit evidence.",
+                    },
+                    "note": "The audit gate is authoritative only when a real doctor command executes and reports READY.",
                 },
             },
         },

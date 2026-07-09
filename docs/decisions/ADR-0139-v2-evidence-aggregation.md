@@ -17,7 +17,7 @@ The aggregator runs the default v2 evidence producers, merges their `gates` and 
 The aggregator is conservative:
 
 - producer failures make aggregation fail;
-- duplicate gate evidence is aggregated conservatively using the worst observed status;
+- duplicate gate evidence is aggregated using recorded observations: any failure fails the gate, otherwise authoritative observations decide status and non-authoritative partial observations are retained for audit;
 - conflicting duplicate journey evidence makes aggregation fail;
 - existing evidence files can be merged with `--input`;
 - default producers can be disabled for tests and future runtime-specific aggregation.

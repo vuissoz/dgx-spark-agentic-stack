@@ -30,6 +30,7 @@ assert scenario["primary_backend"]["status"] == "unavailable"
 assert scenario["actionable"] is True
 assert data["gates"]["p0-no-direct-backend-or-docker-sock"]["status"] == "pass"
 assert data["gates"]["p0-audit-correlated"]["status"] == "partial"
+assert data["gates"]["p0-audit-correlated"]["evidence"]["authoritative"] is False
 PY
 ok "model-backend producer writes actionable-refusal evidence"
 
