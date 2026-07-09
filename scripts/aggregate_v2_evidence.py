@@ -27,6 +27,7 @@ DEFAULT_PRODUCERS = (
     "scripts/produce_v2_context_isolation_evidence.py",
     "scripts/produce_v2_model_backend_failure_evidence.py",
     "scripts/produce_v2_snapshot_restore_rollback_evidence.py",
+    "scripts/produce_v2_single_source_of_truth_evidence.py",
 )
 BOOTSTRAP_PRODUCER = "scripts/produce_v2_bootstrap_evidence.py"
 

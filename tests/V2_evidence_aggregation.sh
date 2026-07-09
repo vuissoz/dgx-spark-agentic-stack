@@ -36,7 +36,8 @@ assert data["journeys"]["bootstrap-doctor"]["status"] in {"partial", "pass"}
 assert data["journeys"]["context-isolation"]["status"] == "pass"
 assert data["journeys"]["model-backend-failure"]["status"] == "pass"
 assert data["journeys"]["snapshot-restore-rollback"]["status"] == "pass"
-assert len(data["runtime"]["producers"]) == 4
+assert len(data["runtime"]["producers"]) == 5
+assert data["gates"]["p0-single-source-of-truth"]["status"] == "pass"
 PY
 ok "v2 evidence aggregator writes combined walking-skeleton evidence"
 
@@ -57,7 +58,7 @@ assert any(item["authoritative"] is True and item["status"] == "pass" for item i
 assert any(item["authoritative"] is False and item["status"] == "partial" for item in observations)
 assert data["gates"]["p0-no-direct-backend-or-docker-sock"]["status"] == "pass"
 assert data["gates"]["p0-recovery-proven"]["status"] == "pass"
-assert data["gates"]["p0-single-source-of-truth"]["status"] == "partial"
+assert data["gates"]["p0-single-source-of-truth"]["status"] == "pass"
 PY
 ok "v2 evidence aggregator promotes audit gate with runtime bootstrap evidence"
 
@@ -80,7 +81,8 @@ assert journeys["context-isolation"] == "pass"
 assert journeys["model-backend-failure"] == "pass"
 assert journeys["snapshot-restore-rollback"] == "pass"
 assert journeys["bootstrap-doctor"] in {"partial", "pass"}
-assert any("p0-single-source-of-truth" in reason for reason in data["reasons"])
+assert any("p0-audit-correlated" in reason for reason in data["reasons"])
+assert any("bootstrap-doctor" in reason for reason in data["reasons"])
 PY
 ok "static evaluator consumes combined evidence file"
 
@@ -91,19 +93,24 @@ set +e
   --evidence-file "${runtime_combined_file}" >/tmp/agent-v2-aggregate-runtime-eval.out 2>&1
 runtime_eval_rc=$?
 set -e
-[[ "${runtime_eval_rc}" -eq 2 ]] || fail "remaining partial gates must keep runtime-enhanced combined evaluator in quarantine"
-python3 - "${artifact_root}/combined-runtime-static/gates.json" <<'PY'
+[[ "${runtime_eval_rc}" -eq 0 ]] || fail "runtime-enhanced combined evaluator must pass once all P0 evidence is present"
+grep -q '^decision=pareto$' /tmp/agent-v2-aggregate-runtime-eval.out \
+  || fail "runtime-enhanced combined evaluation must produce pareto decision"
+python3 - "${artifact_root}/combined-runtime-static/evaluation.json" <<'PY'
 import json
 import sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
-gates = {item["gate_id"]: item for item in data["gates"]}
-assert gates["p0-audit-correlated"]["status"] == "pass"
-assert gates["p0-no-direct-backend-or-docker-sock"]["status"] == "pass"
-assert gates["p0-recovery-proven"]["status"] == "pass"
-assert gates["p0-single-source-of-truth"]["status"] == "partial"
-assert data["reasons"] == ["P0 gate evidence missing or not passing: p0-single-source-of-truth status=partial"]
+gates = {item["gate_id"]: item["status"] for item in data["gates"]}
+assert all(status == "pass" for status in gates.values())
+journeys = {item["journey_id"]: item["status"] for item in data["journeys"]}
+for journey_id in ("bootstrap-doctor", "context-isolation", "model-backend-failure", "snapshot-restore-rollback"):
+    assert journeys[journey_id] == "pass"
+assert journeys["codex-repo-change"] == "missing"
+assert data["decision"] == "pareto"
+assert data["status"] == "pass"
+assert data["reasons"] == []
 PY
-ok "static evaluator records upgraded audit gate without promoting incomplete run"
+ok "static evaluator promotes runtime-enhanced combined evidence to pareto"
 
 input_a="${tmp_dir}/input-a.json"
 input_b="${tmp_dir}/input-b.json"
