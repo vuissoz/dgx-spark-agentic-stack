@@ -18,10 +18,14 @@ The evidence aggregator now records whether each gate observation is authoritati
 
 ## Consequences
 
-Remaining partial P0 gates after this change:
+In the runtime-enhanced combined artifact:
 
-- `p0-single-source-of-truth`: still static/local evidence; needs runtime proof of one mutable owner per v2 domain.
-- `p0-recovery-proven`: still partial in the combined aggregate because bootstrap evidence only checks paths; full pass requires runtime snapshot, restore, rollback, and post-restore doctor proof.
-- `p0-no-direct-backend-or-docker-sock`: still partial in the combined aggregate because bootstrap evidence only scans static compose policy; full pass requires deployed network/backend refusal evidence across all relevant runtime surfaces.
+- `p0-audit-correlated` can pass from doctor-backed evidence;
+- `p0-no-direct-backend-or-docker-sock` can pass when doctor-backed forbidden-surface evidence overrides non-authoritative bootstrap preflight and the model-backend producer also records refusal;
+- `p0-recovery-proven` can pass when snapshot/restore/rollback evidence overrides the non-authoritative bootstrap path preflight.
 
-This change does not promote a full v2 candidate. It upgrades one gate with bounded runtime evidence and keeps the evaluator in quarantine when any P0 journey or gate remains partial.
+Remaining partial P0 gate in that runtime-enhanced artifact:
+
+- `p0-single-source-of-truth`: still static/local evidence; it needs runtime proof of one mutable owner per v2 domain.
+
+This change still does not promote a full v2 candidate. It narrows quarantine to the unresolved single-source-of-truth proof when runtime doctor evidence is available.

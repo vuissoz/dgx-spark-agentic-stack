@@ -55,6 +55,9 @@ assert audit["status"] == "pass"
 observations = audit["evidence"]["observations"]
 assert any(item["authoritative"] is True and item["status"] == "pass" for item in observations)
 assert any(item["authoritative"] is False and item["status"] == "partial" for item in observations)
+assert data["gates"]["p0-no-direct-backend-or-docker-sock"]["status"] == "pass"
+assert data["gates"]["p0-recovery-proven"]["status"] == "pass"
+assert data["gates"]["p0-single-source-of-truth"]["status"] == "partial"
 PY
 ok "v2 evidence aggregator promotes audit gate with runtime bootstrap evidence"
 
@@ -95,8 +98,10 @@ import sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 gates = {item["gate_id"]: item for item in data["gates"]}
 assert gates["p0-audit-correlated"]["status"] == "pass"
+assert gates["p0-no-direct-backend-or-docker-sock"]["status"] == "pass"
+assert gates["p0-recovery-proven"]["status"] == "pass"
 assert gates["p0-single-source-of-truth"]["status"] == "partial"
-assert any("p0-single-source-of-truth" in reason for reason in data["reasons"])
+assert data["reasons"] == ["P0 gate evidence missing or not passing: p0-single-source-of-truth status=partial"]
 PY
 ok "static evaluator records upgraded audit gate without promoting incomplete run"
 

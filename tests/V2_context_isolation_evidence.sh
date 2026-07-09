@@ -28,6 +28,7 @@ assert all(item["status"] == "read" for item in checks)
 assert journey["evidence"]["negative_cross_context_check"]["status"] == "refused"
 assert data["gates"]["p0-no-secret-or-data-leak"]["status"] == "pass"
 assert data["gates"]["p0-single-source-of-truth"]["status"] == "partial"
+assert data["gates"]["p0-single-source-of-truth"]["evidence"]["authoritative"] is False
 PY
 ok "context-isolation producer writes pass-shaped local policy evidence"
 

@@ -27,6 +27,7 @@ assert journey["evidence"]["restored"]["rollback_exact"] is True
 assert journey["evidence"]["checkpoint"]["release"] == journey["evidence"]["restored"]["release"]
 assert data["gates"]["p0-recovery-proven"]["status"] == "pass"
 assert data["gates"]["p0-single-source-of-truth"]["status"] == "partial"
+assert data["gates"]["p0-single-source-of-truth"]["evidence"]["authoritative"] is False
 PY
 ok "snapshot-restore-rollback producer writes pass-shaped recovery evidence"
 

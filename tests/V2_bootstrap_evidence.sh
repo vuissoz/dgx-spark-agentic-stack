@@ -42,6 +42,9 @@ assert "bootstrap-doctor" in data["journeys"]
 assert data["journeys"]["bootstrap-doctor"]["status"] in {"partial", "pass"}
 assert data["gates"]["p0-no-secret-or-data-leak"]["status"] == "pass"
 assert data["gates"]["p0-no-direct-backend-or-docker-sock"]["status"] in {"partial", "pass"}
+assert data["gates"]["p0-no-direct-backend-or-docker-sock"]["evidence"]["authoritative"] is False
+assert data["gates"]["p0-recovery-proven"]["status"] == "partial"
+assert data["gates"]["p0-recovery-proven"]["evidence"]["authoritative"] is False
 assert data["gates"]["p0-audit-correlated"]["status"] == "partial"
 assert data["gates"]["p0-audit-correlated"]["evidence"]["authoritative"] is False
 assert data["runtime"]["doctor_executed"] is False
@@ -62,6 +65,13 @@ audit = data["gates"]["p0-audit-correlated"]
 assert audit["status"] == "pass"
 assert audit["evidence"]["authoritative"] is True
 assert audit["evidence"]["doctor_ready"] is True
+forbidden = data["gates"]["p0-no-direct-backend-or-docker-sock"]
+assert forbidden["status"] == "pass"
+assert forbidden["evidence"]["authoritative"] is True
+assert forbidden["evidence"]["doctor_ready"] is True
+recovery = data["gates"]["p0-recovery-proven"]
+assert recovery["status"] == "partial"
+assert recovery["evidence"]["authoritative"] is False
 PY
 ok "bootstrap evidence producer promotes audit gate with runtime doctor evidence"
 
@@ -78,6 +88,10 @@ audit = data["gates"]["p0-audit-correlated"]
 assert audit["status"] == "fail"
 assert audit["evidence"]["authoritative"] is True
 assert audit["evidence"]["doctor"]["exit_code"] == 23
+forbidden = data["gates"]["p0-no-direct-backend-or-docker-sock"]
+assert forbidden["status"] == "fail"
+assert forbidden["evidence"]["authoritative"] is True
+assert forbidden["evidence"]["doctor"]["exit_code"] == 23
 PY
 ok "bootstrap evidence producer records runtime doctor refusal"
 

@@ -222,6 +222,7 @@ def main() -> int:
                 "evidence": {
                     "type": "local_checkpoint_manifest",
                     "generated_at": generated_at,
+                    "authoritative": spec_status != "pass",
                     "manifest": snapshot_manifest,
                     "note": "This producer uses one snapshot manifest as the local source of restore truth.",
                 },

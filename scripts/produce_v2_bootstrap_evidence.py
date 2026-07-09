@@ -208,6 +208,19 @@ def main() -> int:
         else "fail"
     )
 
+    no_direct_status = (
+        "pass"
+        if static_preflight_pass and doctor_ready
+        else "fail"
+        if static_security["docker_sock_hits"] or static_security["public_bind_hits"] or args.run_doctor
+        else "partial"
+    )
+    recovery_status = (
+        "partial"
+        if paths["snapshot"]["exists"] and paths["rollback"]["exists"]
+        else "fail"
+    )
+
     evidence = {
         "schema_version": "v2-bootstrap-evidence.v0",
         "generated_at": generated_at,
@@ -233,20 +246,30 @@ def main() -> int:
                 },
             },
             "p0-no-direct-backend-or-docker-sock": {
-                "status": "partial" if not static_security["docker_sock_hits"] else "fail",
+                "status": no_direct_status,
                 "evidence": {
-                    "type": "static_forbidden_pattern_scan",
+                    "type": "runtime_doctor_forbidden_surface_check" if doctor_ready else "bootstrap_forbidden_surface_preflight",
                     "generated_at": generated_at,
+                    "authoritative": no_direct_status != "partial",
                     "docker_sock_hits": static_security["docker_sock_hits"],
                     "public_bind_hits": static_security["public_bind_hits"],
-                    "note": "Direct model backend reachability is not runtime-validated by this producer.",
+                    "doctor_executed": bool(args.run_doctor),
+                    "doctor_ready": doctor_ready,
+                    "doctor": doctor_result
+                    if doctor_result is not None
+                    else {
+                        "status": "not_run",
+                        "reason": "Run with --run-doctor to require runtime forbidden-surface evidence.",
+                    },
+                    "note": "This producer treats doctor-backed forbidden-surface checks as authoritative; static preflight alone remains non-authoritative.",
                 },
             },
             "p0-recovery-proven": {
-                "status": "partial" if paths["snapshot"]["exists"] and paths["rollback"]["exists"] else "fail",
+                "status": recovery_status,
                 "evidence": {
                     "type": "release_recovery_static_paths",
                     "generated_at": generated_at,
+                    "authoritative": recovery_status != "partial",
                     "paths": {
                         "snapshot": paths["snapshot"],
                         "rollback": paths["rollback"],

@@ -191,6 +191,7 @@ def main() -> int:
                 "evidence": {
                     "type": "local_context_manifest",
                     "generated_at": generated_at,
+                    "authoritative": spec_status != "pass",
                     "note": "This producer proves one active root per local fixture context; deployed v2 source-of-truth is not implemented yet.",
                     "fixture": fixture_report,
                 },
