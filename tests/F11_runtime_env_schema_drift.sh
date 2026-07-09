@@ -131,6 +131,7 @@ COMPOSE_PROFILES=trt,rag-lexical
 EOF
 
 load_profile_output="$(
+  COMPOSE_PROFILES= \
   AGENTIC_PROFILE=rootless-dev \
   AGENTIC_ROOT="${load_root}" \
   AGENTIC_COMPOSE_PROJECT=agentic-schema-load \

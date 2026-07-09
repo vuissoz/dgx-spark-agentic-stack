@@ -14,6 +14,49 @@ warn() {
   echo "WARN: $*" >&2
 }
 
+test_runtime_cleanup_helper_image() {
+  if docker image inspect agentic/optional-modules:local >/dev/null 2>&1; then
+    printf '%s\n' "agentic/optional-modules:local"
+    return 0
+  fi
+  printf '%s\n' "${AGENTIC_TEST_CLEANUP_HELPER_IMAGE:-busybox:1.36.1}"
+}
+
+repair_runtime_root_ownership_with_docker() {
+  local runtime_root="$1"
+  local helper_image
+
+  [[ -d "${runtime_root}" ]] || return 0
+  assert_cmd docker
+  helper_image="$(test_runtime_cleanup_helper_image)"
+
+  docker run --rm \
+    --user 0:0 \
+    --network none \
+    -v "${runtime_root}:/runtime" \
+    --entrypoint /bin/sh \
+    "${helper_image}" \
+    -c "chown -R $(id -u):$(id -g) /runtime" >/dev/null
+}
+
+purge_runtime_root_test_safe() {
+  local runtime_root="$1"
+
+  [[ -d "${runtime_root}" ]] || return 0
+
+  if find "${runtime_root}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete \
+    && find "${runtime_root}" -mindepth 1 -depth -type d -empty -delete \
+    && rmdir "${runtime_root}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  repair_runtime_root_ownership_with_docker "${runtime_root}" || return 1
+
+  find "${runtime_root}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete
+  find "${runtime_root}" -mindepth 1 -depth -type d -empty -delete
+  rmdir "${runtime_root}" >/dev/null 2>&1
+}
+
 pick_free_loopback_port() {
   local start_port="${1:-20000}"
   local max_tries="${2:-200}"
