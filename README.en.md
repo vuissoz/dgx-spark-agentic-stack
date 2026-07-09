@@ -349,7 +349,7 @@ agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose> [
 agent openclaw init [project]
 agent ls
 agent ps
-agent llm mode [local|hybrid|remote]
+agent llm mode [local|hybrid|mixed|remote]
 agent llm backend [ollama|trtllm|both|remote]
 agent llm test-mode [on|off]
 agent context [show|set <tokens>]
@@ -657,6 +657,7 @@ Runtime prerequisites for core OpenClaw:
 ## Validation
 
 - Global diagnostics: `./agent doctor`
+- README EN/FR structural drift check: `python3 scripts/check_readme_translation_drift.py`
 - Explicit stream tool-call probe (codex, claude, openhands, opencode, openclaw, pi-mono, goose): `./agent doctor --check-tool-stream-e2e`
 - Repository-driven multi-agent E2E orchestrator: `./agent repo-e2e` (reference repo bootstrapped by `git-forge`: `eight-queens-agent-e2e`)
 - Goose verification (context contract + banner aligned with `AGENTIC_GOOSE_CONTEXT_LIMIT`): `./agent test K`

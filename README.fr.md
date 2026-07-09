@@ -526,6 +526,15 @@ consommés par les noeuds Flux de ComfyUI :
 - `models/text_encoders/clip_l.safetensors`
 - `models/text_encoders/t5xxl_fp16.safetensors`
 
+Exemple de téléchargement direct via la CLI Comfy (depuis un shell `./agent comfyui`) :
+
+```bash
+comfy model download \
+  --url "https://huggingface.co/Comfy-Org/FLUX.1-Krea-dev_ComfyUI/resolve/main/split_files/diffusion_models/flux1-krea-dev_fp8_scaled.safetensors" \
+  --relative-path models/diffusion_models \
+  --filename flux1-krea-dev_fp8_scaled.safetensors
+```
+
 Sans `--hf-token-file`, le script lit automatiquement `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` si present.
 
 Notes:
@@ -678,6 +687,7 @@ Préconditions (runtime) pour OpenClaw core:
 ## Validation
 
 - Diagnostic global: `./agent doctor`
+- Vérification de drift structurel README EN/FR: `python3 scripts/check_readme_translation_drift.py`
 - Probe explicite stream tool-calls (codex, claude, openhands, opencode, openclaw, pi-mono, goose): `./agent doctor --check-tool-stream-e2e`
 - Orchestrateur E2E multi-agents piloté par dépôt: `./agent repo-e2e` (repo bootstrapé par `git-forge`: `eight-queens-agent-e2e`)
 - Vérification Goose (contrat contexte + bannière alignée avec `AGENTIC_GOOSE_CONTEXT_LIMIT`): `./agent test K`
