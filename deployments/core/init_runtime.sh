@@ -538,9 +538,15 @@ set_proxy_runtime_permissions() {
     fi
 
     local log_file
+    local file_acl_warning_emitted=0
     for log_file in "${proxy_log_files[@]}"; do
       [[ -e "${log_file}" ]] || continue
-      setfacl -m u:0:rw,u:13:rw "${log_file}" || true
+      if ! setfacl -m u:0:rw,u:13:rw "${log_file}" >/dev/null 2>&1; then
+        if [[ "${file_acl_warning_emitted}" -eq 0 ]]; then
+          log "non-root runtime init: unable to update file ACLs for squid logs under ${proxy_logs_dir}; continuing because directory ACLs are already in place"
+          file_acl_warning_emitted=1
+        fi
+      fi
     done
 
     log "non-root runtime init: applied ACL grants (uid 0 + uid 13) on ${proxy_logs_dir}"
