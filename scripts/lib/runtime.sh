@@ -42,6 +42,48 @@ agentic_csv_first() {
   return 1
 }
 
+agentic_readwrite_rootfs_exception_services() {
+  cat <<'EOF'
+ollama
+egress-proxy
+opensearch
+optional-forgejo
+EOF
+}
+
+agentic_service_readwrite_rootfs_exception_reason() {
+  local service="$1"
+  case "${service}" in
+    ollama)
+      printf '%s\n' "model storage and runtime assets live inside the writable container filesystem contract"
+      ;;
+    egress-proxy)
+      printf '%s\n' "the proxy runtime manages mutable cache and spool state during normal operation"
+      ;;
+    opensearch)
+      printf '%s\n' "the search backend maintains mutable index and data paths during normal operation"
+      ;;
+    optional-forgejo)
+      printf '%s\n' "Forgejo rootless needs writable rootfs paths for SSH and application runtime state"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+agentic_service_allows_readwrite_rootfs() {
+  local service="$1"
+  local candidate
+
+  while IFS= read -r candidate; do
+    [[ -n "${candidate}" ]] || continue
+    [[ "${candidate}" == "${service}" ]] && return 0
+  done < <(agentic_readwrite_rootfs_exception_services)
+
+  return 1
+}
+
 agentic_runtime_schema() {
   cat <<'EOF'
 AGENTIC_PROFILE|profile|persist,profile

@@ -139,15 +139,7 @@ service_allows_root_user() {
 }
 
 service_allows_readwrite_rootfs() {
-  local service="$1"
-  case "${service}" in
-    ollama|egress-proxy|opensearch|optional-forgejo)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  agentic_service_allows_readwrite_rootfs "$1"
 }
 
 service_git_forge_ssh_private_key_path() {
@@ -217,13 +209,10 @@ assert_agent_sudo_mode_hardening() {
 
   IFS='|' read -r readonly cap_drop security_opt <<<"${inspect_out}"
 
-  # Forgejo rootless container cannot use readonly rootfs due to SSH and write requirements
-  if [[ "${service}" != "optional-forgejo" ]]; then
-    [[ "${readonly}" == "true" ]] || {
-      fail "${cid}: readonly rootfs is not enabled"
-      return 1
-    }
-  fi
+  [[ "${readonly}" == "true" ]] || {
+    fail "${cid}: readonly rootfs is not enabled"
+    return 1
+  }
   [[ ",${cap_drop}," == *",ALL,"* ]] || {
     fail "${cid}: cap_drop does not include ALL"
     return 1
@@ -1533,8 +1522,11 @@ for row in "${running_services[@]}"; do
   fi
 
   if service_allows_readwrite_rootfs "${service}"; then
+    rootfs_exception_reason="$(agentic_service_readwrite_rootfs_exception_reason "${service}" || true)"
     if ! assert_container_runtime_restrictions "${cid}"; then
       doctor_fail_or_warn "service '${service}' runtime restriction baseline failed"
+    elif [[ -n "${rootfs_exception_reason}" ]]; then
+      ok "service '${service}' uses the documented writable-rootfs exception (${rootfs_exception_reason})"
     fi
   else
     if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES}" == "false" ]] && service_is_agent_cli "${service}"; then

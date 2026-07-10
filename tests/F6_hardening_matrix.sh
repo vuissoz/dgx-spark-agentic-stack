@@ -16,6 +16,9 @@ fi
 assert_cmd docker
 assert_cmd python3
 
+readwrite_rootfs_exceptions="$(agentic_readwrite_rootfs_exception_services | paste -sd, -)"
+export READWRITE_ROOTFS_EXCEPTIONS="${readwrite_rootfs_exceptions}"
+
 config_json_file="$(mktemp)"
 trap 'rm -f "${config_json_file}"' EXIT
 
@@ -59,7 +62,11 @@ strict_root_required = {
 if profile == "strict-prod":
     strict_root_required.add("ollama")
     strict_root_required.add("promtail")
-readwrite_rootfs_exceptions = {"ollama", "egress-proxy", "opensearch", "optional-forgejo"}
+readwrite_rootfs_exceptions = {
+    item.strip()
+    for item in os.environ.get("READWRITE_ROOTFS_EXCEPTIONS", "").split(",")
+    if item.strip()
+}
 agent_services = {"agentic-claude", "agentic-codex", "agentic-opencode", "agentic-kilocode", "agentic-vibestral", "agentic-hermes"}
 agent_nnp = os.environ.get("AGENTIC_AGENT_NO_NEW_PRIVILEGES", "true").strip().lower()
 if agent_nnp not in {"true", "false"}:

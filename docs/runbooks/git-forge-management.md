@@ -19,6 +19,26 @@ Provide one self-hosted Git forge inside the stack so:
 - forge SSH: enabled only on loopback for the host and on the private Docker network for containers
 - deployment path: converged together with `./agent up ui`, `./agent up agents,ui,obs,rag`, and `./agent first-up` so agent Git bootstrap exists before `./agent doctor`
 
+## Rootfs Hardening Exception
+
+`optional-forgejo` keeps the standard hardening baseline (`cap_drop: ALL`,
+`no-new-privileges:true`, non-root user, loopback-only publication), but it is
+one explicit exception to the repo-wide `read_only: true where compatible`
+policy.
+
+Reason:
+
+- Forgejo rootless needs writable rootfs paths for SSH and application runtime
+  state during normal operation.
+
+The exception is intentional and regression-covered:
+
+- Compose leaves `optional-forgejo` without `read_only: true`;
+- `scripts/lib/runtime.sh` is the single source of truth for writable-rootfs
+  exceptions;
+- `./agent doctor` reports the exception as documented instead of emitting a
+  contradictory readonly-rootfs failure.
+
 Reason for the default transport choice:
 
 - it avoids a public ingress surface;

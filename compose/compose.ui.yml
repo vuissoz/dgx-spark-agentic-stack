@@ -1,6 +1,9 @@
 services:
   optional-forgejo:
     image: codeberg.org/forgejo/forgejo:14-rootless
+    # Intentionally no read_only: Forgejo rootless needs writable rootfs paths
+    # for SSH and application runtime state. Keep this exception aligned with
+    # scripts/lib/runtime.sh and docs/decisions/ADR-0098-forgejo-rootless-permission-fix.md.
     entrypoint:
       - /bin/sh
       - -c
