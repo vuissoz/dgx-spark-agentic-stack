@@ -8,6 +8,11 @@ It explains:
 - how to handle secrets and API keys safely.
 
 Use this document as the source of truth before changing runtime settings.
+The repo also ships a machine drift guard for this file pair:
+
+```bash
+python3 scripts/check_config_docs_drift.py
+```
 
 ## 1. How Configuration Works
 
@@ -74,6 +79,7 @@ If you are unsure, use these defaults:
 | `AGENTIC_NETWORK` | Docker network name | `agentic` | `agentic-dev` | shell, `runtime.env` |
 | `AGENTIC_LLM_NETWORK` | Docker network name | `agentic-llm` | `agentic-dev-llm` | shell, `runtime.env` |
 | `AGENTIC_EGRESS_NETWORK` | Docker network name | `agentic-egress` | `agentic-dev-egress` | shell, `runtime.env` |
+| `AGENTIC_OPENCLAW_INIT_PROJECT` | OpenClaw init project slug | `openclaw-default` | `openclaw-default` | shell, `runtime.env` |
 
 Practical note:
 - In `rootless-dev`, baseline agent workspaces are rooted under `AGENTIC_AGENT_WORKSPACES_ROOT=${AGENTIC_ROOT}/agent-workspaces`.
@@ -136,6 +142,10 @@ Notes:
 | `OLLAMA_MODELS_MOUNT_MODE` | `rw` or `ro` | `rw` | `runtime.env` |
 | `AGENTIC_DEFAULT_MODEL` | model id string | `nemotron-cascade-2:30b` | shell, `runtime.env` |
 | `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` | integer `>= 2048` (tokens) | `50909` | shell, `runtime.env` |
+| `AGENTIC_AGENT_DEFAULT_MODEL` | default interactive agent model id | `${AGENTIC_DEFAULT_MODEL}` | shell, `runtime.env` |
+| `AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW` | integer `>= 2048` (tokens) for agent shells | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
+| `AGENTIC_LLM_BACKEND` | `ollama`, `trtllm`, or provider-specific backend id | derived from `AGENTIC_LLM_MODE` and active stack | shell, `runtime.env` |
+| `AGENTIC_LLM_BACKEND_SWITCH_COOLDOWN_SECONDS` | integer `>= 0` | `3` | shell, `runtime.env` |
 | `OLLAMA_CONTEXT_LENGTH` | integer `>= 2048` (tokens) | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
 | `AGENTIC_GOOSE_CONTEXT_LIMIT` | integer `>= 2048` (tokens, Goose client limit) | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
 | `AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT` | integer `1..99` (`< danger`) | `75` | shell, `runtime.env` |
@@ -147,7 +157,6 @@ Notes:
 | `OLLAMA_PRELOAD_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
-| `TRTLLM_ACTIVE_MODEL_KEY` | active TRT model catalog key (`nemotron-super-120b` or `nemotron-cascade-30b`) | `nemotron-cascade-30b` | shell, `runtime.env` |
 | `TRTLLM_MODELS` | CSV list of model ids exposed by TRT-LLM | `https://huggingface.co/chankhavu/Nemotron-Cascade-2-30B-A3B-NVFP4` | shell |
 | `TRTLLM_NATIVE_MODEL_POLICY` | `auto` or `strict-nvfp4-local-only` | `auto` | shell |
 | `TRTLLM_NVFP4_LOCAL_MODEL_DIR` | absolute path for the prepared DGX Spark NVFP4 runtime | `/models/cascade_30b_nvfp4` | shell |
@@ -164,15 +173,18 @@ All published ports stay loopback-only (`127.0.0.1`).
 
 | Variable | Service | Default |
 |---|---|---|
+| `OLLAMA_HOST_PORT` | Ollama API | `11434` |
 | `OPENWEBUI_HOST_PORT` | OpenWebUI | `8080` |
 | `OPENHANDS_HOST_PORT` | OpenHands | `3000` |
 | `COMFYUI_HOST_PORT` | ComfyUI loopback bridge | `8188` |
+| `GIT_FORGE_SSH_HOST_PORT` | Forgejo SSH loopback bridge | `2222` |
 | `GRAFANA_HOST_PORT` | Grafana | `13000` |
 | `PROMETHEUS_HOST_PORT` | Prometheus | `19090` |
 | `LOKI_HOST_PORT` | Loki | `13100` |
 | `PORTAINER_HOST_PORT` | Optional Portainer | `9001` |
 | `OPENCLAW_WEBHOOK_HOST_PORT` | Core OpenClaw webhook ingress | `18111` |
 | `OPENCLAW_GATEWAY_HOST_PORT` | Core OpenClaw upstream Web UI + Gateway WS | `18789` |
+| `OPENCLAW_RELAY_HOST_PORT` | Core OpenClaw relay loopback bridge | `18112` |
 
 ## 3.6 Resource Limits
 
@@ -187,6 +199,8 @@ Stack-level defaults (persisted in `runtime.env`):
 
 Dedicated onboarding prompt:
 - `AGENTIC_LIMIT_OLLAMA_MEM` (default: inherits `AGENTIC_LIMIT_CORE_MEM`)
+- `AGENTIC_LIMIT_OPENHANDS_MEM` (default `4g`)
+- `AGENTIC_LIMIT_COMFYUI_MEM` (default `110g` in `strict-prod`, `8g` in `rootless-dev`)
 
 Per-service override pattern:
 - `AGENTIC_LIMIT_<SERVICE_NAME>_CPUS`
@@ -254,9 +268,11 @@ Common toggles (`0` or `1`):
 Other useful operational variables:
 - `AGENT_LOG_TAIL` (default `200` for `agent logs`)
 - `AGENT_PROJECT_NAME` (one-shot override for the current shell invocation)
+- `AGENTIC_GPU_CLOCK_LOCK` (`default`, `low`, or explicit `min,max` clocks persisted by `./agent gpu-clock`)
 - `AGENTIC_AGENT_WORKSPACES_ROOT` (baseline agent workspace root; default `${AGENTIC_ROOT}` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces` in `rootless-dev`)
 - `AGENTIC_CLAUDE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-claude`)
 - `AGENTIC_CODEX_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-codex`)
+- `AGENTIC_KILOCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-kilocode`)
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-opencode`)
 - `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-vibestral`)
 - `AGENTIC_HERMES_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-hermes`)
@@ -296,6 +312,7 @@ Host firewall/egress advanced options:
 | `AGENTIC_CODEX_CLI_NPM_SPEC` | npm package spec | `@openai/codex@latest` | shell, `runtime.env` |
 | `AGENTIC_CLAUDE_CODE_NPM_SPEC` | npm package spec | `@anthropic-ai/claude-code@latest` | shell, `runtime.env` |
 | `AGENTIC_OPENCODE_NPM_SPEC` | npm package spec | `opencode-ai@latest` | shell, `runtime.env` |
+| `AGENTIC_KILOCODE_CLI_NPM_SPEC` | npm package spec | `@kilocode/cli@latest` | shell, `runtime.env` |
 | `AGENTIC_PI_CODING_AGENT_NPM_SPEC` | npm package spec | `@mariozechner/pi-coding-agent@latest` | shell, `runtime.env` |
 | `AGENTIC_OPENHANDS_INSTALL_SCRIPT` | installer script URL | `https://install.openhands.dev/install.sh` | shell, `runtime.env` |
 | `AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT` | installer script URL | `https://openclaw.ai/install-cli.sh` | shell, `runtime.env` |
@@ -328,8 +345,10 @@ Notes:
 | `RAG_RERANK_ENABLED` | `0` or `1` | `0` | shell, `runtime.env` |
 | `RAG_RERANK_BACKEND` | currently `lexical` | `lexical` | shell, `runtime.env` |
 | `RAG_RERANK_CANDIDATES` | integer `>= 1` | `16` | shell, `runtime.env` |
+| `RAG_RERANK_MODEL` | model id string | `lexical-token-overlap-v1` | shell, `runtime.env` |
 | `RAG_RERANK_TOP_N` | integer `>= 1` | `8` | shell, `runtime.env` |
 | `RAG_OPENSEARCH_BOOTSTRAP` | `0` or `1` | `1` | shell, `runtime.env` |
+| `RAG_OPENSEARCH_BOOTSTRAP_TIMEOUT_SEC` | integer `>= 1` | `60` | shell, `runtime.env` |
 | `RAG_WORKER_BOOTSTRAP_INDEX` | `0` or `1` | `1` | shell |
 
 Notes:
@@ -337,6 +356,7 @@ Notes:
 - `./agent rag bootstrap-lexical` explicitly applies the OpenSearch mapping; `./agent rag index --wait` reindexes the corpus.
 - The local reranker is optional and adds one ranking pass after `rrf` fusion.
 - `RAG_DENSE_BACKEND` exists in service code, but Compose pins it to `qdrant` in this repo baseline.
+- The legacy TRT active-model key is no longer part of the supported onboarding/runtime contract; the live contract uses `TRTLLM_MODELS` and `TRTLLM_NATIVE_MODEL_POLICY` instead.
 
 ## 3.11 Setup and Script-Specific Variables
 

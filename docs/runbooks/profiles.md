@@ -21,6 +21,9 @@ For local iteration, testing, or CI where root privileges are limited, `rootless
 - Host controls:
   - applies and validates `DOCKER-USER`-based enforcement via `./agent net apply`,
   - expects filesystem ownership/permissions under `/srv/agentic` to match contract.
+- Recommended network-policy defaults:
+  - keep `AGENTIC_DOCKER_USER_SOURCE_NETWORKS=${AGENTIC_NETWORK},${AGENTIC_EGRESS_NETWORK}` so both the internal and egress subnets stay under host DROP coverage,
+  - keep `AGENTIC_ALLOW_NON_ROOT_NET_ADMIN=0`; non-root netfilter access is a local-validation exception, not the production default.
 - Doctor behavior: structural/security drift is treated as failure (non-zero exit).
 - Use this profile for:
   - release validation,
@@ -39,6 +42,8 @@ For local iteration, testing, or CI where root privileges are limited, `rootless
 - Host controls:
   - skips root-only host firewall application/checks by default,
   - keeps container-level controls intact (`127.0.0.1` binds, no `docker.sock`, capabilities drop, etc.).
+- Local validation escape hatch:
+  - `AGENTIC_ALLOW_NON_ROOT_NET_ADMIN=1` is only for controlled environments where a trusted `iptables` helper is already available in `PATH`; it is not a baseline recommendation.
 - Doctor behavior:
   - runs all applicable checks,
   - emits warnings where root-only host checks cannot be enforced.
