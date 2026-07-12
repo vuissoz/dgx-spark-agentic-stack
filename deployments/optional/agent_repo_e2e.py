@@ -46,6 +46,7 @@ SUCCESS_THRESHOLD = 1
 OPENCLAW_REPO_SOLVER_TOOL = "repo.eight_queens.solve"
 OPENCLAW_TOKEN_FILE = "/run/secrets/openclaw.token"
 KILOCODE_MIN_INVOKE_TIMEOUT = 1800
+VERBOSE = False
 COMMON_INSTRUCTION_FILES = ("AGENTS.md", "AGENT.md", "SKILLS.md")
 MODE_INSTRUCTION_FILE = {
     "codex": "CODEX.md",
@@ -82,6 +83,12 @@ def fail(message: str) -> None:
 def log_progress(message: str) -> None:
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     print(f"[repo-e2e {timestamp}] {message}", file=sys.stderr, flush=True)
+
+
+def log_verbose(message: str) -> None:
+    """Emit extra operator progress without changing the JSON stdout contract."""
+    if VERBOSE:
+        log_progress(f"verbose: {message}")
 
 
 def write_json(path: pathlib.Path, payload: object) -> None:
@@ -1586,11 +1593,19 @@ def parse_args() -> argparse.Namespace:
         help="Destructively realign selected remote agent/<tool> branches to main before the run",
     )
     parser.add_argument("--dry-run", action="store_true", help="Resolve plan and artifacts without invoking agents")
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Emit per-agent/per-attempt phase and artifact progress to stderr",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
+    global VERBOSE
     args = parse_args()
+    VERBOSE = args.verbose
     if args.attempts < 1:
         fail("--attempts must be >= 1")
     log_progress("loading git-forge bootstrap state")
@@ -1609,11 +1624,13 @@ def main() -> None:
         + ", ".join(selected_agents)
         + f" | attempts={args.attempts} | repo={repo_name} | dry_run={'yes' if args.dry_run else 'no'}"
     )
+    log_verbose("campaign preflight summary emitted; JSON result remains on stdout")
 
     timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     artifact_root = pathlib.Path(args.artifacts_dir) if args.artifacts_dir else DEFAULT_ARTIFACTS_ROOT / timestamp
     artifact_root.mkdir(parents=True, exist_ok=True)
     log_progress(f"artifacts directory: {artifact_root}")
+    log_verbose(f"artifacts will contain _preflight plus one directory per attempt and agent")
 
     log_progress("running branch reset preflight")
     preflight = reset_agent_branches_if_requested(
@@ -1658,6 +1675,10 @@ def main() -> None:
                 workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
                 attempt_artifact_dir = artifact_root / f"attempt-{attempt:02d}" / agent_name
                 attempt_artifact_dir.mkdir(parents=True, exist_ok=True)
+                log_verbose(
+                    f"attempt {attempt}/{args.attempts} agent={agent_name} phase=plan "
+                    f"workspace={workspace} artifacts={attempt_artifact_dir}"
+                )
                 write_json(
                     attempt_artifact_dir / "plan.json",
                     {
@@ -1711,6 +1732,10 @@ def main() -> None:
                 }
             for agent_name in selected_agents:
                 log_progress(f"attempt {attempt}/{args.attempts}: invoking {agent_name}")
+                log_verbose(
+                    f"attempt {attempt}/{args.attempts} agent={agent_name} "
+                    "phases=clone,baseline,execute,validate,publish"
+                )
                 attempt_result = run_agent_once(
                     agent_name,
                     clone_url=clone_url,
@@ -1729,6 +1754,11 @@ def main() -> None:
                     f"attempt {attempt}/{args.attempts}: {agent_name} -> "
                     f"{attempt_result.get('status')} at {attempt_result.get('stage')} "
                     f"({attempt_result.get('detail')})"
+                )
+                log_verbose(
+                    f"attempt {attempt}/{args.attempts} agent={agent_name} "
+                    f"artifacts={attempt_result.get('artifacts_dir')} "
+                    f"category={attempt_result.get('category')}"
                 )
 
     results = [

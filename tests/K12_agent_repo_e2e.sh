@@ -78,6 +78,32 @@ grep -q "selected agents:" "${summary_stderr}" \
 grep -q "building dry-run attempt plans" "${summary_stderr}" \
   || fail "agent_repo_e2e stderr must mention dry-run planning"
 
+verbose_summary_json="${runtime_root}/summary-verbose.json"
+verbose_summary_stderr="${runtime_root}/summary-verbose.stderr.log"
+verbose_artifacts_dir="${runtime_root}/deployments/validation/agent-repo-e2e-verbose"
+AGENTIC_ROOT="${runtime_root}" AGENTIC_COMPOSE_PROJECT="agentic-dev" \
+  python3 "${REPO_ROOT}/deployments/optional/agent_repo_e2e.py" \
+    --dry-run --attempts 1 --agents codex,openclaw --verbose --artifacts-dir "${verbose_artifacts_dir}" >"${verbose_summary_json}" 2>"${verbose_summary_stderr}" \
+  || fail "agent_repo_e2e verbose dry-run planner failed"
+
+grep -q "verbose: campaign preflight summary emitted" "${verbose_summary_stderr}" \
+  || fail "verbose mode must emit the campaign preflight marker"
+grep -q "verbose: attempt 1/1 agent=codex phase=plan" "${verbose_summary_stderr}" \
+  || fail "verbose mode must emit per-agent plan phase markers"
+grep -q "artifacts=" "${verbose_summary_stderr}" \
+  || fail "verbose mode must expose the attempt artifact directory"
+if grep -q "verbose:" "${summary_stderr}"; then
+  fail "default repo-e2e output must remain concise without verbose markers"
+fi
+python3 - "${verbose_summary_json}" <<'PY' || fail "verbose repo-e2e mode must preserve JSON stdout"
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+assert [item["agent"] for item in payload["results"]] == ["codex", "openclaw"]
+PY
+ok "agent_repo_e2e verbose mode adds terminal progress without changing JSON stdout"
+
 python3 - "${summary_json}" <<'PY' || fail "agent_repo_e2e dry-run summary schema is invalid"
 import json
 import sys
