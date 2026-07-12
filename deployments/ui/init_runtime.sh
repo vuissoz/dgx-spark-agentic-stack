@@ -261,6 +261,7 @@ repair_rootless_openhands_layout() {
   local path
   local -a repair_paths=(
     "${AGENTIC_ROOT}/openhands/state"
+    "${AGENTIC_ROOT}/openhands/state/home"
     "${AGENTIC_ROOT}/openhands/logs"
     "${AGENTIC_OPENHANDS_WORKSPACES_DIR}"
   )
@@ -286,9 +287,8 @@ repair_rootless_openhands_layout() {
       set -eu
       for path in /repair/openhands/state /repair/openhands/logs /repair/openhands/workspaces; do
         [ -e \"\${path}\" ] || continue
-        chown -R ${target_uid}:${target_gid} \"\${path}\"
-        find \"\${path}\" -type d -exec chmod 2770 {} +
-        find \"\${path}\" -type f -exec chmod ug+rw,o-rwx {} +
+        chown -R ${target_uid}:${target_gid} \"\${path}\" || true
+        chmod -R a+rwX \"\${path}\"
       done
     " || die "failed to repair OpenHands ownership for rootless-dev runtime"
 
@@ -330,6 +330,7 @@ main() {
   install -d -m 0750 "${AGENTIC_ROOT}/openhands"
   install -d -m 0750 "${AGENTIC_ROOT}/openhands/config"
   install -d -m 0770 "${AGENTIC_ROOT}/openhands/state"
+  install -d -m 0770 "${AGENTIC_ROOT}/openhands/state/home"
   install -d -m 0770 "${AGENTIC_ROOT}/openhands/logs"
   install -d -m 0770 "${AGENTIC_OPENHANDS_WORKSPACES_DIR}"
 
