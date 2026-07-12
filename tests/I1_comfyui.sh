@@ -17,6 +17,19 @@ comfy_port="${COMFYUI_HOST_PORT:-8188}"
 comfy_cid="$(require_service_container comfyui)" || exit 1
 wait_for_container_ready "${comfy_cid}" 300 || fail "comfyui is not ready"
 
+wait_for_loopback_api() {
+  local deadline=$((SECONDS + 90))
+  local status
+  while (( SECONDS < deadline )); do
+    status="$(curl -sS -o /tmp/agent-i1-loopback-api.out -w '%{http_code}' --max-time 5 "http://127.0.0.1:${comfy_port}/system_stats" || true)"
+    if [[ "${status}" == "200" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail "comfyui-loopback did not recover /system_stats on loopback (last HTTP status=${status:-none})"
+}
+
 timeout 20 docker exec "${comfy_cid}" sh -lc 'test -d /opt/comfyui/custom_nodes/ComfyUI-Manager' \
   || fail "comfyui manager extension is missing (/opt/comfyui/custom_nodes/ComfyUI-Manager)"
 ok "comfyui manager extension is installed"
@@ -81,6 +94,7 @@ timeout 20 docker exec "${comfy_cid}" sh -lc "printf 'persist\\n' > '${persist_p
 
 docker restart "${comfy_cid}" >/dev/null || fail "unable to restart comfyui for persistence verification"
 wait_for_container_ready "${comfy_cid}" 180 || fail "comfyui did not recover after restart during persistence verification"
+wait_for_loopback_api
 timeout 20 docker exec "${comfy_cid}" sh -lc "test -f '${persist_probe_container}'" \
   || fail "comfyui persistence probe under custom_nodes did not survive container restart"
 ok "comfyui custom_nodes persistence survives restart via the single runtime root"
