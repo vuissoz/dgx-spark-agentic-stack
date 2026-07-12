@@ -93,13 +93,14 @@ export default definePluginEntry({
               },
             ],
           };
-        } catch (error) {
-          const detail = error instanceof Error ? error.message : String(error);
+        } catch (_error) {
+          // Never reflect transport errors: they can disclose the internal
+          // service URL, host paths, or upstream implementation details.
           return {
             content: [
               {
                 type: "text",
-                text: `OpenClaw status is temporarily unavailable (${detail}).`,
+                text: "OpenClaw status is temporarily unavailable.",
               },
             ],
           };
