@@ -269,6 +269,7 @@ Autres variables utiles:
 - `AGENTIC_AGENT_WORKSPACES_ROOT` (racine des workspaces agents de base; defaut `${AGENTIC_ROOT}` en `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces` en `rootless-dev`)
 - `AGENTIC_CLAUDE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-claude`)
 - `AGENTIC_CODEX_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-codex`)
+- `AGENTIC_CODEX_CATALOG_MODELS` (seed CSV de metadonnees de modeles locaux pour Codex ; defaut `qwen3.5:35b` ; les modeles visibles via `ollama-gate` sont ajoutes au demarrage lorsqu’ils sont disponibles)
 - `AGENTIC_KILOCODE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-kilocode`)
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-opencode`)
 - `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (chemin host monte sur `/workspace` pour `agentic-vibestral`)

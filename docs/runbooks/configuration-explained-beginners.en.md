@@ -272,6 +272,7 @@ Other useful operational variables:
 - `AGENTIC_AGENT_WORKSPACES_ROOT` (baseline agent workspace root; default `${AGENTIC_ROOT}` in `strict-prod`, `${AGENTIC_ROOT}/agent-workspaces` in `rootless-dev`)
 - `AGENTIC_CLAUDE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-claude`)
 - `AGENTIC_CODEX_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-codex`)
+- `AGENTIC_CODEX_CATALOG_MODELS` (comma-separated local-model metadata seed for Codex; default `qwen3.5:35b`; models visible from `ollama-gate` are added at startup when available)
 - `AGENTIC_KILOCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-kilocode`)
 - `AGENTIC_OPENCODE_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-opencode`)
 - `AGENTIC_VIBESTRAL_WORKSPACES_DIR` (host path mounted to `/workspace` for `agentic-vibestral`)

@@ -483,7 +483,10 @@ bootstrap_codex_config() {
   local compaction_soft_tokens="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-}"
   local compaction_danger_tokens="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}"
   local gate_base_url="${AGENTIC_OLLAMA_GATE_BASE_URL:-http://ollama-gate:11435}"
+  local catalog_models_csv="${AGENTIC_CODEX_CATALOG_MODELS:-qwen3.5:35b}"
   local codex_base_instructions
+  local discovered_catalog_models=""
+  local catalog_models=""
   local tmp_catalog
   local tmp_existing
   local tmp_filtered
@@ -534,7 +537,29 @@ EOF
 Start compacting or summarizing once the session approaches ${compaction_soft_tokens} tokens.
 Treat ${compaction_danger_tokens} tokens as near-limit and reduce context before continuing."
 
-  python3 - "${default_model}" "${codex_base_instructions}" "${default_context_window}" "${compaction_soft_tokens}" >"${tmp_catalog}" <<'PY'
+  # Codex only uses metadata from its local catalog. Seed a reviewed fallback
+  # for a common non-default local model, then add models currently visible via
+  # the gate. Querying the gate preserves the no-direct-backend invariant and
+  # is best-effort so an agent can still start while the core is converging.
+  if command -v curl >/dev/null 2>&1; then
+    discovered_catalog_models="$(
+      curl --fail --silent --show-error --max-time 3 "${gate_base_url}/v1/models" 2>/dev/null \
+        | python3 -c '
+import json
+import sys
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, ValueError):
+    raise SystemExit(0)
+for item in payload.get("data", []):
+    if isinstance(item, dict) and isinstance(item.get("id"), str):
+        print(item["id"])
+' 2>/dev/null || true
+    )"
+  fi
+  catalog_models="${default_model}"$'\n'"${catalog_models_csv//,/$'\n'}"$'\n'"${discovered_catalog_models}"
+
+  python3 - "${default_model}" "${codex_base_instructions}" "${default_context_window}" "${compaction_soft_tokens}" "${catalog_models}" >"${tmp_catalog}" <<'PY'
 import json
 import sys
 
@@ -542,42 +567,56 @@ model = sys.argv[1]
 base_instructions = sys.argv[2]
 context_window = int(sys.argv[3])
 auto_compact_token_limit = int(sys.argv[4])
+raw_models = sys.argv[5]
+
+models = []
+seen = set()
+for candidate in raw_models.splitlines():
+    candidate = candidate.strip()
+    if not candidate or candidate in seen:
+        continue
+    seen.add(candidate)
+    models.append(candidate)
+
+if model not in seen:
+    models.insert(0, model)
+
+def metadata(slug: str) -> dict:
+    return {
+        "slug": slug,
+        "display_name": slug,
+        "description": "Local stack model via ollama-gate",
+        "default_reasoning_level": "medium",
+        "supported_reasoning_levels": [
+            {"effort": "low", "description": "Fast responses with lighter reasoning"},
+            {"effort": "medium", "description": "Balanced speed and reasoning"},
+            {"effort": "high", "description": "Deeper reasoning for complex tasks"},
+        ],
+        "shell_type": "shell_command",
+        "visibility": "list",
+        "supported_in_api": True,
+        "priority": 1 if slug == model else 0,
+        "availability_nux": None,
+        "upgrade": None,
+        "base_instructions": base_instructions,
+        "model_messages": None,
+        "supports_reasoning_summaries": False,
+        "default_reasoning_summary": "auto",
+        "support_verbosity": False,
+        "default_verbosity": None,
+        "apply_patch_tool_type": "freeform",
+        "truncation_policy": {"mode": "bytes", "limit": 10000},
+        "supports_parallel_tool_calls": False,
+        "context_window": context_window,
+        "auto_compact_token_limit": auto_compact_token_limit,
+        "effective_context_window_percent": 95,
+        "experimental_supported_tools": [],
+        "input_modalities": ["text", "image"],
+        "prefer_websockets": False,
+    }
 
 catalog = {
-    "models": [
-        {
-            "slug": model,
-            "display_name": model,
-            "description": "Local stack model via ollama-gate",
-            "default_reasoning_level": "medium",
-            "supported_reasoning_levels": [
-                {"effort": "low", "description": "Fast responses with lighter reasoning"},
-                {"effort": "medium", "description": "Balanced speed and reasoning"},
-                {"effort": "high", "description": "Deeper reasoning for complex tasks"},
-            ],
-            "shell_type": "shell_command",
-            "visibility": "list",
-            "supported_in_api": True,
-            "priority": 1,
-            "availability_nux": None,
-            "upgrade": None,
-            "base_instructions": base_instructions,
-            "model_messages": None,
-            "supports_reasoning_summaries": False,
-            "default_reasoning_summary": "auto",
-            "support_verbosity": False,
-            "default_verbosity": None,
-            "apply_patch_tool_type": "freeform",
-            "truncation_policy": {"mode": "bytes", "limit": 10000},
-            "supports_parallel_tool_calls": False,
-            "context_window": context_window,
-            "auto_compact_token_limit": auto_compact_token_limit,
-            "effective_context_window_percent": 95,
-            "experimental_supported_tools": [],
-            "input_modalities": ["text", "image"],
-            "prefer_websockets": False,
-        }
-    ]
+    "models": [metadata(slug) for slug in models]
 }
 
 json.dump(catalog, sys.stdout, indent=2)
@@ -1060,6 +1099,11 @@ bootstrap_kilocode_config
 bootstrap_pi_config
 bootstrap_vibestral_config
 bootstrap_hermes_config
+
+if [[ "${AGENT_ENTRYPOINT_BOOTSTRAP_ONLY:-0}" == "1" ]]; then
+  log "INFO: agent entrypoint bootstrap-only completed"
+  exit 0
+fi
 
 if ! tmux has-session -t "${session}" 2>/dev/null; then
   start_session
