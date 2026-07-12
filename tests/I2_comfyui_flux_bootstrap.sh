@@ -17,6 +17,13 @@ assert_cmd python3
 agent_bin="${REPO_ROOT}/agent"
 [[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
 
+# Keep the negative download path deterministic. The setup helper otherwise
+# discovers a host-managed Hugging Face token and can start a real, long-running
+# gated download during a regression test. An explicit empty file disables that
+# fallback while still exercising the same CLI contract.
+empty_hf_token_file="$(mktemp)"
+trap 'rm -f "${empty_hf_token_file}"' EXIT
+
 comfy_cid="$(require_service_container comfyui)" || exit 1
 wait_for_container_ready "${comfy_cid}" 180 || fail "comfyui is not ready"
 
@@ -56,7 +63,8 @@ done
 ok "flux bootstrap ensured comfyui model directories and legacy compatibility locations"
 
 set +e
-"${agent_bin}" comfyui flux-1-dev --download --no-egress-check >/tmp/agent-i2-flux-download.out 2>&1
+env -u HF_TOKEN "${agent_bin}" comfyui flux-1-dev --download \
+  --hf-token-file "${empty_hf_token_file}" --no-egress-check >/tmp/agent-i2-flux-download.out 2>&1
 download_rc=$?
 set -e
 if [[ "${download_rc}" -ne 0 ]]; then
