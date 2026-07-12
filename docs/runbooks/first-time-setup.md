@@ -408,6 +408,10 @@ Notes:
 
 After `core` is up, edit the egress allowlist:
 
+This is deliberately not an OpenClaw approval action: proxy destinations grant
+stack-wide egress and must be changed by an administrator through this reviewed
+runtime artifact.
+
 ```bash
 # strict-prod
 sudoedit /srv/agentic/proxy/allowlist.txt

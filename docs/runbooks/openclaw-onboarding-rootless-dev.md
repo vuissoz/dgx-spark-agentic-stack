@@ -214,6 +214,10 @@ Promotion writes to one of:
 - `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
 - `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
 
+It never writes `${AGENTIC_ROOT}/proxy/allowlist.txt`. Proxy destinations are
+a stack-wide egress authority and stay administrator-managed; follow the core
+egress change procedure and redeploy `core` after a reviewed host edit.
+
 State transitions are durable and auditable:
 - `pending`
 - `approved`
