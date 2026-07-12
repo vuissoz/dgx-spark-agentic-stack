@@ -32,6 +32,13 @@ DEFAULT_ARTIFACTS_ROOT = AGENTIC_ROOT / "deployments" / "validation" / "agent-re
 OPENHANDS_HOST_PORT = os.environ.get("OPENHANDS_HOST_PORT", "3000")
 REFERENCE_PROBLEM_FILE = "src/eight_queens.py"
 REFERENCE_PROBLEM_SENTINEL = 'raise NotImplementedError("Implement solve_eight_queens()")'
+REFERENCE_TASK = "Implement solve_eight_queens()"
+REFERENCE_COMMIT_MESSAGE = "Implement solve_eight_queens()"
+REFERENCE_TEST_COMMAND = "python3 -m pytest -q"
+REFERENCE_SCENARIOS = {
+    "eight-queens-agent-e2e": ("src/eight_queens.py", 'raise NotImplementedError("Implement solve_eight_queens()")', "Implement solve_eight_queens()", "Implement solve_eight_queens()"),
+    "agent-stack-full-e2e": ("src/normalize.py", 'raise NotImplementedError("Implement normalize_identifier()")', "Implement normalize_identifier()", "Implement normalize_identifier()"),
+}
 GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
 PYTEST_IMPORT_CHECK = "python3 -c 'import pytest' >/dev/null"
 AGENT_DEFAULTS_FILE = "/state/bootstrap/ollama-gate-defaults.env"
@@ -78,6 +85,14 @@ AGENT_MATRIX = {
 def fail(message: str) -> None:
     print(f"ERROR: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def configure_reference_scenario(repo_name: str) -> None:
+    global REFERENCE_PROBLEM_FILE, REFERENCE_PROBLEM_SENTINEL, REFERENCE_TASK, REFERENCE_COMMIT_MESSAGE
+    scenario = REFERENCE_SCENARIOS.get(repo_name)
+    if scenario is None:
+        return
+    REFERENCE_PROBLEM_FILE, REFERENCE_PROBLEM_SENTINEL, REFERENCE_TASK, REFERENCE_COMMIT_MESSAGE = scenario
 
 
 def log_progress(message: str) -> None:
@@ -265,7 +280,7 @@ def build_workspace_instruction_files(mode: str, branch: str, workspace: str) ->
         "# Repo-E2E Instructions\n\n"
         "This repository is a stack-managed reference task for a non-interactive agent harness.\n\n"
         "## Task\n\n"
-        f"- Implement `solve_eight_queens()` in `{REFERENCE_PROBLEM_FILE}`.\n"
+        f"- {REFERENCE_TASK} in `{REFERENCE_PROBLEM_FILE}`.\n"
         "- Do not rename files or add unrelated changes.\n"
         "- Verify with `python3 -m pytest -q`.\n\n"
         "## Runtime Contract\n\n"
@@ -279,7 +294,7 @@ def build_workspace_instruction_files(mode: str, branch: str, workspace: str) ->
         "## Publish Contract\n\n"
         "- Start with `git pull --ff-only origin <branch>`.\n"
         f"- Stage only `{REFERENCE_PROBLEM_FILE}`.\n"
-        '- Commit with `git commit -m "Implement solve_eight_queens()"`.\n'
+        f'- Commit with `git commit -m "{REFERENCE_COMMIT_MESSAGE}"`.\n'
         "- Push with `git push origin HEAD:<branch>`.\n"
         "- Leave the worktree clean after push.\n"
     )
@@ -289,7 +304,7 @@ def build_workspace_instruction_files(mode: str, branch: str, workspace: str) ->
         "Use this sequence:\n\n"
         "1. Read `AGENTS.md` and the harness-specific instruction file.\n"
         "2. Read the known local tools manifest.\n"
-        "3. Inspect `src/eight_queens.py` and `tests/test_eight_queens.py`.\n"
+        f"3. Inspect `{REFERENCE_PROBLEM_FILE}` and its tests.\n"
         "4. Edit only the target solver file.\n"
         "5. Run `python3 -m pytest -q`.\n"
         "6. Commit and push only after tests pass.\n"
@@ -329,7 +344,7 @@ def build_standard_prompt(repo_name: str, branch: str, workspace: str, mode: str
         "The shell is '/bin/sh', so use POSIX-compatible commands only. "
         f"When you publish, run 'git add {REFERENCE_PROBLEM_FILE}', then create the commit with a simple "
         "single-line command such as "
-        "'git commit -m \"Implement solve_eight_queens()\"', then push with "
+        f"'git commit -m \"{REFERENCE_COMMIT_MESSAGE}\"', then push with "
         f"'git push origin HEAD:{branch}'. "
         "Do not use here-strings, heredocs, or shell redirections to build the commit command. "
         "After your push, the repository must be completely clean: no staged, modified, or untracked files may remain. "
@@ -1611,6 +1626,7 @@ def main() -> None:
     log_progress("loading git-forge bootstrap state")
     state = load_bootstrap_state()
     repo_name = args.repo or str(state.get("reference_repository") or "")
+    configure_reference_scenario(repo_name)
     clone_url = args.clone_url or str(state.get("reference_clone_url_internal") or "")
     if not repo_name or not clone_url:
         fail("reference repository metadata is missing from git-forge bootstrap state")
