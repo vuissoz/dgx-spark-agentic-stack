@@ -235,7 +235,7 @@ EOF
       -v "${AGENTIC_ROOT}/optional/git/config:/repair/config" \
       busybox:1.36.1 sh -lc "
         set -eu
-        chown -R ${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID} /repair/state /repair/config
+        chown -R ${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID} /repair/state /repair/config || true
         # Rootless user namespaces can preserve host root ownership despite
         # chown. The Forgejo process still needs a writable bind mount.
         chmod -R a+rwX /repair/state /repair/config
