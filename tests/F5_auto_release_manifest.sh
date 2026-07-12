@@ -20,11 +20,13 @@ export AGENTIC_PROFILE=rootless-dev
 export AGENTIC_ROOT="${REPO_ROOT}/.runtime/${suffix}-root"
 export AGENTIC_COMPOSE_PROJECT="agentic-${suffix}"
 export AGENTIC_NETWORK="agentic-${suffix}"
+export AGENTIC_LLM_NETWORK="agentic-${suffix}-llm"
 export AGENTIC_EGRESS_NETWORK="agentic-${suffix}-egress"
 
 cleanup() {
   AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" down optional >/tmp/agent-f5-down.out 2>&1 || true
   docker network rm "${AGENTIC_EGRESS_NETWORK}" >/dev/null 2>&1 || true
+  docker network rm "${AGENTIC_LLM_NETWORK}" >/dev/null 2>&1 || true
   docker network rm "${AGENTIC_NETWORK}" >/dev/null 2>&1 || true
   if [[ -d "${AGENTIC_ROOT}" ]]; then
     find "${AGENTIC_ROOT}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete || true
@@ -33,9 +35,6 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-
-docker network create --driver bridge --internal "${AGENTIC_NETWORK}" >/dev/null
-docker network create --driver bridge "${AGENTIC_EGRESS_NETWORK}" >/dev/null
 
 "${REPO_ROOT}/deployments/bootstrap/init_fs.sh" >/tmp/agent-f5-initfs.out
 

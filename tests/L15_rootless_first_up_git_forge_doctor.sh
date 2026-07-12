@@ -38,7 +38,14 @@ cleanup() {
       docker compose --project-name "${project}" -f "${compose_file}" down --remove-orphans >/dev/null 2>&1 || true
     done
   fi
-  rm -rf "${work_dir}"
+  # Containers can leave root-owned files in this test-only runtime. Remove
+  # only this freshly-created work directory through a disposable helper so a
+  # failed rootless run never pollutes the repository worktree.
+  if [[ -d "${work_dir}" ]]; then
+    docker run --rm -v "${work_dir}:/cleanup" alpine:3.21 \
+      sh -c 'rm -rf /cleanup/* /cleanup/.[!.]* /cleanup/..?*' >/dev/null 2>&1 || true
+    rmdir "${work_dir}" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 
