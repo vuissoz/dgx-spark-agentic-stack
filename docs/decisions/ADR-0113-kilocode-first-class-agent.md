@@ -28,9 +28,11 @@ Implementation details:
 - manage the Kilocode runtime config at `/state/home/.config/kilo/opencode.json`;
 - pin the managed provider to `ollama-gate` using the OpenAI-compatible `/v1` endpoint and `model=ollama/<default-model>`;
 - extend `agent`, onboarding, filesystem bootstrap, doctor checks, and git-forge bootstrap to treat `kilocode` like other first-class agents.
+- pin the default npm artifact to `@kilocode/cli@7.4.5`; an operator may override it deliberately through `AGENTIC_KILOCODE_CLI_NPM_SPEC`, and the resolved image digest remains recorded by `agent update`.
 
 ## Consequences
 
 - Operators get `./agent kilocode <project>` with the same lifecycle semantics as the other baseline agents.
 - Kilocode persists state independently from OpenCode even though it reuses OpenCode-compatible config semantics.
 - The integration remains deterministic for local Ollama-first deployments without introducing new public binds or `docker.sock` exposure.
+- The default no longer follows npm `latest`; upgrades require an explicit reviewed version change and the normal release/rollback workflow.
