@@ -529,6 +529,29 @@ Notes:
 - ComfyUI Journal uses `/ws` websocket through `comfyui-loopback`.
 - End-to-end Flux smoke test: `bash tests/I3_comfyui_flux_generate.sh`
 
+### Flux troubleshooting
+
+Run only one stack-managed ComfyUI process for a runtime root. Check it before
+submitting another Flux prompt:
+
+```bash
+docker ps --filter name=comfyui --format 'table {{.Names}}\t{{.Status}}'
+docker inspect --format '{{.RestartCount}}' "$(docker ps -q --filter name=comfyui | head -n1)"
+```
+
+The baseline graph is the one in `tests/I3_comfyui_flux_generate.sh`: `UNETLoader`
+(`flux1-dev.safetensors`), `DualCLIPLoader` with `type=flux`,
+`CLIPTextEncodeFlux`, `VAELoader` (`ae.safetensors`), and `SaveImage`. A completed
+I3 run that writes a PNG and leaves `RestartCount` unchanged is the success oracle.
+
+`clip missing: ['text_projection.weight']` is not by itself a success or a failure:
+upstream reports it both alongside working Flux runs and alongside incompatible
+CLIP/workflow combinations. Treat it as non-blocking only when the known-good I3
+graph completes and writes its PNG; otherwise preserve the prompt/history and
+`./agent logs comfyui` as the failure evidence. Do not use the Manager UI to
+self-update the immutable image; upgrade it through the reviewed image/update
+workflow instead.
+
 Default-model e2e probe (Ollama, gate, agents, OpenWebUI, OpenHands):
 
 ```bash

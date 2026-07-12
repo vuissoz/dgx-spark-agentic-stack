@@ -544,6 +544,29 @@ Notes:
 - En `rootless-dev` sur `arm64`, la stack publie un diagnostic explicite dans `${AGENTIC_ROOT}/comfyui/user/agentic-runtime/torch-runtime.json`; si aucun backend CUDA effectif n'est détecté, ComfyUI démarre volontairement en `--cpu`.
 - Smoke test e2e Flux : `bash tests/I3_comfyui_flux_generate.sh`
 
+### Dépannage Flux
+
+N’exécutez qu’un seul processus ComfyUI géré par la stack pour une racine runtime.
+Vérifiez-le avant d’envoyer un autre prompt Flux :
+
+```bash
+docker ps --filter name=comfyui --format 'table {{.Names}}\t{{.Status}}'
+docker inspect --format '{{.RestartCount}}' "$(docker ps -q --filter name=comfyui | head -n1)"
+```
+
+Le graphe de référence est celui de `tests/I3_comfyui_flux_generate.sh` :
+`UNETLoader` (`flux1-dev.safetensors`), `DualCLIPLoader` avec `type=flux`,
+`CLIPTextEncodeFlux`, `VAELoader` (`ae.safetensors`) et `SaveImage`. Un I3 réussi
+écrit un PNG et laisse `RestartCount` inchangé : c’est l’oracle de succès.
+
+`clip missing: ['text_projection.weight']` n’est à lui seul ni un succès ni un
+échec : l’amont le rapporte avec des exécutions Flux fonctionnelles comme avec des
+combinaisons CLIP/graphe incompatibles. Ne le traitez comme non bloquant que si le
+graphe I3 de référence termine et écrit son PNG ; sinon conservez le prompt,
+l’historique et `./agent logs comfyui` comme preuve d’échec. N’utilisez pas
+ComfyUI-Manager pour se mettre à jour lui-même dans l’image immuable : passez par
+le workflow d’image/update revu.
+
 Test e2e du modèle par défaut (Ollama, gate, agents, OpenWebUI, OpenHands):
 
 ```bash
