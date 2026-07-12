@@ -75,6 +75,7 @@ export GIT_FORGE_SSH_HOST_PORT='$((base_port + 9))'
 export OPENCLAW_WEBHOOK_HOST_PORT='$((base_port + 10))'
 export OPENCLAW_GATEWAY_HOST_PORT='$((base_port + 11))'
 export OPENCLAW_RELAY_HOST_PORT='$((base_port + 12))'
+export OPENCLAW_GATEWAY_PROXY_METRICS_PORT='$((base_port + 13))'
 EOF
 
 if ! AGENTIC_ONBOARD_OUTPUT="${env_file}" "${agent_bin}" first-up >"${output_file}" 2>&1; then
