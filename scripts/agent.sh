@@ -4242,6 +4242,13 @@ cmd_context() {
       printf 'context_budget_tokens=%s\n' "${AGENTIC_CONTEXT_BUDGET_TOKENS:-}"
       printf 'context_compaction_soft_tokens=%s\n' "${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-}"
       printf 'context_compaction_danger_tokens=%s\n' "${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}"
+      # This is deliberately the stack-managed active route, not an aggregate
+      # of every model catalog that an OpenClaw installation may retain. Remote
+      # provider metadata must never be mistaken for the active local session.
+      printf 'openclaw_active_provider=custom-ollama-gate-11435\n'
+      printf 'openclaw_active_model=%s\n' "${AGENTIC_DEFAULT_MODEL:-}"
+      printf 'openclaw_active_context_window=%s\n' "${AGENTIC_CONTEXT_BUDGET_TOKENS:-}"
+      printf 'openclaw_catalog_context_note=active_provider_only\n'
       printf 'runtime_env=%s\n' "${AGENT_RUNTIME_ENV_FILE}"
       ;;
     set)
