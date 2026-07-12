@@ -25,6 +25,11 @@ export AGENTIC_EGRESS_NETWORK="agentic-${suffix}-egress"
 
 cleanup() {
   AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" down optional >/tmp/agent-f5-down.out 2>&1 || true
+  "${agent_bin}" down core >/tmp/agent-f5-down-core.out 2>&1 || true
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+    -f "${REPO_ROOT}/compose/compose.core.yml" \
+    -f "${REPO_ROOT}/compose/compose.optional.yml" \
+    down --remove-orphans >/tmp/agent-f5-compose-down.out 2>&1 || true
   docker network rm "${AGENTIC_EGRESS_NETWORK}" >/dev/null 2>&1 || true
   docker network rm "${AGENTIC_LLM_NETWORK}" >/dev/null 2>&1 || true
   docker network rm "${AGENTIC_NETWORK}" >/dev/null 2>&1 || true
