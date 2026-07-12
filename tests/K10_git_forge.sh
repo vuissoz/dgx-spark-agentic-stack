@@ -58,8 +58,15 @@ admin_password="$(tr -d '\n' <"${admin_password_file}")"
 shared_namespace="${GIT_FORGE_SHARED_NAMESPACE:-agentic}"
 shared_repository="${GIT_FORGE_SHARED_REPOSITORY:-shared-workbench}"
 reference_repository="${GIT_FORGE_REFERENCE_REPOSITORY:-eight-queens-agent-e2e}"
+full_reference_repository="$(python3 - "${bootstrap_state}" <<'PY'
+import json
+import pathlib
+import sys
+print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["full_reference_repository"])
+PY
+)"
 
-python3 - "${git_forge_port}" "${admin_user}" "${admin_password}" "${shared_namespace}" "${shared_repository}" "${reference_repository}" <<'PY' \
+python3 - "${git_forge_port}" "${admin_user}" "${admin_password}" "${shared_namespace}" "${shared_repository}" "${reference_repository}" "${full_reference_repository}" <<'PY' \
   || fail "git-forge API bootstrap verification failed"
 import base64
 import json
@@ -67,7 +74,7 @@ import sys
 import urllib.error
 import urllib.request
 
-port, username, password, org, shared_repo, reference_repo = sys.argv[1:7]
+port, username, password, org, shared_repo, reference_repo, full_reference_repo = sys.argv[1:8]
 base = f"http://127.0.0.1:{port}"
 token = base64.b64encode(f"{username}:{password}".encode()).decode()
 headers = {
@@ -96,20 +103,22 @@ def request(path: str):
 request(f"/api/v1/orgs/{org}")
 request(f"/api/v1/repos/{org}/{shared_repo}")
 request(f"/api/v1/repos/{org}/{reference_repo}")
+request(f"/api/v1/repos/{org}/{full_reference_repo}")
 
 for user in users:
     request(f"/api/v1/users/{user}")
 
-protections = request(f"/api/v1/repos/{org}/{reference_repo}/branch_protections")
-assert isinstance(protections, list) and protections
-main_rules = [rule for rule in protections if isinstance(rule, dict) and rule.get("branch_name") == "main"]
-assert main_rules, protections
-rule = main_rules[0]
-assert rule.get("enable_push") is True
-assert username in (rule.get("push_whitelist_usernames") or [])
+for repository in (reference_repo, full_reference_repo):
+    protections = request(f"/api/v1/repos/{org}/{repository}/branch_protections")
+    assert isinstance(protections, list) and protections
+    main_rules = [rule for rule in protections if isinstance(rule, dict) and rule.get("branch_name") == "main"]
+    assert main_rules, protections
+    rule = main_rules[0]
+    assert rule.get("enable_push") is True
+    assert username in (rule.get("push_whitelist_usernames") or [])
 PY
 
-python3 - "${bootstrap_state}" "${reference_repository}" <<'PY' \
+python3 - "${bootstrap_state}" "${reference_repository}" "${full_reference_repository}" <<'PY' \
   || fail "git-forge bootstrap state must include the reference repo contract"
 import json
 import pathlib
@@ -117,6 +126,7 @@ import sys
 
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert payload.get("reference_repository") == sys.argv[2]
+assert payload.get("full_reference_repository") == sys.argv[3]
 branch_policy = payload.get("reference_branch_policy") or {}
 branches = set(branch_policy.get("agent_branches") or [])
 expected = {
@@ -240,5 +250,19 @@ timeout 90 docker exec "${goose_cid}" sh -lc "
   grep -q 'Never push to `main`' AGENT.md
 " >/tmp/agent-k10-goose-smoke.out 2>&1 \
   || fail "goose clone/share smoke failed on the reference repository"
+
+timeout 90 docker exec "${goose_cid}" sh -lc "
+  set -eu
+  rm -rf /workspace/git-forge-full-reference-smoke
+  git clone http://optional-forgejo:3000/${shared_namespace}/${full_reference_repository}.git /workspace/git-forge-full-reference-smoke
+  cd /workspace/git-forge-full-reference-smoke
+  git checkout -B agent/goose origin/agent/goose
+  test -f src/normalize.py
+  test -f tests/test_normalize.py
+  test -f .agentic/reference-e2e.manifest.json
+  grep -F 'Implement normalize_identifier()' src/normalize.py >/dev/null
+  python3 -m pytest -q >/tmp/full-reference-red.out 2>&1 && exit 1 || test \$? -eq 1
+" >/tmp/agent-k10-goose-full-reference.out 2>&1 \
+  || fail "goose full reference clone/red-test smoke failed"
 
 ok "K10_git_forge passed"

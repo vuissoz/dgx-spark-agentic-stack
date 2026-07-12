@@ -36,8 +36,20 @@ REFERENCE_TASK = "Implement solve_eight_queens()"
 REFERENCE_COMMIT_MESSAGE = "Implement solve_eight_queens()"
 REFERENCE_TEST_COMMAND = "python3 -m pytest -q"
 REFERENCE_SCENARIOS = {
-    "eight-queens-agent-e2e": ("src/eight_queens.py", 'raise NotImplementedError("Implement solve_eight_queens()")', "Implement solve_eight_queens()", "Implement solve_eight_queens()"),
-    "agent-stack-full-e2e": ("src/normalize.py", 'raise NotImplementedError("Implement normalize_identifier()")', "Implement normalize_identifier()", "Implement normalize_identifier()"),
+    "eight-queens-agent-e2e": (
+        "src/eight_queens.py",
+        'raise NotImplementedError("Implement solve_eight_queens()")',
+        "Implement solve_eight_queens()",
+        "Implement solve_eight_queens()",
+        "repo.eight_queens.solve",
+    ),
+    "agent-stack-full-e2e": (
+        "src/normalize.py",
+        'raise NotImplementedError("Implement normalize_identifier()")',
+        "Implement normalize_identifier()",
+        "Implement normalize_identifier()",
+        "repo.normalize_identifier.solve",
+    ),
 }
 GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
 PYTEST_IMPORT_CHECK = "python3 -c 'import pytest' >/dev/null"
@@ -88,11 +100,36 @@ def fail(message: str) -> None:
 
 
 def configure_reference_scenario(repo_name: str) -> None:
-    global REFERENCE_PROBLEM_FILE, REFERENCE_PROBLEM_SENTINEL, REFERENCE_TASK, REFERENCE_COMMIT_MESSAGE
+    global REFERENCE_PROBLEM_FILE, REFERENCE_PROBLEM_SENTINEL, REFERENCE_TASK, REFERENCE_COMMIT_MESSAGE, OPENCLAW_REPO_SOLVER_TOOL
     scenario = REFERENCE_SCENARIOS.get(repo_name)
     if scenario is None:
         return
-    REFERENCE_PROBLEM_FILE, REFERENCE_PROBLEM_SENTINEL, REFERENCE_TASK, REFERENCE_COMMIT_MESSAGE = scenario
+    (
+        REFERENCE_PROBLEM_FILE,
+        REFERENCE_PROBLEM_SENTINEL,
+        REFERENCE_TASK,
+        REFERENCE_COMMIT_MESSAGE,
+        OPENCLAW_REPO_SOLVER_TOOL,
+    ) = scenario
+
+
+def reference_metadata(state: dict[str, object], repo_name: str) -> tuple[str, str, str]:
+    """Return the state keys belonging to a supported seeded reference repository."""
+    primary = str(state.get("reference_repository") or "")
+    full = str(state.get("full_reference_repository") or "")
+    if repo_name == primary:
+        return (
+            primary,
+            str(state.get("reference_clone_url_internal") or ""),
+            str(state.get("reference_clone_url_host") or ""),
+        )
+    if repo_name == full:
+        return (
+            full,
+            str(state.get("full_reference_clone_url_internal") or ""),
+            str(state.get("full_reference_clone_url_host") or ""),
+        )
+    fail(f"unsupported stack-managed reference repository '{repo_name}'")
 
 
 def log_progress(message: str) -> None:
@@ -628,7 +665,7 @@ def publish_workspace_changes(
             "python3 -m pytest -q",
             f"git add {shlex.quote(REFERENCE_PROBLEM_FILE)}",
             "if ! git diff --cached --quiet; then",
-            "  git commit -m 'Implement solve_eight_queens()'",
+            f"  git commit -m {shlex.quote(REFERENCE_COMMIT_MESSAGE)}",
             "fi",
             f"git push origin HEAD:{shlex.quote(branch)}",
             "git status --short",
@@ -732,7 +769,7 @@ def reset_agent_branches_if_requested(
         payload = {
             "status": "skipped",
             "reset_agent_branches": False,
-            "reference_repository": str(state.get("reference_repository") or ""),
+            "reference_repository": repo_name,
             "main_branch": "main",
             "selected_agents": selected_agents,
             "branches": branch_summary,
@@ -740,14 +777,7 @@ def reset_agent_branches_if_requested(
         (preflight_dir / "preflight.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         return payload
 
-    reference_repo = str(state.get("reference_repository") or "")
-    if repo_name != reference_repo:
-        fail(
-            "--reset-agent-branches only supports the stack-managed reference repository "
-            f"'{reference_repo}', got '{repo_name}'"
-        )
-    reference_clone_url_internal = str(state.get("reference_clone_url_internal") or "")
-    reference_clone_url_host = str(state.get("reference_clone_url_host") or "")
+    reference_repo, reference_clone_url_internal, reference_clone_url_host = reference_metadata(state, repo_name)
     allowed_clone_urls = {
         reference_clone_url_internal,
         reference_clone_url_host,
@@ -1627,7 +1657,8 @@ def main() -> None:
     state = load_bootstrap_state()
     repo_name = args.repo or str(state.get("reference_repository") or "")
     configure_reference_scenario(repo_name)
-    clone_url = args.clone_url or str(state.get("reference_clone_url_internal") or "")
+    _, reference_clone_url_internal, _ = reference_metadata(state, repo_name)
+    clone_url = args.clone_url or reference_clone_url_internal
     if not repo_name or not clone_url:
         fail("reference repository metadata is missing from git-forge bootstrap state")
 

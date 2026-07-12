@@ -433,7 +433,7 @@ Examples:
 ```
 
 Notes:
-- `agent repo-e2e` streams live progress to `stderr` and keeps the final JSON summary on `stdout`. Live OpenClaw runs also fail fast unless `repo.eight_queens.solve` is present in the effective OpenClaw tool allowlist.
+- `agent repo-e2e` streams live progress to `stderr` and keeps the final JSON summary on `stdout`. Live OpenClaw runs also fail fast unless the scenario-specific reviewed solver (`repo.eight_queens.solve` or `repo.normalize_identifier.solve`) is present in the effective OpenClaw tool allowlist.
 - Baseline agent containers now publish `/state/bootstrap/known-local-tools.md` and `/state/bootstrap/known-local-tools.json`; `repo-e2e` prompts use those manifests to bias agents toward the reviewed local shell command set instead of guessed tool schemas.
 - `repo-e2e` also injects ignored project-scoped instruction files into each cloned workspace (`AGENTS.md`, `AGENT.md`, `SKILLS.md`, plus one harness-specific file such as `CLAUDE.md` or `CODEX.md`) so each CLI sees repo-local task instructions before acting.
 - `kilocode` now gets a larger effective `repo-e2e` invoke budget (`1800s` minimum) before timeout classification; the requested and effective values are recorded in per-agent artifacts.

@@ -438,7 +438,7 @@ Exemples:
 ```
 
 Notes:
-- `agent repo-e2e` diffuse maintenant une progression live sur `stderr` et conserve le JSON final sur `stdout`. En mode live avec OpenClaw sélectionné, la commande échoue immédiatement si `repo.eight_queens.solve` n'est pas présent dans l'allowlist d'outils effective OpenClaw.
+- `agent repo-e2e` diffuse maintenant une progression live sur `stderr` et conserve le JSON final sur `stdout`. En mode live avec OpenClaw sélectionné, la commande échoue immédiatement si le solveur revu du scénario (`repo.eight_queens.solve` ou `repo.normalize_identifier.solve`) n'est pas présent dans l'allowlist d'outils effective OpenClaw.
 - Les conteneurs agents baseline publient maintenant `/state/bootstrap/known-local-tools.md` et `/state/bootstrap/known-local-tools.json` ; les prompts `repo-e2e` s'appuient sur ces manifests pour orienter les agents vers un jeu de commandes shell local revu au lieu d'inventer des schémas d'outils.
 - `repo-e2e` injecte aussi des fichiers d'instructions locaux ignores dans chaque workspace clone (`AGENTS.md`, `AGENT.md`, `SKILLS.md`, plus un fichier specifique au harness comme `CLAUDE.md` ou `CODEX.md`) afin que chaque CLI voie d'abord des consignes de depot locales.
 - `kilocode` recoit maintenant un budget effectif d'invocation `repo-e2e` plus large (`1800s` minimum) avant d'etre classe en timeout ; les valeurs demandee et effective sont tracees dans les artefacts par agent.

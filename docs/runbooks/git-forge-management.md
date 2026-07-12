@@ -262,12 +262,16 @@ The runner prepares the checkout, but the agent instruction itself must perform:
 
 Two adapters have stack-managed finalization around that contract:
 
-- OpenClaw executes the reviewed `repo.eight_queens.solve` sandbox tool through
-  its live `/v1/tools/execute` API. The tool is scoped to this reference repo
-  task and is not a general shell.
-- Before any live OpenClaw run, `repo-e2e` now verifies that
-  `repo.eight_queens.solve` is present in the effective OpenClaw tool allowlist
-  and aborts immediately if it is missing, instead of burning a full attempt.
+- OpenClaw executes the reviewed scenario-specific sandbox solver through its
+  live `/v1/tools/execute` API: `repo.eight_queens.solve` for the canary or
+  `repo.normalize_identifier.solve` for `agent-stack-full-e2e`. Neither tool
+  is a general shell: each fixes one fixed path, runs pytest, and can push only
+  `agent/openclaw` through the managed Forgejo SSH identity.
+- Before any live OpenClaw run, `repo-e2e` verifies that the selected solver is
+  present in the effective OpenClaw tool allowlist and aborts immediately if it
+  is missing, instead of burning a full attempt. Runtime initialization appends
+  missing reviewed baseline entries from the versioned template without
+  removing operator additions.
 - Vibestral keeps the same prompt, then the runner applies a common publish
   guard after tests pass so runs that stop after editing still end with a clean
   committed branch.

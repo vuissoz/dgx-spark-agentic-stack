@@ -782,6 +782,7 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   ensure_openclaw_chat_status_plugin
   ensure_openclaw_deep_research_skill
   ensure_openclaw_default_skills_plugin
+  ensure_allowlist_baseline_entries "${OPTIONAL_TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt"
   reconcile_openclaw_context_metadata
   ensure_allowlist_baseline_entries "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt"
   chmod 0640 "${AGENTIC_ROOT}/gate/config/model_routes.yml"

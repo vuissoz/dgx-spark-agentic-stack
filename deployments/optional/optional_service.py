@@ -2694,6 +2694,9 @@ setInterval(loadStatus, 5000);
         if tool == "repo.eight_queens.solve":
             return self._execute_repo_eight_queens_tool(tool, args)
 
+        if tool == "repo.normalize_identifier.solve":
+            return self._execute_repo_normalize_identifier_tool(tool, args)
+
         if tool == "attachments.list":
             return self._execute_attachment_list_tool(tool, args)
 
@@ -3049,6 +3052,80 @@ setInterval(loadStatus, 5000);
             "pytest_stderr": pytest_proc.stderr[-4000:],
             "git_steps": git_steps,
         }
+
+    def _execute_repo_normalize_identifier_tool(self, tool: str, args: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        """Solve the fixed full-reference task without accepting arbitrary code or paths."""
+        workspace_raw = str(args.get("workspace", "")).strip()
+        branch = str(args.get("branch", "")).strip()
+        target_file = "src/normalize.py"
+        commit_message = "Implement normalize_identifier()"
+        ssh_dir = Path("/state/cli/openclaw-home/.ssh")
+
+        if not workspace_raw:
+            return 400, {"error": "workspace_required", "tool": tool}
+        workspace = Path(workspace_raw).resolve()
+        workspace_root = Path("/workspace").resolve()
+        if workspace != workspace_root and workspace_root not in workspace.parents:
+            return 400, {"error": "workspace_outside_allowed_root", "workspace": str(workspace), "tool": tool}
+        if not workspace.is_dir():
+            return 404, {"error": "workspace_missing", "workspace": str(workspace), "tool": tool}
+        if branch != "agent/openclaw":
+            return 400, {"error": "invalid_branch", "branch": branch, "tool": tool}
+
+        target_path = (workspace / target_file).resolve()
+        if workspace not in target_path.parents:
+            return 400, {"error": "target_outside_workspace", "target": target_file, "tool": tool}
+        if not target_path.is_file():
+            return 404, {"error": "target_missing", "target": target_file, "tool": tool}
+        if not (ssh_dir / "id_ed25519").is_file() or not (ssh_dir / "known_hosts").is_file():
+            return 500, {"error": "ssh_material_missing", "tool": tool, "ssh_dir": str(ssh_dir)}
+
+        sentinel = 'raise NotImplementedError("Implement normalize_identifier()")'
+        source = target_path.read_text(encoding="utf-8")
+        implementation = 'return "-".join(value.strip().lower().split())'
+        if sentinel in source:
+            target_path.write_text(source.replace(sentinel, implementation), encoding="utf-8")
+
+        pytest_proc = run_command(["python3", "-m", "pytest", "-q"], cwd=workspace, timeout_sec=180)
+        if pytest_proc.returncode != 0:
+            return 422, {"error": "pytest_failed", "tool": tool, "pytest_stdout": pytest_proc.stdout[-4000:], "pytest_stderr": pytest_proc.stderr[-4000:]}
+
+        git_env = os.environ.copy()
+        git_env["GIT_TERMINAL_PROMPT"] = "0"
+        git_env["GIT_SSH_COMMAND"] = (
+            "ssh -F /dev/null "
+            f"-i {ssh_dir / 'id_ed25519'} "
+            f"-o UserKnownHostsFile={ssh_dir / 'known_hosts'} "
+            "-o StrictHostKeyChecking=yes"
+        )
+        for name, argv in (("git_config_user_name", ["git", "config", "user.name", "OpenClaw"]), ("git_config_user_email", ["git", "config", "user.email", "openclaw@forge.agentic.local"])):
+            proc = run_command(argv, cwd=workspace, timeout_sec=30, env=git_env)
+            if proc.returncode != 0:
+                return 500, {"error": f"{name}_failed", "tool": tool}
+        remote_get = run_command(["git", "remote", "get-url", "origin"], cwd=workspace, timeout_sec=30, env=git_env)
+        if remote_get.returncode != 0:
+            return 500, {"error": "git_remote_get_origin_failed", "tool": tool}
+        origin_url = remote_get.stdout.strip()
+        ssh_origin_url = canonicalize_forgejo_ssh_remote(origin_url)
+        if not ssh_origin_url.startswith("ssh://"):
+            return 500, {"error": "git_origin_not_convertible_to_ssh", "tool": tool, "origin_url": origin_url}
+        remote_set = run_command(["git", "remote", "set-url", "origin", ssh_origin_url], cwd=workspace, timeout_sec=30, env=git_env)
+        if remote_set.returncode != 0:
+            return 500, {"error": "git_remote_set_origin_ssh_failed", "tool": tool}
+        status_before = run_command(["git", "status", "--short"], cwd=workspace, timeout_sec=30, env=git_env)
+        if status_before.returncode != 0:
+            return 500, {"error": "git_status_failed", "tool": tool}
+        if status_before.stdout.strip():
+            for name, argv in (("git_add", ["git", "add", target_file]), ("git_commit", ["git", "commit", "-m", commit_message])):
+                proc = run_command(argv, cwd=workspace, timeout_sec=60, env=git_env)
+                if proc.returncode != 0:
+                    return 500, {"error": f"{name}_failed", "tool": tool}
+        push_proc = run_command(["git", "push", "origin", f"HEAD:{branch}"], cwd=workspace, timeout_sec=120, env=git_env)
+        if push_proc.returncode != 0:
+            return 500, {"error": "git_push_failed", "tool": tool}
+        head_proc = run_command(["git", "rev-parse", "HEAD"], cwd=workspace, timeout_sec=30, env=git_env)
+        status_after = run_command(["git", "status", "--short"], cwd=workspace, timeout_sec=30, env=git_env)
+        return 200, {"status": "executed", "tool": tool, "workspace": str(workspace), "branch": branch, "origin_url": origin_url, "ssh_origin_url": ssh_origin_url, "head": head_proc.stdout.strip(), "worktree_clean": status_after.returncode == 0 and not status_after.stdout.strip(), "pytest_stdout": pytest_proc.stdout[-4000:], "pytest_stderr": pytest_proc.stderr[-4000:]}
 
     def _handle_openclaw_sandbox_execute(self) -> None:
         if self.path not in self.cfg.get("endpoint_sandbox_execute_paths", {"/v1/tools/execute"}):
