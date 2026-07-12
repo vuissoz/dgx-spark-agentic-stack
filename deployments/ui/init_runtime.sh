@@ -223,6 +223,25 @@ EOF
     fi
     log "created Forgejo SSH host key for agents"
   fi
+
+  # Forgejo's rootless image can create nested state paths as root during its
+  # entrypoint. Repair only the Forgejo runtime roots before the next start so
+  # the configured non-root service user can write repositories and queues.
+  if [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" && "${EUID}" -ne 0 ]]; then
+    command -v docker >/dev/null 2>&1 \
+      || die "docker command is required to repair Forgejo ownership in rootless-dev"
+    docker run --rm \
+      -v "${AGENTIC_ROOT}/optional/git/state:/repair/state" \
+      -v "${AGENTIC_ROOT}/optional/git/config:/repair/config" \
+      busybox:1.36.1 sh -lc "
+        set -eu
+        chown -R ${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID} /repair/state /repair/config
+        # Rootless user namespaces can preserve host root ownership despite
+        # chown. The Forgejo process still needs a writable bind mount.
+        chmod -R a+rwX /repair/state /repair/config
+      "
+    log "repaired Forgejo state/config permissions for rootless container"
+  fi
 }
 
 repair_rootless_openhands_layout() {
