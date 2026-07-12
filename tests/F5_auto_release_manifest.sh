@@ -36,6 +36,10 @@ cleanup() {
   if [[ -d "${AGENTIC_ROOT}" ]]; then
     find "${AGENTIC_ROOT}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete || true
     find "${AGENTIC_ROOT}" -mindepth 1 -depth -type d -empty -delete || true
+    if [[ -d "${AGENTIC_ROOT}" ]]; then
+      docker run --rm -v "${AGENTIC_ROOT}:/cleanup" alpine:3.21 \
+        sh -c 'rm -rf /cleanup/* /cleanup/.[!.]* /cleanup/..?*' >/dev/null 2>&1 || true
+    fi
     rmdir "${AGENTIC_ROOT}" >/dev/null 2>&1 || true
   fi
 }
@@ -71,5 +75,8 @@ grep -q '/compose\.core\.yml$' "${release_compose_files}" \
   || fail "automatic release snapshot must retain compose.core.yml after a later up"
 grep -q '/compose\.optional\.yml$' "${release_compose_files}" \
   || fail "automatic release snapshot must include compose.optional.yml after optional up"
+
+cleanup
+trap - EXIT
 
 ok "F5_auto_release_manifest passed"
