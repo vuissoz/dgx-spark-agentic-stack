@@ -186,6 +186,16 @@ seed_openhands_workspace_if_missing() {
 }
 
 prepare_forgejo_volumes() {
+  local forgejo_state_dir="${AGENTIC_ROOT}/optional/git/state"
+  local forgejo_state_leaf
+  # Pre-create every individual Compose mountpoint. Otherwise Docker creates
+  # absent bind sources as root after this initializer has run.
+  for forgejo_state_leaf in \
+    git tmp home data repo-archive packages actions_log actions_artifacts \
+    queues jwt indexers ssh forgejo custom/conf; do
+    install -d -m 0775 "${forgejo_state_dir}/${forgejo_state_leaf}"
+  done
+
   # Set permissive permissions for Forgejo queues directory to allow container to manage locks
   if [[ -d "${AGENTIC_ROOT}/optional/git/state/queues" ]]; then
     find "${AGENTIC_ROOT}/optional/git/state/queues" -type d -exec chmod 775 {} + 2>/dev/null || true
