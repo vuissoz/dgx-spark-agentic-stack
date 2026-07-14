@@ -2060,6 +2060,7 @@ check_default_model_tool_call_regression_notice
 check_default_model_context_resources
 check_llm_backend_runtime_policy
 check_observability_retention_policy
+check_memory_footprint
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"
@@ -3199,3 +3200,41 @@ else
 fi
 
 exit "$status"
+
+# ── Resource Footprint Checks (rootless-dev / 60GB constraint) ─────────────
+
+check_memory_footprint() {
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then
+    return 0
+  fi
+
+  local total_mem_kb
+  total_mem_kb=$(awk '/MemTotal/ { print $2 }' /proc/meminfo)
+  if [[ -z "${total_mem_mem_kb:-}" ]]; then
+    warn "cannot determine system memory (check_memory_footprint)"
+    return 0
+  fi
+
+  local used_mem_kb=0
+  
+  # Ollama memory estimate (from cgroup or known env)
+  local ollama_mem=$(docker inspect --format='{{.HostConfig.Memory}}' ollama 2>/dev/null || echo "0")
+  
+  # Sum containers in agentic project
+  for cid in $(docker ps --filter "name=agentic" --format '{{.ID}}'); do
+    local mem=$(docker inspect --format='{{.HostConfig.Memory}}' "${cid}" 2>/dev/null)
+    if [[ -n "${mem}" && "${mem}" != "0" ]]; then
+      used_mem_kb=$((used_mem_kb + mem / 1024))
+    fi
+  done
+
+  local total_limit_mb=61440 # 60 GB in MB
+  local current_limit_mb=$((used_mem_kb / 1024))
+  
+  if (( current_limit_mb > total_limit_mb )); then
+    doctor_fail "rootless-dev memory footprint exceeds 60GB limit (${current_limit_mb}MB used)"
+  else
+    echo "CHECK: memory_footprint OK (${current_limit_mb}MB / ${total_limit_mb}MB limit in rootless-dev mode)"
+  fi
+}
+
