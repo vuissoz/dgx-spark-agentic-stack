@@ -3989,7 +3989,7 @@ cmd_first_up() {
   local -a doctor_cmd=()
 
   while [[ $# -gt 0 ]]; do
-  pre_flight_check
+
     case "$1" in
       --env-file)
         [[ $# -ge 2 ]] || die "missing value for --env-file"
@@ -5713,6 +5713,10 @@ case "$cmd" in
     cmd_vm "$@"
     ;;
   evaluate)
+  walkingskeleton)
+    shift
+    exec "${SCRIPT_DIR}/walkingskeleton.sh" "$@"
+    ;;
     shift
     cmd_evaluate "$@"
     ;;
