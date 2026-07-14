@@ -2061,6 +2061,7 @@ check_default_model_context_resources
 check_llm_backend_runtime_policy
 check_observability_retention_policy
 check_memory_footprint
+check_openhands_process_sandbox
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"
@@ -3235,6 +3236,24 @@ check_memory_footprint() {
     doctor_fail "rootless-dev memory footprint exceeds 60GB limit (${current_limit_mb}MB used)"
   else
     echo "CHECK: memory_footprint OK (${current_limit_mb}MB / ${total_limit_mb}MB limit in rootless-dev mode)"
+  fi
+}
+
+
+check_openhands_process_sandbox() {
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then return 0; fi
+  
+  # Verify that the OpenHands container is running with process-sandbox enabled
+  # rather than trying to mount docker.sock or use full Docker-in-Docker.
+  local cid=$(service_container_id openhands)
+  [[ -n "${cid}" ]] || return 0
+
+  local volume_mounts=$(docker inspect --format='{{range .Mounts}}{{.Type}} {{.Source}} -> {{.Destination}}; {{end}}' "${cid}" 2>/dev/null)
+  
+  if echo "${volume_mounts}" | grep -q "docker.sock"; then
+    doctor_fail "openhands should not mount docker.sock in rootless-dev (use process sandbox)"
+  else
+    echo "CHECK: openhands_process_sandbox OK (no docker.sock, relying on process isolation)"
   fi
 }
 
