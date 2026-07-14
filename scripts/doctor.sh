@@ -2062,6 +2062,7 @@ check_llm_backend_runtime_policy
 check_observability_retention_policy
 check_memory_footprint
 check_openhands_process_sandbox
+check_harness_memory_caps
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"
@@ -3254,6 +3255,46 @@ check_openhands_process_sandbox() {
     doctor_fail "openhands should not mount docker.sock in rootless-dev (use process sandbox)"
   else
     echo "CHECK: openhands_process_sandbox OK (no docker.sock, relying on process isolation)"
+  fi
+}
+
+
+# ── Harness Memory Cap Enforcement (§11, rootless-dev 60GB) ────────────────
+
+check_harness_memory_caps() {
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then return 0; fi
+
+  local total_cap_mb=0
+  local service_count=0
+  
+  for cid in $(docker ps --filter "name=agentic-" --format '{{.ID}}'); do
+    local label_name
+    label_name=$(docker inspect --format='{{index .Config.Labels "com.docker.compose.service"}}' "${cid}" 2>/dev/null || true)
+    
+    if [[ -n "${label_name}" ]]; then
+      local mem_limit_kb
+      mem_limit_kb=$(docker inspect --format='{{.HostConfig.Memory}}' "${cid}" 2>/dev/null || echo "0")
+      
+      # Skip non-zero uncapable services (like ollama which handles its own limits)
+      if [[ "${label_name}" == *"ollama"* && "${mem_limit_kb}" -eq 0 ]]; then
+        continue
+      fi
+      
+      local mem_mb=$((mem_limit_kb / 1024))
+      if (( mem_mb > 0 )); then
+        total_cap_mb=$((total_cap_mb + mem_mb))
+        service_count=$((service_count + 1))
+      fi
+    fi
+  done
+
+  # rootless-dev default stack budget (excluding ollama) is ~6GB
+  local allowed_cap_mb=6144
+  
+  if (( total_cap_mb > allowed_cap_mb )); then
+    warn "harness_memory_caps: ${service_count} services using ${total_cap_mb}MB caps (limit ${allowed_cap_mb}MB). Consider reducing AGENTIC_LIMIT_DEFAULT_MEM"
+  else
+    echo "CHECK: harness_memory_caps OK (${total_cap_mb}MB / ${allowed_cap_mb}MB limit across ${service_count} agents)"
   fi
 }
 
