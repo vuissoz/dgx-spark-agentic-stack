@@ -3989,6 +3989,7 @@ cmd_first_up() {
   local -a doctor_cmd=()
 
   while [[ $# -gt 0 ]]; do
+  pre_flight_check
     case "$1" in
       --env-file)
         [[ $# -ge 2 ]] || die "missing value for --env-file"
@@ -5753,3 +5754,19 @@ case "$cmd" in
     die "Unknown command: $cmd"
     ;;
 esac
+
+# ── Rootless-Dev Pre-flight Admission Gate (60GB constraint) ────────────────
+pre_flight_check() {
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then return 0; fi
+
+  local avail_mem_kb=$(awk '/MemAvailable/ { print $2 }' /proc/meminfo)
+  [[ -n "${avail_mem_kb}" ]] || return 0
+  
+  local min_free_mb=8192 # Minimum 8GB free for stack + Ollama headroom
+  if (( avail_mem_kb < min_free_mb * 1024 )); then
+    warn "LOW MEMORY: available ${avail_mem_kb}KB < ${min_free_mb}MB limit in rootless-dev"
+    die "Refusing 'agent up' to protect local ollama. Run 'docker system prune -a' or stop heavy containers first."
+  fi
+  echo "CHECK: rootless-dev admission OK (${avail_mem_kb}KB available)"
+}
+
