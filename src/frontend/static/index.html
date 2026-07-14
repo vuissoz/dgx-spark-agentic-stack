@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DGX Spark — Agentic Platform</title>
+  <style>
+    :root { --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3a; --text: #e0e0e0; --muted: #888; --accent: #4a9eff; --ok: #4caf50; --warn: #ff9800; --err: #f44336; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.75rem 1.5rem; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+    header h1 { font-size: 1.2rem; font-weight: 600; }
+    header nav a { color: var(--accent); text-decoration: none; margin-left: 1rem; font-size: 0.9rem; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    .tabs { display: flex; gap: 0.25rem; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; overflow-x: auto; }
+    .tab-btn { background: none; border: none; color: var(--muted); padding: 0.75rem 1.25rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .card h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+    .card p { color: var(--muted); font-size: 0.9rem; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+    .badge-ok { background: rgba(76,175,80,0.15); color: var(--ok); }
+    .badge-err { background: rgba(244,67,54,0.15); color: var(--err); }
+    .badge-warn { background: rgba(255,152,0,0.15); color: var(--warn); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .status-bar { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+    .spinner { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .actions { margin-top: 1rem; display: flex; gap: 0.5rem; }
+    button.action-btn { background: var(--accent); color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    button.action-btn:hover { opacity: 0.9; }
+    button.action-btn.danger { background: var(--err); }
+    .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DGX Spark Agentic Platform</h1>
+    <nav>
+      <a href="#" onclick="switchTab('agents')">Agents</a>
+      <a href="#" onclick="switchTab('apps')">Apps</a>
+      <a href="#" onclick="switchTab('projects')">Projects</a>
+      <a href="#" onclick="switchTab('models')">Models</a>
+      <a href="#" onclick="switchTab('data')">RAG</a>
+      <a href="#" onclick="switchTab('system')">System</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <!-- Agents Tab -->
+    <div id="tab-agents" class="tab-content active">
+      <h2 style="margin-bottom:1rem;">Visible Agents</h2>
+      <div class="grid" id="agents-grid"></div>
+    </div>
+
+    <!-- Applications Tab -->
+    <div id="tab-apps" class="tab-content">
+      <h2 style="margin-bottom:1rem;">Applications</h2>
+      <div class="grid" id="apps-grid"></div>
+    </div>
+
+    <!-- Projects Tab -->
+    <div id="tab-projects" class="tab-content">
+      <h2 style="margin-bottom:1rem;">Projects</h2>
+      <div class="grid" id="projects-grid"></div>
+    </div>
+
+    <!-- Models Tab -->
+    <div id="tab-models" class="tab-content">
+      <h2 style="margin-bottom:1rem;">Model Catalog</h2>
+      <div class="card"><p id="models-status">Loading model catalog...</p></div>
+    </div>
+
+    <!-- Resources Tab -->
+    <div id="tab-resources" class="tab-content">
+      <h2 style="margin-bottom:1rem;">Resources</h2>
+      <div id="resources-grid" class="grid"></div>
+    </div>
+
+    <!-- RAG Tab -->
+    <div id="tab-data" class="tab-content">
+      <h2 style="margin-bottom:1rem;">Data / RAG</h2>
+      <div class="card"><p id="rag-status">Loading RAG status...</p></div>
+    </div>
+
+    <!-- System Tab -->
+    <div id="tab-system" class="tab-content">
+      <h2 style="margin-bottom:1rem;">System</h2>
+      <div id="system-status" class="card"><p>Loading system status...</p></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin; // Control plane on same host
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch(API_BASE + '/api/v1/status');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('system-status').innerHTML = `
+            <h3>Control Plane Status</h3>
+            <p>Workers: ${data.workers.length}</p>
+            <div class="status-bar">
+              CPU: ${data.state.allocated_cpu}/${data.state.total_cpu} | 
+              Memory: ${data.state.allocated_memory_mb}MB/${data.state.total_memory_mb}MB | 
+              GPU: ${data.state.allocated_gpu}/${data.state.total_gpu}
+            </div>
+            <div class="actions">
+              <button class="action-btn" onclick="startDrain()">Start Drain</button>
+              <button class="action-btn" onclick="resumeScheduler()">Resume</button>
+            </div>`;
+        }
+      } catch(e) { /* stub mode */ }
+
+      // List active sessions/workloads
+      try {
+        const res = await fetch(API_BASE + '/api/v1/sessions');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('agents-grid').innerHTML = 
+            (data.sessions && data.sessions.length > 0) 
+              ? data.sessions.map(s => `
+                <div class="card">
+                  <h3>${s.workload_id || s.session_id}</h3>
+                  <p>User: ${s.user_id || 'default'}</p>
+                  <p>Status: <span class="badge badge-ok">${s.status || 'active'}</span></p>
+                </div>`).join('')
+              : '<div class="empty-state">No active sessions. Start a session to see it here.</div>';
+        }
+      } catch(e) { /* stub mode */ }
+
+      // Check drift
+      try {
+        const res = await fetch(API_BASE + '/api/v1/reconciler/drift');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('rag-status').innerHTML = `
+            <h3>Reconciliation</h3>
+            <p>Drift count: ${data.drift_count}</p>
+            ${data.drifts.length > 0 ? '<p class="badge badge-err">⚠ Components with state drift</p>' : '<span class="badge badge-ok">All components in sync</span>'}
+          `;
+        }
+      } catch(e) { /* stub mode */ }
+    }
+
+    async function startDrain() {
+      await fetch(API_BASE + '/api/v1/scheduler/drain', { method: 'POST' });
+      loadStatus();
+    }
+
+    async function resumeScheduler() {
+      await fetch(API_BASE + '/api/v1/scheduler/resume', { method: 'POST' });
+      loadStatus();
+    }
+
+    // Load on page init
+    document.addEventListener('DOMContentLoaded', loadStatus);
+  </script>
+</body>
+</html>

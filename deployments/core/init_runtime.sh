@@ -835,6 +835,46 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   set_gate_runtime_permissions
   set_proxy_runtime_permissions
   set_openclaw_runtime_permissions
+  ensure_broker_credentials
+}
+
+
+# Inject external access credentials from SecretStore into runtime secrets.
+# Satisfies PLAN.md §10 ExternalAccessBroker contract: agents get short-lived
+# tokens via standard secret paths without direct SecretStore knowledge.
+ensure_broker_credentials() {
+  mkdir -p "${AGENTIC_ROOT}/secrets/runtime" 2>/dev/null || true
+
+  # HuggingFace token from SecretStore (short-lived, scoped to hf access)
+  if [[ -f "${AGENTIC_SECRET_STORE:-}" ]]; then
+    local hf_token
+    hf_token="$(bash "${SCRIPT_DIR}/../secrets/broker.sh" get external.hf.token hf 2>/dev/null || true)"
+    if [[ -n "${hf_token}" && "${hf_token}" != "SECRET_NOT_FOUND"* && "${hf_token}" != "SECRET_EXPIRED"* ]]; then
+      printf '%s
+' "${hf_token}" > "${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
+      chmod 0600 "${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
+      log "HF token injected from SecretStore into runtime secrets"
+    else
+      log "No valid HF token in SecretStore; using existing optional secret"
+    fi
+  fi
+
+  # GitHub token (placeholder: store.sh provides external github token)
+  if [[ -f "${AGENTIC_SECRET_STORE:-}" ]]; then
+    local gh_token
+    gh_token="$(bash "${SCRIPT_DIR}/../secrets/broker.sh" get external.github.token github 2>/dev/null || true)"
+    if [[ -n "${gh_token}" && "${gh_token}" != "SECRET_NOT_FOUND"* && "${gh_token}" != "SECRET_EXPIRED"* ]]; then
+      cp "${AGENTIC_SECRET_STORE}" "${AGENTIC_ROOT}/secrets/runtime/github.token" 2>/dev/null || true
+      chmod 0600 "${AGENTIC_ROOT}/secrets/runtime/github.token" 2>/dev/null || true
+      log "GitHub credentials injected from SecretStore into runtime secrets"
+    fi
+  fi
+
+  # Ensure HF cache root exists for agent containers that use AGENTIC_HF_CACHE_ROOT
+  local hf_cache="${AGENTIC_HF_CACHE_ROOT:-${AGENTIC_ROOT}/hf-cache}"
+  mkdir -p "${hf_cache}"
+  chown -R "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}" "${hf_cache}" 2>/dev/null || true
+  chmod 0755 "${hf_cache}"
 }
 
 main "$@"

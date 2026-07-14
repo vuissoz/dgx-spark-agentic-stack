@@ -81,6 +81,11 @@ Usage:
   agent stop <target>
   agent stop service <service...>
   agent stop container <container...>
+  agent control-plane inspect [--project <name>] [--json]
+  agent control-plane model-route [--json]
+  agent control-plane session <start|end|list> [--harness <h>] [--project <p>] [--session-id <id>]
+  agent control-plane auth rotate <service> [scope]
+  agent control-plane scheduler <status|stats>
   agent start <target>
   agent start service <service...>
   agent start container <container...>
@@ -98,6 +103,7 @@ Usage:
   agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
   agent ollama-models [status|rw|ro]
   agent sudo-mode [status|on|off]
+  agent sbom <scan|validate-allowlist|list-digests|record-deps>
   agent update
   agent rollback all <release_id>
   agent rollback host-net <backup_id>
@@ -108,6 +114,8 @@ Usage:
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
   agent vm cleanup [--name ... --yes --dry-run]
+  agent evaluate <validate-specs|bootstrap-evidence|context-isolation-evidence|snapshot-restore-rollback-evidence|model-backend-failure-evidence|run-all>
+  agent schema                          PostgreSQL source-of-truth schema (§4, §5)
   agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all> [--skip-d5-tests]
   agent doctor [--fix-net] [--check-tool-stream-e2e]
 
@@ -1057,6 +1065,7 @@ build_ui_local_images() {
   fi
 }
 
+COMPOSE_FILES_ARG=""
 resolve_update_latest_inputs() {
   local output_dir="$1"
   shift
@@ -1105,6 +1114,14 @@ capture_update_resolution_artifacts() {
     [[ -f "${resolution_dir}/${artifact}" ]] || continue
     install -m 0640 "${resolution_dir}/${artifact}" "${release_dir}/${artifact}"
   done
+
+  # Generate and store SBOM/provenance snapshot (PLAN §17)
+  if [[ -f "${REPO_ROOT}/scripts/sbom_provenance.sh" ]]; then
+    local _sbom_release_dir="${release_dir}"
+    bash "${REPO_ROOT}/scripts/sbom_provenance.sh" \
+      --mode scan --release-dir "${_sbom_release_dir}" \
+      ${COMPOSE_FILES_ARG:-} 2>/dev/null || warn "SBOM capture skipped (docker unavailable)"
+  fi
 
   [[ -f "${AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT}" ]] \
     || die "release integrity writer is missing: ${AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT}"
@@ -2000,6 +2017,67 @@ cmd_ls() {
       "${target}" "${service}" "${status}" "${tmux_status}" "${workspace_size}" "${sticky}" "${runtime}"
   done
 }
+
+cmd_control_plane() {
+  local subcommand="${1:-inspect}"
+  shift || true
+
+  case "${subcommand}" in
+    inspect)
+      # Delegate to Python RuntimeInspector
+      local json_flag=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --json|-j) json_flag="--json"; shift ;;
+          --project|-p) project_override="$2"; shift 2 ;;
+          *) shift ;;
+        esac
+      done
+
+      local inspector_script="${REPO_ROOT}/src/agentic/implementations/runtime_inspector.py"
+      [[ -f "${inspector_script}" ]] || die "runtime_inspector.py not found: ${inspector_script}"
+
+      local inspect_cmd=(python3 "${inspector_script}")
+      if [[ -n "${project_override:-}" ]]; then
+        inspect_cmd+=(--project "${project_override}")
+      else
+        inspect_cmd+=(--project "${AGENTIC_COMPOSE_PROJECT:-agentic-dev}")
+      fi
+      if [[ -n "${json_flag}" ]]; then
+        inspect_cmd+=("--json")  # runtime_inspector always outputs JSON
+      fi
+
+      printf '--- Runtime Inspection (v2 adapter bridge) ---\n' >&2
+      set +e
+      "${inspect_cmd[@]}"
+      local rc=$?
+      set -e
+      return ${rc}
+      ;;
+    schema)
+      # Print PostgreSQL schema for control plane
+      local schema_script="${REPO_ROOT}/src/agentic/control/postgres_schema.py"
+      [[ -f "${schema_script}" ]] || die "postgres_schema.py not found: ${schema_script}"
+      python3 "${schema_script}"
+      ;;
+    model-route)
+      python3 "${REPO_ROOT}/scripts/control_plane.py" model-route "$@"
+      ;;
+    session)
+      python3 "${REPO_ROOT}/scripts/control_plane.py" session "$@"
+      ;;
+    auth)
+      python3 "${REPO_ROOT}/scripts/control_plane.py" auth "$@"
+      ;;
+    scheduler)
+      python3 "${REPO_ROOT}/scripts/control_plane.py" scheduler "$@"
+      ;;
+    *)
+      die "Usage: agent control-plane <inspect|schema|model-route|session|auth|scheduler> [--project <name>] [--json]"
+      ;;
+  esac
+}
+
 
 cmd_status() {
   require_cmd docker
@@ -3002,6 +3080,64 @@ USAGE
   printf 'forget completed target=%s backup=%s\n' "${target}" "${backup_path:-none}"
 }
 
+
+cmd_evaluate() {
+  local mode="${1:-run-all}"
+  shift || true
+
+  local eval_script="${REPO_ROOT}/scripts/run_v2_evaluation.py"
+  local spec_validator="${REPO_ROOT}/scripts/validate_v2_evaluation_specs.py"
+  local evidence_scripts=(
+    "produce_v2_bootstrap_evidence.py"
+    "produce_v2_context_isolation_evidence.py"
+    "produce_v2_model_backend_failure_evidence.py"
+    "produce_v2_single_source_of_truth_evidence.py"
+    "produce_v2_snapshot_restore_rollback_evidence.py"
+  )
+
+  # Mode: validate-specs — validate all v2 evaluation specs
+  if [[ "${mode}" == "validate-specs" ]]; then
+    printf 'validating v2 evaluation specs...
+'
+    python3 "${spec_validator}" --repo-root "${REPO_ROOT}" "$@"
+    printf 'v2 evaluation spec validation complete
+'
+    return $?
+  fi
+
+  # Mode: <evidence-name>-evidence — run a single evidence producer
+  if [[ "${mode}" =~ -evidence$ ]]; then
+    local base_name="${mode%-evidence}"
+    for escript in "${evidence_scripts[@]}"; do
+      local candidate="${escript%-evidence.py}"
+      if [[ "${candidate}" == "${base_name}" ]]; then
+        printf 'running evidence producer: %s
+' "${escript}"
+        python3 "${REPO_ROOT}/scripts/${escript}" "$@"
+        return $?
+      fi
+    done
+    die "unknown evidence mode: ${mode}. Available: $(printf '%s ' "${evidence_scripts[@]}")"
+  fi
+
+  # Mode: run-all — run specs validation + all evidence producers
+  if [[ "${mode}" == "run-all" ]]; then
+    printf '=== v2 evaluation: validate specs ===
+'
+    python3 "${spec_validator}" --repo-root "${REPO_ROOT}" || true
+    for escript in "${evidence_scripts[@]}"; do
+      local base_name="${escript%-evidence.py}"
+      printf '\n=== v2 evaluation: %s evidence ===
+' "${base_name}"
+      python3 "${REPO_ROOT}/scripts/${escript}" "$@" || true
+    done
+    return 0
+  fi
+
+  die "Usage: agent evaluate <validate-specs|<name>-evidence|run-all> [args...]"
+}
+
+
 cmd_cleanup() {
   local force="${AGENTIC_CLEANUP_FORCE:-0}"
   local backup_mode="ask"
@@ -3973,7 +4109,15 @@ cmd_vm() {
       [[ -x "${AGENT_VM_CREATE_SCRIPT}" ]] || die "VM create script missing or not executable: ${AGENT_VM_CREATE_SCRIPT}"
       "${AGENT_VM_CREATE_SCRIPT}" "$@"
       ;;
-    test)
+    evaluate)
+    shift
+    cmd_evaluate "$@"
+    ;;
+  schema)
+    shift
+    cmd_control_plane schema
+    ;;
+  test)
       [[ -x "${AGENT_VM_TEST_SCRIPT}" ]] || die "VM test script missing or not executable: ${AGENT_VM_TEST_SCRIPT}"
       "${AGENT_VM_TEST_SCRIPT}" "$@"
       ;;
@@ -5535,12 +5679,20 @@ case "$cmd" in
     shift
     cmd_ollama_preload "$@"
     ;;
+  sbom)
+    shift
+    exec "${SCRIPT_DIR}/sbom_provenance.sh" "$@"
+    ;;
   update)
     cmd_update
     ;;
   rollback)
     [[ $# -ge 3 ]] || die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id> | agent rollback ollama-link <backup_id|latest>"
     cmd_rollback "$2" "$3"
+    ;;
+  "control-plane")
+    shift
+    cmd_control_plane "$@"
     ;;
   repo-e2e)
     shift
@@ -5558,6 +5710,14 @@ case "$cmd" in
   vm)
     shift
     cmd_vm "$@"
+    ;;
+  evaluate)
+    shift
+    cmd_evaluate "$@"
+    ;;
+  schema)
+    shift
+    cmd_control_plane schema
     ;;
   test)
     [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|V|all> [--skip-d5-tests]"

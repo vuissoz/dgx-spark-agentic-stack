@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# scripts/sbom — SBOM & Provenance CLI (§17)
+#
+# This script provides a thin CLI wrapper around the Python sbom_provenance module.
+# It is also available directly via: PYTHONPATH=src:$PYTHONPATH python3 -m agentic.control.sbom_provenance
+#
+# Usage:
+#   scripts/sbom scan [--output-dir <dir>]
+#   scripts/sbom validate <sbom_json> --allowlist <file>
+#   scripts/sbom --help
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+export PYTHONPATH="${REPO_ROOT}/src:${PYTHONPATH:-}"
+
+exec python3 -m agentic.control.sbom_provenance "$@"

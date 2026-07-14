@@ -1,1 +1,5 @@
 .runtime/
+
+# SecretStore and runtime secrets (PLAN.md §10)
+secrets/store.jsonl
+secrets/audit.log

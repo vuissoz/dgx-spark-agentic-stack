@@ -73,6 +73,8 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/github.token:/run/secrets/github.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/huggingface.token:/run/secrets/huggingface.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/claude.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/claude:/state/home/.ssh:ro
     healthcheck:
@@ -159,6 +161,8 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/github.token:/run/secrets/github.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/huggingface.token:/run/secrets/huggingface.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/codex.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/codex:/state/home/.ssh:ro
     healthcheck:
@@ -246,6 +250,8 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/github.token:/run/secrets/github.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/huggingface.token:/run/secrets/huggingface.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/opencode.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/opencode:/state/home/.ssh:ro
     healthcheck:
@@ -333,6 +339,8 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/github.token:/run/secrets/github.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/huggingface.token:/run/secrets/huggingface.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/kilocode.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/kilocode:/state/home/.ssh:ro
     healthcheck:
@@ -419,6 +427,8 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/github.token:/run/secrets/github.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/huggingface.token:/run/secrets/huggingface.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/vibestral.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/vibestral:/state/home/.ssh:ro
     healthcheck:
@@ -511,6 +521,8 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-ro:/shared-ro:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/shared-rw:/shared-rw
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/gate_mcp.token:/run/secrets/gate_mcp.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/github.token:/run/secrets/github.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/huggingface.token:/run/secrets/huggingface.token:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/hermes.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/hermes:/state/home/.ssh:ro
     healthcheck:
