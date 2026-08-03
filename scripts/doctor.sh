@@ -96,6 +96,76 @@ Environment:
 USAGE
 }
 
+# These checks are called from the main validation flow below.  Keep their
+# definitions above that flow: Bash executes this script sequentially, so
+# definitions placed after the final `exit` are never available to a call.
+check_memory_footprint() {
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then
+    return 0
+  fi
+
+  local total_mem_kb
+  total_mem_kb=$(awk '/MemTotal/ { print $2 }' /proc/meminfo)
+  if [[ -z "${total_mem_kb:-}" ]]; then
+    warn "cannot determine system memory (check_memory_footprint)"
+    return 0
+  fi
+
+  local used_mem_kb=0
+  local cid mem
+  while IFS= read -r cid; do
+    mem=$(docker inspect --format='{{.HostConfig.Memory}}' "${cid}" 2>/dev/null || echo "0")
+    if [[ -n "${mem}" && "${mem}" != "0" ]]; then
+      used_mem_kb=$((used_mem_kb + mem / 1024))
+    fi
+  done < <(docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}')
+
+  local total_limit_mb=61440
+  local current_limit_mb=$((used_mem_kb / 1024))
+  if (( current_limit_mb > total_limit_mb )); then
+    doctor_fail "rootless-dev memory footprint exceeds 60GB limit (${current_limit_mb}MB configured)"
+  else
+    ok "memory footprint is within the rootless-dev 60GB cap (${current_limit_mb}MB / ${total_limit_mb}MB configured)"
+  fi
+}
+
+check_openhands_process_sandbox() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+
+  local cid volume_mounts
+  cid="$(service_container_id openhands)"
+  [[ -n "${cid}" ]] || return 0
+  volume_mounts="$(docker inspect --format='{{range .Mounts}}{{.Type}} {{.Source}} -> {{.Destination}}; {{end}}' "${cid}" 2>/dev/null)"
+
+  if grep -q "docker.sock" <<<"${volume_mounts}"; then
+    doctor_fail "openhands should not mount docker.sock in rootless-dev (use process sandbox)"
+  else
+    ok "openhands process sandbox has no docker.sock mount"
+  fi
+}
+
+check_harness_memory_caps() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+
+  local total_cap_mb=0 service_count=0 cid mem_limit_bytes mem_mb
+  while IFS= read -r cid; do
+    mem_limit_bytes="$(docker inspect --format='{{.HostConfig.Memory}}' "${cid}" 2>/dev/null || echo "0")"
+    [[ "${mem_limit_bytes}" =~ ^[0-9]+$ ]] || continue
+    mem_mb=$((mem_limit_bytes / 1024 / 1024))
+    if (( mem_mb > 0 )); then
+      total_cap_mb=$((total_cap_mb + mem_mb))
+      service_count=$((service_count + 1))
+    fi
+  done < <(docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}')
+
+  local allowed_cap_mb=6144
+  if (( total_cap_mb > allowed_cap_mb )); then
+    warn "harness memory caps total ${total_cap_mb}MB across ${service_count} running services (reference ${allowed_cap_mb}MB); reduce enabled services or limits"
+  else
+    ok "harness memory caps are within the rootless-dev reference (${total_cap_mb}MB / ${allowed_cap_mb}MB across ${service_count} services)"
+  fi
+}
+
 critical_ports=()
 if [[ -n "${AGENTIC_DOCTOR_CRITICAL_PORTS:-}" ]]; then
   read -r -a critical_ports <<<"${AGENTIC_DOCTOR_CRITICAL_PORTS//,/ }"
@@ -3202,99 +3272,3 @@ else
 fi
 
 exit "$status"
-
-# ── Resource Footprint Checks (rootless-dev / 60GB constraint) ─────────────
-
-check_memory_footprint() {
-  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then
-    return 0
-  fi
-
-  local total_mem_kb
-  total_mem_kb=$(awk '/MemTotal/ { print $2 }' /proc/meminfo)
-  if [[ -z "${total_mem_mem_kb:-}" ]]; then
-    warn "cannot determine system memory (check_memory_footprint)"
-    return 0
-  fi
-
-  local used_mem_kb=0
-  
-  # Ollama memory estimate (from cgroup or known env)
-  local ollama_mem=$(docker inspect --format='{{.HostConfig.Memory}}' ollama 2>/dev/null || echo "0")
-  
-  # Sum containers in agentic project
-  for cid in $(docker ps --filter "name=agentic" --format '{{.ID}}'); do
-    local mem=$(docker inspect --format='{{.HostConfig.Memory}}' "${cid}" 2>/dev/null)
-    if [[ -n "${mem}" && "${mem}" != "0" ]]; then
-      used_mem_kb=$((used_mem_kb + mem / 1024))
-    fi
-  done
-
-  local total_limit_mb=61440 # 60 GB in MB
-  local current_limit_mb=$((used_mem_kb / 1024))
-  
-  if (( current_limit_mb > total_limit_mb )); then
-    doctor_fail "rootless-dev memory footprint exceeds 60GB limit (${current_limit_mb}MB used)"
-  else
-    echo "CHECK: memory_footprint OK (${current_limit_mb}MB / ${total_limit_mb}MB limit in rootless-dev mode)"
-  fi
-}
-
-
-check_openhands_process_sandbox() {
-  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then return 0; fi
-  
-  # Verify that the OpenHands container is running with process-sandbox enabled
-  # rather than trying to mount docker.sock or use full Docker-in-Docker.
-  local cid=$(service_container_id openhands)
-  [[ -n "${cid}" ]] || return 0
-
-  local volume_mounts=$(docker inspect --format='{{range .Mounts}}{{.Type}} {{.Source}} -> {{.Destination}}; {{end}}' "${cid}" 2>/dev/null)
-  
-  if echo "${volume_mounts}" | grep -q "docker.sock"; then
-    doctor_fail "openhands should not mount docker.sock in rootless-dev (use process sandbox)"
-  else
-    echo "CHECK: openhands_process_sandbox OK (no docker.sock, relying on process isolation)"
-  fi
-}
-
-
-# ── Harness Memory Cap Enforcement (§11, rootless-dev 60GB) ────────────────
-
-check_harness_memory_caps() {
-  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then return 0; fi
-
-  local total_cap_mb=0
-  local service_count=0
-  
-  for cid in $(docker ps --filter "name=agentic-" --format '{{.ID}}'); do
-    local label_name
-    label_name=$(docker inspect --format='{{index .Config.Labels "com.docker.compose.service"}}' "${cid}" 2>/dev/null || true)
-    
-    if [[ -n "${label_name}" ]]; then
-      local mem_limit_kb
-      mem_limit_kb=$(docker inspect --format='{{.HostConfig.Memory}}' "${cid}" 2>/dev/null || echo "0")
-      
-      # Skip non-zero uncapable services (like ollama which handles its own limits)
-      if [[ "${label_name}" == *"ollama"* && "${mem_limit_kb}" -eq 0 ]]; then
-        continue
-      fi
-      
-      local mem_mb=$((mem_limit_kb / 1024))
-      if (( mem_mb > 0 )); then
-        total_cap_mb=$((total_cap_mb + mem_mb))
-        service_count=$((service_count + 1))
-      fi
-    fi
-  done
-
-  # rootless-dev default stack budget (excluding ollama) is ~6GB
-  local allowed_cap_mb=6144
-  
-  if (( total_cap_mb > allowed_cap_mb )); then
-    warn "harness_memory_caps: ${service_count} services using ${total_cap_mb}MB caps (limit ${allowed_cap_mb}MB). Consider reducing AGENTIC_LIMIT_DEFAULT_MEM"
-  else
-    echo "CHECK: harness_memory_caps OK (${total_cap_mb}MB / ${allowed_cap_mb}MB limit across ${service_count} agents)"
-  fi
-}
-
