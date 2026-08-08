@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/walkingskeleton.sh — M3 Walking Skeleton Verification
 # Tests the 5 mandatory journeys from PLAN.md §15.4.5 in rootless-dev mode
-# Constraints: 60GB total footprint, protect local ollama
+# Constraints: configurable memory footprint (default 300GB), protect local ollama
 
 set -euo pipefail
 
@@ -21,7 +21,9 @@ check_memory_ok() {
   avail_kb=$(awk '/MemAvailable/ { print $2 }' /proc/meminfo)
   [[ -n "${avail_kb}" ]] || { warn "Cannot read memory"; return 1; }
   
-  # 60GB = 61440MB, leave 8GB headroom → need at least 16384KB free for stack ops
+  local memory_limit_mb="${AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB:-307200}"
+  local memory_limit_kb=$((memory_limit_mb * 1024))
+  # Default 300GB = 307200MB, leave 8GB headroom → need at least 16384KB free for stack ops
   if (( avail_kb < 16384 )); then
     die "Memory too low: ${avail_kb}KB available (need ≥16384 for walking skeleton)"
   fi
@@ -201,9 +203,10 @@ main() {
   
   check_memory_ok || die "Memory check failed — aborting to protect ollama"
   
+  local limit_gb=$((memory_limit_mb / 1024))
   echo "========================================="
   echo "  Walking Skeleton Verification (M3/M3U)"
-  echo "  Constraint: 60GB total footprint"
+  echo "  Constraint: ${limit_gb}GB total footprint"
   echo "========================================="
   
   journey_1_bootstrap_doctor || { FAIL=$((FAIL + 1)); } || true

@@ -120,12 +120,13 @@ check_memory_footprint() {
     fi
   done < <(docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}')
 
-  local total_limit_mb=61440
+  local total_limit_mb="${AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB:-307200}"
   local current_limit_mb=$((used_mem_kb / 1024))
+  local limit_gb=$((total_limit_mb / 1024))
   if (( current_limit_mb > total_limit_mb )); then
-    doctor_fail "rootless-dev memory footprint exceeds 60GB limit (${current_limit_mb}MB configured)"
+    doctor_fail "rootless-dev memory footprint exceeds ${limit_gb}GB limit (${current_limit_mb}MB configured)"
   else
-    ok "memory footprint is within the rootless-dev 60GB cap (${current_limit_mb}MB / ${total_limit_mb}MB configured)"
+    ok "memory footprint is within the rootless-dev ${limit_gb}GB cap (${current_limit_mb}MB / ${total_limit_mb}MB configured)"
   fi
 }
 

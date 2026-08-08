@@ -5378,7 +5378,7 @@ Usage:
 
 Description:
   Validate resource admission before starting a harness.
-  Checks memory footprint (60GB rootless-dev limit), quota, and cycle safety.
+  Checks memory footprint (configurable rootless-dev limit, default 300GB), quota, and cycle safety.
   Returns non-zero if admission is denied.
 USAGE
     return 0
@@ -5393,15 +5393,16 @@ USAGE
     fi
   done
 
-  # Check total memory usage against 60GB constraint
+  # Check total memory usage against rootless-dev memory limit
   local avail_mem_kb
   avail_mem_kb=$(awk '/MemAvailable/ { print $2 }' /proc/meminfo)
   [[ -n "${avail_mem_kb}" ]] || die "Cannot determine system memory"
   
   local stack_budget_mb=8192
+  local memory_limit_mb="${AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB:-307200}"
   
-  if (( avail_mem_kb < (61440 - stack_budget_mb) * 1024 )); then
-    die "ADMISSION DENIED: Insufficient memory. Available: $((avail_mem_kb / 1024))MB, Stack budget: ${stack_budget_mb}MB"
+  if (( avail_mem_kb < (memory_limit_mb - stack_budget_mb) * 1024 )); then
+    die "ADMISSION DENIED: Insufficient memory. Available: $((avail_mem_kb / 1024))MB, Stack budget: ${stack_budget_mb}MB, Limit: ${memory_limit_mb}MB"
   fi
 
   # Check harness-specific limits
@@ -5885,7 +5886,7 @@ case "$cmd" in
     ;;
 esac
 
-# ── Rootless-Dev Pre-flight Admission Gate (60GB constraint) ────────────────
+# ── Rootless-Dev Pre-flight Admission Gate (configurable limit, default 300GB) ────────────────
 pre_flight_check() {
   if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then return 0; fi
 
