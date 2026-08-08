@@ -158,6 +158,53 @@ services:
     networks:
       - agentic
 
+  model-broker:
+    image: agentic/model-broker:local
+    build:
+      context: ..
+      dockerfile: deployments/model_broker/Dockerfile
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:11434:11434
+    cpus: ${AGENTIC_LIMIT_MODEL_BROKER_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_MODEL_BROKER_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      ollama-gate:
+        condition: service_healthy
+    environment:
+      MODEL_BROKER_HOST: 0.0.0.0
+      MODEL_BROKER_PORT: 11434
+      MODEL_BROKER_STATE_DIR: /srv/agentic/model_broker/state
+      MODEL_BROKER_MAX_TOKENS_DAY: ${AGENTIC_MODEL_BROKER_MAX_TOKENS_DAY:-1000000}
+      MODEL_BROKER_MAX_REQUESTS_HOUR: ${AGENTIC_MODEL_BROKER_MAX_REQUESTS_HOUR:-1000}
+      MODEL_BROKER_MAX_GPU_MINUTES: ${AGENTIC_MODEL_BROKER_MAX_GPU_MINUTES:-120.0}
+      OLLAMA_GATE_URL: http://ollama-gate:11435
+      TRTLLM_URL: http://trtllm:11436
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/model_broker/state:/srv/agentic/model_broker/state
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:11434/health", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+
   openclaw:
     image: agentic/optional-modules:local
     build:

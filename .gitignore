@@ -5,3 +5,5 @@ secrets/store.jsonl
 secrets/audit.log
 *.pyc
 __pycache__/
+__pycache__/
+*.pyc

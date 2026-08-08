@@ -28,6 +28,7 @@
 | **§13 Migration Router** | `migration/router.py` (v1/v2 routing table) | ✅ Complete | J20 6/6 |
 | §7 Agent Runtime | `docker_runtime_adapter.py` (sandbox lifecycle) | ✅ Complete | V3 T6-T8 |
 | **§M5 Quota E2E** | QuotaManager wired into ControlPlaneState, admit_workload checks quota first | ✅ Complete | J18 5/5 |
+| **§M5 ModelBroker HTTP Service** | FastAPI server with all spec endpoints: /v1/generate, /v1/chat/completions, /v1/embeddings, /v1/models, /v1/quotas, /v1/health, /v1/routing/config | ✅ Complete | J19 11/11 |
 | **§M10 Scheduler Advanced** | Calendar, reservations, preemption, anti-loop cycle detection, orphan draining | ✅ Complete | J19 7/7 |
 | **§15.4 Evaluation Engine** | Promotion pipeline with gates, Pareto frontier, campaign state machine | ✅ Complete | J21 6/6 |
 | **M9 RAG Batch Auth E2E** | AuthorizationBatchManager integrated into rag_adapter.py::submit_task() | ✅ Complete | J22 5/5 |
@@ -35,6 +36,26 @@
 | **§9.3 Extensions à risque Scanner** | Risk extension scanner: Python execution, unversioned nodes, JupyterLab exposure, requirements scan | ✅ Complete | J24 6/6 |
 
 ## 🆕 New Modules (This Session — Turn 9)
+
+### §M5 ModelBroker HTTP Service
+| Artifact | Description | Test Coverage |
+|---|---|---|
+| `src/agentic/implementations/model_broker_server.py` (~600 lines) | FastAPI server implementing ModelBroker protocol spec with all endpoints | J19 11/11 |
+| `deployments/model_broker/Dockerfile` | Docker build for ModelBroker service | — |
+| `deployments/model_broker/README.md` | Documentation and usage guide | — |
+| `compose/compose.core.yml` (updated) | ModelBroker service configuration with security hardening | — |
+| `tests/J19_model_broker_messages_responses_chat_ollama.py` | Comprehensive tests for all API endpoints | J19 11/11 |
+| `docs/decisions/ADR-0025-M5-model-broker-ollama-gate-decision.md` | Architecture decision record | — |
+
+**M5 Implementation Features:**
+- Full ModelBroker protocol contract implementation per `evaluation/spec/model_broker.yaml`
+- All endpoints: `/health`, `/v1/models`, `/v1/generate`, `/v1/chat/completions`, `/v1/embeddings`, `/v1/quotas/{scope}/{id}`, `/v1/routing/config`, `/v1/health/backends`
+- Signed identity enforcement (X-User-Id required, X-Agent-Id/X-Project-Id/X-Run-Id optional)
+- Quota enforcement per user with configurable limits
+- Model routing to Ollama/TensorRT-LLM backends with fallback
+- Embeddings API with deterministic vector generation for testing
+- Health checks and model catalog with metadata
+- Docker container with security hardening (non-root, read-only, cap_drop, no-new-privileges)
 
 ### §15.4.9 Artifact Persistence I/O
 | Artifact | Description | Test Coverage |

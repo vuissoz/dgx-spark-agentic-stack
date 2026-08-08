@@ -1,0 +1,21 @@
+# src/requirements.txt — Core dependencies for agentic platform
+# M5 ModelBroker HTTP server dependencies
+
+# HTTP Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Data validation
+pydantic>=2.8.0
+
+# HTTP client for backend communication
+httpx>=0.27.0
+
+# Async support (optional, for aiohttp)
+aiohttp>=3.9.0
+
+# Database (for persistence)
+psycopg2-binary>=2.9.0
+
+# YAML support for config
+pyyaml>=6.0.1
