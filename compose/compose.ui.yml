@@ -314,14 +314,13 @@ services:
       NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,localhost,127.0.0.1
       XDG_CACHE_HOME: /tmp/.cache
       HF_HOME: /tmp/.cache/huggingface
+      COMFYUI_ALLOWED_PLUGINS: ${COMFYUI_ALLOWED_PLUGINS:-ComfyUI-Manager}
     labels:
       - agentic.gpu-profile=lowprio
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/comfyui:/comfyui
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/comfyui.password:/run/secrets/git-forge.password:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/comfyui:/comfyui/user/.ssh:ro
-    environment:
-      COMFYUI_ALLOWED_PLUGINS: ${COMFYUI_ALLOWED_PLUGINS:-ComfyUI-Manager}
     healthcheck:
       test:
         - CMD-SHELL

@@ -1446,11 +1446,9 @@ run_compose_on_targets() {
     compose_file="$(stack_to_compose_file "$target")"
     [[ -f "$compose_file" ]] || die "Compose file not found for target '$target': $compose_file"
     compose_args+=("-f" "$compose_file")
+    # Add profile matching target name for services with profiles
+    profile_args+=("--profile" "$target")
   done
-
-  if targets_include optional "${selected_targets[@]}"; then
-    profile_args+=("--profile" "optional")
-  fi
 
   docker_compose_partial "${profile_args[@]}" "${compose_args[@]}" "$action" "$@"
 }
