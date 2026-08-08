@@ -235,7 +235,7 @@ install_goose_cli() {
   fi
 
   install -d -m 0755 "${npm_prefix}/bin"
-  if tar -xzf "${archive}" -C "${npm_prefix}/bin" --strip-components=1 goose 2>/dev/null; then
+  if tar -xzf "${archive}" -C "${npm_prefix}/bin" --strip-components=1 ./goose 2>/dev/null; then
     chmod +x "${npm_prefix}/bin/goose"
     track_cli_after_install "${cli}" "${npm_prefix}/bin/${cli}" || fail_or_warn "Goose install succeeded but executable was not found"
   else
@@ -304,7 +304,7 @@ install_npm_cli codex "${codex_spec}"
 install_npm_cli claude "${claude_spec}"
 install_npm_cli opencode "${opencode_spec}"
 install_npm_cli kilo "${kilocode_spec}"
-install_goose_cli "${goose_github_url}"
+install_goose_cli "${goose_github_url}" || true
 if ensure_node_version_at_least "20.6.0"; then
   install_npm_cli pi "${pi_spec}"
 else
