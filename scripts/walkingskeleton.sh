@@ -65,7 +65,7 @@ journey_1_bootstrap_doctor() {
   # Step 1.2: ollama healthcheck passes
   local ollama_cid
   ollama_cid=$(service_container_id "ollama")
-  if ! docker exec "${ollama_cid}" sh -lc 'curl -sf http://localhost:11434/api/version >/dev/null'; then
+  if ! docker exec "${ollama_cid}" sh -lc 'exec 3<>/dev/tcp/127.0.0.1/11434 && printf "GET /api/version HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && grep -q "200 OK" <&3'; then
     die "Journey 1 FAIL: Ollama healthcheck failed"
   fi
   
