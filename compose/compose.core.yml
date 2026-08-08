@@ -165,7 +165,7 @@ services:
       dockerfile: deployments/model_broker/Dockerfile
     restart: unless-stopped
     ports:
-      - 127.0.0.1:11434:11434
+      - 127.0.0.1:11437:11434
     cpus: ${AGENTIC_LIMIT_MODEL_BROKER_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_MODEL_BROKER_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
@@ -203,7 +203,10 @@ services:
       retries: 5
       start_period: 15s
     networks:
-      - agentic
+      agentic:
+        priority: 100
+      agentic-egress:
+        priority: 1000
 
   openclaw:
     image: agentic/optional-modules:local

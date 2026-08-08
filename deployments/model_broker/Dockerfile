@@ -13,7 +13,7 @@ RUN apt-get update && \
 # Copy requirements and install Python dependencies
 WORKDIR /build
 COPY src/requirements.txt .
-RUN pip install --user -r requirements.txt || true
+RUN pip install --user -r requirements.txt
 
 # --- Runtime stage ---
 FROM python:3.11-slim
@@ -31,6 +31,7 @@ RUN apt-get update && \
 # Install Python packages from builder
 COPY --from=builder /root/.local /home/agent/.local
 ENV PATH=/home/agent/.local/bin:$PATH
+ENV PYTHONPATH=/home/agent/.local/lib/python3.11/site-packages:/app
 
 # Create directories with proper permissions
 RUN mkdir -p /srv/agentic/model_broker/state && \
@@ -38,12 +39,7 @@ RUN mkdir -p /srv/agentic/model_broker/state && \
 
 # Copy application code
 WORKDIR /app
-COPY src/agentic/implementations/model_broker.py .
-COPY src/agentic/implementations/model_broker_client.py .
-COPY src/agentic/implementations/model_broker_server.py .
-COPY src/agentic/control/api.py ./control_api.py
-COPY src/agentic/control/scheduler.py ./control_scheduler.py
-COPY src/agentic/models/identity.py ./models_identity.py
+COPY src/agentic/ ./agentic/
 
 # Ensure proper permissions
 RUN chown -R agent:agent /app
@@ -67,4 +63,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=5 \
         sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:11434/health", timeout=3).status == 200 else 1)' || exit 1
 
 # Entry point
-CMD ["python3", "model_broker_server.py"]
+CMD ["python3", "agentic/implementations/model_broker_server.py"]
