@@ -13,6 +13,7 @@ ARG CLAUDE_CODE_NPM_SPEC=@anthropic-ai/claude-code@latest
 ARG OPENCODE_NPM_SPEC=opencode-ai@latest
 ARG KILOCODE_CLI_NPM_SPEC=@kilocode/cli@7.4.5
 ARG PI_CODING_AGENT_NPM_SPEC=@mariozechner/pi-coding-agent@latest
+ARG GOOSE_GITHUB_URL=https://github.com/aaif-goose/goose
 ARG OPENHANDS_INSTALL_SCRIPT=https://install.openhands.dev/install.sh
 ARG OPENCLAW_INSTALL_CLI_SCRIPT=https://openclaw.ai/install-cli.sh
 ARG OPENCLAW_INSTALL_VERSION=latest
