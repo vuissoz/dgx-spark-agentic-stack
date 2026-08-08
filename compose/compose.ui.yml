@@ -434,8 +434,6 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    ports:
-      - 127.0.0.1:${JUPYTERLAB_HOST_PORT:-8888}:8888
     environment:
       JUPYTER_TOKEN: ${JUPYTERLAB_TOKEN:-change-me}
       JUPYTER_ENABLE_LAB: "True"
