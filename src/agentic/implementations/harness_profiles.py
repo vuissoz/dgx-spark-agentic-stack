@@ -21,9 +21,9 @@ class HarnessProfile:
     """Integration profile for a harness v1 → v2 migration.
 
     Contains: upstream_version, digest, architecture (ARM64), model_protocol,
-    persistent_files, surfaces, permissions, sub_agents, and tests.
+    persistent_files, surfaces, permissions, sub_agents, tests, and repo_e2e support.
     
-    Conforms to PLAN.md §8 specification.
+    Conforms to PLAN.md §8 specification and §M6 (Agents de code).
     """
     harness_name: str
     model_protocol: str                # openai_responses, anthropic_messages, chat_completions, etc.
@@ -40,6 +40,7 @@ class HarnessProfile:
     })
     tests: list[str] = field(default_factory=list)  # Test file patterns
     removal_condition: str = ""     # When v1 route can be retired
+    supports_repo_e2e: bool = True    # §M6: repo-e2e integration support
 
 
 # ── All Harness Profiles (§8 + §2.2 table) ─────────────────────────
@@ -57,7 +58,9 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             surfaces=["cli", "ide", "web"],
             permissions={"cpus": 2.0, "memory_mb": 4096, "gpu_count": 0},
             sub_agents={"mode": "none", "max_depth": 1, "max_concurrency": 1},
-            tests=["tests/L7*", "tests/F3*"],
+            tests=["tests/L7*", "tests/F3*", "tests/J27*"],
+            supports_repo_e2e=True,
+            removal_condition="M6 validation complete",
         ),
         "claude": HarnessProfile(
             harness_name="claude",
@@ -69,7 +72,9 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             surfaces=["cli", "web"],
             permissions={"cpus": 2.0, "memory_mb": 4096, "gpu_count": 0},
             sub_agents={"mode": "native", "max_depth": 3, "max_concurrency": 5},
-            tests=["tests/L7*", "tests/K*"],
+            tests=["tests/L7*", "tests/K*", "tests/J27*"],
+            supports_repo_e2e=True,
+            removal_condition="M6 validation complete",
         ),
         "opencode": HarnessProfile(
             harness_name="opencode",
@@ -81,7 +86,9 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             surfaces=["cli", "web"],
             permissions={"cpus": 1.0, "memory_mb": 2048, "gpu_count": 0},
             sub_agents={"mode": "none", "max_depth": 1, "max_concurrency": 1},
-            tests=["tests/L7*"],
+            tests=["tests/L7*", "tests/J27*"],
+            supports_repo_e2e=True,
+            removal_condition="M6 validation complete",
         ),
         "kilocode": HarnessProfile(
             harness_name="kilocode",
@@ -93,7 +100,9 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             surfaces=["cli", "ide", "web_console"],
             permissions={"cpus": 1.5, "memory_mb": 2048, "gpu_count": 0},
             sub_agents={"mode": "native", "max_depth": 2, "max_concurrency": 3},
-            tests=["tests/F27*", "tests/L7*"],
+            tests=["tests/F27*", "tests/L7*", "tests/J27*"],
+            supports_repo_e2e=True,
+            removal_condition="M6 validation complete",
         ),
         "vibestral": HarnessProfile(
             harness_name="vibestral",
@@ -105,7 +114,9 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             surfaces=["cli", "vscode", "acp"],
             permissions={"cpus": 1.0, "memory_mb": 1024, "gpu_count": 0},
             sub_agents={"mode": "none", "max_depth": 1, "max_concurrency": 1},
-            tests=["tests/L5*", "tests/F2*"],
+            tests=["tests/L5*", "tests/F2*", "tests/J27*"],
+            supports_repo_e2e=True,
+            removal_condition="M6 validation complete",
         ),
         "hermes": HarnessProfile(
             harness_name="hermes",
@@ -129,7 +140,9 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             surfaces=["cli", "desktop"],
             permissions={"cpus": 1.0, "memory_mb": 512, "gpu_count": 0},
             sub_agents={"mode": "none", "max_depth": 1, "max_concurrency": 1},
-            tests=["tests/K4*", "tests/L7*"],
+            tests=["tests/K4*", "tests/L7*", "tests/J27*"],
+            supports_repo_e2e=True,
+            removal_condition="M6 validation complete",
         ),
         "goose": HarnessProfile(
             harness_name="goose",
@@ -141,7 +154,9 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             surfaces=["cli", "acp"],
             permissions={"cpus": 1.0, "memory_mb": 2048, "gpu_count": 0},
             sub_agents={"mode": "native", "max_depth": 2, "max_concurrency": 5},
-            tests=["tests/K5*", "tests/L7*"],
+            tests=["tests/K5*", "tests/L7*", "tests/J27*"],
+            supports_repo_e2e=True,
+            removal_condition="M6 validation complete",
         ),
         "openclaw": HarnessProfile(
             harness_name="openclaw",
