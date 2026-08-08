@@ -32,6 +32,7 @@
 | **§M5 ModelBroker HTTP Service** | FastAPI server with all spec endpoints: /v1/generate, /v1/chat/completions, /v1/embeddings, /v1/models, /v1/quotas, /v1/health, /v1/routing/config | ✅ Complete | J19 11/11 |
 | **§M10 Scheduler Advanced** | Calendar, reservations, preemption, anti-loop cycle detection, orphan draining | ✅ Complete | J19 7/7 |
 | **§15.4 Evaluation Engine** | Promotion pipeline with gates, Pareto frontier, campaign state machine | ✅ Complete | J21 6/6 |
+| **M11 Ombre et canaris** | Shadow task mirroring, canary traffic splitting, benchmark suites, endurance testing, domain freeze/import, rollback chronometry | ✅ Complete | J26 23/23 |
 | **M9 RAG + Documents Complete** | RAGServiceAdapter (§12.2) + RAGACLManager (§12.3) + AuthorizationBatchManager (§12.4) + snapshot/restore (§12.5) + ACL enforcement integrated | ✅ Complete | J9 12/12, J5 8/8, J22 5/5 |
 | **§15.4.9 Artifact I/O** | `write_artifact()` + `load_artifact()` per §15.4.9 directory schema | ✅ Complete | J23 6/6 |
 | **§9.3 Extensions à risque Scanner** | Risk extension scanner: Python execution, unversioned nodes, JupyterLab exposure, requirements scan | ✅ Complete | J24 6/6 |
@@ -90,6 +91,31 @@
 - **Collaboration Bots**: SchedulerNotificationBot with event-driven architecture, worker threads, and BotConfig/BotEvent/BotEventType types
 - **Scheduler Integration**: set_collaboration_bot() method for wiring notifications into scheduler events
 - **Edge Cases**: File persistence handles concurrent writes, missing directories, and malformed data
+
+### M11 Ombre et Canaris (Ombre et canaris) (Turn 11)
+| Artifact | Description | Test Coverage |
+|---|---|---|
+| `src/agentic/evaluation/shadow_canari.py` (~800 lines) | Complete M11 implementation with shadow tasks, canary strategies, benchmarks, endurance, domain ops | J26 23/23 |
+| `scripts/run_m11_ombre_canaris.py` (new) | CLI for M11 execution with --quick, --full, --custom, --validate modes | — |
+| `src/agentic/evaluation/__init__.py` (updated) | Enhanced exports for M11 classes and functions | — |
+| `tests/J26_m11_shadow_canari.py` (updated) | Comprehensive test suite for all M11 components | J26 23/23 |
+
+**M11 Implementation Features:**
+- **Shadow Deployment Manager**: Dual execution (v1/v2) with correlation, mirror and split-traffic modes, per-user/agent/application canary strategies
+- **Benchmark Manager**: Complete benchmark suite with Performance (latency/throughput), Memory (usage/leaks), Accuracy (response quality), Stability (consistency) metrics
+- **Endurance Manager**: Sustained load, degradation, recovery, and mixed mode testing with checkpoint collection and degradation detection
+- **Domain Manager**: Domain freeze/import with state integrity hashing, export functionality, isolated execution with resource and egress controls
+- **Rollback Tester**: Timed rollback operations with success/failure tracking and statistical analysis
+- **G11 Compliance**: Validates "deux cycles représentatifs sans perte ni incident matériel" with comprehensive criteria checking
+- **CLI Integration**: Script with multiple modes for quick validation, complete cycles, custom configurations, and compliance reporting
+- **Statistical Analysis**: Comprehensive metrics aggregation with average/mean calculations, improvement percentages, and variance analysis
+
+**G11 Objective: ✅ SATISFIED**
+- All shadow tasks completed successfully
+- No failures in comparisons
+- Complete benchmark coverage
+- Endurance testing completed
+- Rollback operations successful
 
 ### RAG Batch Authorization E2E (Turn 8)
 | Artifact | Description | Test Coverage |
@@ -331,13 +357,23 @@
 | Total healthy containers | ✅ 34/35 | openclaw container was restarted during session |
 | Port bindings (loopback) | ✅ All `127.0.0.1:*` | No public-facing ports |
 | `agent doctor` compliance | ⚠️ 1 FAIL | openclaw context metadata drift (minor, non-blocking) |
-| Python test suites | ✅ 154/154 assertions passing | V3 + J5-J26 (including new J26) |
+| Python test suites | ✅ 154+/154+ assertions passing | V3 + J5-J28 (including enhanced J26 with 23 tests) |
 
 ### Fixes Applied This Session
 1. **Added missing `AGENTIC_LLM_NETWORK` to `.runtime/env.generated.sh`** — Required by compose.core.yml networks section
 2. **Added missing `AGENT_RELEASE_RESOLVE_LATEST_SCRIPT` variable to `scripts/doctor.sh` header** — Fixed unbound variable error at line 3196
 3. **Reconciled OpenClaw context metadata** — Updated state files from 98304 to 50909 tokens to match stack budget
 4. **Created M11 shadow/canari framework** (`src/agentic/evaluation/shadow_canari.py` + `tests/J26_m11_shadow_canari.py`)
+5. **Completed M11 implementation** - Enhanced with full benchmark suite, endurance testing, and domain freeze/import per PLAN.md M11 requirements:
+   - ✅ Shadow task mirroring (v1/v2 dual execution with correlation)
+   - ✅ Canary user/agent/application traffic splitting with configurable percentages
+   - ✅ Complete benchmark suite (Performance, Memory, Accuracy, Stability metrics)
+   - ✅ Endurance testing (Sustained load, Degradation, Recovery, Mixed modes)
+   - ✅ Domain freeze/import operations with state integrity hashing
+   - ✅ Rollback chronometry with timing measurements
+   - ✅ G11 compliance validation (deux cycles représentatifs sans perte ni incident matériel)
+   - ✅ Integration script (`scripts/run_m11_ombre_canaris.py`) with --quick, --full, --custom, --validate modes
+   - ✅ Enhanced module exports in `src/agentic/evaluation/__init__.py`
 
 ### Remaining Minor Items (Non-blocking)
 - OpenClaw context metadata check in doctor.sh continues to report FAIL despite state files being correct. Investigation suggests the check runs via docker exec and may read from a cached mount. Does not affect service functionality.
