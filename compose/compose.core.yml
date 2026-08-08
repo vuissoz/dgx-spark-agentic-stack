@@ -46,12 +46,15 @@ services:
       context: ..
       dockerfile: deployments/gate/Dockerfile
     restart: unless-stopped
+    ports:
+      - 127.0.0.1:11435:11435
     cpus: ${AGENTIC_LIMIT_OLLAMA_GATE_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_OLLAMA_GATE_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${GATE_CONTAINER_USER:-${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}}"
     read_only: true
     tmpfs:
       - /tmp
+      - /gate
     cap_drop:
       - ALL
     security_opt:
@@ -109,7 +112,6 @@ services:
       start_period: 15s
     networks:
       - agentic
-      - agentic-llm
 
   gate-mcp:
     image: agentic/gate-mcp:local

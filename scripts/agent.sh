@@ -1116,9 +1116,9 @@ capture_update_resolution_artifacts() {
   done
 
   # Generate and store SBOM/provenance snapshot (PLAN §17)
-  if [[ -f "${REPO_ROOT}/scripts/sbom_provenance.sh" ]]; then
+  if [[ -f "${AGENTIC_REPO_ROOT}/scripts/sbom_provenance.sh" ]]; then
     local _sbom_release_dir="${release_dir}"
-    bash "${REPO_ROOT}/scripts/sbom_provenance.sh" \
+    bash "${AGENTIC_REPO_ROOT}/scripts/sbom_provenance.sh" \
       --mode scan --release-dir "${_sbom_release_dir}" \
       ${COMPOSE_FILES_ARG:-} 2>/dev/null || warn "SBOM capture skipped (docker unavailable)"
   fi

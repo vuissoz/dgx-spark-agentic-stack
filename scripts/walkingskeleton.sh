@@ -9,6 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/runtime.sh"
 
+# Set script paths (normally from agent.sh)
+AGENT_RELEASE_SNAPSHOT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/snapshot.sh"
+AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollback.sh"
+
 JOY=0
 TOTAL=5
 PASS=0
@@ -65,20 +69,24 @@ journey_1_bootstrap_doctor() {
   # Step 1.2: ollama healthcheck passes
   local ollama_cid
   ollama_cid=$(service_container_id "ollama")
-  if ! docker exec "${ollama_cid}" sh -lc 'exec 3<>/dev/tcp/127.0.0.1/11434 && printf "GET /api/version HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && grep -q "200 OK" <&3'; then
-    die "Journey 1 FAIL: Ollama healthcheck failed"
+  if ! docker exec "${ollama_cid}" bash -lc 'exec 3<>/dev/tcp/127.0.0.1/11434 && printf "GET /api/version HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && grep -q "200 OK" <&3'; then
+    warn "Journey 1 FAIL: Ollama healthcheck failed"
+    return 1
   fi
   
-  # Step 1.3: ollama-gate reachable on loopback
-  local gate_port="${OLLAMA_GATE_HOST_PORT:-11435}"
-  if ! curl -sf "http://127.0.0.1:${gate_port}/api/version" >/dev/null; then
-    die "Journey 1 FAIL: ollama-gate not reachable on loopback"
+  # Step 1.3: ollama-gate container is healthy
+  local gate_cid
+  gate_cid=$(service_container_id "ollama-gate")
+  if ! docker inspect --format '{{.State.Health.Status}}' "${gate_cid}" 2>/dev/null | grep -q "healthy"; then
+    warn "Journey 1 FAIL: ollama-gate container not healthy"
+    return 1
   fi
   
   # Step 1.4: doctor green
   if ! "${AGENTIC_REPO_ROOT}/agent" doctor >/tmp/walk-skeleton-doctor.out 2>&1; then
     cat /tmp/walk-skeleton-doctor.out >&2
-    die "Journey 1 FAIL: agent doctor is not green"
+    warn "Journey 1 FAIL: agent doctor is not green"
+    return 1
   fi
   
   echo "PASS: bootstrap + startup + doctor ✓"
@@ -91,11 +99,12 @@ journey_2_codex_workflow() {
   # Step 2.1: Verify codex container exists and has workspace
   local codex_cid
   codex_cid=$(service_container_id "agentic-codex")
-  [[ -n "${codex_cid}" ]] || { die "Journey 2 FAIL: Codex container not running"; }
+  [[ -n "${codex_cid}" ]] || { warn "Journey 2 FAIL: Codex container not running"; return 1; }
   
   # Step 2.2: tmux session exists
   if ! docker exec "${codex_cid}" tmux has-session -t "codex" 2>/dev/null; then
-    die "Journey 2 FAIL: Codex tmux session missing (run: agent codex <project>)"
+    warn "Journey 2 FAIL: Codex tmux session missing (run: agent codex <project>)"
+    return 1
   fi
   
   # Step 2.3: workspace directory mounted and accessible
@@ -104,7 +113,8 @@ journey_2_codex_workflow() {
   
   # Step 2.4: Verify Codex CLI is available in container
   if ! docker exec "${codex_cid}" sh -lc 'command -v codex >/dev/null'; then
-    die "Journey 2 FAIL: codex CLI not found in container (check agent-cli-base image)"
+    warn "Journey 2 FAIL: codex CLI not found in container (check agent-cli-base image)"
+    return 1
   fi
   
   # Step 2.5: Verify git is configured for pushing (rootless-dev skips real push, checks config)
@@ -120,11 +130,11 @@ journey_3_isolation() {
   log_step "Journey 3: personal/project isolation + negative leak test"
   
   # Step 3.1: Verify separate workspace roots per agent
-  local codex_ws="/srv/agentic/codex/workspaces"
-  local claude_ws="/srv/agentic/claude/workspaces"
+  local codex_ws="${AGENTIC_CODEX_WORKSPACES_DIR:-/srv/agentic/codex/workspaces}"
+  local claude_ws="${AGENTIC_CLAUDE_WORKSPACES_DIR:-/srv/agentic/claude/workspaces}"
   
-  [[ -d "${codex_ws}" ]] || die "Journey 3 FAIL: Codex workspace root missing"
-  [[ -d "${claude_ws}" ]] || die "Journey 3 FAIL: Claude workspace root missing"
+  [[ -d "${codex_ws}" ]] || { warn "Journey 3 FAIL: Codex workspace root missing"; return 1; }
+  [[ -d "${claude_ws}" ]] || { warn "Journey 3 FAIL: Claude workspace root missing"; return 1; }
   
   # Step 3.2: Workspace directories are not shared (negative test)
   local codex_files claude_files
@@ -155,7 +165,7 @@ journey_4_backend_fallback() {
   
   # Step 4.1: ollama-gate state directory exists
   local gate_state="${AGENTIC_ROOT}/gate/state"
-  [[ -d "${gate_state}" ]] || die "Journey 4 FAIL: gate state directory missing"
+  [[ -d "${gate_state}" ]] || { warn "Journey 4 FAIL: gate state directory missing"; return 1; }
   
   # Step 4.2: Verify model routes file exists and is valid YAML
   local routes_file="${gate_state}/model_routes.yml"
@@ -184,8 +194,8 @@ journey_5_snapshot_rollback() {
   log_step "Journey 5: snapshot + mutation + restore + rollback"
   
   # Step 5.1: Verify release infrastructure exists
-  [[ -x "${AGENT_RELEASE_SNAPSHOT_SCRIPT}" ]] || die "Journey 5 FAIL: snapshot.sh missing"
-  [[ -x "${AGENT_RELEASE_ROLLBACK_SCRIPT}" ]] || die "Journey 5 FAIL: rollback.sh missing"
+  [[ -x "${AGENT_RELEASE_SNAPSHOT_SCRIPT}" ]] || { warn "Journey 5 FAIL: snapshot.sh missing"; return 1; }
+  [[ -x "${AGENT_RELEASE_ROLLBACK_SCRIPT}" ]] || { warn "Journey 5 FAIL: rollback.sh missing"; return 1; }
   
   # Step 5.2: Create a test snapshot (dry-run mode)
   local ts
@@ -193,13 +203,15 @@ journey_5_snapshot_rollback() {
   local test_release="${AGENTIC_ROOT}/deployments/releases/test-walkthrough-${ts}"
   
   if ! mkdir -p "${test_release}" 2>/dev/null; then
-    die "Journey 5 FAIL: cannot create test release directory"
+    warn "Journey 5 FAIL: cannot create test release directory"
+    return 1
   fi
   
   # Step 5.3: Verify snapshot can generate artifacts
   if ! "${AGENT_RELEASE_SNAPSHOT_SCRIPT}" --reason "walking-skeleton-test" >"${test_release}/snapshot.log" 2>&1; then
     cat "${test_release}/snapshot.log" >&2
-    die "Journey 5 FAIL: snapshot generation failed"
+    warn "Journey 5 FAIL: snapshot generation failed"
+    return 1
   fi
   
   # Step 5.4: Verify release integrity file exists
@@ -228,20 +240,15 @@ main() {
   echo "  Constraint: ${limit_gb}GB total footprint"
   echo "========================================="
   
-  journey_1_bootstrap_doctor || { FAIL=$((FAIL + 1)); } || true
-  [[ "${FAIL}" -eq 0 ]] && PASS=$((PASS + 1)) || true
+  journey_1_bootstrap_doctor && PASS=$((PASS + 1)) || FAIL=$((FAIL + 1))
   
-  journey_2_codex_workflow || { FAIL=$((FAIL + 1)); } || true
-  [[ "${FAIL}" -eq 1 ]] && PASS=$((PASS + 1)) || true
+  journey_2_codex_workflow && PASS=$((PASS + 1)) || FAIL=$((FAIL + 1))
   
-  journey_3_isolation || { FAIL=$((FAIL + 1)); } || true
-  [[ "${FAIL}" -eq 2 ]] && PASS=$((PASS + 1)) || true
+  journey_3_isolation && PASS=$((PASS + 1)) || FAIL=$((FAIL + 1))
   
-  journey_4_backend_fallback || { FAIL=$((FAIL + 1)); } || true
-  [[ "${FAIL}" -eq 3 ]] && PASS=$((PASS + 1)) || true
+  journey_4_backend_fallback && PASS=$((PASS + 1)) || FAIL=$((FAIL + 1))
   
-  journey_5_snapshot_rollback || { FAIL=$((FAIL + 1)); } || true
-  [[ "${FAIL}" -eq 4 ]] && PASS=$((PASS + 1)) || true
+  journey_5_snapshot_rollback && PASS=$((PASS + 1)) || FAIL=$((FAIL + 1))
   
   echo ""
   echo "========================================="
