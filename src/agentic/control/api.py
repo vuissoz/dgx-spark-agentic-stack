@@ -66,6 +66,10 @@ class ControlPlaneState:
         self._scheduler: Any = None
         self._reconciler: Any = None
         self._auth: Any = None
+        self._audit_logger: Any = None
+        self._upgrade_manager: Any = None
+        self._config_schema: Any = None
+        self._delegation_store: Any = None
         self._workers: dict[str, Any] = {}  # user_id → TaskWorker
         self._quota_manager: Any = None
         
@@ -88,14 +92,59 @@ class ControlPlaneState:
         """Lazy-initialize auth middleware (M4)."""
         if self._auth is None:
             from .persistence import PersistenceConfig, create_secret_store
-            from .auth import AuthMiddleware
+            from .auth import AuthMiddleware, DelegationStore
             
             # Try to get SecretStore from persistence config
             config = PersistenceConfig()  # Would load from env in production
             store = create_secret_store(config)
+            delegation_store = DelegationStore()
             
-            self._auth = AuthMiddleware(secret_store=store)
+            self._auth = AuthMiddleware(secret_store=store, delegation_store=delegation_store)
+            
+            # Wire audit logger if available
+            if self._audit_logger:
+                self._auth.wire_audit(self._audit_logger)
         return self._auth
+    
+    @property
+    def audit_logger(self):
+        """Lazy-initialize audit logger (M4)."""
+        if self._audit_logger is None:
+            from .audit import AuditLogger
+            import os
+            self._audit_logger = AuditLogger(
+                pg_connection_string=os.environ.get("DATABASE_URL"),
+                secret_store=None,  # Would be wired from auth
+            )
+        return self._audit_logger
+    
+    @property
+    def upgrade_manager(self):
+        """Lazy-initialize upgrade manager (M4)."""
+        if self._upgrade_manager is None:
+            from .upgrade import UpgradeManager
+            self._upgrade_manager = UpgradeManager()
+            
+            # Wire audit logger
+            if self._audit_logger:
+                self._upgrade_manager.wire_audit(self._audit_logger)
+        return self._upgrade_manager
+    
+    @property
+    def config_schema(self):
+        """Lazy-initialize config schema validator (M4)."""
+        if self._config_schema is None:
+            from .config_schema import ConfigSchema
+            self._config_schema = ConfigSchema()
+        return self._config_schema
+    
+    @property
+    def delegation_store(self):
+        """Lazy-initialize delegation store (M4)."""
+        if self._delegation_store is None:
+            from .auth import DelegationStore
+            self._delegation_store = DelegationStore()
+        return self._delegation_store
     
     
     @property
@@ -554,6 +603,444 @@ def _create_fastapi_app() -> FastAPI:
             "user_id": user_id,
             "active_tasks": worker.list_active(),
         })
+
+    # ── M4: Audit Logging ────────────────────────────────────────
+
+    @app.get("/api/v1/audit/log")
+    async def get_audit_log(
+        limit: int = 100,
+        user_id: Optional[str] = None,
+        action: Optional[str] = None,
+    ) -> JSONResponse:
+        """Get audit trail entries (M4 audit corrélé complet)."""
+        from agentic.control.audit import AuditStatus
+        
+        # Get audit logger and fetch entries
+        audit = state.audit_logger
+        entries = audit.get_audit_log(
+            limit=limit,
+            user_id=user_id,
+            action=action,
+        )
+        
+        return JSONResponse({
+            "count": len(entries),
+            "entries": [
+                {
+                    "entry_id": e.entry_id,
+                    "timestamp": e.timestamp,
+                    "action": e.action,
+                    "status": e.status,
+                    "user_id": e.user_id,
+                    "roles": e.roles,
+                    "project_id": e.project_id,
+                    "run_id": e.run_id,
+                    "session_id": e.session_id,
+                    "target": e.target,
+                    "details": e.details,
+                    "error": e.error,
+                    "ip_address": e.ip_address,
+                    "user_agent": e.user_agent,
+                }
+                for e in entries
+            ],
+        })
+
+    @app.get("/api/v1/audit/user/{user_id}")
+    async def get_user_audit(user_id: str, limit: int = 50) -> JSONResponse:
+        """Get audit trail for a specific user (M4)."""
+        audit = state.audit_logger
+        entries = audit.get_user_actions(user_id, limit=limit)
+        
+        return JSONResponse({
+            "user_id": user_id,
+            "count": len(entries),
+            "actions": [
+                {
+                    "timestamp": e.timestamp,
+                    "action": e.action,
+                    "status": e.status,
+                    "target": e.target,
+                }
+                for e in entries
+            ],
+        })
+
+    # ── M4: Config Schema Validation ─────────────────────────────
+
+    @app.post("/api/v1/config/validate")
+    async def validate_config_schema(payload: dict[str, Any]) -> JSONResponse:
+        """Validate configuration against schema (M4 config schema validation)."""
+        from agentic.control.config_schema import validate_config, Severity
+        
+        category = payload.get("category")
+        include_optional = payload.get("include_optional", True)
+        
+        result = validate_config(
+            include_optional=include_optional,
+            category=category,
+        )
+        
+        return JSONResponse({
+            "valid": result.valid,
+            "errors": [
+                {
+                    "var_name": e.var_name,
+                    "message": e.message,
+                    "severity": e.severity.value,
+                    "expected": e.expected,
+                    "actual": e.actual,
+                }
+                for e in result.errors
+            ],
+            "warnings": [
+                {
+                    "var_name": w.var_name,
+                    "message": w.message,
+                    "severity": w.severity.value,
+                }
+                for w in result.warnings
+            ],
+            "info": [
+                {
+                    "var_name": i.var_name,
+                    "message": i.message,
+                }
+                for i in result.info
+            ],
+        })
+
+    @app.get("/api/v1/config/schema")
+    async def get_config_schema() -> JSONResponse:
+        """Get the complete configuration schema (M4)."""
+        from agentic.control.config_schema import ENV_VAR_SCHEMA
+        
+        # Organize by category
+        by_category: dict[str, dict] = {}
+        for var_name, schema in ENV_VAR_SCHEMA.items():
+            category = schema.get("category", "uncategorized")
+            if category not in by_category:
+                by_category[category] = {}
+            by_category[category][var_name] = schema
+        
+        return JSONResponse({
+            "categories": list(by_category.keys()),
+            "schema": by_category,
+            "total_variables": len(ENV_VAR_SCHEMA),
+        })
+
+    @app.post("/api/v1/config/drift/check")
+    async def check_config_drift(payload: dict[str, Any]) -> JSONResponse:
+        """Check for configuration drift (M4)."""
+        from agentic.control.config_schema import check_drift, capture_reference_snapshot
+        
+        reference_path = payload.get("reference_path")
+        
+        # If no reference provided, capture current as reference
+        if not reference_path:
+            capture_reference_snapshot()
+        
+        drift = check_drift(reference_path=reference_path)
+        
+        return JSONResponse({
+            "drift_detected": drift.detected,
+            "changes": [
+                {
+                    "var_name": c.var_name,
+                    "change_type": c.change_type,
+                    "old_value": c.old_value,
+                    "new_value": c.new_value,
+                }
+                for c in drift.changes
+            ],
+            "reference_timestamp": drift.reference_timestamp,
+            "current_timestamp": drift.current_timestamp,
+        })
+
+    # ── M4: Delegations ─────────────────────────────────────────────
+
+    @app.post("/api/v1/delegations/grant")
+    async def grant_delegation(payload: dict[str, Any]) -> JSONResponse:
+        """Grant delegation to another user (M4 auth/délégations)."""
+        grantor_session_id = payload.get("session_id")
+        grantee_user_id = payload.get("grantee_user_id")
+        project_id = payload.get("project_id")
+        permissions = payload.get("permissions", ["read"])
+        expires_in_seconds = payload.get("expires_in_seconds")
+        
+        # Validate grantor session
+        grantor_session = state.auth.validate_session(grantor_session_id)
+        if not grantor_session:
+            return JSONResponse(
+                {"error": "Invalid or expired session"}, 
+                status_code=401
+            )
+        
+        try:
+            delegation = state.auth.grant_delegation(
+                grantor_session=grantor_session,
+                grantee_user_id=grantee_user_id,
+                project_id=project_id,
+                permissions=permissions,
+                expires_in_seconds=expires_in_seconds,
+            )
+            
+            return JSONResponse({
+                "delegation_id": delegation.delegation_id,
+                "grantor": delegation.grantor_user_id,
+                "grantee": delegation.grantee_user_id,
+                "project": delegation.project_id,
+                "permissions": delegation.permissions,
+                "expires_at": delegation.expires_at,
+            })
+        except PermissionError as e:
+            return JSONResponse({"error": str(e)}, status_code=403)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    @app.post("/api/v1/delegations/revoke")
+    async def revoke_delegation(payload: dict[str, Any]) -> JSONResponse:
+        """Revoke a delegation (M4 auth/délégations)."""
+        session_id = payload.get("session_id")
+        delegation_id = payload.get("delegation_id")
+        
+        # Validate session
+        session = state.auth.validate_session(session_id)
+        if not session:
+            return JSONResponse(
+                {"error": "Invalid or expired session"}, 
+                status_code=401
+            )
+        
+        try:
+            result = state.auth.revoke_delegation(session, delegation_id)
+            return JSONResponse({"success": result})
+        except PermissionError as e:
+            return JSONResponse({"error": str(e)}, status_code=403)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    @app.get("/api/v1/delegations/user/{user_id}")
+    async def get_user_delegations(user_id: str) -> JSONResponse:
+        """Get all delegations for a user (M4)."""
+        delegations = state.delegation_store.get_delegations_for_user(user_id)
+        
+        return JSONResponse({
+            "user_id": user_id,
+            "delegations": [
+                {
+                    "delegation_id": d.delegation_id,
+                    "grantor": d.grantor_user_id,
+                    "project": d.project_id,
+                    "permissions": d.permissions,
+                    "granted_at": d.granted_at,
+                    "expires_at": d.expires_at,
+                    "is_expired": d.is_expired(),
+                }
+                for d in delegations
+            ],
+        })
+
+    @app.get("/api/v1/delegations/project/{project_id}")
+    async def get_project_delegations(project_id: str) -> JSONResponse:
+        """Get all delegations for a project (M4)."""
+        delegations = state.delegation_store.get_delegations_for_project(project_id)
+        
+        return JSONResponse({
+            "project_id": project_id,
+            "delegations": [
+                {
+                    "delegation_id": d.delegation_id,
+                    "grantor": d.grantor_user_id,
+                    "grantee": d.grantee_user_id,
+                    "permissions": d.permissions,
+                    "granted_at": d.granted_at,
+                }
+                for d in delegations
+            ],
+        })
+
+    # ── M4: User/Project Separation (G4) ──────────────────────────
+
+    @app.get("/api/v1/users/{user_id}/projects")
+    async def get_user_projects(user_id: str) -> JSONResponse:
+        """Get all projects a user has access to (M4 G4 - séparation utilisateurs/projets)."""
+        projects = state.auth.get_user_projects(user_id)
+        
+        # Also include user's own project from session
+        sessions = [s for s in state.auth._sessions.values() if s.user_id == user_id]
+        for session in sessions:
+            if session.project and session.project not in projects:
+                projects.append(session.project)
+        
+        return JSONResponse({
+            "user_id": user_id,
+            "projects": projects,
+            "count": len(projects),
+        })
+
+    @app.post("/api/v1/projects/{project_id}/access/check")
+    async def check_project_access(payload: dict[str, Any], project_id: str) -> JSONResponse:
+        """Check if a user can access a project (M4 G4)."""
+        user_id = payload.get("user_id")
+        session_id = payload.get("session_id")
+        permission = payload.get("permission", "read")
+        
+        # If session_id provided, validate and use session
+        session = None
+        if session_id:
+            session = state.auth.validate_session(session_id)
+            if not session:
+                return JSONResponse({"error": "Invalid session"}, status_code=401)
+            user_id = session.user_id
+        
+        if not user_id:
+            return JSONResponse({"error": "user_id or session_id required"}, status_code=400)
+        
+        # Create a temporary session for checking
+        if not session:
+            session = state.auth.create_session(user_id, project=project_id)
+        
+        can_access = state.auth.can_access_project(session, project_id, permission)
+        
+        return JSONResponse({
+            "user_id": user_id,
+            "project_id": project_id,
+            "permission": permission,
+            "can_access": can_access,
+        })
+
+    # ── M4: Upgrade Management ───────────────────────────────────────
+
+    @app.get("/api/v1/upgrade/status")
+    async def get_upgrade_status() -> JSONResponse:
+        """Get current upgrade status (M4 upgrade épinglé)."""
+        manager = state.upgrade_manager
+        
+        return JSONResponse({
+            "current_version": manager.get_current_version(),
+            "available_releases": manager.list_available_releases(),
+            "upgrades_available": manager.check_upgrades(),
+            "pinned_digests": manager.get_all_pinned_digests(),
+        })
+
+    @app.post("/api/v1/upgrade/to/{version}")
+    async def upgrade_to_version(version: str, payload: dict[str, Any]) -> JSONResponse:
+        """Upgrade to a specific version with pinned digests (M4)."""
+        force = payload.get("force", False)
+        skip_verification = payload.get("skip_verification", False)
+        
+        result = state.upgrade_manager.upgrade_to(
+            version=version,
+            force=force,
+            skip_verification=skip_verification,
+        )
+        
+        return JSONResponse({
+            "success": result.success,
+            "version": result.version,
+            "previous_version": result.previous_version,
+            "changes": result.changes,
+            "errors": result.errors,
+            "warnings": result.warnings,
+            "duration_seconds": result.duration_seconds,
+        })
+
+    @app.post("/api/v1/upgrade/rollback")
+    async def rollback_upgrade(payload: dict[str, Any]) -> JSONResponse:
+        """Rollback to previous version (M4 upgrade épinglé)."""
+        target_version = payload.get("target_version")
+        force = payload.get("force", False)
+        
+        result = state.upgrade_manager.rollback(
+            target_version=target_version,
+            force=force,
+        )
+        
+        return JSONResponse({
+            "success": result.success,
+            "version": result.version,
+            "previous_version": result.previous_version,
+            "changes": result.changes,
+            "errors": result.errors,
+            "duration_seconds": result.duration_seconds,
+        })
+
+    @app.get("/api/v1/upgrade/history")
+    async def get_upgrade_history(limit: int = 10) -> JSONResponse:
+        """Get upgrade history (M4)."""
+        history = state.upgrade_manager.get_upgrade_history(limit=limit)
+        
+        return JSONResponse({
+            "history": history,
+        })
+
+    @app.post("/api/v1/upgrade/manifests")
+    async def create_manifest(payload: dict[str, Any]) -> JSONResponse:
+        """Create a new release manifest (M4 upgrade épinglé)."""
+        version = payload.get("version")
+        images = payload.get("images", {})
+        description = payload.get("description", "")
+        
+        if not version:
+            return JSONResponse({"error": "version required"}, status_code=400)
+        
+        try:
+            manifest = state.upgrade_manager.create_manifest(
+                version=version,
+                images=images,
+                description=description,
+            )
+            
+            return JSONResponse({
+                "version": manifest.version,
+                "images": {name: str(digest) for name, digest in manifest.images.items()},
+                "timestamp": manifest.timestamp,
+                "description": manifest.description,
+            })
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    # ── M4: Reconciler with Audit Integration ────────────────────────
+
+    @app.post("/api/v1/reconciler/run")
+    async def run_reconciliation() -> JSONResponse:
+        """Trigger a reconciliation cycle with audit logging (M4)."""
+        import asyncio as _aio
+        
+        # Audit log start
+        if state._audit_logger:
+            state.audit_logger.log_start(
+                action="reconciler.run",
+                target="full",
+            )
+        
+        try:
+            drifts = await state.reconciler.reconcile()
+            
+            # Audit log result
+            if state._audit_logger:
+                state.audit_logger.log_success(
+                    action="reconciler.complete",
+                    target="full",
+                    details={"drifts_resolved": len(drifts)},
+                )
+            
+            return JSONResponse({
+                "reconciled": len(state.reconciler.drift_history) > 0,
+                "drifts_resolved": len([d for d in state.reconciler.drift_history 
+                                        if d.action_taken == "reconciled"]),
+                "drifts_escalated": len([d for d in state.reconciler.drift_history 
+                                         if d.action_taken == "escalated"]),
+            })
+        except Exception as e:
+            if state._audit_logger:
+                state.audit_logger.log_failure(
+                    action="reconciler.failed",
+                    target="full",
+                    error=str(e),
+                )
+            raise
 
     # ── SSE Event Stream ────────────────────────────────────────
     
