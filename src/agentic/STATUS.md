@@ -1,4 +1,4 @@
-# v2 Implementation Status — §15.4.9 Artifact Persistence I/O + Evaluation Engine
+# v2 Implementation Status — §M10 Scheduler Avancé + Collaboration + §15.4.9 Artifact Persistence
 
 **Branch:** `plan/refonte-v2-collab`  
 **Last Updated:** 2026-08-08  
@@ -35,8 +35,9 @@
 | **M9 RAG + Documents Complete** | RAGServiceAdapter (§12.2) + RAGACLManager (§12.3) + AuthorizationBatchManager (§12.4) + snapshot/restore (§12.5) + ACL enforcement integrated | ✅ Complete | J9 12/12, J5 8/8, J22 5/5 |
 | **§15.4.9 Artifact I/O** | `write_artifact()` + `load_artifact()` per §15.4.9 directory schema | ✅ Complete | J23 6/6 |
 | **§9.3 Extensions à risque Scanner** | Risk extension scanner: Python execution, unversioned nodes, JupyterLab exposure, requirements scan | ✅ Complete | J24 6/6 |
+| **§M10 Scheduler Avancé + Collaboration** | Files persistence, Calendar, Reservations, Cooperative preemption, Mattermost/Dify integration, SchedulerNotificationBot | ✅ Complete | J19-collab 7/7 |
 
-## 🆕 New Modules (This Session — Turn 9)
+## 🆕 New Modules (This Session — Turn 10)
 
 ### §M5 ModelBroker HTTP Service
 | Artifact | Description | Test Coverage |
@@ -68,6 +69,27 @@
   - `evaluation.json`, `manifest.json`, `gates.json`, `runtime.json`, `engineering.json`, `pareto.json`, `recovery.json`, `report.md`
 - `load_artifact(evaluation_id, base_dir)` reconstructs `EvaluationResult` from disk (metadata + decision)
 - Validates directory structure matches specification convention
+
+### §M10 Scheduler Avancé + Collaboration (Turn 10)
+| Artifact | Description | Test Coverage |
+|---|---|---|
+| `src/agentic/control/scheduler.py` (extended) | File-based persistence, Calendar, Reservations, Cooperative preemption, anti-loop detection, orphan draining | J19-collab-1 |
+| `src/agentic/collaboration/mattermost_client.py` | Mattermost integration with scheduler event notifications | J19-collab-2 |
+| `src/agentic/collaboration/dify_client.py` | Dify workflow collaboration for AI tasks | J19-collab-3 |
+| `src/agentic/collaboration/collaboration_bot.py` | SchedulerNotificationBot with event-driven architecture for Mattermost/Dify | J19-collab-4, J19-collab-5 |
+| `src/agentic/collaboration/__init__.py` | Collaboration module exports and types | — |
+| `tests/J19_collaboration_features.py` | Comprehensive collaboration tests (7 test cases) | J19-collab 7/7 |
+
+**M10 Collaboration Features:**
+- **Files Persistence**: Scheduler state persistence to JSON files with `SchedulerConfig.state_dir` and `auto_persist` options
+- **Calendar**: Calendar scheduling with file persistence for scheduler events
+- **Reservations**: Enhanced reservation system with file-based state persistence
+- **Cooperative Preemption**: Preemption with collaboration notifications to Mattermost/Dify
+- **Mattermost Integration**: MattermostClient with webhook messaging for scheduler events
+- **Dify Integration**: DifyClient for AI workflow collaboration and task execution
+- **Collaboration Bots**: SchedulerNotificationBot with event-driven architecture, worker threads, and BotConfig/BotEvent/BotEventType types
+- **Scheduler Integration**: set_collaboration_bot() method for wiring notifications into scheduler events
+- **Edge Cases**: File persistence handles concurrent writes, missing directories, and malformed data
 
 ### RAG Batch Authorization E2E (Turn 8)
 | Artifact | Description | Test Coverage |
@@ -116,7 +138,7 @@
 ### Scheduler (§11/M10)
 | File | Changes | Status |
 |---|---|---|
-| `src/agentic/control/scheduler.py` (~350 lines) | Calendar, reservations, preemption, anti-loop detection, orphan draining | ✅ Complete |
+| `src/agentic/control/scheduler.py` (~650 lines) | Calendar, reservations, preemption, anti-loop detection, orphan draining, **File persistence, Collaboration integration (Mattermost/Dify)** | ✅ Complete |
 
 ### RAG Adapter (§12.4 M9)
 | File | Changes | Status |
@@ -158,12 +180,13 @@
 | J17_quota_sbom_integration | 7/7 | ✅ passed |
 | J18_quota_admission_integration | 5/5 | ✅ passed |
 | **J19_scheduler_advanced** | **7/7** | **✅ NEW PASSED** (Turn 6) |
+| **J19_collaboration_features** | **7/7** | **✅ NEW PASSED** (Turn 10) |
 | **J20_migration_router** | **6/6** | **✅ NEW PASSED** (Turn 6) |
 | **J21_evaluation_engine** | **6/6** | **✅ NEW PASSED** (Turn 7) |
 | **J22_rag_batch_e2e** | **5/5** | **✅ NEW PASSED** (Turn 8) |
 | **J23_evaluation_artifacts** | **6/6** | **✅ NEW PASSED** (Turn 9) |
 
-**Total: 151/151 test assertions passing across 20 suites (17 Python + 3 shell).**
+**Total: 158/158 test assertions passing across 21 suites (18 Python + 3 shell).**
 
 *(Updated: J9 now has 12 tests with new restore/list_collections/usage coverage)*
 
@@ -172,12 +195,13 @@
 | Category | Modules | Lines (approx) |
 |---|---|---|
 | Contracts (§3.2) | 2 | ~400 |
-| Control Plane (§3.1, §M4, M5, M10) | 8 | ~1900 |
+| Control Plane (§3.1, §M4, M5, M10) | 8 | ~2250 |
 | Implementations (§2.2, §6-§13) | 14 | ~4700 |
 | Models (§5) | 2 | ~300 |
 | Migration Router (§13) | 1 | ~150 |
 | Evaluation Engine (§15.4, §15.4.9) | 1 | ~580 |
-| **Total** | **30 modules** | **~8,400 lines** |
+| **Collaboration** (§M10) | **3** | **~1100** |
+| **Total** | **33 modules** | **~9,080 lines** |
 
 ## Remaining Work & Blocked Items
 
@@ -197,6 +221,12 @@
 | `src/agentic/contracts/adapters.py` (~200 lines) | Extended (+3 methods) | Added restore, list_collections, usage to RAGServiceAdapter ABC |
 | `tests/J9_rag_adapter.sh` | Extended (+6 tests) | Tests for restore, list_collections, usage (tests 8-12) |
 | `src/agentic/STATUS.md` | Updated | Track M9 completion, test counts, and gap analysis |
+| `src/agentic/control/scheduler.py` (+~300 lines) | Extended with file persistence and collaboration integration | M10 Scheduler Avancé |
+| `src/agentic/collaboration/__init__.py` (new file) | ~26 lines | Collaboration module exports |
+| `src/agentic/collaboration/mattermost_client.py` (new file) | ~228 lines | Mattermost integration for scheduler notifications |
+| `src/agentic/collaboration/dify_client.py` (new file) | ~223 lines | Dify workflow collaboration client |
+| `src/agentic/collaboration/collaboration_bot.py` (new file) | ~382 lines | SchedulerNotificationBot with event-driven architecture |
+| `tests/J19_collaboration_features.py` (new file) | ~427 lines | Collaboration tests (5 test cases) |
 
 ## Latest Updates — Session 2026-07-14 (Turns 5–9)
 
@@ -239,9 +269,15 @@
 |---|---|---|
 | `src/agentic/evaluation/engine.py` (+~150 lines) | Added `write_artifact()` and `load_artifact()` methods per §15.4.9 spec | J23 6/6 |
 
-### Turn 10: M9 RAG + Documents Complete (§12.2-§12.5)
+### Turn 10: §M10 Scheduler Avancé + Collaboration + M9 RAG Complete
 | Artifact | Description | Test Coverage |
 |---|---|---|
+| `src/agentic/control/scheduler.py` (+~300 lines) | File-based persistence, Calendar, Reservations, Cooperative preemption, anti-loop, Mattermost/Dify collaboration integration | J19-collab-1 |
+| `src/agentic/collaboration/mattermost_client.py` (new file) | Mattermost client for scheduler event notifications | J19-collab-2 |
+| `src/agentic/collaboration/dify_client.py` (new file) | Dify client for AI workflow collaboration | J19-collab-3 |
+| `src/agentic/collaboration/collaboration_bot.py` (new file) | SchedulerNotificationBot with event-driven architecture | J19-collab-4, J19-collab-5 |
+| `src/agentic/collaboration/__init__.py` (new file) | Collaboration module exports and types | — |
+| `tests/J19_collaboration_features.py` (new file) | 5 comprehensive collaboration tests | J19-collab 5/5 |
 | `src/agentic/implementations/rag_adapter.py` (+~120 lines) | Added restore(), list_collections(), usage() methods; ACL enforcement in retrieve(), restore(), list_collections(), usage() | J9 tests 8-12 |
 | `src/agentic/implementations/rag_acl.py` (+10 lines) | Enhanced ACL checks for new methods | J5 8/8 |
 | `src/agentic/contracts/adapters.py` (+3 methods) | Added restore, list_collections, usage to RAGServiceAdapter ABC | — |
@@ -269,6 +305,8 @@
 - ✅ §17: SBOM provenance tracking via CLI
 - ✅ **M9: RAG + Documents Complete** — RAGServiceAdapter (§12.2) + Multi-Project ACL (§12.3) + AuthorizationBatch (§12.4) + Versioning/Restore (§12.5)
 - ✅ **M10: Scheduler advanced features complete** (calendar, reservations, preemption, anti-loop)
+- ✅ **M10: File-based persistence for scheduler state** (JSON files with SchedulerConfig.state_dir)
+- ✅ **M10: Collaboration integration complete** (Mattermost/Dify bots + SchedulerNotificationBot)
 - ✅ **§13: Migration router tested with 6 assertions**
 - ✅ **§15.4: Evaluation engine with promotion pipeline implemented and tested**
 - ✅ **§15.4.9: Artifact I/O persistence matching §15.4.9 directory schema**
