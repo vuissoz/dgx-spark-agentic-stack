@@ -14,6 +14,25 @@ TOTAL=5
 PASS=0
 FAIL=0
 
+memory_limit_mb="${AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB:-307200}"
+
+warn() {
+  echo "WARN: $*" >&2
+}
+
+die() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
+
+service_container_id() {
+  local service="$1"
+  docker ps \
+    --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
+    --filter "label=com.docker.compose.service=${service}" \
+    --format '{{.ID}}' | head -n 1
+}
+
 log_step() { printf '\n=== %s ===\n' "$*" >&2; }
 
 check_memory_ok() {
