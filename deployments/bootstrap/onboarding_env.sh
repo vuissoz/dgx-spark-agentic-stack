@@ -54,6 +54,7 @@ limits_rag_cpus_override=""
 limits_rag_mem_override=""
 limits_optional_cpus_override=""
 limits_optional_mem_override=""
+limits_rootless_dev_memory_override=""
 git_forge_host_port_override=""
 git_forge_admin_user_override=""
 git_forge_shared_namespace_override=""
@@ -424,6 +425,15 @@ default_limits_stack_mem_for_profile() {
   fi
 }
 
+default_limits_rootless_dev_memory_for_profile() {
+  local profile="$1"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "307200"
+  else
+    printf '%s\n' "61440"
+  fi
+}
+
 validate_profile() {
   case "$1" in
     strict-prod|rootless-dev) return 0 ;;
@@ -457,6 +467,23 @@ validate_memory_limit_value() {
   }
   [[ "${value}" =~ ^[0-9]+([.][0-9]+)?[bBkKmMgG]$ ]] || {
     echo "${key} must use docker memory format (example: 512m, 1g, 2G)" >&2
+    return 1
+  }
+}
+
+validate_positive_int_value() {
+  local key="$1"
+  local value="$2"
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+  [[ "${value}" =~ ^[0-9]+$ ]] || {
+    echo "${key} must be a positive integer" >&2
+    return 1
+  }
+  (( value > 0 )) || {
+    echo "${key} must be positive" >&2
     return 1
   }
 }
@@ -1596,6 +1623,7 @@ export AGENTIC_LIMIT_RAG_CPUS=$(shell_quote "${limits_rag_cpus}")
 export AGENTIC_LIMIT_RAG_MEM=$(shell_quote "${limits_rag_mem}")
 export AGENTIC_LIMIT_OPTIONAL_CPUS=$(shell_quote "${limits_optional_cpus}")
 export AGENTIC_LIMIT_OPTIONAL_MEM=$(shell_quote "${limits_optional_mem}")
+export AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB=$(shell_quote "${limits_rootless_dev_memory}")
 export AGENTIC_OPTIONAL_MODULES=$(shell_quote "${optional_modules_csv}")
 EOF_ENV
 
@@ -2285,6 +2313,9 @@ collect_mem_limit limits_rag_mem "AGENTIC_LIMIT_RAG_MEM" "$(default_limits_stack
 
 collect_cpu_limit limits_optional_cpus "AGENTIC_LIMIT_OPTIONAL_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "optional")" "${limits_optional_cpus_override}" "AGENTIC_LIMIT_OPTIONAL_CPUS/AGENTIC_LIMIT_OPTIONAL_MEM set defaults for optional modules."
 collect_mem_limit limits_optional_mem "AGENTIC_LIMIT_OPTIONAL_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "optional")" "${limits_optional_mem_override}"
+
+# Rootless-dev memory footprint limit (configurable, default 300GB for rootless-dev, 60GB for strict-prod)
+collect_text_value limits_rootless_dev_memory "AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB" "$(default_limits_rootless_dev_memory_for_profile "${profile}")" "${limits_rootless_dev_memory_override}" validate_positive_int_value "AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB sets the total memory footprint limit for the rootless-dev profile (in MB)."
 
 optional_modules_raw="${optional_modules_override:-none}"
 if [[ "${non_interactive}" -eq 0 && -z "${optional_modules_override}" ]]; then
