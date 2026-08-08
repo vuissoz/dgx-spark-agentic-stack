@@ -450,8 +450,9 @@ services:
       test:
         - CMD-SHELL
         - >
-          python3 -c 'import sys,urllib.request;
-          r=urllib.request.urlopen("http://127.0.0.1:8888/api/status", timeout=5);
+          python3 -c 'import sys,urllib.request,os;
+          token=os.environ.get("JUPYTER_TOKEN","");
+          r=urllib.request.urlopen("http://127.0.0.1:8888/api/status?token="+token, timeout=5);
           sys.exit(0 if r.status == 200 else 1)'
       interval: 30s
       timeout: 10s
