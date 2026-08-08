@@ -5,10 +5,12 @@ Implements:
 - Admission for CPU, memory unified, GPU, storage, network
 - Queues with priorities and quotas
 - Modes: normal, burst, exclusive
-- Reservations and calendar (stubbed)
+- Reservations and calendar (§M10)
 - Drain and grace period handling
 - Parent/child aggregation for multi-agent trees
 - Interactive vs background separation
+- File-based persistence for scheduler state (§M10)
+- Anti-loop cycle detection and orphan draining
 
 This is the control-plane skeleton. Actual limits are enforced by Docker/Compose
 resource constraints; this component tracks state, aggregates budgets, and
@@ -18,9 +20,12 @@ provides admission decisions to upstream adapters.
 from __future__ import annotations
 
 import enum
+import json
+import os
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
 
@@ -136,6 +141,14 @@ class SchedulerState:
 
 
 @dataclass
+class SchedulerConfig:
+    """Configuration for the scheduler including persistence settings (§M10)."""
+    state_dir: str = "/srv/agentic/scheduler"
+    persist_interval_seconds: float = 30.0
+    auto_persist: bool = True
+
+
+@dataclass
 class Scheduler:
     """Admission controller and work scheduler.
 
@@ -147,6 +160,9 @@ class Scheduler:
     """
 
     state: SchedulerState = field(default_factory=SchedulerState)
+    config: SchedulerConfig = field(default_factory=SchedulerConfig)
+    _last_persist_time: float = 0.0
+    _collaboration_bot: Any = None
 
     # ── Admission ────────────────────────────────────────────────────────
     def admit(
@@ -156,6 +172,7 @@ class Scheduler:
         priority: int = 50,  # 0-100, higher = more urgent
         mode: QueueMode = QueueMode.NORMAL,
         is_interactive: bool = True,
+        user_id: str = "default",
     ) -> AdmissionResult:
         """Request resource admission for a workload."""
         if self.state.is_draining:
@@ -207,8 +224,24 @@ class Scheduler:
             "mode": mode,
             "is_interactive": is_interactive,
             "admitted_at": time.time(),
+            "user_id": user_id,
             "metrics": {},
         }
+
+        # Notify collaboration bot about admission (§M10)
+        self._notify_collaboration_bot(
+            event_type="workload_admitted",
+            workload_id=workload_id,
+            user_id=user_id,
+            details={
+                "cpu": needed_cpu,
+                "memory_mb": needed_mem,
+                "gpu": needed_gpu,
+                "priority": priority,
+                "mode": mode.value,
+                "is_interactive": is_interactive,
+            }
+        )
 
         return AdmissionResult(
             granted=True,
@@ -225,9 +258,27 @@ class Scheduler:
             return False
         w = self.state.active_workloads.pop(workload_id)
         req = w["required"]
+        
+        # Calculate duration for notification
+        admitted_at = w.get("admitted_at", time.time())
+        duration = time.time() - admitted_at
+        
         self.state.allocated_cpu -= req.cpus or 0.01
         self.state.allocated_memory_mb -= req.memory_mb or 64
         self.state.allocated_gpu -= req.gpu_count or 0
+        
+        # Notify collaboration bot about release (§M10)
+        self._notify_collaboration_bot(
+            event_type="workload_released",
+            workload_id=workload_id,
+            details={
+                "cpu": req.cpus or 0.01,
+                "memory_mb": req.memory_mb or 64,
+                "gpu": req.gpu_count or 0,
+                "duration": f"{duration:.1f}s",
+            }
+        )
+        
         return True
 
     def submit_to_queue(self, workload_id: str, required: ResourceLimits, priority: int = 50) -> None:
@@ -327,6 +378,22 @@ class Scheduler:
             workload_id=workload_id,
             details={"start": start_time, "end": end_time},
         ))
+        
+        # Notify collaboration bot about reservation (§M10)
+        self._notify_collaboration_bot(
+            event_type="reservation_created",
+            workload_id=workload_id,
+            user_id=user_id,
+            details={
+                "start": start_time,
+                "end": end_time,
+                "cpu": required_cpu,
+                "memory_mb": required_memory_mb,
+                "gpu": required_gpu,
+                "priority": priority,
+            }
+        )
+        
         return res
 
     def cancel_reservation(self, reservation_id: str) -> bool:
@@ -411,6 +478,17 @@ class Scheduler:
                     workload_id=entry.workload_id,
                     details={"scheduled_at": entry.scheduled_start},
                 ))
+                
+                # Notify collaboration bot about calendar event (§M10)
+                self._notify_collaboration_bot(
+                    event_type="calendar_triggered",
+                    workload_id=entry.workload_id,
+                    user_id=entry.user_id,
+                    details={
+                        "scheduled_at": entry.scheduled_start,
+                        "resources": entry.resource_limits,
+                    }
+                )
             to_remove.append(i)
         
         # Remove processed entries (keep failed ones for retry)
@@ -454,7 +532,7 @@ class Scheduler:
                 break
             
             req = wdata["required"]
-            self.release(wid)
+            self.release(wid)  # release() will handle collaboration notification
             preempted.append(wid)
             freed_cpu += req.cpus or 0.01
             freed_mem += req.memory_mb or 64
@@ -465,6 +543,19 @@ class Scheduler:
                 workload_id=wid,
                 details={"reason": f"preempted by {high_priority_id} (priority {minimum_priority})"},
             ))
+            
+            # Notify collaboration bot about preemption (§M10)
+            self._notify_collaboration_bot(
+                event_type="workload_preempted",
+                workload_id=wid,
+                details={
+                    "reason": f"preempted by {high_priority_id} (priority {minimum_priority})",
+                    "preempted_by": high_priority_id,
+                    "cpu": req.cpus or 0.01,
+                    "memory_mb": req.memory_mb or 64,
+                    "gpu": req.gpu_count or 0,
+                }
+            )
         
         return preempted
 
@@ -586,3 +677,192 @@ class Scheduler:
     def resume_after_drain(self) -> None:
         """Resume accepting workloads after drain period."""
         self.state.is_draining = False
+
+    # ── File-based Persistence (§M10) ───────────────────────────────────────
+
+    def _get_state_file_path(self) -> Path:
+        """Get the path for the scheduler state file."""
+        return Path(self.config.state_dir) / "scheduler_state.json"
+
+    def _get_event_log_path(self) -> Path:
+        """Get the path for the event log file."""
+        return Path(self.config.state_dir) / "scheduler_events.json"
+
+    def _serialize_state(self) -> dict[str, Any]:
+        """Serialize scheduler state for persistence."""
+        state_dict = {
+            "total_cpu": self.state.total_cpu,
+            "total_memory_mb": self.state.total_memory_mb,
+            "total_gpu": self.state.total_gpu,
+            "total_storage_gb": self.state.total_storage_gb,
+            "allocated_cpu": self.state.allocated_cpu,
+            "allocated_memory_mb": self.state.allocated_memory_mb,
+            "allocated_gpu": self.state.allocated_gpu,
+            "allocated_storage_gb": self.state.allocated_storage_gb,
+            "active_workloads": self.state.active_workloads,
+            "reservations": [asdict(r) for r in self.state.reservations],
+            "calendar": [asdict(c) for c in self.state.calendar],
+            "queue": self.state.queue,
+            "event_log": [asdict(e) for e in self.state.event_log],
+            "cycle_tracker": {k: list(v) for k, v in self.state.cycle_tracker.items()},
+            "mode": self.state.mode.value,
+            "is_draining": self.state.is_draining,
+            "drain_grace_seconds": self.state.drain_grace_seconds,
+        }
+        return state_dict
+
+    def _deserialize_state(self, state_dict: dict[str, Any]) -> None:
+        """Deserialize scheduler state from persistence."""
+        self.state.total_cpu = state_dict.get("total_cpu", 0.0)
+        self.state.total_memory_mb = state_dict.get("total_memory_mb", 0)
+        self.state.total_gpu = state_dict.get("total_gpu", 0)
+        self.state.total_storage_gb = state_dict.get("total_storage_gb", 0)
+        self.state.allocated_cpu = state_dict.get("allocated_cpu", 0.0)
+        self.state.allocated_memory_mb = state_dict.get("allocated_memory_mb", 0)
+        self.state.allocated_gpu = state_dict.get("allocated_gpu", 0)
+        self.state.allocated_storage_gb = state_dict.get("allocated_storage_gb", 0)
+        self.state.active_workloads = state_dict.get("active_workloads", {})
+        self.state.reservations = [
+            Reservation(**r) for r in state_dict.get("reservations", [])
+        ]
+        self.state.calendar = [
+            CalendarEntry(**c) for c in state_dict.get("calendar", [])
+        ]
+        self.state.queue = state_dict.get("queue", [])
+        self.state.event_log = [
+            SchedulerEventRecord(**e) for e in state_dict.get("event_log", [])
+        ]
+        self.state.cycle_tracker = {
+            k: set(v) for k, v in state_dict.get("cycle_tracker", {}).items()
+        }
+        self.state.mode = QueueMode(state_dict.get("mode", "normal"))
+        self.state.is_draining = state_dict.get("is_draining", False)
+        self.state.drain_grace_seconds = state_dict.get("drain_grace_seconds", 30)
+
+    def save_state(self, state_file: str | Path | None = None) -> bool:
+        """Save scheduler state to file (§M10).
+        
+        Args:
+            state_file: Optional custom path. Uses config.state_dir if None.
+            
+        Returns:
+            True if save was successful, False otherwise.
+        """
+        try:
+            # Ensure directory exists
+            state_path = Path(state_file) if state_file else self._get_state_file_path()
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Serialize and save state
+            state_dict = self._serialize_state()
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump(state_dict, f, indent=2, default=str)
+            
+            # Save event log separately for audit purposes
+            event_log_path = self._get_event_log_path()
+            event_log_data = {
+                "events": [asdict(e) for e in self.state.event_log],
+                "last_updated": time.time()
+            }
+            with open(event_log_path, "w", encoding="utf-8") as f:
+                json.dump(event_log_data, f, indent=2, default=str)
+            
+            self._last_persist_time = time.time()
+            return True
+            
+        except Exception as e:
+            # Log error but don't fail the scheduler
+            self.state.event_log.append(SchedulerEventRecord(
+                event_type=SchedulerEvent.WORKLOAD_RELEASED,
+                workload_id="persistence-error",
+                details={"error": str(e), "operation": "save_state"},
+            ))
+            return False
+
+    def load_state(self, state_file: str | Path | None = None) -> bool:
+        """Load scheduler state from file (§M10).
+        
+        Args:
+            state_file: Optional custom path. Uses config.state_dir if None.
+            
+        Returns:
+            True if load was successful, False otherwise.
+        """
+        try:
+            state_path = Path(state_file) if state_file else self._get_state_file_path()
+            if not state_path.exists():
+                return False
+            
+            # Load and deserialize state
+            with open(state_path, "r", encoding="utf-8") as f:
+                state_dict = json.load(f)
+            
+            self._deserialize_state(state_dict)
+            self._last_persist_time = time.time()
+            return True
+            
+        except Exception as e:
+            # Log error but don't fail the scheduler
+            self.state.event_log.append(SchedulerEventRecord(
+                event_type=SchedulerEvent.WORKLOAD_RELEASED,
+                workload_id="persistence-error",
+                details={"error": str(e), "operation": "load_state"},
+            ))
+            return False
+
+    def maybe_persist(self) -> bool:
+        """Automatically persist state if interval has elapsed (§M10).
+        
+        Returns:
+            True if persistence occurred, False otherwise.
+        """
+        if not self.config.auto_persist:
+            return False
+        
+        now = time.time()
+        if now - self._last_persist_time < self.config.persist_interval_seconds:
+            return False
+        
+        return self.save_state()
+
+    # ── Collaboration Integration (§M10) ─────────────────────────────────
+
+    def set_collaboration_bot(self, bot: Any) -> None:
+        """Set the collaboration bot for scheduler notifications (§M10).
+        
+        Args:
+            bot: A SchedulerNotificationBot instance or compatible bot.
+        """
+        self._collaboration_bot = bot
+
+    def _notify_collaboration_bot(
+        self,
+        event_type: str,
+        workload_id: str,
+        user_id: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> bool:
+        """Notify the collaboration bot about a scheduler event (§M10).
+        
+        Args:
+            event_type: Scheduler event type
+            workload_id: ID of the workload
+            user_id: User who owns the workload
+            details: Additional event details
+            
+        Returns:
+            True if notification was queued successfully.
+        """
+        if not self._collaboration_bot:
+            return False
+        
+        try:
+            return self._collaboration_bot.notify_scheduler_event(
+                event_type=event_type,
+                workload_id=workload_id,
+                user_id=user_id,
+                details=details,
+            )
+        except Exception:
+            # Don't let collaboration failures affect scheduler operation
+            return False
