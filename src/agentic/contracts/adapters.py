@@ -140,7 +140,11 @@ class ModelBrokerAdapter(abc.ABC):
 
 
 class RAGServiceAdapter(abc.ABC):
-    """RAG v1 service adapter."""
+    """RAG v1 service adapter (§12.2).
+    
+    Contract includes: health, capabilities, config, submit_task, retrieve,
+    snapshot, restore, list_collections, and usage.
+    """
 
     @abc.abstractmethod
     async def health(self) -> dict[str, Any]: ...
@@ -159,6 +163,15 @@ class RAGServiceAdapter(abc.ABC):
 
     @abc.abstractmethod
     async def snapshot(self) -> dict[str, Any]: ...
+
+    @abc.abstractmethod
+    async def restore(self, snapshot_id: Optional[str] = None, project: Optional[str] = None) -> dict[str, Any]: ...
+
+    @abc.abstractmethod
+    async def list_collections(self, project: Optional[str] = None) -> list[dict[str, Any]]: ...
+
+    @abc.abstractmethod
+    async def usage(self, project: Optional[str] = None) -> dict[str, Any]: ...
 
 
 class GitProviderAdapter(abc.ABC):

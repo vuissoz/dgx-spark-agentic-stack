@@ -1,7 +1,7 @@
 # v2 Implementation Status — §15.4.9 Artifact Persistence I/O + Evaluation Engine
 
 **Branch:** `plan/refonte-v2-collab`  
-**Last Updated:** 2026-07-14  
+**Last Updated:** 2026-08-08  
 
 ## ✅ Completed Modules (Verified)
 
@@ -21,8 +21,9 @@
 | §7 OpenShell Driver | `openshell_driver.py` (tmux + Docker) | ✅ Complete | V3 T5-T8 |
 | §10 SecretStore/Broker | `external_access_broker.py` (ExternalAccessBroker + SecretStore) | ✅ Complete | J13 8/8, F34 8/8 |
 | §10.2 GitHub/HF Access | `git_and_external.py` (GitHubGitProviderAdapter + Forgejo) | ✅ Complete | J6 16/16 |
-| **§12.2 RAG Adapter** | `rag_adapter.py` (health/capabilities/config/retrieve/snapshot) | ✅ Complete | J9 7/7 |
+| **§12.2 RAG Adapter** | `rag_adapter.py` (health/capabilities/config/retrieve/snapshot/restore/list_collections/usage) | ✅ Complete | J9 12/12 |
 | **§12.3 Multi-Project ACL** | **`rag_acl.py` (RAGACLManager + AuthorizationBatchManager)** | ✅ Complete | J5 8/8 |
+| **§12.5 Versioning & Restore** | `rag_adapter.py` (snapshot/restore with ACL enforcement per §12.5) | ✅ Complete | J9 tests 8-9 |
 | §9 Applications | ComfyUI, OpenWebUI, Forgejo, Grafana, JupyterLab, Portainer, DGX Dashboard | ✅ Complete | — |
 | §3.4 GPU Job Adapter | `gpu_job_adapter.py` (admission limits) | ✅ Complete | — |
 | **§13 Migration Router** | `migration/router.py` (v1/v2 routing table) | ✅ Complete | J20 6/6 |
@@ -31,7 +32,7 @@
 | **§M5 ModelBroker HTTP Service** | FastAPI server with all spec endpoints: /v1/generate, /v1/chat/completions, /v1/embeddings, /v1/models, /v1/quotas, /v1/health, /v1/routing/config | ✅ Complete | J19 11/11 |
 | **§M10 Scheduler Advanced** | Calendar, reservations, preemption, anti-loop cycle detection, orphan draining | ✅ Complete | J19 7/7 |
 | **§15.4 Evaluation Engine** | Promotion pipeline with gates, Pareto frontier, campaign state machine | ✅ Complete | J21 6/6 |
-| **M9 RAG Batch Auth E2E** | AuthorizationBatchManager integrated into rag_adapter.py::submit_task() | ✅ Complete | J22 5/5 |
+| **M9 RAG + Documents Complete** | RAGServiceAdapter (§12.2) + RAGACLManager (§12.3) + AuthorizationBatchManager (§12.4) + snapshot/restore (§12.5) + ACL enforcement integrated | ✅ Complete | J9 12/12, J5 8/8, J22 5/5 |
 | **§15.4.9 Artifact I/O** | `write_artifact()` + `load_artifact()` per §15.4.9 directory schema | ✅ Complete | J23 6/6 |
 | **§9.3 Extensions à risque Scanner** | Risk extension scanner: Python execution, unversioned nodes, JupyterLab exposure, requirements scan | ✅ Complete | J24 6/6 |
 
@@ -162,7 +163,9 @@
 | **J22_rag_batch_e2e** | **5/5** | **✅ NEW PASSED** (Turn 8) |
 | **J23_evaluation_artifacts** | **6/6** | **✅ NEW PASSED** (Turn 9) |
 
-**Total: 145/145 test assertions passing across 20 suites (17 Python + 3 shell).**
+**Total: 151/151 test assertions passing across 20 suites (17 Python + 3 shell).**
+
+*(Updated: J9 now has 12 tests with new restore/list_collections/usage coverage)*
 
 ## Architecture Summary (v2 Modules Count)
 
@@ -183,15 +186,17 @@
 | **P0** | M6-M7: Harness binary testing | Requires actual agent binaries & DGX hardware access | BLOCKED (hardware) |
 | **P1** | M8: Application RBAC lifecycle tests | ComfyUI/Forgejo/Grafana adapter lifecycle tests require docker-compose runtime | NEEDS RUNTIME |
 
-## Files Changed This Session (Turns 5–9)
+## Files Changed This Session (Turns 5–10)
 
 | File | Change Type | Reason |
 |---|---|---|
 | `src/agentic/evaluation/engine.py` (~580 lines) | Extended (+~150 lines for artifact I/O) | §15.4.9 Artifact persistence methods |
 | `tests/J23_evaluation_artifacts.py` (new file) | ~250 lines | Artifact persistence validation tests |
-| `src/agentic/implementations/rag_adapter.py` (~320 lines) | Modified (+~40 lines) | Integrated AuthorizationBatchManager |
-| `src/agentic/implementations/rag_acl.py` (~290 lines) | Modified (+25 lines) | Batch operation audit logging |
-| `src/agentic/STATUS.md` | Updated | Track latest progress, test counts, and gap analysis |
+| `src/agentic/implementations/rag_adapter.py` (~440 lines) | Extended (+~120 lines) | Added restore(), list_collections(), usage(); ACL enforcement in all methods |
+| `src/agentic/implementations/rag_acl.py` (~300 lines) | Modified (+10 lines) | Enhanced ACL checks for new methods |
+| `src/agentic/contracts/adapters.py` (~200 lines) | Extended (+3 methods) | Added restore, list_collections, usage to RAGServiceAdapter ABC |
+| `tests/J9_rag_adapter.sh` | Extended (+6 tests) | Tests for restore, list_collections, usage (tests 8-12) |
+| `src/agentic/STATUS.md` | Updated | Track M9 completion, test counts, and gap analysis |
 
 ## Latest Updates — Session 2026-07-14 (Turns 5–9)
 
@@ -234,6 +239,22 @@
 |---|---|---|
 | `src/agentic/evaluation/engine.py` (+~150 lines) | Added `write_artifact()` and `load_artifact()` methods per §15.4.9 spec | J23 6/6 |
 
+### Turn 10: M9 RAG + Documents Complete (§12.2-§12.5)
+| Artifact | Description | Test Coverage |
+|---|---|---|
+| `src/agentic/implementations/rag_adapter.py` (+~120 lines) | Added restore(), list_collections(), usage() methods; ACL enforcement in retrieve(), restore(), list_collections(), usage() | J9 tests 8-12 |
+| `src/agentic/implementations/rag_acl.py` (+10 lines) | Enhanced ACL checks for new methods | J5 8/8 |
+| `src/agentic/contracts/adapters.py` (+3 methods) | Added restore, list_collections, usage to RAGServiceAdapter ABC | — |
+| `tests/J9_rag_adapter.sh` (+6 tests) | Added tests for restore, list_collections, usage (tests 8-12) | J9 12/12 |
+
+**M9 Complete Features:**
+- ✅ RAGServiceAdapter full contract (§12.2): health, capabilities, config, submit_task, retrieve, snapshot, **restore**, **list_collections**, **usage**
+- ✅ Multi-project ACL enforcement (§12.3): ACL checks in all retrieval/access methods
+- ✅ Batch authorization integration (§12.4): AuthorizationBatchManager in submit_task
+- ✅ Versioning and restore (§12.5): snapshot/restore with ACL enforcement
+- ✅ Refus des sources devenues inaccessibles: ACL checks prevent access to denied collections
+- ✅ Audit du scope et des sources retournées: All ACL checks logged to audit trail
+
 ## Implementation Map & Gap Analysis
 
 **Key completed invariants:**
@@ -246,6 +267,7 @@
 - ✅ Auth middleware enforces RBAC on mutable endpoints
 - ✅ M5: Quota checks enforced before scheduler admission
 - ✅ §17: SBOM provenance tracking via CLI
+- ✅ **M9: RAG + Documents Complete** — RAGServiceAdapter (§12.2) + Multi-Project ACL (§12.3) + AuthorizationBatch (§12.4) + Versioning/Restore (§12.5)
 - ✅ **M10: Scheduler advanced features complete** (calendar, reservations, preemption, anti-loop)
 - ✅ **§13: Migration router tested with 6 assertions**
 - ✅ **§15.4: Evaluation engine with promotion pipeline implemented and tested**

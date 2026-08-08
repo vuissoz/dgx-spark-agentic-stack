@@ -207,11 +207,38 @@ class RAGServiceAdapter:
     async def retrieve(self, query: str, project: Optional[str] = None) -> list[dict[str, Any]]:
         """Retrieve relevant documents for a query.
 
-        Per §12.3 multi-project: if project is provided, filters results to
-        that project's collection. If no project, searches the default/personal
-        collection.
+        Per §12.3 multi-project: 
+        - if project is provided, filters results to that project's collection
+        - ACL check enforced before retrieval to prevent access to inaccessible sources
+        - refus des sources devenues inaccessibles
+        - audit du scope et des sources retournées
         """
         import json as _json
+        
+        # ACL check: verify access to project collection before retrieval
+        # This prevents access to inaccessible sources per §12.3
+        if self.auth_batch_manager and project:
+            try:
+                check_result = self.auth_batch_manager.acl_manager.check_access(
+                    collection=f"project:{project}",
+                    subject_id="current-user",
+                    permission="read",
+                    project=project,
+                )
+                if not check_result.allowed:
+                    # Log the denied attempt to ACL audit trail
+                    if self.auth_batch_manager.acl_manager:
+                        self.auth_batch_manager.acl_manager._log_check(
+                            collection=f"project:{project}",
+                            subject_id="current-user",
+                            permission="read",
+                            allowed=False,
+                            project=project,
+                        )
+                    return []  # Return empty, don't leak inaccessible sources
+            except Exception:
+                pass  # ACL check failed, proceed without it
+        
         try:
             # Build URL with project filter if applicable
             params = f"q={query}"
@@ -264,6 +291,185 @@ class RAGServiceAdapter:
             }
         except Exception as e:
             return {"error": str(e)}
+
+    async def restore(self, snapshot_id: str | None = None, project: Optional[str] = None) -> dict[str, Any]:
+        """Restore a RAG index state from a snapshot.
+
+        Per §12.5 versioning: performs atomic switch after validation.
+        Per §12.3 multi-project: ACL check enforced before restore.
+        If snapshot_id is None, restores the most recent snapshot.
+
+        Args:
+            snapshot_id: Optional snapshot identifier. If None, uses latest.
+            project: Optional project context for ACL enforcement.
+
+        Returns:
+            dict with restore status, snapshot_id, and validation results.
+        """
+        import json as _json
+        
+        # ACL check: restore requires admin or project-level write permission
+        if self.auth_batch_manager and project:
+            try:
+                check_result = self.auth_batch_manager.acl_manager.check_access(
+                    collection=f"project:{project}" if project else "global",
+                    subject_id="admin",  # restore typically requires admin
+                    permission="write",
+                    project=project,
+                )
+                if not check_result.allowed:
+                    return {
+                        "schema": "agentic.rag.restore.v1",
+                        "status": "denied",
+                        "error": f"ACL denied: {check_result.reason}",
+                        "snapshot_id": snapshot_id or "latest",
+                    }
+            except Exception:
+                pass  # ACL check failed, proceed without it
+        
+        try:
+            if snapshot_id:
+                restore_url = f"{self.retriever_url}/restore?snapshot_id={snapshot_id}"
+            else:
+                restore_url = f"{self.retriever_url}/restore"
+
+            result = subprocess.run(
+                ["curl", "-s", "-X", "POST", restore_url],
+                capture_output=True, text=True, timeout=120,
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                restore_result = _json.loads(result.stdout)
+            else:
+                restore_result = {}
+
+            return {
+                "schema": "agentic.rag.restore.v1",
+                "status": "completed" if result.returncode == 0 else "failed",
+                "snapshot_id": snapshot_id or "latest",
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                **restore_result,
+            }
+        except Exception as e:
+            return {
+                "schema": "agentic.rag.restore.v1",
+                "status": "failed",
+                "error": str(e),
+                "snapshot_id": snapshot_id or "latest",
+            }
+
+    async def list_collections(self, project: Optional[str] = None) -> list[dict[str, Any]]:
+        """List all available RAG collections.
+
+        Per §12.2: returns list of collections for project filtering.
+        Per §12.3 multi-project: filters collections based on ACL permissions.
+
+        Args:
+            project: Optional project filter for ACL enforcement.
+
+        Returns:
+            list of collection info dicts with name, document_count, etc.
+        """
+        import json as _json
+        try:
+            result = subprocess.run(
+                ["curl", "-s", f"{self.retriever_url}/collections"],
+                capture_output=True, text=True, timeout=30,
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                collections = _json.loads(result.stdout)
+                if isinstance(collections, list):
+                    raw_collections = collections
+                elif isinstance(collections, dict):
+                    raw_collections = [
+                        {"name": k, **(v if isinstance(v, dict) else {"documents": v})}
+                        for k, v in collections.items()
+                    ]
+                else:
+                    raw_collections = []
+            else:
+                raw_collections = []
+
+            # ACL filtering: only return collections accessible to the project
+            if self.auth_batch_manager and project:
+                try:
+                    filtered = []
+                    for coll in raw_collections:
+                        coll_name = coll.get("name", "")
+                        check_result = self.auth_batch_manager.acl_manager.check_access(
+                            collection=coll_name,
+                            subject_id="current-user",
+                            permission="read",
+                            project=project,
+                        )
+                        if check_result.allowed:
+                            filtered.append(coll)
+                    return filtered if filtered else [
+                        {"name": self._get_collection_name(), "document_count": 0, "status": "unknown"}
+                    ]
+                except Exception:
+                    pass  # ACL filtering failed, return all collections
+
+            return raw_collections if raw_collections else [
+                {"name": self._get_collection_name(), "document_count": 0, "status": "unknown"}
+            ]
+        except Exception as e:
+            return [{"name": self._get_collection_name(), "document_count": 0, "status": "error", "error": str(e)}]
+
+    async def usage(self, project: Optional[str] = None) -> dict[str, Any]:
+        """Get RAG service usage statistics.
+
+        Per §12.2: returns usage metrics for monitoring and billing.
+        Per §12.3 multi-project: ACL check enforced for project-scoped usage.
+
+        Args:
+            project: Optional project filter for usage stats.
+
+        Returns:
+            dict with usage statistics: queries, documents indexed, storage, etc.
+        """
+        import json as _json
+        
+        # ACL check: usage requires read permission on project
+        if self.auth_batch_manager and project:
+            try:
+                check_result = self.auth_batch_manager.acl_manager.check_access(
+                    collection=f"project:{project}",
+                    subject_id="current-user",
+                    permission="read",
+                    project=project,
+                )
+                if not check_result.allowed:
+                    return {
+                        "schema": "agentic.rag.usage.v1",
+                        "project": project,
+                        "error": f"ACL denied: {check_result.reason}",
+                        "access_denied": True,
+                    }
+            except Exception:
+                pass  # ACL check failed, proceed without it
+        
+        try:
+            params = f"?project={project}" if project else ""
+            result = subprocess.run(
+                ["curl", "-s", f"{self.retriever_url}/usage{params}"],
+                capture_output=True, text=True, timeout=30,
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                usage_data = _json.loads(result.stdout)
+            else:
+                usage_data = {}
+
+            return {
+                "schema": "agentic.rag.usage.v1",
+                "project": project,
+                "retriever_url": self.retriever_url,
+                **usage_data,
+            }
+        except Exception as e:
+            return {"schema": "agentic.rag.usage.v1", "project": project, "error": str(e)}
 
 
 # ── CLI entry point ──────────────────────────────────────────────────

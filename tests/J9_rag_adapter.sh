@@ -23,6 +23,9 @@ assert hasattr(r, 'config'), 'missing config()'
 assert hasattr(r, 'submit_task'), 'missing submit_task()'
 assert hasattr(r, 'retrieve'), 'missing retrieve()'
 assert hasattr(r, 'snapshot'), 'missing snapshot()'
+assert hasattr(r, 'restore'), 'missing restore()'
+assert hasattr(r, 'list_collections'), 'missing list_collections()'
+assert hasattr(r, 'usage'), 'missing usage()'
 print('PASS')
 " || fail "J9 test 1: RAG adapter contract violation"
 
@@ -96,6 +99,66 @@ result = asyncio.run(r.retrieve('test query', project='personal'))
 assert isinstance(result, list), 'retrieve should return list'
 print('PASS')
 " || fail "J9 test 7: retrieve not returning list"
+
+ok "J9 test 8: restore() returns structured result with status"
+python3 -c "
+import sys, asyncio
+sys.path.insert(0, '${REPO_ROOT}/src')
+from agentic.implementations.rag_adapter import RAGServiceAdapter
+r = RAGServiceAdapter(retriever_url='http://127.0.0.1:9999')
+result = asyncio.run(r.restore())
+assert 'schema' in result, 'restore should have schema'
+assert 'status' in result, 'restore should have status'
+assert result.get('schema') == 'agentic.rag.restore.v1', f'Expected restore schema: {result}'
+print('PASS')
+" || fail "J9 test 8: restore crashes or wrong response"
+
+ok "J9 test 9: restore() with snapshot_id returns correct snapshot_id"
+python3 -c "
+import sys, asyncio
+sys.path.insert(0, '${REPO_ROOT}/src')
+from agentic.implementations.rag_adapter import RAGServiceAdapter
+r = RAGServiceAdapter(retriever_url='http://127.0.0.1:9999')
+result = asyncio.run(r.restore('snap-123'))
+assert result.get('snapshot_id') == 'snap-123', f'Expected snapshot_id snap-123: {result}'
+print('PASS')
+" || fail "J9 test 9: restore with snapshot_id wrong"
+
+ok "J9 test 10: list_collections() returns list of collections"
+python3 -c "
+import sys, asyncio
+sys.path.insert(0, '${REPO_ROOT}/src')
+from agentic.implementations.rag_adapter import RAGServiceAdapter
+r = RAGServiceAdapter(retriever_url='http://127.0.0.1:9999')
+result = asyncio.run(r.list_collections())
+assert isinstance(result, list), f'list_collections should return list: {type(result)}'
+assert len(result) > 0, 'Should return at least one collection'
+assert 'name' in result[0], 'Collection should have name field'
+print('PASS')
+" || fail "J9 test 10: list_collections wrong response"
+
+ok "J9 test 11: usage() returns structured usage statistics"
+python3 -c "
+import sys, asyncio
+sys.path.insert(0, '${REPO_ROOT}/src')
+from agentic.implementations.rag_adapter import RAGServiceAdapter
+r = RAGServiceAdapter(retriever_url='http://127.0.0.1:9999')
+result = asyncio.run(r.usage())
+assert 'schema' in result, 'usage should have schema'
+assert result.get('schema') == 'agentic.rag.usage.v1', f'Expected usage schema: {result}'
+print('PASS')
+" || fail "J9 test 11: usage wrong response"
+
+ok "J9 test 12: usage() with project filter includes project field"
+python3 -c "
+import sys, asyncio
+sys.path.insert(0, '${REPO_ROOT}/src')
+from agentic.implementations.rag_adapter import RAGServiceAdapter
+r = RAGServiceAdapter(retriever_url='http://127.0.0.1:9999')
+result = asyncio.run(r.usage(project='test-project'))
+assert result.get('project') == 'test-project', f'Expected project filter: {result}'
+print('PASS')
+" || fail "J9 test 12: usage with project filter wrong"
 
 echo ""
 echo "=== J9_rag_adapter passed ==="
