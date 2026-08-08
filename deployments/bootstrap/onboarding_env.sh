@@ -141,6 +141,7 @@ Runtime options:
   --limits-rag-mem <size>
   --limits-optional-cpus <cores>
   --limits-optional-mem <size>
+  --limits-rootless-dev-memory <mb>
   --git-forge-host-port <port>
   --git-forge-admin-user <name>
   --git-forge-shared-namespace <slug>
@@ -2019,6 +2020,11 @@ while [[ $# -gt 0 ]]; do
     --limits-optional-mem)
       [[ $# -ge 2 ]] || die "missing value for --limits-optional-mem"
       limits_optional_mem_override="$2"
+      shift 2
+      ;;
+    --limits-rootless-dev-memory)
+      [[ $# -ge 2 ]] || die "missing value for --limits-rootless-dev-memory"
+      limits_rootless_dev_memory_override="$2"
       shift 2
       ;;
     --git-forge-host-port)
