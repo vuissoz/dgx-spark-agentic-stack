@@ -914,11 +914,11 @@ validate_optional_modules_csv() {
       none)
         saw_none=1
         ;;
-      mcp|pi-mono|goose|portainer)
+      mcp|pi-mono|goose|portainer|n8n)
         saw_module=1
         ;;
       *)
-        echo "unknown optional module '${entry}' (allowed: mcp,pi-mono,goose,portainer,none)" >&2
+        echo "unknown optional module '${entry}' (allowed: mcp,pi-mono,goose,portainer,n8n,none)" >&2
         return 1
         ;;
     esac
@@ -2326,7 +2326,7 @@ collect_text_value limits_rootless_dev_memory "AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY
 optional_modules_raw="${optional_modules_override:-none}"
 if [[ "${non_interactive}" -eq 0 && -z "${optional_modules_override}" ]]; then
   while true; do
-    candidate="$(prompt_with_default "AGENTIC_OPTIONAL_MODULES (csv: none,mcp,pi-mono,goose,portainer)" "${optional_modules_raw}")"
+    candidate="$(prompt_with_default "AGENTIC_OPTIONAL_MODULES (csv: none,mcp,pi-mono,goose,portainer,n8n)" "${optional_modules_raw}")"
     if validate_optional_modules_csv "${candidate}"; then
       optional_modules_raw="${candidate}"
       break

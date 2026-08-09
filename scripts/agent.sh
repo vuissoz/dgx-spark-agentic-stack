@@ -39,10 +39,10 @@ AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_GPU_CLOCK_LOW_PRESET="${AGENT_GPU_CLOCK_LOW_PRESET:-2000,2000}"
 AGENT_TOOLS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose comfyui)
-AGENT_STATUS_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
-STOP_START_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
-OPTIONAL_MODULES=(mcp pi-mono goose portainer)
-FORGET_TARGETS=(ollama claude codex opencode kilocode vibestral hermes comfyui openclaw openhands openwebui qdrant obs all)
+AGENT_STATUS_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui n8n)
+STOP_START_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui n8n)
+OPTIONAL_MODULES=(mcp pi-mono goose portainer n8n)
+FORGET_TARGETS=(ollama claude codex opencode kilocode vibestral hermes comfyui openclaw openhands openwebui qdrant obs n8n all)
 STACK_START_ORDER=(core agents ui obs rag optional)
 STACK_STOP_ORDER=(optional rag obs ui agents core)
 
@@ -121,7 +121,7 @@ Usage:
   agent doctor [--fix-net] [--check-tool-stream-e2e]
 
 Optional modules (disabled by default):
-  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer agent up optional
+  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer,n8n agent up optional
 USAGE
 }
 
@@ -298,6 +298,7 @@ service_start_hint() {
     openclaw|openclaw-gateway) echo "agent up core" ;;
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
+    optional-n8n) echo "AGENTIC_OPTIONAL_MODULES=n8n agent up optional" ;;
     optional-forgejo|comfyui) echo "agent up ui" ;;
     *) echo "agent up agents" ;;
   esac
@@ -308,7 +309,7 @@ target_to_compose_file() {
     claude|codex|opencode|kilocode|vibestral|hermes) stack_to_compose_file agents ;;
     openclaw) stack_to_compose_file core ;;
     openwebui|openhands|comfyui|forgejo) stack_to_compose_file ui ;;
-    pi-mono|goose) stack_to_compose_file optional ;;
+    pi-mono|goose|n8n) stack_to_compose_file optional ;;
     *) return 1 ;;
   esac
 }
@@ -331,6 +332,7 @@ target_to_services() {
       ;;
     pi-mono) printf '%s\n' "optional-pi-mono" ;;
     goose) printf '%s\n' "optional-goose" ;;
+    n8n) printf '%s\n' "optional-n8n optional-n8n-loopback" ;;
     forgejo)
       printf '%s\n' \
         "optional-forgejo" \
@@ -408,6 +410,7 @@ optional_module_profile() {
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "optional-goose" ;;
     portainer) echo "optional-portainer" ;;
+    n8n) echo "optional-n8n" ;;
     *) return 1 ;;
   esac
 }

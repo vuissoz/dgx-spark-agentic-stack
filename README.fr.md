@@ -17,7 +17,7 @@ Les fichiers Compose sont dans `compose/`:
 - `compose/compose.ui.yml`: `optional-forgejo`, `optional-forgejo-loopback`, `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (profile `rag-lexical`)
-- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`, `optional-n8n`, `optional-n8n-loopback`
 
 ## Profils d'exécution
 
@@ -99,7 +99,7 @@ Dossiers persistants clés:
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode,kilocode,vibestral,hermes}/{state,logs,workspaces}/`
 - `openclaw/{config/{immutable,overlay},state,logs,relay/{state,logs},sandbox/{state,workspaces},workspaces}/`
-- `optional/{git,mcp,pi-mono,goose,portainer}/...`
+- `optional/{git,mcp,pi-mono,goose,portainer,n8n}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
 - `shared-ro/`, `shared-rw/`
@@ -674,7 +674,7 @@ Variables injectées dans les conteneurs agents:
 Activation explicite:
 
 ```bash
-AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
+AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer,n8n ./agent up optional
 ```
 
 OpenClaw fait désormais partie du `core` et démarre via:

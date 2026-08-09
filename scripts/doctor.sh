@@ -181,6 +181,7 @@ openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 openclaw_gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 openclaw_relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 openclaw_gateway_metrics_port="${OPENCLAW_GATEWAY_PROXY_METRICS_PORT:-9114}"
+n8n_host_port="${N8N_HOST_PORT:-5678}"
 goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
 compaction_soft_percent_expected="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
 compaction_danger_percent_expected="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
@@ -191,7 +192,7 @@ compaction_danger_tokens_expected="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}
 service_requires_proxy_env() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-kilocode|agentic-vibestral|agentic-hermes|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-kilocode|agentic-vibestral|agentic-hermes|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|optional-n8n|ollama-gate)
       return 0
       ;;
     *)
@@ -3184,6 +3185,13 @@ optional_portainer_cid="$(service_container_id optional-portainer)"
 if [[ -n "${optional_portainer_cid}" ]]; then
   if ! assert_no_public_bind "${portainer_host_port}"; then
     doctor_fail "optional portainer host bind must stay loopback-only on port ${portainer_host_port}"
+  fi
+fi
+
+optional_n8n_cid="$(service_container_id optional-n8n)"
+if [[ -n "${optional_n8n_cid}" ]]; then
+  if ! assert_no_public_bind "${n8n_host_port}"; then
+    doctor_fail "optional n8n host bind must stay loopback-only on port ${n8n_host_port}"
   fi
 fi
 
