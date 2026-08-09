@@ -13,6 +13,7 @@ AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollbac
 AGENT_RELEASE_RESOLVE_LATEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/resolve_latest.py"
 AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/write_release_integrity.py"
 AGENT_BACKUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/backups/time_machine.sh"
+AGENT_GENERATE_HARNESS_PROFILES_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/generate_harness_profiles.py"
 AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_PREREQS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/check_prereqs.sh"
@@ -5195,6 +5196,16 @@ cmd_update() {
 
   printf 'update requested: profile=%s project=%s, resolving image digests and compose inputs\n' \
     "${AGENTIC_PROFILE}" "${AGENTIC_COMPOSE_PROJECT}"
+
+  # Générer harness_profiles.py à partir des configs
+  if [[ -x "${AGENT_GENERATE_HARNESS_PROFILES_SCRIPT}" ]]; then
+    printf 'Generating harness profiles from config...\n'
+    python3 "${AGENT_GENERATE_HARNESS_PROFILES_SCRIPT}" --force \
+      --config "${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles_config.yaml" \
+      --output "${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles.py" || {
+      echo "WARN: Failed to generate harness profiles" >&2
+    }
+  fi
 
   local resolution_dir
   resolution_dir="$(mktemp -d)"

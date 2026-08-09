@@ -13,6 +13,9 @@ source "${AGENTIC_REPO_ROOT}/tests/lib/common.sh"
 
 AGENT_RELEASE_VALIDATE_LATEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/validate_latest_resolution.py"
 AGENT_RELEASE_VALIDATE_ARTIFACTS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/validate_release_artifacts.py"
+AGENT_GENERATE_HARNESS_PROFILES_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/generate_harness_profiles.py"
+HARNESS_PROFILES_CONFIG="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles_config.yaml"
+HARNESS_PROFILES_PY="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles.py"
 
 status=0
 fix_net=0
@@ -3264,6 +3267,36 @@ else
       doctor_fail "active release artifact integrity or secret hygiene validation failed; run 'agent update' and inspect the release snapshot"
     fi
   fi
+fi
+
+# Check harness profiles generation status
+if [[ -f "${HARNESS_PROFILES_CONFIG}" ]]; then
+  if [[ -f "${HARNESS_PROFILES_PY}" ]]; then
+    # Vérifier que le fichier Python est à jour par rapport au YAML
+    if [[ -x "${AGENT_GENERATE_HARNESS_PROFILES_SCRIPT}" ]]; then
+      set +e
+      profiles_check_output=$(
+        python3 "${AGENT_GENERATE_HARNESS_PROFILES_SCRIPT}" --check \
+          --config "${HARNESS_PROFILES_CONFIG}" \
+          --output "${HARNESS_PROFILES_PY}" 2>&1
+      )
+      profiles_check_rc=$?
+      set -e
+      
+      if [[ "${profiles_check_rc}" -eq 0 ]]; then
+        ok "harness profiles are up-to-date"
+      else
+        warn "harness profiles are outdated: ${profiles_check_output}"
+        doctor_fail_or_warn "harness_profiles.py is outdated; run 'agent update' to regenerate"
+      fi
+    else
+      ok "harness profiles generator is available"
+    fi
+  else
+    doctor_fail "harness_profiles.py is missing; run 'agent update' to generate"
+  fi
+else
+  doctor_fail "harness_profiles_config.yaml is missing"
 fi
 
 if [[ "$status" -ne 0 ]]; then

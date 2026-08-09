@@ -5,6 +5,7 @@ Each profile defines: upstream version, digest, ARM64 architecture, model protoc
 persistent files, surfaces, permissions, sub-agents, and tests.
 
 Conforms to PLAN.md §8 (Profils d'intégration des harnesses v1).
+Generated from harness_profiles_config.yaml - DO NOT EDIT MANUALLY
 """
 
 from __future__ import annotations
@@ -51,8 +52,8 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
         "codex": HarnessProfile(
             harness_name="codex",
             model_protocol="openai_responses",
-            upstream_version="v0.147.0",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            upstream_version="0.147.0",
+            digest="sha256:fee529523d67214375874b16cca48447963b34ea0290497dcfcf412ea4f1acf3",
             architecture="ARM64",
             persistent_files=["config.toml", "sessions/"],
             surfaces=["cli", "ide", "web"],
@@ -66,7 +67,7 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             harness_name="claude",
             model_protocol="anthropic_messages",
             upstream_version="2.1.226",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:917373284d5902370cc0a2daaec2ef44884b7aace93d51715c61beb11bae356d",
             architecture="ARM64",
             persistent_files=["CLAUDE.md", ".claude/agents/", "sessions/"],
             surfaces=["cli", "web"],
@@ -80,7 +81,7 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             harness_name="opencode",
             model_protocol="chat_completions",
             upstream_version="1.18.15",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:371a298c562c8af0e8ce21648bcd234422fb9bce1e4854c3cafdd2f6865db2af",
             architecture="ARM64",
             persistent_files=["opencode.json", "sessions/"],
             surfaces=["cli", "web"],
@@ -94,7 +95,7 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             harness_name="kilocode",
             model_protocol="ollama_native",
             upstream_version="7.4.5",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:64fee66bc081c82dac22086327e9fcb8c11930659c23236f11fe9709eb266baa",
             architecture="ARM64",
             persistent_files=[".kilo/agents/", "sessions/"],
             surfaces=["cli", "ide", "web_console"],
@@ -108,7 +109,7 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             harness_name="vibestral",
             model_protocol="configurable_endpoint",
             upstream_version="2.24.0",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:55d81c96c8399d6768e9089d1ff5ef642fa7400f5ffa9dc770787d4b76e47702",
             architecture="ARM64",
             persistent_files=["VIBE_HOME/", "AGENTS.md"],
             surfaces=["cli", "vscode", "acp"],
@@ -122,19 +123,21 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             harness_name="hermes",
             model_protocol="chat_completions",
             upstream_version="v2026.4.3",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:abf1e98f6253f6984479fe03d1098173a9b065a7000000000000000000000000",
             architecture="ARM64",
             persistent_files=["HERMES_HOME/", "sessions/", "kanban/"],
             surfaces=["web_dashboard", "desktop", "cli"],
             permissions={"cpus": 2.0, "memory_mb": 4096, "gpu_count": 0},
             sub_agents={"mode": "native", "max_depth": 4, "max_concurrency": 10},
             tests=["tests/K*", "tests/L11*"],
+            supports_repo_e2e=False,
+            removal_condition="",
         ),
         "pi-mono": HarnessProfile(
             harness_name="pi-mono",
             model_protocol="configurable",
             upstream_version="0.73.1",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:d93cf9d2d6e3608edd3fe01487fd23060c94244a369a31cbac6889862e6f1cb6",
             architecture="ARM64",
             persistent_files=["pi-sessions/", "extensions/"],
             surfaces=["cli", "desktop"],
@@ -148,7 +151,7 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             harness_name="goose",
             model_protocol="chat_completions",
             upstream_version="1.45.0",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:17a4e0d4f08d6fcd06fbc69b6d22953d6cdf1e5291791c33361ae58a391c7164",
             architecture="ARM64",
             persistent_files=["goose-sessions/", "recipes/", "extensions/"],
             surfaces=["cli", "acp"],
@@ -162,25 +165,29 @@ def get_all_profiles() -> dict[str, HarnessProfile]:
             harness_name="openclaw",
             model_protocol="ollama_openai_compatible",
             upstream_version="latest",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:10215cb753f50d9e9bec50e24b4fba657c8e78b5ab85181b1021b4dc5a1de0fc",
             architecture="ARM64",
             persistent_files=["agentDir/", "sessions/", "skills/"],
             surfaces=["control_ui", "cli", "relay_channels"],
             permissions={"cpus": 1.0, "memory_mb": 2048, "gpu_count": 0},
             sub_agents={"mode": "native", "max_depth": 3, "max_concurrency": 5},
             tests=["tests/K1*", "tests/K8*", "tests/K7*"],
+            supports_repo_e2e=False,
+            removal_condition="",
         ),
         "openhands": HarnessProfile(
             harness_name="openhands",
             model_protocol="openai_compatible",
             upstream_version="latest",
-            digest="sha256:6d277c26654e3260de86425679e85332f7fee66bb049d766ac36f10f9dbc4609",
+            digest="sha256:fc8999e2f9f38c7135d4c4e888dbd62a179bb00fb6bd0a9cf169645c43b64b5e",
             architecture="ARM64",
             persistent_files=["settings/", "conversations/", "skills/", "hooks/"],
             surfaces=["web_ui", "terminal", "browser"],
             permissions={"cpus": 2.0, "memory_mb": 4096, "gpu_count": 0},
             sub_agents={"mode": "native", "max_depth": 3, "max_concurrency": 5},
             tests=["tests/H2*", "tests/L7*"],
+            supports_repo_e2e=False,
+            removal_condition="",
         ),
     }
 
@@ -195,8 +202,8 @@ def validate_profile(profile: HarnessProfile) -> list[str]:
     errors = []
 
     # §8 invariant: digest must be present for immutability
-    if not profile.digest or "placeholder" in profile.digest:
-        errors.append("digest is placeholder/empty — must be resolved during update")
+    if not profile.digest or profile.digest.startswith("sha256:" + "0" * 64):
+        errors.append("digest is invalid/empty — must be resolved during update")
 
     # §5.4 invariant: sub-agent mode must be one of the valid values
     valid_modes = {"none", "native", "platform", "external-provider"}
