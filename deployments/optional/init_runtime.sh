@@ -117,6 +117,7 @@ optional_request_default_need() {
     pi-mono) printf '%s\n' "Provide an additional isolated CLI agent runtime for targeted tasks." ;;
     goose) printf '%s\n' "Provide an isolated Goose CLI runtime for approved workflows." ;;
     portainer) printf '%s\n' "Provide temporary loopback-only Portainer visibility for local diagnostics." ;;
+    n8n) printf '%s\n' "Provide workflow automation service for local agentic workflows." ;;
     *) return 1 ;;
   esac
 }
@@ -128,6 +129,7 @@ optional_request_default_success() {
     pi-mono) printf '%s\n' "Container starts with expected user/workspace mappings and no forbidden mounts." ;;
     goose) printf '%s\n' "Container starts successfully with isolated workspace and expected proxy controls." ;;
     portainer) printf '%s\n' "UI is reachable on loopback only and runs without docker.sock mount." ;;
+    n8n) printf '%s\n' "n8n service and loopback proxy start successfully with healthchecks passing." ;;
     *) return 1 ;;
   esac
 }

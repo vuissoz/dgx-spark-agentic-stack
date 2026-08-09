@@ -1,0 +1,4 @@
+need=Provide workflow automation service for local agentic workflows.
+success=n8n service and loopback proxy start successfully with healthchecks passing.
+owner=
+expires_at=

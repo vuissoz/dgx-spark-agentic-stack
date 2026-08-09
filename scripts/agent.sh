@@ -419,14 +419,14 @@ optional_module_secret_files() {
   case "$1" in
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
-    goose|portainer) ;;
+    goose|portainer|n8n) ;;
     *) return 1 ;;
   esac
 }
 
 optional_module_config_files() {
   case "$1" in
-    mcp|pi-mono|goose|portainer) ;;
+    mcp|pi-mono|goose|portainer|n8n) ;;
     *) return 1 ;;
   esac
 }
@@ -517,8 +517,48 @@ baseline_optional_modules() {
 validate_optional_request_file() {
   local module="$1"
   local request_file="${AGENTIC_ROOT}/deployments/optional/${module}.request"
+  local need_value
+  local success_value
+  local owner_value
 
-  [[ -f "${request_file}" ]] || die "Optional module '${module}' requires request file: ${request_file}"
+  if [[ ! -f "${request_file}" ]]; then
+    install -d -m 0750 "${AGENTIC_ROOT}/deployments/optional"
+    case "${module}" in
+      mcp)
+        need_value="Expose a restricted MCP catalog for local automation workflows."
+        success_value="Only allowlisted tools are available and service healthcheck stays green."
+        ;;
+      pi-mono)
+        need_value="Provide an additional isolated CLI agent runtime for targeted tasks."
+        success_value="Container starts with expected user/workspace mappings and no forbidden mounts."
+        ;;
+      goose)
+        need_value="Provide an isolated Goose CLI runtime for approved workflows."
+        success_value="Container starts successfully with isolated workspace and expected proxy controls."
+        ;;
+      portainer)
+        need_value="Provide temporary loopback-only Portainer visibility for local diagnostics."
+        success_value="UI is reachable on loopback only and runs without docker.sock mount."
+        ;;
+      n8n)
+        need_value="Provide workflow automation service for local agentic workflows."
+        success_value="n8n service and loopback proxy start successfully with healthchecks passing."
+        ;;
+      *)
+        die "Optional module '${module}' requires request file: ${request_file}"
+        ;;
+    esac
+    owner_value="${SUDO_USER:-${USER:-operator}}"
+    cat > "${request_file}" <<EOF
+need=${need_value}
+success=${success_value}
+owner=${owner_value}
+expires_at=
+EOF
+    chmod 0640 "${request_file}" || true
+    log_optional_activation "${module}"
+  fi
+
   grep -Eq '^need=[^[:space:]].+$' "${request_file}" \
     || die "Optional module '${module}' request is missing a non-empty 'need=' entry: ${request_file}"
   grep -Eq '^success=[^[:space:]].+$' "${request_file}" \
