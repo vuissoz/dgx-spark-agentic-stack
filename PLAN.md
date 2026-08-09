@@ -98,6 +98,7 @@ Le registre de parité est généré à partir de `agent --help`, Compose, des r
 
 - OpenWebUI ;
 - ComfyUI et Flux ;
+- n8n ;
 - Forgejo ;
 - Grafana et les vues d’observabilité ;
 - DGX Dashboard NVIDIA ;
@@ -200,7 +201,7 @@ OpenHands utilise plusieurs contrats : application, harness et runtime. Les adap
 |---|---|---|
 | contrôle de confiance | API, portail, scheduler, brokers | privilèges minimaux et audit complet |
 | services gérés | PostgreSQL, Forgejo, RAG, Grafana | Docker/Compose durci et réseau interne |
-| applications extensibles | OpenWebUI, ComfyUI, JupyterLab | plugins contrôlés, droits minimaux |
+| applications extensibles | OpenWebUI, ComfyUI, n8n, JupyterLab | plugins contrôlés, droits minimaux |
 | exécution de code | agents, OpenHands runtime, outils autonomes | OpenShell cible |
 | rupture | Portainer, shell hôte, TUI OpenShell direct | admin, réauthentification, audit |
 
@@ -440,6 +441,7 @@ Une application peut invoquer un modèle ou un agent sans devenir une identité 
 |---|---|---|
 | OpenWebUI | `ApplicationAdapter` | multi-utilisateur/RBAC, ModelBroker uniquement, sauvegarde |
 | ComfyUI | `ApplicationAdapter` + `GPUJobAdapter` | WebSocket/API, Flux, racine persistante unique, admission GPU |
+| n8n | `ApplicationAdapter` | workflows, Ollama local, nodes contrôlés, racine persistante |
 | Forgejo | `ApplicationAdapter` + `GitProviderAdapter` | forge interne, comptes, SSH, hooks, branches protégées |
 | Grafana | `ApplicationAdapter` | dashboards/datasources versionnés, lecture majoritaire |
 | DGX Dashboard | launcher admin supporté | pas d’iframe/proxy supposé sans test |
@@ -451,6 +453,7 @@ Une application peut invoquer un modèle ou un agent sans devenir une identité 
 - OpenWebUI Tools, Functions et Pipelines peuvent exécuter du Python : création/import désactivés par défaut, allowlist et revue ;
 - le RAG natif OpenWebUI ne devient pas une seconde source de vérité : il est désactivé ou relié explicitement au RAG de la stack ;
 - ComfyUI custom nodes sont du code tiers : versions/digests, provenance, allowlist, scan et test ;
+- n8n custom nodes et workflows externes sont du code tiers : versions/digests, provenance, allowlist, scan et test, intégration Ollama locale ;
 - JupyterLab est traité comme un environnement de code, pas une simple page web ;
 - les tâches OpenHands restent sous leur politique runtime validée.
 
@@ -461,7 +464,7 @@ Une application peut invoquer un modèle ou un agent sans devenir une identité 
 - Kilo CLI/IDE/console ;
 - Vibe CLI/VS Code/ACP ;
 - Goose ACP ;
-- OpenWebUI, ComfyUI, Forgejo et Grafana ;
+- OpenWebUI, ComfyUI, n8n, Forgejo et Grafana ;
 - DGX Dashboard et JupyterLab.
 
 Aucun iframe ou reverse proxy par sous-chemin n’est supposé compatible sans preuve. Le portail utilise une URL, un tunnel ou un proxy officiellement validé.
@@ -679,7 +682,7 @@ Hermes natif référence, NemoClaw canari isolé, OpenClaw NemoClaw après parit
 
 ### M8 — Applications humaines
 
-OpenWebUI, ComfyUI/Flux, Forgejo, Grafana, DGX Dashboard et JupyterLab avec RBAC, plugins gouvernés, admission GPU et sauvegarde.
+OpenWebUI, ComfyUI/Flux, n8n, Forgejo, Grafana, DGX Dashboard et JupyterLab avec RBAC, plugins gouvernés, admission GPU et sauvegarde.
 
 **G8 :** accès sans port interne et selon le niveau de confiance.
 
@@ -734,7 +737,7 @@ La baseline attend une DGX Spark ARM64 avec 128 Go de mémoire unifiée ; les ca
 
 **Niveau 2 — harnesses :** démarrage chaud/froid, reprise, compaction, `repo-e2e`, Git/GitHub, approvals, sous-agents, profondeur, annulation et coûts.
 
-**Niveau 3 — applications/données :** OpenWebUI, Flux ComfyUI, tâche OpenHands, RAG index/query, Forgejo, GitHub, HF cache froid/chaud.
+**Niveau 3 — applications/données :** OpenWebUI, Flux ComfyUI, n8n, tâche OpenHands, RAG index/query, Forgejo, GitHub, HF cache froid/chaud.
 
 **Niveau 4 — mixte/endurance :** charges 1 h, 6 h et 24 h, panne backend, pression disque, perte réseau et échec de modèle.
 
@@ -1286,7 +1289,7 @@ Ce gate ne doit pas multiplier artificiellement les validations humaines. Il emp
 | tokens GitHub/HF persistants | ExternalAccessBroker et credentials courts |
 | téléchargements HF dupliqués | cache central et admission |
 | RAG OpenWebUI parallèle | désactivation ou pont explicite |
-| Tools OpenWebUI/custom nodes ComfyUI | allowlist, pinning, scan, sandbox |
+| Tools OpenWebUI/custom nodes ComfyUI/n8n workflows | allowlist, pinning, scan, sandbox |
 | changement embedding | version d’index séparée |
 | Qdrant pris pour source canonique | sources et catalogue restaurables |
 | proxy dashboard supposé | chemin officiel testé |
