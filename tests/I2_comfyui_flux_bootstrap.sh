@@ -17,6 +17,22 @@ assert_cmd python3
 agent_bin="${REPO_ROOT}/agent"
 [[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
 
+python3 - "${REPO_ROOT}/scripts/comfyui_flux_setup.sh" <<'PY' \
+  || fail "embedded Flux downloader Python is invalid or lacks integrity imports"
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+marker = "      python3 - <<'PY'\n"
+start = source.index(marker) + len(marker)
+end = source.index("\nPY\n", start)
+downloader = source[start:end]
+compile(downloader, "comfyui_flux_downloader", "exec")
+for required_import in ("import fcntl", "import hashlib"):
+    if required_import not in downloader:
+        raise SystemExit(f"missing downloader import: {required_import}")
+PY
+
 # Keep the negative download path deterministic. The setup helper otherwise
 # discovers a host-managed Hugging Face token and can start a real, long-running
 # gated download during a regression test. An explicit empty file disables that

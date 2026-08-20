@@ -155,8 +155,6 @@ JSON
 
 python3 - "${manifest_file}" "${models_root}" <<'PY'
 import json
-import fcntl
-import hashlib
 import os
 import pathlib
 import sys
@@ -228,6 +226,8 @@ if [[ "${download_models}" == "1" ]]; then
       -e FLUX_MANIFEST_FILE="/comfyui/models/flux1-dev.manifest.json" \
       "${comfy_cid}" \
       python3 - <<'PY'
+import fcntl
+import hashlib
 import json
 import os
 import pathlib
