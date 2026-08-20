@@ -148,6 +148,19 @@ The following environment variables can be configured:
 - `GRAFANA_HOST_PORT`: Grafana port (default: 13000)
 - `OPENWEBUI_HOST_PORT`: OpenWebUI port (default: 8080)
 
+### ComfyUI authentication
+
+`COMFYUI_AUTH_USERNAME` and `COMFYUI_AUTH_PASSWORD` protect the loopback
+proxy exposed on port 8188. The built-in `admin` / `change-me` pair exists
+only as a first-run development default and must be replaced before remote
+access is enabled.
+
+For a deployed stack, inject the values from an untracked, mode-600 runtime
+environment file (normally `${AGENTIC_ROOT}/deployments/runtime.env`) or from
+your deployment environment. Do not add real credentials to
+`examples/ui/comfyui.env`, tracked `.env` files, release artifacts, or issue
+comments. Recreate `comfyui-loopback` after changing either value.
+
 ## G8 Compliance
 
 G8 requires: "accès sans port interne et selon le niveau de confiance"

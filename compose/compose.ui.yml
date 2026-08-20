@@ -340,7 +340,10 @@ services:
       - agentic
 
   comfyui-loopback:
-    image: nginxinc/nginx-unprivileged:1.27-alpine
+    image: agentic/comfyui-loopback:local
+    build:
+      context: ..
+      dockerfile: deployments/images/comfyui-loopback/Dockerfile
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_COMFYUI_LOOPBACK_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_COMFYUI_LOOPBACK_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
@@ -362,9 +365,28 @@ services:
       - /bin/sh
       - -ec
       - |
+        umask 077
         mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
-        # Generate htpasswd file for basic auth
-        printf '%s:%s\n' '${COMFYUI_AUTH_USERNAME:-admin}' "$(printf '%s' '${COMFYUI_AUTH_PASSWORD:-change-me}' | openssl passwd -apr1 -stdin)" > /tmp/nginx.htpasswd
+        username="$${COMFYUI_AUTH_USERNAME:-}"
+        password="$${COMFYUI_AUTH_PASSWORD:-}"
+        if ! printf '%s' "$$username" | grep -Eq '^[A-Za-z0-9._-]+$$'; then
+          echo 'COMFYUI_AUTH_USERNAME must contain only letters, digits, dot, underscore, or hyphen' >&2
+          exit 1
+        fi
+        if [ -z "$$password" ]; then
+          echo 'COMFYUI_AUTH_PASSWORD must not be empty' >&2
+          exit 1
+        fi
+        if ! auth_hash="$$(printf '%s' "$$password" | openssl passwd -apr1 -stdin)"; then
+          echo 'failed to generate ComfyUI Basic Auth password hash' >&2
+          exit 1
+        fi
+        if [ -z "$$auth_hash" ]; then
+          echo 'ComfyUI Basic Auth password hash is empty' >&2
+          exit 1
+        fi
+        printf '%s:%s\n' "$$username" "$$auth_hash" > /tmp/nginx.htpasswd
+        chmod 600 /tmp/nginx.htpasswd
         cat >/tmp/nginx.conf <<'NGINX'
         pid /tmp/nginx.pid;
         events {}
@@ -408,7 +430,11 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - wget -q -S -O /dev/null http://127.0.0.1:8188/ 2>&1 | grep -qE 'HTTP/1.[01] (200|401|403)' || exit 1
+        - >
+          auth_header="$$(printf '%s:%s' "$${COMFYUI_AUTH_USERNAME}" "$${COMFYUI_AUTH_PASSWORD}" | base64 | tr -d '\n')";
+          test -n "$$auth_header" &&
+          wget -q -S -O /dev/null --header "Authorization: Basic $$auth_header" http://127.0.0.1:8188/ 2>&1 |
+          grep -qE 'HTTP/1.[01] (200|302)' || exit 1
       interval: 30s
       timeout: 10s
       retries: 6

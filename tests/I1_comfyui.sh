@@ -14,6 +14,8 @@ assert_cmd docker
 assert_cmd python3
 
 comfy_port="${COMFYUI_HOST_PORT:-8188}"
+comfy_username="${COMFYUI_AUTH_USERNAME:-admin}"
+comfy_password="${COMFYUI_AUTH_PASSWORD:-change-me}"
 comfy_cid="$(require_service_container comfyui)" || exit 1
 wait_for_container_ready "${comfy_cid}" 300 || fail "comfyui is not ready"
 
@@ -21,13 +23,23 @@ wait_for_loopback_api() {
   local deadline=$((SECONDS + 90))
   local status
   while (( SECONDS < deadline )); do
-    status="$(curl -sS -o /tmp/agent-i1-loopback-api.out -w '%{http_code}' --max-time 5 "http://127.0.0.1:${comfy_port}/system_stats" || true)"
+    status="$(curl -sS -u "${comfy_username}:${comfy_password}" -o /tmp/agent-i1-loopback-api.out -w '%{http_code}' --max-time 5 "http://127.0.0.1:${comfy_port}/system_stats" || true)"
     if [[ "${status}" == "200" ]]; then
       return 0
     fi
     sleep 1
   done
   fail "comfyui-loopback did not recover /system_stats on loopback (last HTTP status=${status:-none})"
+}
+
+assert_loopback_auth_contract() {
+  local anonymous_status wrong_password_status
+  anonymous_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${comfy_port}/system_stats" || true)"
+  [[ "${anonymous_status}" == "401" ]] || fail "comfyui-loopback accepted an unauthenticated request (HTTP ${anonymous_status:-none})"
+
+  wrong_password_status="$(curl -sS -u "${comfy_username}:incorrect-password" -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${comfy_port}/system_stats" || true)"
+  [[ "${wrong_password_status}" == "401" ]] || fail "comfyui-loopback accepted an incorrect password (HTTP ${wrong_password_status:-none})"
+  ok "comfyui-loopback rejects missing and invalid credentials"
 }
 
 timeout 20 docker exec "${comfy_cid}" sh -lc 'test -d /opt/comfyui/custom_nodes/ComfyUI-Manager' \
@@ -95,6 +107,7 @@ timeout 20 docker exec "${comfy_cid}" sh -lc "printf 'persist\\n' > '${persist_p
 docker restart "${comfy_cid}" >/dev/null || fail "unable to restart comfyui for persistence verification"
 wait_for_container_ready "${comfy_cid}" 180 || fail "comfyui did not recover after restart during persistence verification"
 wait_for_loopback_api
+assert_loopback_auth_contract
 timeout 20 docker exec "${comfy_cid}" sh -lc "test -f '${persist_probe_container}'" \
   || fail "comfyui persistence probe under custom_nodes did not survive container restart"
 ok "comfyui custom_nodes persistence survives restart via the single runtime root"
@@ -225,14 +238,17 @@ fi
 assert_no_public_bind "${comfy_port}" || fail "comfyui host bind is not loopback-only"
 ok "comfyui host bind is loopback-only"
 
-python3 - "${comfy_port}" <<'PY' || fail "comfyui websocket endpoint /ws is not upgrade-compatible via loopback proxy"
+python3 - "${comfy_port}" "${comfy_username}" "${comfy_password}" <<'PY' || fail "comfyui websocket endpoint /ws is not upgrade-compatible via loopback proxy"
 import base64
 import os
 import socket
 import sys
 
 port = int(sys.argv[1])
+username = sys.argv[2]
+password = sys.argv[3]
 key = base64.b64encode(os.urandom(16)).decode("ascii")
+authorization = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
 request = (
     f"GET /ws HTTP/1.1\r\n"
     f"Host: 127.0.0.1:{port}\r\n"
@@ -240,6 +256,7 @@ request = (
     "Connection: Upgrade\r\n"
     f"Sec-WebSocket-Key: {key}\r\n"
     "Sec-WebSocket-Version: 13\r\n"
+    f"Authorization: Basic {authorization}\r\n"
     "\r\n"
 )
 
@@ -253,7 +270,7 @@ if " 101 " not in status_line:
 PY
 ok "comfyui websocket endpoint /ws upgrades correctly via loopback proxy"
 
-curl -fsS "http://127.0.0.1:${comfy_port}/system_stats" >/dev/null \
+curl -fsS -u "${comfy_username}:${comfy_password}" "http://127.0.0.1:${comfy_port}/system_stats" >/dev/null \
   || fail "comfyui /system_stats endpoint is unavailable"
 ok "comfyui API responds on /system_stats"
 
@@ -265,7 +282,8 @@ fi
 
 prefix="i1-smoke-$RANDOM-$$"
 set +e
-python3 - "${comfy_port}" "${checkpoint}" "${prefix}" <<'PY'
+python3 - "${comfy_port}" "${checkpoint}" "${prefix}" "${comfy_username}" "${comfy_password}" <<'PY'
+import base64
 import json
 import sys
 import time
@@ -274,7 +292,12 @@ import urllib.request
 port = int(sys.argv[1])
 checkpoint = sys.argv[2]
 prefix = sys.argv[3]
+username = sys.argv[4]
+password = sys.argv[5]
 base = f"http://127.0.0.1:{port}"
+auth_header = "Basic " + base64.b64encode(
+    f"{username}:{password}".encode("utf-8")
+).decode("ascii")
 
 prompt = {
     "4": {
@@ -321,7 +344,7 @@ prompt = {
 req = urllib.request.Request(
     f"{base}/prompt",
     data=json.dumps({"prompt": prompt}).encode("utf-8"),
-    headers={"Content-Type": "application/json"},
+    headers={"Content-Type": "application/json", "Authorization": auth_header},
     method="POST",
 )
 with urllib.request.urlopen(req, timeout=25) as resp:
@@ -333,7 +356,10 @@ if not prompt_id:
 
 deadline = time.time() + 120
 while time.time() < deadline:
-    with urllib.request.urlopen(f"{base}/history/{prompt_id}", timeout=10) as resp:
+    history_request = urllib.request.Request(
+        f"{base}/history/{prompt_id}", headers={"Authorization": auth_header}
+    )
+    with urllib.request.urlopen(history_request, timeout=10) as resp:
         history_payload = json.loads(resp.read().decode("utf-8"))
     details = history_payload.get(prompt_id) or {}
     outputs = details.get("outputs") or {}
