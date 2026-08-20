@@ -27,6 +27,7 @@ AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_
 AGENT_OLLAMA_CHAT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_chat_benchmark.py"
 AGENT_CODEX_CONTEXT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/codex_context_window_benchmark.py"
 AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
+AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_model_bundle.sh"
 AGENT_TUNNEL_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/tunnel_matrix.py"
 AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py"
 AGENT_OPENCLAW_OPERATOR_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_operator.py"
@@ -78,6 +79,7 @@ Usage:
   agent tunnel generate <linux|macos|windows|iphone> --ssh-target <user@host> [--all|--enabled|--surface <id> ...] [--output <path>] [--name <alias>]
   agent tunnel check [--all|--surface <id> ...] [--json]
   agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
+  agent comfyui <minimax-h3|flux2-dev> [--download] [--force] [--dry-run]
   agent logs <service>
   agent stop <target>
   agent stop service <service...>
@@ -4510,8 +4512,13 @@ cmd_comfyui() {
         || die "comfyui flux setup script missing or not executable: ${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}"
       "${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}" "$@"
       ;;
+    minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev)
+      [[ -x "${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}" ]] \
+        || die "comfyui model bundle script missing or not executable: ${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}"
+      "${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}" "${action}" "$@"
+      ;;
     *)
-      die "Usage: agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]"
+      die "Usage: agent comfyui <flux-1-dev|minimax-h3|flux2-dev> [options]"
       ;;
   esac
 }
@@ -5764,7 +5771,7 @@ case "$cmd" in
     ;;
   comfyui)
     case "${2:-}" in
-      flux-1-dev|flux1-dev|flux-dev)
+      flux-1-dev|flux1-dev|flux-dev|minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev)
         shift
         cmd_comfyui "$@"
         ;;
@@ -5952,4 +5959,3 @@ pre_flight_check() {
   fi
   echo "CHECK: rootless-dev admission OK (${avail_mem_kb}KB available)"
 }
-

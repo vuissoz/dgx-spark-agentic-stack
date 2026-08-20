@@ -2149,7 +2149,7 @@ if [[ -n "${comfyui_cid}" ]]; then
   if [[ ! -f "${proxy_allowlist_file}" ]]; then
     doctor_fail_or_warn "proxy allowlist file is missing: ${proxy_allowlist_file}"
   else
-    for required_domain in api.comfy.org registry.comfy.org; do
+    for required_domain in api.comfy.org registry.comfy.org huggingface.co us.aws.cdn.hf.co; do
       if ! allowlist_has_entry "${proxy_allowlist_file}" "${required_domain}"; then
         doctor_fail_or_warn "proxy allowlist missing required ComfyUI domain '${required_domain}' in ${proxy_allowlist_file}"
       fi

@@ -59,6 +59,7 @@ ngc.nvidia.com
 # ----------------------------------------------------------
 huggingface.co
 cdn-lfs.huggingface.co
+us.aws.cdn.hf.co
 cas-bridge.xethub.hf.co
 cas-server.xethub.hf.co
 transfer.xethub.hf.co
