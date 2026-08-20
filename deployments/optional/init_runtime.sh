@@ -19,6 +19,33 @@ die() {
   exit 1
 }
 
+repair_rootless_n8n_layout() {
+  local n8n_root="${AGENTIC_ROOT}/optional/n8n"
+  local first_unwritable=""
+  local target_uid="${AGENT_RUNTIME_UID:-$(id -u)}"
+  local target_gid="${AGENT_RUNTIME_GID:-$(id -g)}"
+
+  [[ "${EUID}" -ne 0 ]] || return 0
+  [[ -d "${n8n_root}" ]] || return 0
+
+  if [[ ! -w "${n8n_root}" ]] || [[ ! -x "${n8n_root}" ]]; then
+    first_unwritable="${n8n_root}"
+  else
+    first_unwritable="$(find "${n8n_root}" -mindepth 0 ! -writable -print -quit 2>/dev/null || true)"
+  fi
+  [[ -n "${first_unwritable}" ]] || return 0
+
+  command -v docker >/dev/null 2>&1 \
+    || die "docker is required to repair legacy n8n ownership (first unwritable path: ${first_unwritable})"
+  docker run --rm --network none \
+    -v "${n8n_root}:/repair/n8n" \
+    busybox:1.36.1 sh -lc \
+    "chown -R ${target_uid}:${target_gid} /repair/n8n && chmod -R u+rwX,g+rwX,o-rwx /repair/n8n" \
+    || die "failed to repair legacy n8n ownership; run: sudo chown -R ${target_uid}:${target_gid} '${n8n_root}'"
+
+  log "repaired legacy n8n ownership with containerized chown (uid=${target_uid} gid=${target_gid})"
+}
+
 copy_if_missing() {
   local src="$1"
   local dst="$2"
@@ -170,6 +197,18 @@ ensure_optional_request_file() {
   fi
 }
 
+migrate_n8n_config_mountpoint() {
+  local config_path="${AGENTIC_ROOT}/optional/n8n/data/config"
+  local backup_path
+
+  [[ -d "${config_path}" ]] || return 0
+
+  backup_path="${config_path}.directory-backup-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  mv "${config_path}" "${backup_path}" \
+    || die "failed to preserve legacy n8n config directory ${config_path}; fix its ownership and re-run runtime init"
+  log "migrated legacy n8n config directory to recoverable backup: ${backup_path}"
+}
+
 main() {
   local runtime_uid="${AGENT_RUNTIME_UID:-1000}"
   local runtime_gid="${AGENT_RUNTIME_GID:-1000}"
@@ -187,6 +226,8 @@ main() {
     pi-mono
     goose
   )
+
+  repair_rootless_n8n_layout
 
   install -d -m 0750 "${AGENTIC_ROOT}/optional"
   install -d -m 0750 "${AGENTIC_ROOT}/optional/mcp"
@@ -213,6 +254,12 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/optional/portainer/data"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/portainer/logs"
 
+  install -d -m 0750 "${AGENTIC_ROOT}/optional/n8n"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/data"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/custom"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/logs"
+  migrate_n8n_config_mountpoint
+
   install -d -m 0750 "${AGENTIC_ROOT}/deployments"
   install -d -m 0750 "${AGENTIC_ROOT}/deployments/optional"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets"
@@ -227,6 +274,7 @@ main() {
   ensure_optional_request_file "pi-mono"
   ensure_optional_request_file "goose"
   ensure_optional_request_file "portainer"
+  ensure_optional_request_file "n8n"
 
   chmod 0644 "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
 
@@ -253,7 +301,10 @@ main() {
       "${AGENTIC_ROOT}/secrets/ssh/pi-mono" \
       "${AGENTIC_ROOT}/secrets/ssh/goose" \
       "${AGENTIC_ROOT}/optional/portainer/data" \
-      "${AGENTIC_ROOT}/optional/portainer/logs"
+      "${AGENTIC_ROOT}/optional/portainer/logs" \
+      "${AGENTIC_ROOT}/optional/n8n/data" \
+      "${AGENTIC_ROOT}/optional/n8n/custom" \
+      "${AGENTIC_ROOT}/optional/n8n/logs"
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
     fi
@@ -280,7 +331,10 @@ main() {
       "${AGENTIC_ROOT}/secrets/ssh/pi-mono" \
       "${AGENTIC_ROOT}/secrets/ssh/goose" \
       "${AGENTIC_ROOT}/optional/portainer/data" \
-      "${AGENTIC_ROOT}/optional/portainer/logs"
+      "${AGENTIC_ROOT}/optional/portainer/logs" \
+      "${AGENTIC_ROOT}/optional/n8n/data" \
+      "${AGENTIC_ROOT}/optional/n8n/custom" \
+      "${AGENTIC_ROOT}/optional/n8n/logs"
     log "non-root runtime init: relaxed optional dirs permissions for userns compatibility"
   fi
 }

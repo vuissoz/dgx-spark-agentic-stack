@@ -289,6 +289,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /home/node/.cache:mode=1777
     cap_drop:
       - ALL
     security_opt:
@@ -311,7 +312,6 @@ services:
       NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,localhost,127.0.0.1
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/data:/home/node/.n8n
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/config:/home/node/.n8n/config
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/custom:/home/node/.n8n/custom
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/logs:/home/node/.n8n/logs
     healthcheck:
@@ -352,6 +352,7 @@ services:
         pid /tmp/nginx.pid;
         events {}
         http {
+          resolver 127.0.0.11 valid=30s ipv6=off;
           client_body_temp_path /tmp/client_temp;
           proxy_temp_path /tmp/proxy_temp;
           fastcgi_temp_path /tmp/fastcgi_temp;

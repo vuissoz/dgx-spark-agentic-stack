@@ -3196,6 +3196,9 @@ if [[ -n "${optional_n8n_cid}" ]]; then
   if ! mount_destination_present "${optional_n8n_cid}" "/home/node/.n8n"; then
     doctor_fail "optional n8n must mount /home/node/.n8n for persistent workflow data"
   fi
+  if mount_destination_present "${optional_n8n_cid}" "/home/node/.n8n/config"; then
+    doctor_fail "optional n8n must not mount a directory at /home/node/.n8n/config; n8n reserves that path for its instance settings file"
+  fi
   n8n_status="$(curl -sS -o /tmp/doctor-n8n.out -w '%{http_code}' "http://127.0.0.1:${n8n_host_port}/healthz" 2>/dev/null || true)"
   if [[ ! "${n8n_status}" =~ ^(200|401|403)$ ]]; then
     doctor_fail "optional n8n endpoint is unreachable on loopback (http_status=${n8n_status:-none})"

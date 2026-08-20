@@ -334,7 +334,11 @@ target_to_services() {
       ;;
     pi-mono) printf '%s\n' "optional-pi-mono" ;;
     goose) printf '%s\n' "optional-goose" ;;
-    n8n) printf '%s\n' "optional-n8n optional-n8n-loopback" ;;
+    n8n)
+      printf '%s\n' \
+        "optional-n8n" \
+        "optional-n8n-loopback"
+      ;;
     forgejo)
       printf '%s\n' \
         "optional-forgejo" \
@@ -2164,7 +2168,7 @@ cmd_start_target() {
 
   case "${target}" in
     forgejo|openwebui|openhands|comfyui) ensure_ui_runtime ;;
-    pi-mono|goose) ensure_optional_runtime ;;
+    pi-mono|goose|n8n) ensure_optional_runtime ;;
   esac
 
   docker_compose_partial -f "${compose_file}" up -d --no-deps "${services_to_start[@]}"
