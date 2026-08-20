@@ -79,7 +79,7 @@ Usage:
   agent tunnel generate <linux|macos|windows|iphone> --ssh-target <user@host> [--all|--enabled|--surface <id> ...] [--output <path>] [--name <alias>]
   agent tunnel check [--all|--surface <id> ...] [--json]
   agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
-  agent comfyui <minimax-h3|flux2-dev> [--download] [--force] [--dry-run]
+  agent comfyui <minimax-h3|flux2-dev|stable-audio-3|ace-step-v1|ace-step-1.5> [--download] [--force] [--dry-run]
   agent logs <service>
   agent stop <target>
   agent stop service <service...>
@@ -4512,13 +4512,13 @@ cmd_comfyui() {
         || die "comfyui flux setup script missing or not executable: ${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}"
       "${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}" "$@"
       ;;
-    minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev)
+    minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev|stable-audio-3|stable_audio_3|ace-step-v1|ace_step_v1|ace-step-1|ace-step-1.5|ace_step_1.5|ace-step-15)
       [[ -x "${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}" ]] \
         || die "comfyui model bundle script missing or not executable: ${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}"
       "${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}" "${action}" "$@"
       ;;
     *)
-      die "Usage: agent comfyui <flux-1-dev|minimax-h3|flux2-dev> [options]"
+      die "Usage: agent comfyui <flux-1-dev|minimax-h3|flux2-dev|stable-audio-3|ace-step-v1|ace-step-1.5> [options]"
       ;;
   esac
 }
@@ -5771,7 +5771,7 @@ case "$cmd" in
     ;;
   comfyui)
     case "${2:-}" in
-      flux-1-dev|flux1-dev|flux-dev|minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev)
+      flux-1-dev|flux1-dev|flux-dev|minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev|stable-audio-3|stable_audio_3|ace-step-v1|ace_step_v1|ace-step-1|ace-step-1.5|ace_step_1.5|ace-step-15)
         shift
         cmd_comfyui "$@"
         ;;

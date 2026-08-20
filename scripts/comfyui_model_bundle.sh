@@ -14,7 +14,7 @@ dry_run=0
 usage() {
   cat <<'USAGE'
 Usage:
-  comfyui_model_bundle.sh <minimax-h3|flux2-dev> [--download] [--force] [--dry-run]
+  comfyui_model_bundle.sh <minimax-h3|flux2-dev|stable-audio-3|ace-step-v1|ace-step-1.5> [--download] [--force] [--dry-run]
 
 The command writes a manifest under /comfyui/models and downloads public Hugging
 Face files directly from the ComfyUI container into its persistent model tree.
@@ -41,6 +41,9 @@ done
 case "${bundle}" in
   minimax-h3|minimax_h3) bundle="minimax-h3" ;;
   flux2-dev|flux2_dev|flux-2-dev) bundle="flux2-dev" ;;
+  stable-audio-3|stable_audio_3) bundle="stable-audio-3" ;;
+  ace-step-v1|ace_step_v1|ace-step-1) bundle="ace-step-v1" ;;
+  ace-step-1.5|ace_step_1.5|ace-step-15) bundle="ace-step-1.5" ;;
   *) usage >&2; die "unknown model bundle: ${bundle}" ;;
 esac
 
@@ -85,6 +88,21 @@ bundles = {
         ("loras/Flux2TurboComfyv2.safetensors", "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/loras/Flux2TurboComfyv2.safetensors", 2760814872, "dfc97af0180d432269361a7bc36b4a7df6a2a3ffb630763f8c3343d3d1991d87"),
         ("vae/flux2-vae.safetensors", "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors", 336213556, "d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5"),
         ("text_encoders/mistral_3_small_flux2_fp8.safetensors", "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_fp8.safetensors", 18034640095, "e3467b7d912a234fb929cdf215dc08efdb011810b44bc21081c4234cc75b370e"),
+    ],
+    "stable-audio-3": [
+        ("checkpoints/stable_audio_3_medium.safetensors", "https://huggingface.co/Comfy-Org/stable-audio-3/resolve/main/checkpoints/stable_audio_3_medium.safetensors", 9222116660, "48d9c65e290e7bcd5194e0633bfc2424a59ee9683f5c2d58762d997b7d8ce0b5"),
+        ("text_encoders/qwen3.5_2b_bf16.safetensors", "https://huggingface.co/Comfy-Org/Qwen3.5/resolve/main/text_encoders/qwen3.5_2b_bf16.safetensors", 4548221488, "aa33250c4fc64891ddfaba3a314fd9542ea371843c387178b425fbcc5ed680b1"),
+        ("text_encoders/t5gemma_b_b_ul2.safetensors", "https://huggingface.co/Comfy-Org/stable-audio-3/resolve/main/text_encoders/t5gemma_b_b_ul2.safetensors", 1187264003, "1e1eba25be8872edb0d3c6335c6658fd6388e7b14b60da6e454e404cfcd8150e"),
+    ],
+    "ace-step-v1": [
+        ("checkpoints/ace_step_v1_3.5b.safetensors", "https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged/resolve/main/all_in_one/ace_step_v1_3.5b.safetensors", 7699743341, "f07cad74c4adce52ca14ca1bdf74cf3c14cbafb0823b95eca4459467fa369f40"),
+    ],
+    "ace-step-1.5": [
+        ("vae/ace_1.5_vae.safetensors", "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/vae/ace_1.5_vae.safetensors", 337431732, "6de92e3a862acd287e08b024ac90f0783a8635451b728721a33ff03565bcb2bb"),
+        ("text_encoders/qwen_0.6b_ace15.safetensors", "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/text_encoders/qwen_0.6b_ace15.safetensors", 1191588248, "fd4590c82153b8ddb67e15a2e7aaa8afa8b83a858c8a9b82a4831063156aa7a7"),
+        ("text_encoders/qwen_4b_ace15.safetensors", "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/text_encoders/qwen_4b_ace15.safetensors", 8379154232, "ffe5ffb855086c2ab55e467e9859fb01894781020a0376484dd19de166b79873"),
+        ("diffusion_models/acestep_v1.5_xl_sft_bf16.safetensors", "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/diffusion_models/acestep_v1.5_xl_sft_bf16.safetensors", 9974719930, "3c05ae268353b3540fb1fd7db4fd77ffbda9802ec641b624e15648e030ecf3ce"),
+        ("checkpoints/ace_step_1.5_turbo_aio.safetensors", "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/checkpoints/ace_step_1.5_turbo_aio.safetensors", 10025478736, "67b0f43aa5c51c840bd0228e6a935d8ff416ec87e5df2fc0637da17a561252bc"),
     ],
 }
 
