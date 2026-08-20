@@ -25,7 +25,8 @@ Extend the existing checksum-pinned ComfyUI model installer with three bundles:
 
 Source paths are translated to the model directories expected by ComfyUI. The
 download command remains opt-in, resumable, checksum-verified, and profile
-independent; persistence follows `AGENTIC_ROOT`.
+independent; persistence follows `AGENTIC_ROOT`. A non-blocking per-bundle file
+lock prevents concurrent invocations from writing the same partial artifact.
 
 ## Consequences
 

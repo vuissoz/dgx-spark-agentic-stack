@@ -66,6 +66,7 @@ docker exec -i \
   -e COMFYUI_FORCE_DOWNLOAD="${force_download}" \
   "${comfy_cid}" python3 - <<'PY'
 import hashlib
+import fcntl
 import json
 import os
 import pathlib
@@ -76,6 +77,15 @@ bundle = os.environ["COMFYUI_MODEL_BUNDLE"]
 download = os.environ.get("COMFYUI_DOWNLOAD_MODELS") == "1"
 force = os.environ.get("COMFYUI_FORCE_DOWNLOAD") == "1"
 models_root = pathlib.Path("/comfyui/models")
+models_root.mkdir(parents=True, exist_ok=True)
+lock_path = models_root / f".{bundle}.download.lock"
+lock_handle = lock_path.open("w", encoding="utf-8")
+try:
+    fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    raise SystemExit(
+        f"bundle installer already running for {bundle}; wait for the active download to finish"
+    )
 
 bundles = {
     "minimax-h3": [
@@ -108,7 +118,6 @@ bundles = {
 
 files = bundles[bundle]
 manifest_path = models_root / f"{bundle}.manifest.json"
-manifest_path.parent.mkdir(parents=True, exist_ok=True)
 manifest = {
     "schema_version": 1,
     "model": bundle,

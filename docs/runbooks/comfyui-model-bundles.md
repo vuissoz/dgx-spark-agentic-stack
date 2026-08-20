@@ -13,7 +13,8 @@ Start ComfyUI, then install any of the public model bundles you need:
 
 The commands are idempotent. They skip files whose pinned size and SHA-256 are
 valid, retain interrupted transfers with a `.part` suffix for resumption, and
-write bundle manifests under `/comfyui/models`.
+write bundle manifests under `/comfyui/models`. A per-bundle lock refuses a
+second concurrent installer so two processes cannot modify the same `.part`.
 
 Run either command without `--download` to check presence and expected sizes:
 

@@ -34,6 +34,8 @@ rg -qF 'qwen_0.6b_ace15.safetensors' "${script}"
 rg -qF 'qwen_4b_ace15.safetensors' "${script}"
 rg -qF 'acestep_v1.5_xl_sft_bf16.safetensors' "${script}"
 rg -qF 'ace_step_1.5_turbo_aio.safetensors' "${script}"
+rg -qF 'fcntl.LOCK_EX | fcntl.LOCK_NB' "${script}"
+rg -qF 'bundle installer already running' "${script}"
 rg -qF 'agent comfyui <minimax-h3|flux2-dev|stable-audio-3|ace-step-v1|ace-step-1.5>' "${agent_script}"
 rg -qxF 'us.aws.cdn.hf.co' "${allowlist}"
 
