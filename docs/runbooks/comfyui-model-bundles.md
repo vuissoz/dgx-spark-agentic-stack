@@ -42,6 +42,12 @@ The `minimax-h3` bundle installs both requested INT8 diffusion variants:
 `minimax_h3_ref2va_pruned_int8_convrot.safetensors`. Together with its VAEs and
 text encoder, the complete bundle requires approximately 63.4 GB.
 
+The `flux-1-dev` bootstrap also installs
+`diffusion_models/flux1-fill-dev.safetensors` for Flux Fill workflows. This
+public artifact adds approximately 23.8 GB and is verified against its pinned
+size and SHA-256. The base Flux.1-dev weights remain gated and still require
+license acceptance plus a Hugging Face token when they are not already present.
+
 The audio bundles install the files at the paths expected by ComfyUI:
 
 | Bundle | Installed content | Approximate download |

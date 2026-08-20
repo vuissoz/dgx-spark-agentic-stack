@@ -30,6 +30,8 @@ In `rootless-dev`, two operator-facing issues were observed:
    - add `agent comfyui flux-1-dev` command and script:
      - creates deterministic model layout + manifest under `${AGENTIC_ROOT}/comfyui/models`,
      - optionally downloads Flux.1-dev assets from Hugging Face (`--download`),
+     - includes the public Comfy-Org Flux Fill diffusion model with pinned size
+       and SHA-256 verification,
      - probes required remote endpoints used by manager/bootstrap unless disabled.
 
 4. ComfyUI image GPU readiness:
