@@ -23,6 +23,8 @@ done
 
 rg -qF 'minimax_h3_audio_vae_fp32.safetensors' "${script}"
 rg -qF 'minimax_h3_fl2va_pruned_int8_convrot.safetensors' "${script}"
+rg -qF 'minimax_h3_ref2va_pruned_int8_convrot.safetensors' "${script}"
+rg -qF '9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779' "${script}"
 rg -qF 'Flux2TurboComfyv2.safetensors' "${script}"
 rg -qF 'mistral_3_small_flux2_fp8.safetensors' "${script}"
 rg -qF 'stable_audio_3_medium.safetensors' "${script}"

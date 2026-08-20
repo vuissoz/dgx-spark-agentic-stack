@@ -31,10 +31,16 @@ same persistent model tree is reused across container recreation:
 
 ```bash
 ./agent rootless-dev start comfyui
+./agent rootless-dev comfyui minimax-h3 --download
 ./agent rootless-dev comfyui stable-audio-3 --download
 ./agent rootless-dev comfyui ace-step-v1 --download
 ./agent rootless-dev comfyui ace-step-1.5 --download
 ```
+
+The `minimax-h3` bundle installs both requested INT8 diffusion variants:
+`minimax_h3_fl2va_pruned_int8_convrot.safetensors` and
+`minimax_h3_ref2va_pruned_int8_convrot.safetensors`. Together with its VAEs and
+text encoder, the complete bundle requires approximately 63.4 GB.
 
 The audio bundles install the files at the paths expected by ComfyUI:
 

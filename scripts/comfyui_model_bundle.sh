@@ -93,6 +93,7 @@ bundles = {
         ("vae/minimax_h3_video_vae_fp16.safetensors", "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors", 5207808496, "7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522"),
         ("text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", 15687142551, "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"),
         ("diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors", "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors", 20970379616, "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a"),
+        ("diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors", "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors", 20970379616, "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779"),
     ],
     "flux2-dev": [
         ("loras/Flux2TurboComfyv2.safetensors", "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/loras/Flux2TurboComfyv2.safetensors", 2760814872, "dfc97af0180d432269361a7bc36b4a7df6a2a3ffb630763f8c3343d3d1991d87"),
