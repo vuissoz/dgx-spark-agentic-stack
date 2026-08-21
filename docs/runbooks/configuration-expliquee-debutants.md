@@ -171,6 +171,7 @@ Tous les ports restent en loopback (`127.0.0.1`).
 | Variable | Service | Defaut |
 |---|---|---|
 | `OLLAMA_HOST_PORT` | API Ollama | `11434` |
+| `OLLAMA_GATE_HOST_PORT` | API Ollama via la gate controlee | `11435` |
 | `OPENWEBUI_HOST_PORT` | OpenWebUI | `8080` |
 | `OPENHANDS_HOST_PORT` | OpenHands | `3000` |
 | `COMFYUI_HOST_PORT` | bridge loopback ComfyUI | `8188` |
@@ -195,6 +196,7 @@ Defauts par stack (persistes en `runtime.env`):
 - `AGENTIC_LIMIT_OPTIONAL_CPUS`, `AGENTIC_LIMIT_OPTIONAL_MEM`
 
 Question dediee dans l'onboarding:
+- `AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB` (plafond total de memoire configuree des conteneurs pour `rootless-dev`, defaut `307200` Mo)
 - `AGENTIC_LIMIT_OLLAMA_MEM` (defaut: valeur de `AGENTIC_LIMIT_CORE_MEM`)
 - `AGENTIC_LIMIT_OPENHANDS_MEM` (defaut `4g`)
 - `AGENTIC_LIMIT_COMFYUI_MEM` (defaut `110g` en `strict-prod`, `8g` en `rootless-dev`)

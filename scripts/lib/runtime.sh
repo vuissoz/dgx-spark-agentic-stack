@@ -216,6 +216,7 @@ AGENTIC_LIMIT_DEFAULT_CPUS|limit_default_cpus|persist,load,profile
 AGENTIC_LIMIT_DEFAULT_MEM|limit_default_mem|persist,load,profile
 AGENTIC_LIMIT_CORE_CPUS|limit_core_cpus|persist,load,profile
 AGENTIC_LIMIT_CORE_MEM|limit_core_mem|persist,load,profile
+AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB|limit_rootless_dev_memory_mb|persist,load,profile
 AGENTIC_LIMIT_OLLAMA_MEM|limit_ollama_mem|persist,load,profile
 AGENTIC_LIMIT_AGENTS_CPUS|limit_agents_cpus|persist,load,profile
 AGENTIC_LIMIT_AGENTS_MEM|limit_agents_mem|persist,load,profile

@@ -45,6 +45,7 @@ required = {
     "AGENTIC_EGRESS_NETWORK",
     "AGENTIC_OPENCLAW_INIT_PROJECT",
     "AGENTIC_GPU_CLOCK_LOCK",
+    "AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB",
     "AGENTIC_LIMIT_OLLAMA_MEM",
     "AGENTIC_LIMIT_OPENHANDS_MEM",
     "AGENTIC_LIMIT_COMFYUI_MEM",
@@ -86,6 +87,7 @@ AGENTIC_EGRESS_NETWORK=agentic-schema-egress \
 AGENTIC_DOCKER_USER_SOURCE_NETWORKS=agentic-schema-net,agentic-schema-egress \
 AGENTIC_OPENCLAW_INIT_PROJECT=issue-3je \
 AGENTIC_GPU_CLOCK_LOCK=2100,2100 \
+AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB=345600 \
 AGENTIC_LIMIT_OLLAMA_MEM=77g \
 AGENTIC_LIMIT_OPENHANDS_MEM=5g \
 AGENTIC_LIMIT_COMFYUI_MEM=66g \
@@ -123,6 +125,7 @@ AGENTIC_EGRESS_NETWORK=load-egress
 AGENTIC_DOCKER_USER_SOURCE_NETWORKS=load-net,load-egress
 AGENTIC_OPENCLAW_INIT_PROJECT=load-openclaw-project
 AGENTIC_GPU_CLOCK_LOCK=2300,2300
+AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB=347200
 AGENTIC_LIMIT_OLLAMA_MEM=88g
 AGENTIC_LIMIT_OPENHANDS_MEM=6g
 AGENTIC_LIMIT_COMFYUI_MEM=77g
@@ -149,6 +152,8 @@ printf '%s\n' "${load_profile_output}" | grep -q '^openclaw_init_project=load-op
   || fail "agent profile should load AGENTIC_OPENCLAW_INIT_PROJECT from runtime.env"
 printf '%s\n' "${load_profile_output}" | grep -q '^gpu_clock_lock=2300,2300$' \
   || fail "agent profile should load AGENTIC_GPU_CLOCK_LOCK from runtime.env"
+printf '%s\n' "${load_profile_output}" | grep -q '^limit_rootless_dev_memory_mb=347200$' \
+  || fail "agent profile should load AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB from runtime.env"
 printf '%s\n' "${load_profile_output}" | grep -q '^limit_ollama_mem=88g$' \
   || fail "agent profile should load AGENTIC_LIMIT_OLLAMA_MEM from runtime.env"
 printf '%s\n' "${load_profile_output}" | grep -q '^limit_openhands_mem=6g$' \
