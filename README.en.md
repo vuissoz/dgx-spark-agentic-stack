@@ -17,7 +17,7 @@ Compose files are located in `compose/`:
 - `compose/compose.ui.yml`: `optional-forgejo`, `optional-forgejo-loopback`, `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (`rag-lexical` profile)
-- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`, `optional-n8n`, `optional-n8n-loopback`, plus the local `optional-n8n-ai` profile (mTLS, internal registry, Sysbox sandbox, SearXNG)
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`, `optional-n8n`, `optional-n8n-loopback`, plus the local `optional-n8n-ai` profile (Multipass VM sandbox, SearXNG)
 
 ## Execution Profiles
 
@@ -649,6 +649,21 @@ Explicit activation:
 ```bash
 AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer,n8n ./agent up optional
 ```
+
+Fully local n8n Assistant (Ollama model, VM sandbox, and automatically
+configured SearXNG search):
+
+```bash
+export AGENTIC_N8N_AI_MODEL=qwen3.8
+./agent n8n-sandbox-vm create
+AGENTIC_OPTIONAL_MODULES=n8n-ai ./agent up optional
+```
+
+The CPU-only VM defaults to 4 vCPU, 8 GiB RAM, and a 60 GiB sparse disk.
+Sysbox remains exclusively inside the VM and the host NVIDIA runtime is not
+modified. Sandbox apt/npm/pip installs and network tools go through the stack's
+monitored Squid gateway; direct egress is blocked. See
+`docs/runbooks/n8n-local-ai-sandbox.md` for the full procedure.
 
 OpenClaw is now part of `core` and starts with:
 

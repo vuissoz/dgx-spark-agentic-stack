@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Superseded by ADR-0151. Sysbox is no longer installed on the DGX host.
 
 ## Context
 

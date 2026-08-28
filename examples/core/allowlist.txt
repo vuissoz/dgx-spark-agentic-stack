@@ -25,6 +25,13 @@ api.bitbucket.org
 # PACKAGE REGISTRIES
 # ----------------------------------------------------------
 
+# Debian/Ubuntu system packages used by CPU-only sandboxes
+deb.debian.org
+security.debian.org
+archive.ubuntu.com
+ports.ubuntu.com
+security.ubuntu.com
+
 # Python
 pypi.org
 files.pythonhosted.org
@@ -46,6 +53,7 @@ sum.golang.org
 registry-1.docker.io
 auth.docker.io
 hub.docker.com
+production.cloudfront.docker.com
 
 ghcr.io
 quay.io

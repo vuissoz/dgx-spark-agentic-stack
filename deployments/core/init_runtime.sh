@@ -85,6 +85,18 @@ copy_if_missing() {
   log "created runtime file: ${dst}"
 }
 
+ensure_squid_loopback_tunnel_acl() {
+  local config_file="${AGENTIC_ROOT}/proxy/config/squid.conf"
+
+  [[ -f "${config_file}" ]] || return 0
+  if ! grep -Fqx 'acl localhost src 127.0.0.0/8' "${config_file}"; then
+    sed -i '/^acl localnet src 192\.168\.0\.0\/16$/a acl localhost src 127.0.0.0/8' "${config_file}"
+  fi
+  if ! grep -Fqx 'http_access allow localhost allowed_domains' "${config_file}"; then
+    sed -i '/^http_access allow localnet allowed_domains$/i http_access allow localhost allowed_domains' "${config_file}"
+  fi
+}
+
 sync_runtime_file() {
   local src="$1"
   local dst="$2"
@@ -762,6 +774,7 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   ensure_gate_default_trtllm_route "${AGENTIC_ROOT}/gate/config/model_routes.yml"
   copy_if_missing "${TEMPLATE_DIR}/unbound.conf" "${AGENTIC_ROOT}/dns/unbound.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/squid.conf" "${AGENTIC_ROOT}/proxy/config/squid.conf" 0644
+  ensure_squid_loopback_tunnel_acl
   copy_if_missing "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt" 0644
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.dm_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt" 0640

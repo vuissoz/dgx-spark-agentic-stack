@@ -1109,6 +1109,10 @@ services:
       - SETUID
     security_opt:
       - no-new-privileges:true
+    ports:
+      # Loopback-only endpoint used by the restricted SSH tunnel from the
+      # local n8n sandbox VM. It is never reachable from LAN/Tailscale.
+      - 127.0.0.1:${AGENTIC_PROXY_HOST_PORT:-3128}:3128
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/proxy/config/squid.conf:/etc/squid/squid.conf:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/proxy/allowlist.txt:/etc/squid/allowlist.txt:ro

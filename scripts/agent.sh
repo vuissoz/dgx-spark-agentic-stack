@@ -38,6 +38,7 @@ AGENT_REPO_E2E_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/agent_repo_e2e.
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
+AGENT_N8N_SANDBOX_VM_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/manage_n8n_sandbox_vm.sh"
 AGENT_GPU_CLOCK_LOW_PRESET="${AGENT_GPU_CLOCK_LOW_PRESET:-2000,2000}"
 AGENT_TOOLS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose comfyui)
 AGENT_STATUS_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui n8n)
@@ -117,6 +118,7 @@ Usage:
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
   agent vm cleanup [--name ... --yes --dry-run]
+  agent n8n-sandbox-vm <create|start|stop|status|endpoint|destroy> [options]
   agent evaluate <validate-specs|bootstrap-evidence|context-isolation-evidence|snapshot-restore-rollback-evidence|model-backend-failure-evidence|run-all>
   agent schema                          PostgreSQL source-of-truth schema (§4, §5)
   agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all> [--skip-d5-tests]
@@ -301,7 +303,7 @@ service_start_hint() {
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
     optional-n8n) echo "AGENTIC_OPTIONAL_MODULES=n8n agent up optional" ;;
-    optional-n8n-sandbox-api|optional-n8n-sandbox-runner|optional-n8n-searxng) echo "AGENTIC_OPTIONAL_MODULES=n8n-ai agent up optional" ;;
+    optional-n8n-searxng) echo "AGENTIC_OPTIONAL_MODULES=n8n-ai agent up optional" ;;
     optional-forgejo|comfyui) echo "agent up ui" ;;
     *) echo "agent up agents" ;;
   esac
@@ -339,9 +341,6 @@ target_to_services() {
       printf '%s\n' \
         "optional-n8n" \
         "optional-n8n-loopback" \
-        "optional-n8n-sandbox-api" \
-        "optional-n8n-sandbox-runner" \
-        "optional-n8n-sandbox-registry" \
         "optional-n8n-searxng"
       ;;
     forgejo)
@@ -564,8 +563,8 @@ validate_optional_request_file() {
         success_value="n8n service and loopback proxy start successfully with healthchecks passing."
         ;;
       n8n-ai)
-        need_value="Provide a fully local n8n AI Assistant with Ollama, Sysbox sandbox, and SearXNG."
-        success_value="n8n AI Assistant reaches the local model, sandbox API/runner, and local search without host code execution."
+        need_value="Provide a fully local n8n AI Assistant with Ollama, an isolated sandbox VM, and SearXNG."
+        success_value="n8n AI Assistant reaches the local model, private sandbox VM, and local search without host code execution."
         ;;
       *)
         die "Optional module '${module}' requires request file: ${request_file}"
@@ -616,9 +615,11 @@ validate_optional_module_prereqs() {
   done
 
   if [[ "${module}" == "n8n-ai" ]]; then
-    require_cmd docker
-    docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"sysbox-runc"' \
-      || die "Optional module 'n8n-ai' requires the sysbox-runc Docker runtime. Follow docs/runbooks/n8n-local-ai-sandbox.md; privileged fallback is forbidden."
+    require_cmd multipass
+    [[ -x "${AGENT_N8N_SANDBOX_VM_SCRIPT}" ]] \
+      || die "n8n sandbox VM manager is missing: ${AGENT_N8N_SANDBOX_VM_SCRIPT}"
+    "${AGENT_N8N_SANDBOX_VM_SCRIPT}" status >/dev/null \
+      || die "Optional module 'n8n-ai' requires a healthy local sandbox VM. Run: ./agent n8n-sandbox-vm create"
   fi
 }
 
@@ -630,11 +631,27 @@ load_n8n_sandbox_runtime_env() {
   export N8N_SANDBOX_RUNNER_API_KEY
   export N8N_SEARXNG_SECRET
   export N8N_INSTANCE_AI_SANDBOX_ENABLED=true
+  export N8N_SANDBOX_SERVICE_URL
+  export N8N_SANDBOX_VM_IP
 
   N8N_SANDBOX_API_KEY="$(<"${secret_root}/api.key")"
   N8N_SANDBOX_RUNNER_REGISTRATION_TOKEN="$(<"${secret_root}/registration.token")"
   N8N_SANDBOX_RUNNER_API_KEY="$(<"${secret_root}/runner.key")"
   N8N_SEARXNG_SECRET="$(<"${secret_root}/searxng.key")"
+  N8N_SANDBOX_SERVICE_URL="$("${AGENT_N8N_SANDBOX_VM_SCRIPT}" endpoint)"
+  N8N_SANDBOX_VM_IP="${N8N_SANDBOX_SERVICE_URL#http://}"
+  N8N_SANDBOX_VM_IP="${N8N_SANDBOX_VM_IP%:8080}"
+}
+
+cmd_n8n_sandbox_vm() {
+  [[ -x "${AGENT_N8N_SANDBOX_VM_SCRIPT}" ]] \
+    || die "n8n sandbox VM manager is missing: ${AGENT_N8N_SANDBOX_VM_SCRIPT}"
+  case "${1:-status}" in
+    create)
+      ensure_optional_runtime
+      ;;
+  esac
+  "${AGENT_N8N_SANDBOX_VM_SCRIPT}" "$@"
 }
 
 log_optional_activation() {
@@ -5676,6 +5693,9 @@ case "$cmd" in
       docker_compose_partial \
         "${optional_profiles[@]}" \
         -f "${optional_compose_file}" up -d
+      if targets_include "n8n-ai" "${optional_modules[@]}"; then
+        apply_core_network_policy
+      fi
     else
       run_compose_on_targets up "$target_arg" -d
       wait_for_ui_loopback_services_for_targets 120 "${targets[@]}"
@@ -5944,6 +5964,10 @@ case "$cmd" in
   vm)
     shift
     cmd_vm "$@"
+    ;;
+  n8n-sandbox-vm)
+    shift
+    cmd_n8n_sandbox_vm "$@"
     ;;
   evaluate)
     shift

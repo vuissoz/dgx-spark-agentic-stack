@@ -278,202 +278,6 @@ services:
       - agentic
       - agentic-egress
 
-  optional-n8n-sandbox-tls:
-    image: ${N8N_SANDBOX_API_IMAGE:-n8nio/n8n-sandbox-service-api:latest}
-    profiles:
-      - optional-n8n-ai
-    user: "0:0"
-    entrypoint:
-      - /bin/sh
-      - -ec
-    command:
-      - |
-        bootstrap-mtls.sh --out-dir /tls \
-          --api-san optional-n8n-sandbox-api \
-          --control-san-prefix optional-n8n-sandbox-runner &&
-        chown -R sandbox-api:sandbox-api /tls/api
-    environment:
-      NUM_RUNNERS: "1"
-    read_only: true
-    tmpfs:
-      - /tmp
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - FOWNER
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/sandbox/tls:/tls
-    networks:
-      - n8n-sandbox
-
-  optional-n8n-sandbox-registry:
-    image: registry:2.8.3
-    profiles:
-      - optional-n8n-ai
-    restart: unless-stopped
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/sandbox/registry:/var/lib/registry
-    healthcheck:
-      test:
-        - CMD
-        - /bin/registry
-        - --version
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    networks:
-      - n8n-sandbox
-
-  optional-n8n-sandbox-image-seed:
-    image: quay.io/skopeo/stable:latest
-    profiles:
-      - optional-n8n-ai
-    depends_on:
-      optional-n8n-sandbox-registry:
-        condition: service_started
-    restart: "no"
-    read_only: true
-    tmpfs:
-      - /tmp
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      HTTP_PROXY: http://egress-proxy:3128
-      HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: optional-n8n-sandbox-registry,localhost,127.0.0.1
-    entrypoint:
-      - /bin/sh
-      - -ec
-    command:
-      - |
-        attempts=0
-        until skopeo list-tags --tls-verify=false docker://optional-n8n-sandbox-registry:5000 >/dev/null 2>&1; do
-          attempts=$$((attempts + 1))
-          [ "$$attempts" -lt 30 ] || {
-            echo "internal sandbox registry did not become ready" >&2
-            exit 1
-          }
-          sleep 1
-        done
-        exec skopeo copy --dest-tls-verify=false \
-          "docker://${N8N_SANDBOX_IMAGE:-n8nio/n8n-sandbox-service-sandbox:latest}" \
-          docker://optional-n8n-sandbox-registry:5000/n8n-sandbox:local
-    networks:
-      - n8n-sandbox
-      - agentic-egress
-
-  optional-n8n-sandbox-api:
-    image: ${N8N_SANDBOX_API_IMAGE:-n8nio/n8n-sandbox-service-api:latest}
-    profiles:
-      - optional-n8n-ai
-    depends_on:
-      optional-n8n-sandbox-tls:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      SANDBOX_API_KEYS: ${N8N_SANDBOX_API_KEY:-}
-      SANDBOX_API_RUNNER_REGISTRATION_TOKEN: ${N8N_SANDBOX_RUNNER_REGISTRATION_TOKEN:-}
-      SANDBOX_API_RUNNER_API_KEY: ${N8N_SANDBOX_RUNNER_API_KEY:-}
-      SANDBOX_API_DEFAULT_MAX_SANDBOXES: ${N8N_SANDBOX_MAX_SANDBOXES:-4}
-      SANDBOX_API_GRPC_TLS_CERT_FILE: /tls/grpc-server.crt
-      SANDBOX_API_GRPC_TLS_KEY_FILE: /tls/grpc-server.key
-      SANDBOX_API_GRPC_TLS_CLIENT_CA_FILE: /tls/ca.crt
-      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CA_FILE: /tls/ca.crt
-      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CERT_FILE: /tls/control-grpc-api-client.crt
-      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_KEY_FILE: /tls/control-grpc-api-client.key
-      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_SERVER_NAME: optional-n8n-sandbox-runner-1
-    volumes:
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/sandbox/tls/api:/tls:ro
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/sandbox/api-data:/var/lib/n8n-sandbox-api
-    healthcheck:
-      test:
-        - CMD
-        - wget
-        - -qO-
-        - http://127.0.0.1:8080/healthz
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    networks:
-      n8n-sandbox:
-        aliases:
-          - optional-n8n-sandbox-api
-
-  optional-n8n-sandbox-runner:
-    image: ${N8N_SANDBOX_RUNNER_IMAGE:-n8nio/n8n-sandbox-service-runner-dind:latest}
-    profiles:
-      - optional-n8n-ai
-    runtime: sysbox-runc
-    depends_on:
-      optional-n8n-sandbox-tls:
-        condition: service_completed_successfully
-      optional-n8n-sandbox-api:
-        condition: service_healthy
-      optional-n8n-sandbox-image-seed:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    environment:
-      SANDBOX_RUNNER_API_KEYS: ${N8N_SANDBOX_RUNNER_API_KEY:-}
-      SANDBOX_RUNNER_REGISTRATION_TOKEN: ${N8N_SANDBOX_RUNNER_REGISTRATION_TOKEN:-}
-      SANDBOX_RUNNER_DOCKER_SANDBOX_IMAGE: optional-n8n-sandbox-registry:5000/n8n-sandbox:local
-      SANDBOX_RUNNER_DOCKER_INSECURE_REGISTRIES: optional-n8n-sandbox-registry:5000
-      SANDBOX_RUNNER_API_GRPC_ADDR: optional-n8n-sandbox-api:9090
-      SANDBOX_RUNNER_HTTP_BASE_URL: https://optional-n8n-sandbox-runner-1:8080
-      SANDBOX_RUNNER_CONTROL_GRPC_LISTEN_ADDR: ":9091"
-      SANDBOX_RUNNER_CONTROL_GRPC_ADVERTISE_ADDR: optional-n8n-sandbox-runner-1:9091
-      SANDBOX_RUNNER_ID: runner-1
-      SANDBOX_RUNNER_CAPACITY_TOTAL: ${N8N_SANDBOX_MAX_SANDBOXES:-4}
-      SANDBOX_RUNNER_IDLE_TTL_SECONDS: ${N8N_SANDBOX_IDLE_TTL_SECONDS:-900}
-      SANDBOX_RUNNER_INTER_SANDBOX_NETWORK_ENABLED: "false"
-      SANDBOX_RUNNER_DEFAULT_MEMORY_MB: ${N8N_SANDBOX_MEMORY_MB:-1024}
-      SANDBOX_RUNNER_DEFAULT_CPU_PERCENT: ${N8N_SANDBOX_CPU_PERCENT:-100}
-      SANDBOX_RUNNER_DEFAULT_PIDS_MAX: ${N8N_SANDBOX_PIDS_MAX:-256}
-      SANDBOX_RUNNER_REGISTRATION_GRPC_CA_FILE: /tls/ca.crt
-      SANDBOX_RUNNER_REGISTRATION_GRPC_CERT_FILE: /tls/grpc-client.crt
-      SANDBOX_RUNNER_REGISTRATION_GRPC_KEY_FILE: /tls/grpc-client.key
-      SANDBOX_RUNNER_REGISTRATION_GRPC_SERVER_NAME: optional-n8n-sandbox-api
-      SANDBOX_RUNNER_CONTROL_GRPC_TLS_CERT_FILE: /tls/control-grpc-server.crt
-      SANDBOX_RUNNER_CONTROL_GRPC_TLS_KEY_FILE: /tls/control-grpc-server.key
-      SANDBOX_RUNNER_CONTROL_GRPC_TLS_CLIENT_CA_FILE: /tls/ca.crt
-    volumes:
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/sandbox/tls/runner:/tls:ro
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/sandbox/runner-data:/var/sandboxes
-      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/sandbox/docker-data:/var/lib/docker
-    healthcheck:
-      test:
-        - CMD
-        - wget
-        - -qO-
-        - --no-check-certificate
-        - https://127.0.0.1:8080/readyz
-      interval: 10s
-      timeout: 5s
-      retries: 24
-      start_period: 30s
-    networks:
-      n8n-sandbox:
-        aliases:
-          - optional-n8n-sandbox-runner-1
-
   optional-n8n-searxng:
     image: ${N8N_SEARXNG_IMAGE:-searxng/searxng:latest}
     profiles:
@@ -542,15 +346,15 @@ services:
       N8N_INSTANCE_AI_MODEL_API_KEY: "${N8N_INSTANCE_AI_MODEL_API_KEY:-local-ollama}"
       N8N_INSTANCE_AI_SANDBOX_ENABLED: "${N8N_INSTANCE_AI_SANDBOX_ENABLED:-false}"
       N8N_INSTANCE_AI_SANDBOX_PROVIDER: n8n-sandbox
-      N8N_INSTANCE_AI_SANDBOX_API_URL: http://optional-n8n-sandbox-api:8080
+      N8N_INSTANCE_AI_SANDBOX_API_URL: ${N8N_SANDBOX_SERVICE_URL:-}
       N8N_INSTANCE_AI_SANDBOX_API_KEY: "${N8N_SANDBOX_API_KEY:-}"
-      N8N_SANDBOX_SERVICE_URL: http://optional-n8n-sandbox-api:8080
+      N8N_SANDBOX_SERVICE_URL: ${N8N_SANDBOX_SERVICE_URL:-}
       N8N_SANDBOX_SERVICE_API_KEY: "${N8N_SANDBOX_API_KEY:-}"
-      N8N_INSTANCE_AI_SANDBOX_IMAGE: optional-n8n-sandbox-registry:5000/n8n-sandbox:local
+      N8N_INSTANCE_AI_SANDBOX_IMAGE: ${N8N_SANDBOX_IMAGE:-n8nio/n8n-sandbox-service-sandbox:latest}
       N8N_INSTANCE_AI_SEARXNG_URL: http://optional-n8n-searxng:8080
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,optional-n8n-sandbox-api,optional-n8n-searxng,optional-forgejo,unbound,egress-proxy,localhost,127.0.0.1
+      NO_PROXY: ${N8N_SANDBOX_VM_IP:-},ollama-gate,optional-n8n-searxng,optional-forgejo,unbound,egress-proxy,localhost,127.0.0.1
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/data:/home/node/.n8n
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/custom:/home/node/.n8n/custom
@@ -565,7 +369,7 @@ services:
       start_period: 20s
     networks:
       - agentic
-      - n8n-sandbox
+      - agentic-egress
 
   optional-n8n-loopback:
     image: nginxinc/nginx-unprivileged:1.27-alpine
@@ -640,7 +444,3 @@ networks:
   agentic-egress:
     external: true
     name: ${AGENTIC_EGRESS_NETWORK:?AGENTIC_EGRESS_NETWORK must be set (use ./agent or source scripts/lib/runtime.sh)}
-  n8n-sandbox:
-    driver: bridge
-    internal: true
-    name: ${AGENTIC_COMPOSE_PROJECT:-agentic}-n8n-sandbox

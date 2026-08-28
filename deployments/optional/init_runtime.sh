@@ -263,12 +263,6 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/data"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/custom"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/logs"
-  install -d -m 0750 "${AGENTIC_ROOT}/optional/n8n/sandbox"
-  install -d -m 0700 "${AGENTIC_ROOT}/optional/n8n/sandbox/tls"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/sandbox/api-data"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/sandbox/runner-data"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/sandbox/docker-data"
-  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/sandbox/registry"
   migrate_n8n_config_mountpoint
 
   install -d -m 0750 "${AGENTIC_ROOT}/deployments"
@@ -326,11 +320,6 @@ main() {
       "${AGENTIC_ROOT}/optional/n8n/data" \
       "${AGENTIC_ROOT}/optional/n8n/custom" \
       "${AGENTIC_ROOT}/optional/n8n/logs"
-    chown -R "${runtime_uid}:${runtime_gid}" \
-      "${AGENTIC_ROOT}/optional/n8n/sandbox/api-data" \
-      "${AGENTIC_ROOT}/optional/n8n/sandbox/runner-data" \
-      "${AGENTIC_ROOT}/optional/n8n/sandbox/docker-data" \
-      "${AGENTIC_ROOT}/optional/n8n/sandbox/registry"
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
     fi
@@ -361,11 +350,6 @@ main() {
       "${AGENTIC_ROOT}/optional/n8n/data" \
       "${AGENTIC_ROOT}/optional/n8n/custom" \
       "${AGENTIC_ROOT}/optional/n8n/logs"
-    chmod 0770 \
-      "${AGENTIC_ROOT}/optional/n8n/sandbox/api-data" \
-      "${AGENTIC_ROOT}/optional/n8n/sandbox/runner-data" \
-      "${AGENTIC_ROOT}/optional/n8n/sandbox/docker-data" \
-      "${AGENTIC_ROOT}/optional/n8n/sandbox/registry"
     log "non-root runtime init: relaxed optional dirs permissions for userns compatibility"
   fi
 }
