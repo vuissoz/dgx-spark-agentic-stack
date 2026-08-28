@@ -42,7 +42,7 @@ AGENT_GPU_CLOCK_LOW_PRESET="${AGENT_GPU_CLOCK_LOW_PRESET:-2000,2000}"
 AGENT_TOOLS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose comfyui)
 AGENT_STATUS_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui n8n)
 STOP_START_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui n8n)
-OPTIONAL_MODULES=(mcp pi-mono goose portainer n8n)
+OPTIONAL_MODULES=(mcp pi-mono goose portainer n8n n8n-ai)
 FORGET_TARGETS=(ollama claude codex opencode kilocode vibestral hermes comfyui openclaw openhands openwebui qdrant obs n8n all)
 STACK_START_ORDER=(core agents ui obs rag optional)
 STACK_STOP_ORDER=(optional rag obs ui agents core)
@@ -123,7 +123,7 @@ Usage:
   agent doctor [--fix-net] [--check-tool-stream-e2e]
 
 Optional modules (disabled by default):
-  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer,n8n agent up optional
+  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer,n8n,n8n-ai agent up optional
 USAGE
 }
 
@@ -301,6 +301,7 @@ service_start_hint() {
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
     optional-n8n) echo "AGENTIC_OPTIONAL_MODULES=n8n agent up optional" ;;
+    optional-n8n-sandbox-api|optional-n8n-sandbox-runner|optional-n8n-searxng) echo "AGENTIC_OPTIONAL_MODULES=n8n-ai agent up optional" ;;
     optional-forgejo|comfyui) echo "agent up ui" ;;
     *) echo "agent up agents" ;;
   esac
@@ -337,7 +338,11 @@ target_to_services() {
     n8n)
       printf '%s\n' \
         "optional-n8n" \
-        "optional-n8n-loopback"
+        "optional-n8n-loopback" \
+        "optional-n8n-sandbox-api" \
+        "optional-n8n-sandbox-runner" \
+        "optional-n8n-sandbox-registry" \
+        "optional-n8n-searxng"
       ;;
     forgejo)
       printf '%s\n' \
@@ -417,6 +422,7 @@ optional_module_profile() {
     goose) echo "optional-goose" ;;
     portainer) echo "optional-portainer" ;;
     n8n) echo "optional-n8n" ;;
+    n8n-ai) echo "optional-n8n-ai" ;;
     *) return 1 ;;
   esac
 }
@@ -426,13 +432,20 @@ optional_module_secret_files() {
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
     goose|portainer|n8n) ;;
+    n8n-ai)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/api.key" \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/registration.token" \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/runner.key" \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/searxng.key"
+      ;;
     *) return 1 ;;
   esac
 }
 
 optional_module_config_files() {
   case "$1" in
-    mcp|pi-mono|goose|portainer|n8n) ;;
+    mcp|pi-mono|goose|portainer|n8n|n8n-ai) ;;
     *) return 1 ;;
   esac
 }
@@ -550,6 +563,10 @@ validate_optional_request_file() {
         need_value="Provide workflow automation service for local agentic workflows."
         success_value="n8n service and loopback proxy start successfully with healthchecks passing."
         ;;
+      n8n-ai)
+        need_value="Provide a fully local n8n AI Assistant with Ollama, Sysbox sandbox, and SearXNG."
+        success_value="n8n AI Assistant reaches the local model, sandbox API/runner, and local search without host code execution."
+        ;;
       *)
         die "Optional module '${module}' requires request file: ${request_file}"
         ;;
@@ -597,6 +614,27 @@ validate_optional_module_prereqs() {
     [[ -s "${config_file}" ]] \
       || die "Optional module '${module}' requires runtime config file: ${config_file}"
   done
+
+  if [[ "${module}" == "n8n-ai" ]]; then
+    require_cmd docker
+    docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"sysbox-runc"' \
+      || die "Optional module 'n8n-ai' requires the sysbox-runc Docker runtime. Follow docs/runbooks/n8n-local-ai-sandbox.md; privileged fallback is forbidden."
+  fi
+}
+
+load_n8n_sandbox_runtime_env() {
+  local secret_root="${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox"
+
+  export N8N_SANDBOX_API_KEY
+  export N8N_SANDBOX_RUNNER_REGISTRATION_TOKEN
+  export N8N_SANDBOX_RUNNER_API_KEY
+  export N8N_SEARXNG_SECRET
+  export N8N_INSTANCE_AI_SANDBOX_ENABLED=true
+
+  N8N_SANDBOX_API_KEY="$(<"${secret_root}/api.key")"
+  N8N_SANDBOX_RUNNER_REGISTRATION_TOKEN="$(<"${secret_root}/registration.token")"
+  N8N_SANDBOX_RUNNER_API_KEY="$(<"${secret_root}/runner.key")"
+  N8N_SEARXNG_SECRET="$(<"${secret_root}/searxng.key")"
 }
 
 log_optional_activation() {
@@ -626,6 +664,8 @@ optional_module_build_services() {
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "" ;;
     portainer) echo "" ;;
+    n8n) echo "" ;;
+    n8n-ai) echo "" ;;
     *) return 1 ;;
   esac
 }
@@ -5628,6 +5668,9 @@ case "$cmd" in
           log_optional_activation "${optional_module}"
         done
         build_optional_module_images "${optional_compose_file}" "${optional_modules[@]}"
+        if targets_include "n8n-ai" "${optional_modules[@]}"; then
+          load_n8n_sandbox_runtime_env
+        fi
       fi
 
       docker_compose_partial \

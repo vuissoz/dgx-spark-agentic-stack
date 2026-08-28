@@ -17,7 +17,7 @@ Compose files are located in `compose/`:
 - `compose/compose.ui.yml`: `optional-forgejo`, `optional-forgejo-loopback`, `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (`rag-lexical` profile)
-- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`, `optional-n8n`, `optional-n8n-loopback`
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`, `optional-n8n`, `optional-n8n-loopback`, plus the local `optional-n8n-ai` profile (mTLS, internal registry, Sysbox sandbox, SearXNG)
 
 ## Execution Profiles
 

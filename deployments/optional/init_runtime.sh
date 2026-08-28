@@ -22,26 +22,29 @@ die() {
 repair_rootless_n8n_layout() {
   local n8n_root="${AGENTIC_ROOT}/optional/n8n"
   local first_unwritable=""
+  local scoped_path=""
   local target_uid="${AGENT_RUNTIME_UID:-$(id -u)}"
   local target_gid="${AGENT_RUNTIME_GID:-$(id -g)}"
 
   [[ "${EUID}" -ne 0 ]] || return 0
   [[ -d "${n8n_root}" ]] || return 0
 
-  if [[ ! -w "${n8n_root}" ]] || [[ ! -x "${n8n_root}" ]]; then
-    first_unwritable="${n8n_root}"
-  else
-    first_unwritable="$(find "${n8n_root}" -mindepth 0 ! -writable -print -quit 2>/dev/null || true)"
-  fi
+  for scoped_path in "${n8n_root}/data" "${n8n_root}/custom" "${n8n_root}/logs"; do
+    [[ -d "${scoped_path}" ]] || continue
+    first_unwritable="$(find "${scoped_path}" -mindepth 0 ! -writable -print -quit 2>/dev/null || true)"
+    [[ -z "${first_unwritable}" ]] || break
+  done
   [[ -n "${first_unwritable}" ]] || return 0
 
   command -v docker >/dev/null 2>&1 \
     || die "docker is required to repair legacy n8n ownership (first unwritable path: ${first_unwritable})"
   docker run --rm --network none \
-    -v "${n8n_root}:/repair/n8n" \
+    -v "${n8n_root}/data:/repair/data" \
+    -v "${n8n_root}/custom:/repair/custom" \
+    -v "${n8n_root}/logs:/repair/logs" \
     busybox:1.36.1 sh -lc \
-    "chown -R ${target_uid}:${target_gid} /repair/n8n && chmod -R u+rwX,g+rwX,o-rwx /repair/n8n" \
-    || die "failed to repair legacy n8n ownership; run: sudo chown -R ${target_uid}:${target_gid} '${n8n_root}'"
+    "chown -R ${target_uid}:${target_gid} /repair/data /repair/custom /repair/logs && chmod -R u+rwX,g+rwX,o-rwx /repair/data /repair/custom /repair/logs" \
+    || die "failed to repair legacy n8n ownership; repair only data/custom/logs under '${n8n_root}'"
 
   log "repaired legacy n8n ownership with containerized chown (uid=${target_uid} gid=${target_gid})"
 }
@@ -145,6 +148,7 @@ optional_request_default_need() {
     goose) printf '%s\n' "Provide an isolated Goose CLI runtime for approved workflows." ;;
     portainer) printf '%s\n' "Provide temporary loopback-only Portainer visibility for local diagnostics." ;;
     n8n) printf '%s\n' "Provide workflow automation service for local agentic workflows." ;;
+    n8n-ai) printf '%s\n' "Provide a fully local n8n AI Assistant with Ollama, Sysbox sandbox, and SearXNG." ;;
     *) return 1 ;;
   esac
 }
@@ -157,6 +161,7 @@ optional_request_default_success() {
     goose) printf '%s\n' "Container starts successfully with isolated workspace and expected proxy controls." ;;
     portainer) printf '%s\n' "UI is reachable on loopback only and runs without docker.sock mount." ;;
     n8n) printf '%s\n' "n8n service and loopback proxy start successfully with healthchecks passing." ;;
+    n8n-ai) printf '%s\n' "Local model, sandbox API/runner, and SearXNG start with healthchecks passing." ;;
     *) return 1 ;;
   esac
 }
@@ -258,6 +263,12 @@ main() {
   install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/data"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/custom"
   install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/logs"
+  install -d -m 0750 "${AGENTIC_ROOT}/optional/n8n/sandbox"
+  install -d -m 0700 "${AGENTIC_ROOT}/optional/n8n/sandbox/tls"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/sandbox/api-data"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/sandbox/runner-data"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/sandbox/docker-data"
+  install -d -m 0770 "${AGENTIC_ROOT}/optional/n8n/sandbox/registry"
   migrate_n8n_config_mountpoint
 
   install -d -m 0750 "${AGENTIC_ROOT}/deployments"
@@ -267,6 +278,7 @@ main() {
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/ssh/pi-mono"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/ssh/goose"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
+  install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox"
   install -d -m 0750 "${AGENTIC_ROOT}/secrets/runtime/git-forge"
 
   copy_if_missing "${TEMPLATE_DIR}/mcp.tool_allowlist.txt" "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt" 0640
@@ -275,10 +287,19 @@ main() {
   ensure_optional_request_file "goose"
   ensure_optional_request_file "portainer"
   ensure_optional_request_file "n8n"
+  ensure_optional_request_file "n8n-ai"
 
   chmod 0644 "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
 
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/api.key"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/registration.token"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/runner.key"
+  ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/searxng.key"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/api.key"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/registration.token"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/runner.key"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/searxng.key"
   for git_forge_secret in "${git_forge_accounts[@]}"; do
     ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password"
     ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/git-forge/${git_forge_secret}.password"
@@ -305,6 +326,11 @@ main() {
       "${AGENTIC_ROOT}/optional/n8n/data" \
       "${AGENTIC_ROOT}/optional/n8n/custom" \
       "${AGENTIC_ROOT}/optional/n8n/logs"
+    chown -R "${runtime_uid}:${runtime_gid}" \
+      "${AGENTIC_ROOT}/optional/n8n/sandbox/api-data" \
+      "${AGENTIC_ROOT}/optional/n8n/sandbox/runner-data" \
+      "${AGENTIC_ROOT}/optional/n8n/sandbox/docker-data" \
+      "${AGENTIC_ROOT}/optional/n8n/sandbox/registry"
     if [[ -f "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ]]; then
       chown "${runtime_uid}:${runtime_gid}" "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
     fi
@@ -335,6 +361,11 @@ main() {
       "${AGENTIC_ROOT}/optional/n8n/data" \
       "${AGENTIC_ROOT}/optional/n8n/custom" \
       "${AGENTIC_ROOT}/optional/n8n/logs"
+    chmod 0770 \
+      "${AGENTIC_ROOT}/optional/n8n/sandbox/api-data" \
+      "${AGENTIC_ROOT}/optional/n8n/sandbox/runner-data" \
+      "${AGENTIC_ROOT}/optional/n8n/sandbox/docker-data" \
+      "${AGENTIC_ROOT}/optional/n8n/sandbox/registry"
     log "non-root runtime init: relaxed optional dirs permissions for userns compatibility"
   fi
 }

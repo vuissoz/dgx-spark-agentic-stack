@@ -204,7 +204,7 @@ service_requires_proxy_env() {
 service_allows_root_user() {
   local service="$1"
   case "${service}" in
-    ollama|unbound|egress-proxy|promtail|cadvisor|dcgm-exporter)
+    ollama|unbound|egress-proxy|promtail|cadvisor|dcgm-exporter|optional-n8n-sandbox-registry|optional-n8n-sandbox-runner)
       return 0
       ;;
     *)
@@ -1596,7 +1596,15 @@ for row in "${running_services[@]}"; do
     doctor_fail_or_warn "docker.sock mount detected for service '${service}'"
   fi
 
-  if service_allows_readwrite_rootfs "${service}"; then
+  if [[ "${service}" == "optional-n8n-sandbox-runner" ]]; then
+    sysbox_runtime="$(docker inspect --format '{{.HostConfig.Runtime}}' "${cid}" 2>/dev/null || true)"
+    sysbox_privileged="$(docker inspect --format '{{.HostConfig.Privileged}}' "${cid}" 2>/dev/null || true)"
+    if [[ "${sysbox_runtime}" != "sysbox-runc" || "${sysbox_privileged}" != "false" ]]; then
+      doctor_fail "service '${service}' must use unprivileged sysbox-runc"
+    else
+      ok "service '${service}' uses documented Sysbox DinD hardening exception"
+    fi
+  elif service_allows_readwrite_rootfs "${service}"; then
     rootfs_exception_reason="$(agentic_service_readwrite_rootfs_exception_reason "${service}" || true)"
     if ! assert_container_runtime_restrictions "${cid}"; then
       doctor_fail_or_warn "service '${service}' runtime restriction baseline failed"
@@ -3203,6 +3211,58 @@ if [[ -n "${optional_n8n_cid}" ]]; then
   if [[ ! "${n8n_status}" =~ ^(200|401|403)$ ]]; then
     doctor_fail "optional n8n endpoint is unreachable on loopback (http_status=${n8n_status:-none})"
   fi
+fi
+
+optional_n8n_sandbox_api_cid="$(service_container_id optional-n8n-sandbox-api)"
+optional_n8n_sandbox_runner_cid="$(service_container_id optional-n8n-sandbox-runner)"
+if agentic_csv_contains "n8n-ai" "${AGENTIC_OPTIONAL_MODULES:-}"; then
+  docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"sysbox-runc"' \
+    || doctor_fail "n8n-ai requires sysbox-runc registered in Docker; privileged fallback is forbidden"
+
+  for n8n_ai_secret in api.key registration.token runner.key searxng.key; do
+    n8n_ai_secret_path="${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/${n8n_ai_secret}"
+    if [[ ! -s "${n8n_ai_secret_path}" ]]; then
+      doctor_fail "n8n-ai secret is missing or empty: ${n8n_ai_secret_path}"
+    elif [[ "$(stat -c '%a' "${n8n_ai_secret_path}" 2>/dev/null || true)" != "600" ]]; then
+      doctor_fail "n8n-ai secret must use mode 600: ${n8n_ai_secret_path}"
+    fi
+  done
+
+  [[ -n "${optional_n8n_sandbox_api_cid}" ]] \
+    || doctor_fail "n8n-ai is enabled but optional-n8n-sandbox-api is not running"
+  [[ -n "${optional_n8n_sandbox_runner_cid}" ]] \
+    || doctor_fail "n8n-ai is enabled but optional-n8n-sandbox-runner is not running"
+fi
+
+if [[ -n "${optional_n8n_sandbox_api_cid}" ]]; then
+  api_port_bindings="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "${optional_n8n_sandbox_api_cid}" 2>/dev/null || true)"
+  [[ "${api_port_bindings}" == "null" || "${api_port_bindings}" == "{}" ]] \
+    || doctor_fail "n8n sandbox API must not publish host ports"
+  assert_no_docker_sock_mount "${optional_n8n_sandbox_api_cid}" \
+    || doctor_fail "n8n sandbox API must not mount docker.sock"
+fi
+
+if [[ -n "${optional_n8n_sandbox_runner_cid}" ]]; then
+  n8n_runner_runtime="$(docker inspect --format '{{.HostConfig.Runtime}}' "${optional_n8n_sandbox_runner_cid}" 2>/dev/null || true)"
+  n8n_runner_privileged="$(docker inspect --format '{{.HostConfig.Privileged}}' "${optional_n8n_sandbox_runner_cid}" 2>/dev/null || true)"
+  [[ "${n8n_runner_runtime}" == "sysbox-runc" ]] \
+    || doctor_fail "n8n sandbox runner must use sysbox-runc (got: ${n8n_runner_runtime:-unset})"
+  [[ "${n8n_runner_privileged}" == "false" ]] \
+    || doctor_fail "n8n sandbox runner must never be privileged"
+  assert_no_docker_sock_mount "${optional_n8n_sandbox_runner_cid}" \
+    || doctor_fail "n8n sandbox runner must not mount the host docker.sock"
+fi
+
+if [[ -n "${optional_n8n_cid}" && -n "${optional_n8n_sandbox_api_cid}" ]]; then
+  n8n_ai_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_n8n_cid}" 2>/dev/null || true)"
+  grep -q '^N8N_INSTANCE_AI_SANDBOX_ENABLED=true$' <<<"${n8n_ai_env}" \
+    || doctor_fail "n8n local AI sandbox is running but N8N_INSTANCE_AI_SANDBOX_ENABLED is not true"
+  grep -q '^N8N_INSTANCE_AI_MODEL_URL=http://ollama-gate:11435/v1$' <<<"${n8n_ai_env}" \
+    || doctor_fail "n8n local AI model URL must target ollama-gate"
+  grep -q '^N8N_INSTANCE_AI_SANDBOX_API_URL=http://optional-n8n-sandbox-api:8080$' <<<"${n8n_ai_env}" \
+    || doctor_fail "n8n sandbox URL must target the internal sandbox API"
+  grep -q '^N8N_INSTANCE_AI_SEARXNG_URL=http://optional-n8n-searxng:8080$' <<<"${n8n_ai_env}" \
+    || doctor_fail "n8n local AI search URL must target internal SearXNG"
 fi
 
 if [[ "${check_tool_stream_e2e}" -eq 1 ]]; then

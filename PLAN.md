@@ -448,7 +448,53 @@ Une application peut invoquer un modèle ou un agent sans devenir une identité 
 | JupyterLab | application de code | isolation utilisateur, quotas, accès externes explicites |
 | Portainer | break-glass | désactivé par défaut, admin uniquement |
 
-### 9.3 Extensions à risque
+### 9.3 Sandbox de l'AI Assistant n8n
+
+La sandbox de l'AI Assistant n8n est une capacité optionnelle distincte du moteur de workflows et des `Code` nodes. Elle reste désactivée par défaut et ne doit pas conditionner le démarrage de `optional-n8n`.
+
+Références amont vérifiées le 28 août 2026 :
+
+- [Set up the AI Assistant](https://docs.n8n.io/deploy/host-n8n/configure-n8n/set-up-ai-assistant/) : une sandbox est obligatoire pour la construction de workflows par l'Assistant ;
+- [Install using Docker Compose](https://docs.n8n.io/deploy/host-n8n/install-options/install-using-docker-compose/) : la sandbox native comprend `sandbox-certs`, `sandbox-api` et un runner Docker-in-Docker, reliés par mTLS ;
+- [Linux quickstart](https://github.com/n8n-io/n8n-sandbox-service/blob/main/docs/quickstart-linux.md) : sous Linux, `sysbox-runc` permet d'exécuter le runner DinD sans `privileged: true` ;
+- [Instance AI configuration](https://github.com/n8n-io/n8n/blob/master/packages/%40n8n/instance-ai/docs/configuration.md) : les connexions configurées dans l'UI sont prioritaires sur les variables d'environnement et la sandbox conserve un workspace par conversation.
+
+Décisions d'architecture :
+
+- introduire un profil explicite `optional-n8n-ai`, indépendant de `optional-n8n`, qui démarre localement bootstrap mTLS, registre d'image interne, API sandbox, runner Sysbox et SearXNG ;
+- utiliser exclusivement `n8n-sandbox` dans ce profil : Daytona et les autres sandboxes distantes ne font pas partie du chemin local demandé ;
+- exiger `sysbox-runc` sur l'hôte DGX et refuser le démarrage si ce runtime n'est pas enregistré ; aucun fallback automatique vers `privileged: true` n'est autorisé ;
+- ne jamais monter le `docker.sock` de l'hôte ; le runner utilise uniquement son daemon Docker interne sous Sysbox ;
+- empêcher l'egress direct des sandboxes : une tâche d'amorçage copie l'image sandbox dans un registre interne, puis le runner et ses conteneurs restent sur un réseau Docker `internal: true` ;
+- garder l'API sandbox et le registre sans port hôte ; seul n8n reste publié sur le loopback existant ;
+- stocker les quatre secrets sandbox/recherche hors git, dans des fichiers root-only générés au runtime, injectés sans journalisation ;
+- pinner les images et enregistrer leurs digests dans les releases avant activation du profil ;
+- préconfigurer automatiquement l'Assistant avec `AGENTIC_N8N_AI_MODEL=qwen3.8` via `http://ollama-gate:11435/v1`, la sandbox `http://optional-n8n-sandbox-api:8080` et la recherche locale `http://optional-n8n-searxng:8080` ;
+- permettre des overrides explicites, mais conserver le parcours zéro-saisie comme défaut de `AGENTIC_OPTIONAL_MODULES=n8n-ai ./agent up optional`.
+
+Un verrou de compatibilité est obligatoire avant implémentation : la documentation de déploiement n8n utilise actuellement `N8N_INSTANCE_AI_SANDBOX_API_URL` et `N8N_INSTANCE_AI_SANDBOX_API_KEY`, tandis que la documentation du paquet `@n8n/instance-ai` expose `N8N_SANDBOX_SERVICE_URL` et `N8N_SANDBOX_SERVICE_API_KEY`. L'image n8n doit être figée par version/digest, puis le contrat réellement lu par cette version doit être couvert par un test de configuration. Aucun doublon silencieux de variables n'est accepté comme solution permanente.
+
+Plan d'implémentation :
+
+1. **Contrat amont et ADR** : figer une version n8n compatible, relever les variables effectives et documenter le runtime Sysbox local.
+2. **Configuration automatique** : ajouter les options modèle/sandbox/recherche au bootstrap/runtime, générer les secrets et injecter les valeurs locales sans saisie dans l'UI.
+3. **Compose** : activer `tls-init`, registre interne, seed d'image, API, runner Sysbox et SearXNG uniquement sous `optional-n8n-ai`, sans port supplémentaire ni `docker.sock`.
+4. **Réseau et egress** : limiter l'egress au seed d'image et à SearXNG via le proxy ; garder API, runner, registre et sandboxes sur le réseau interne.
+5. **Exploitation** : étendre `agent up`, `agent ls`, `agent logs`, `agent stop`, `agent update` et le manifest de release pour exposer fournisseur, santé, version et digest sans afficher les clés.
+6. **Conformité** : étendre `agent doctor` pour vérifier profil opt-in, absence de port public et de `docker.sock`, absence de conteneur privilégié local, présence des secrets, endpoint `/healthz`, cohérence du fournisseur et traçabilité des digests.
+7. **Tests** : ajouter des tests statiques Compose, un faux provider HTTP pour les tests hors ligne, puis un e2e opt-in qui construit et exécute un workflow minimal avec `qwen3.8` via `ollama-gate` et vérifie nettoyage/expiration du workspace.
+8. **Runbooks** : documenter l'installation de Sysbox, la commande de démarrage entièrement locale, les champs visibles dans l'UI, la rotation des clés et certificats, le diagnostic, la sauvegarde, le rollback et la désactivation d'urgence.
+
+Critères d'acceptation :
+
+- `optional-n8n` continue de fonctionner sans sandbox ;
+- `optional-n8n-ai` refuse de démarrer si le fournisseur, l'URL ou les secrets requis sont absents ou incohérents ;
+- aucune publication autre que le loopback n8n existant, aucun `docker.sock` et aucun conteneur privilégié n'apparaissent sur le DGX ;
+- `./agent doctor` valide le fournisseur configuré et échoue avec un message actionnable en cas de dérive ;
+- une release contient les versions/digests et peut être restaurée sans perdre les workflows n8n ;
+- un test e2e prouve que l'Assistant peut générer, construire et tester un workflow dans la sandbox sans exécuter de code sur l'hôte n8n.
+
+### 9.4 Extensions à risque
 
 - OpenWebUI Tools, Functions et Pipelines peuvent exécuter du Python : création/import désactivés par défaut, allowlist et revue ;
 - le RAG natif OpenWebUI ne devient pas une seconde source de vérité : il est désactivé ou relié explicitement au RAG de la stack ;
@@ -457,7 +503,7 @@ Une application peut invoquer un modèle ou un agent sans devenir une identité 
 - JupyterLab est traité comme un environnement de code, pas une simple page web ;
 - les tâches OpenHands restent sous leur politique runtime validée.
 
-### 9.4 Surfaces natives
+### 9.5 Surfaces natives
 
 - Hermes Dashboard et Desktop ;
 - OpenHands UI ;
