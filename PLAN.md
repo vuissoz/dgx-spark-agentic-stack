@@ -526,6 +526,34 @@ Une seule source canonique assure chiffrement, scopes, rotation, expiration et a
 
 Les providers OpenShell et les fichiers temporaires de service sont des mécanismes de livraison, pas des sources de vérité.
 
+#### 10.1.1 Assistant d’initialisation des secrets
+
+La plateforme doit fournir un outil d’initialisation idempotent qui parcourt un
+inventaire déclaratif des secrets requis par les modules activés et demande à
+l’opérateur uniquement les valeurs absentes, vides ou invalides. Un secret déjà
+présent et conforme n’est jamais affiché, recopié dans un log, demandé à nouveau
+ou remplacé implicitement.
+
+Le parcours doit :
+
+- fonctionner en mode interactif et en `--check` non interactif, avec une sortie
+  actionnable et un code non nul si des secrets requis manquent ;
+- distinguer les secrets obligatoires du profil actif, les secrets optionnels et
+  les valeurs non sensibles ;
+- écrire exclusivement dans `${AGENTIC_ROOT}/secrets/runtime/`, avec dossiers
+  `0700` et fichiers `0600`, après validation de propriété et de permissions ;
+- utiliser un prompt masqué, confirmer les valeurs sensibles si elles sont
+  nouvelles, et ne jamais accepter de les passer en argument de commande ;
+- être rejouable sans rotation involontaire et signaler explicitement toute
+  rotation ou correction de permissions ;
+- couvrir au minimum les credentials d’authentification des services, les clés
+  n8n/sandbox et les secrets ComfyUI déjà définis par les modules existants.
+
+L’outil ne doit pas déduire l’absence d’un secret à partir de `docker inspect`,
+des logs ou d’un fichier `.env` committé. Les tests doivent prouver qu’un
+secret existant reste inchangé et qu’aucune valeur sensible ne se retrouve dans
+la sortie, les artefacts de release ou l’historique shell.
+
 ### 10.2 ExternalAccessBroker
 
 Les agents peuvent accéder à GitHub et Hugging Face par capacités explicites.
@@ -707,7 +735,9 @@ Non-objectifs de cette première version :
 
 ### M4 — Fondation production
 
-Auth, rôles, délégations, reconciler, SecretStore, ExternalAccessBroker, audit, observabilité, admission simple et upgrade épinglé.
+Auth, rôles, délégations, reconciler, SecretStore et assistant d’initialisation
+des secrets, ExternalAccessBroker, audit, observabilité, admission simple et
+upgrade épinglé.
 
 **G4 :** séparation utilisateurs/projets et restauration validées.
 
@@ -732,6 +762,10 @@ Hermes natif référence, NemoClaw canari isolé, OpenClaw NemoClaw après parit
 ### M8 — Applications humaines
 
 OpenWebUI, ComfyUI/Flux, n8n, Forgejo, Grafana, DGX Dashboard et JupyterLab avec RBAC, plugins gouvernés, admission GPU et sauvegarde.
+
+L’assistant d’initialisation des secrets est intégré au démarrage des modules
+optionnels : il ne demande que les secrets requis par les profils sélectionnés
+et permet de valider une installation déjà configurée sans ressaisie.
 
 #### Sécurisation de l’initialisation ComfyUI
 
