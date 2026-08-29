@@ -18,6 +18,7 @@ AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_PREREQS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/check_prereqs.sh"
 AGENT_ONBOARD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
+AGENT_SECRETS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/secrets_assistant.py"
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
 AGENT_TRTLLM_PREPARE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/trtllm/prepare_nvfp4_model.sh"
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
@@ -116,6 +117,8 @@ Usage:
   agent repo-e2e [--agents <csv>] [--repo <name>] [--clone-url <url>] [--artifacts-dir <path>] [--attempts <int>] [--reset-agent-branches] [--dry-run]
   agent prereqs
   agent onboard [runtime flags...] [--compose-profiles ... --default-model ... --default-model-context-window ... --trtllm-models ... --grafana-admin-user ... --grafana-admin-password ... --obs-retention-time ... --obs-max-disk ... --openwebui-admin-email ... --openwebui-admin-password ... --openhands-llm-model ... --allowlist-domains ... --huggingface-token ... --openclaw-init-project ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --optional-modules ... --output ... --non-interactive --require-complete]
+  agent secrets [--check] [--profiles <csv>] [--modules <csv>]
+  agent secrets rotate <secret-id>
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
   agent vm cleanup [--name ... --yes --dry-run]
@@ -431,9 +434,11 @@ optional_module_secret_files() {
   case "$1" in
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
-    goose|portainer|n8n) ;;
+    goose|portainer) ;;
+    n8n) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/n8n.auth_password" ;;
     n8n-ai)
       printf '%s\n' \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n.auth_password" \
         "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/api.key" \
         "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/registration.token" \
         "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/runner.key" \
@@ -601,7 +606,7 @@ validate_optional_module_prereqs() {
   for secret_file in "${secret_files[@]}"; do
     [[ -n "${secret_file}" ]] || continue
     [[ -s "${secret_file}" ]] \
-      || die "Optional module '${module}' requires a secret file with mode 600: ${secret_file}"
+      || die "Optional module '${module}' requires a secret file with mode 600: ${secret_file}; run './agent secrets --modules ${module}'"
     secret_mode="$(stat -c '%a' "${secret_file}" 2>/dev/null || echo "")"
     if [[ "${secret_mode}" != "600" && "${secret_mode}" != "640" ]]; then
       die "Optional module '${module}' secret must use restrictive permissions (600/640): ${secret_file} (mode=${secret_mode:-unknown})"
@@ -4202,6 +4207,11 @@ cmd_onboard() {
   "${AGENT_ONBOARD_SCRIPT}" "$@"
 }
 
+cmd_secrets() {
+  [[ -x "${AGENT_SECRETS_SCRIPT}" ]] || die "secret assistant missing or not executable: ${AGENT_SECRETS_SCRIPT}"
+  exec python3 "${AGENT_SECRETS_SCRIPT}" "$@"
+}
+
 cmd_prereqs() {
   [[ -x "${AGENT_PREREQS_SCRIPT}" ]] || die "prereqs script missing or not executable: ${AGENT_PREREQS_SCRIPT}"
   "${AGENT_PREREQS_SCRIPT}" "$@"
@@ -5986,6 +5996,10 @@ case "$cmd" in
   onboard)
     shift
     cmd_onboard "$@"
+    ;;
+  secrets)
+    shift
+    cmd_secrets "$@"
     ;;
   prereqs)
     shift

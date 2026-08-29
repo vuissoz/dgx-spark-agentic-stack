@@ -286,6 +286,7 @@ main() {
   chmod 0644 "${AGENTIC_ROOT}/optional/mcp/config/tool_allowlist.txt"
 
   ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/mcp.token"
+  ensure_secret_mode "${AGENTIC_ROOT}/secrets/runtime/n8n.auth_password"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/api.key"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/registration.token"
   ensure_secret_file_if_missing "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/runner.key"

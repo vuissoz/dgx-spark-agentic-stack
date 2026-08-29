@@ -416,6 +416,8 @@ Secrets baseline + optionnels:
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token` (requis pour OpenClaw core)
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.webhook_secret` (requis pour OpenClaw core)
 - `${AGENTIC_ROOT}/secrets/runtime/mcp.token` (requis si module `mcp` actif)
+- `${AGENTIC_ROOT}/secrets/runtime/n8n.auth_password` (requis si module `n8n` ou `n8n-ai` actif)
+- `${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/{api.key,registration.token,runner.key,searxng.key}` (requis si `n8n-ai` actif)
 
 ## 5.2 Permissions requises
 
@@ -433,12 +435,14 @@ chmod 600 "${AGENTIC_ROOT}/secrets/runtime/openai.api_key"
 
 ## 5.3 Rotation
 
-1. Remplacer le contenu du secret.
-2. Garder mode `600`.
+1. Lancer `./agent secrets rotate <secret-id>` pour une saisie masquee et une rotation explicite.
+2. Verifier avec `./agent secrets --check` (ajouter le profil/module concerne).
 3. Recreer la stack concernee.
 - Exemple: `./agent up core`
 - Exemple module optionnel restant: `AGENTIC_OPTIONAL_MODULES=mcp ./agent up optional`
 4. Lancer `./agent doctor`.
+
+Le parcours complet est decrit dans `docs/runbooks/secrets-assistant.md`.
 
 ## 5.4 A ne pas faire
 

@@ -14,6 +14,7 @@ source "${AGENTIC_REPO_ROOT}/tests/lib/common.sh"
 AGENT_RELEASE_VALIDATE_LATEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/validate_latest_resolution.py"
 AGENT_RELEASE_VALIDATE_ARTIFACTS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/validate_release_artifacts.py"
 AGENT_GENERATE_HARNESS_PROFILES_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/generate_harness_profiles.py"
+AGENT_SECRETS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/secrets_assistant.py"
 HARNESS_PROFILES_CONFIG="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles_config.yaml"
 HARNESS_PROFILES_PY="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles.py"
 
@@ -1470,6 +1471,13 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 ok "doctor profile=${AGENTIC_PROFILE}"
+if [[ ! -x "${AGENT_SECRETS_SCRIPT}" ]]; then
+  doctor_fail "runtime secret assistant is missing or not executable: ${AGENT_SECRETS_SCRIPT}"
+elif ! python3 "${AGENT_SECRETS_SCRIPT}" --check; then
+  doctor_fail "required runtime secret inventory check failed; run './agent secrets' in an interactive terminal"
+else
+  ok "required runtime secrets match the versioned inventory"
+fi
 if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES}" == "false" ]]; then
   warn "agent sudo-mode is enabled (AGENTIC_AGENT_NO_NEW_PRIVILEGES=false)"
 fi
@@ -3237,6 +3245,20 @@ fi
 
 optional_n8n_cid="$(service_container_id optional-n8n)"
 if [[ -n "${optional_n8n_cid}" ]]; then
+  optional_n8n_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_n8n_cid}" 2>/dev/null || true)"
+  if grep -q '^N8N_BASIC_AUTH_PASSWORD=' <<<"${optional_n8n_env}"; then
+    doctor_fail "optional-n8n must not expose its Basic Auth password in the container environment"
+  fi
+  grep -q '^N8N_BASIC_AUTH_PASSWORD_FILE=/run/secrets/n8n.auth_password$' <<<"${optional_n8n_env}" \
+    || doctor_fail "optional-n8n must use N8N_BASIC_AUTH_PASSWORD_FILE=/run/secrets/n8n.auth_password"
+  if ! mount_destination_present "${optional_n8n_cid}" "/run/secrets/n8n.auth_password"; then
+    doctor_fail "optional-n8n must mount /run/secrets/n8n.auth_password"
+  elif ! mount_destination_read_only "${optional_n8n_cid}" "/run/secrets/n8n.auth_password"; then
+    doctor_fail "optional-n8n Basic Auth password mount must be read-only"
+  fi
+  if ! python3 "${AGENT_SECRETS_SCRIPT}" --check --modules n8n; then
+    doctor_fail "optional-n8n runtime secret inventory check failed; run './agent secrets --modules n8n'"
+  fi
   if ! assert_no_public_bind "${n8n_host_port}"; then
     doctor_fail "optional n8n host bind must stay loopback-only on port ${n8n_host_port}"
   fi

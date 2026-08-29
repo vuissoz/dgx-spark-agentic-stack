@@ -331,7 +331,7 @@ services:
     environment:
       N8N_BASIC_AUTH_ACTIVE: "${N8N_BASIC_AUTH_ACTIVE:-true}"
       N8N_BASIC_AUTH_USER: "${N8N_BASIC_AUTH_USER:-admin}"
-      N8N_BASIC_AUTH_PASSWORD: "${N8N_BASIC_AUTH_PASSWORD:-change-me}"
+      N8N_BASIC_AUTH_PASSWORD_FILE: /run/secrets/n8n.auth_password
       N8N_HOST: 0.0.0.0
       N8N_PORT: 5678
       N8N_PROTOCOL: http
@@ -363,6 +363,7 @@ services:
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/data:/home/node/.n8n
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/custom:/home/node/.n8n/custom
       - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/logs:/home/node/.n8n/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/n8n.auth_password:/run/secrets/n8n.auth_password:ro
     healthcheck:
       test:
         - CMD-SHELL
