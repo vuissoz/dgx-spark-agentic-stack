@@ -41,6 +41,8 @@ AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_v
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
 AGENT_N8N_SANDBOX_VM_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/manage_n8n_sandbox_vm.sh"
+AGENT_N8N_DOCTOR_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/n8n_doctor.py"
+AGENT_N8N_DOCTOR_WORKFLOW="${AGENTIC_REPO_ROOT}/examples/optional/n8n-workflows/doctor-n8n-local-ollama-validation.json"
 AGENT_GPU_CLOCK_LOW_PRESET="${AGENT_GPU_CLOCK_LOW_PRESET:-2000,2000}"
 AGENT_TOOLS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose comfyui)
 AGENT_STATUS_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui n8n)
@@ -671,6 +673,32 @@ cmd_n8n_sandbox_vm() {
       set_runtime_env_value "N8N_SANDBOX_VM_IP" "${N8N_SANDBOX_VM_IP}"
       ;;
   esac
+}
+
+install_n8n_doctor_workflow() {
+  local n8n_cid=""
+  local attempt
+
+  [[ -x "${AGENT_N8N_DOCTOR_SCRIPT}" ]] \
+    || die "n8n doctor runner is missing or not executable: ${AGENT_N8N_DOCTOR_SCRIPT}"
+  [[ -f "${AGENT_N8N_DOCTOR_WORKFLOW}" ]] \
+    || die "n8n doctor workflow template is missing: ${AGENT_N8N_DOCTOR_WORKFLOW}"
+
+  for attempt in $(seq 1 24); do
+    n8n_cid="$(docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${AGENTIC_COMPOSE_DIR}/compose.optional.yml" ps -q optional-n8n 2>/dev/null || true)"
+    if [[ -n "${n8n_cid}" ]] && [[ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${n8n_cid}" 2>/dev/null || true)" == "healthy" ]]; then
+      break
+    fi
+    sleep 2
+  done
+  [[ -n "${n8n_cid}" ]] \
+    || die "optional-n8n did not start; cannot install the managed doctor workflow"
+
+  python3 "${AGENT_N8N_DOCTOR_SCRIPT}" \
+    --workflow "${AGENT_N8N_DOCTOR_WORKFLOW}" \
+    --container "${n8n_cid}" \
+    --install \
+    || die "failed to install managed n8n doctor workflow"
 }
 
 log_optional_activation() {
@@ -5870,6 +5898,9 @@ case "$cmd" in
       docker_compose_partial \
         "${optional_profiles[@]}" \
         -f "${optional_compose_file}" up -d
+      if targets_include "n8n" "${optional_modules[@]}" || targets_include "n8n-ai" "${optional_modules[@]}"; then
+        install_n8n_doctor_workflow
+      fi
       if targets_include "n8n-ai" "${optional_modules[@]}"; then
         apply_core_network_policy
       fi

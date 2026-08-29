@@ -549,25 +549,27 @@ Le dernier nœud `DOCTOR PASS` ne doit produire qu’un seul objet :
 }
 ```
 
-Les erreurs de credential absente, réponse vide, JSON invalide, mauvais modèle,
+Les erreurs de gate indisponible, réponse vide, JSON invalide, mauvais modèle,
 mauvaise somme, texte différent, identifiant incorrect, backend incorrect,
 statut incorrect ou schéma incomplet doivent faire échouer l’exécution avec un
 code explicite. Aucune valeur par défaut ne doit masquer une réponse invalide.
 
-`doctor` déclenche le workflow par l’API locale n8n, via le chemin loopback
-existant, avec une clé API dédiée stockée hors Git dans un fichier de mode
-`0600`. L’identifiant du workflow, l’URL loopback, le délai maximal et le nom
-de la credential sont des paramètres runtime ; aucun secret ne doit apparaître
-dans les logs ou les artefacts de release.
+`doctor` exécute le workflow enregistré par la CLI officielle `n8n execute`,
+dans le conteneur n8n, avec un port de broker dédié au sous-processus. Ce
+chemin évite d’exposer une nouvelle API d’exécution et ne nécessite aucune clé
+API supplémentaire. Le workflow a un identifiant stable, est importé ou mis à
+jour par `agent up optional`, et son délai maximal reste un paramètre runtime.
+Aucun secret ne doit apparaître dans les logs ou les artefacts de release.
 
 Le contrôle `doctor` doit :
 
 1. vérifier que n8n est sain et que le workflow attendu existe ;
-2. déclencher une nouvelle exécution, sans réutiliser une exécution historique ;
+2. déclencher une nouvelle exécution par la CLI n8n, sans réutiliser une
+   exécution historique ;
 3. attendre l’état final avec un timeout borné ;
 4. échouer si l’exécution n’est pas réussie ;
 5. vérifier exactement le JSON du nœud `DOCTOR PASS` ;
-6. afficher une erreur actionnable sans afficher la clé API ni le contenu
+6. afficher une erreur actionnable sans afficher de secret ni le contenu
    sensible des credentials.
 
 Le workflow ne doit pas être considéré comme validé par le seul Assistant n8n :
@@ -578,15 +580,15 @@ régression de formatage ou de routage.
 
 Tests à ajouter :
 
-- test statique du workflow : nœuds, connexions, credential, modèle et absence
+- test statique du workflow : nœuds, connexions, URL de gate, modèle et absence
   de nœuds interdits ;
 - test offline avec provider simulé pour vérifier le contrat du `doctor` sans
   charger Qwen ;
 - test e2e opt-in avec `qwen3.8:27b` via `ollama-gate` ;
-- test négatif : credential absente, gate indisponible, réponse invalide et
+- test négatif : gate indisponible, réponse invalide et
   modèle incorrect doivent tous produire un diagnostic non-zéro ;
-- test de non-fuite vérifiant que la clé API n’apparaît ni dans la sortie du
-  test, ni dans les logs, ni dans les releases.
+- test de non-fuite vérifiant qu’aucun secret de stack n’apparaît dans la
+  sortie du test, les logs ou les releases.
 
 Critère de terminé :
 

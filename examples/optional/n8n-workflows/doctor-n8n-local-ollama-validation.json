@@ -1,0 +1,97 @@
+{
+  "id": "DrN8nOllamaV001",
+  "name": "DOCTOR - n8n local Ollama validation",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "test-id", "name": "test_id", "type": "string", "value": "N8N-DOCTOR-OLLAMA-001"},
+            {"id": "integer-a", "name": "integer_a", "type": "number", "value": 17},
+            {"id": "integer-b", "name": "integer_b", "type": "number", "value": 25},
+            {"id": "text", "name": "text", "type": "string", "value": "IRM dynamique Nancy"},
+            {"id": "expected-sum", "name": "expected_sum", "type": "number", "value": 42}
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-doctor-test-data",
+      "name": "Prepare Doctor Test Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const calculatedSum = Number($json.integer_a) + Number($json.integer_b);\nconst uppercaseText = String($json.text).toUpperCase();\nif (calculatedSum !== Number($json.expected_sum)) {\n  throw new Error('N8N_DOCTOR_JAVASCRIPT_FAILED');\n}\nreturn [{ json: { ...$json, javascript_ok: true, calculated_sum: calculatedSum, uppercase_text: uppercaseText } }];"
+      },
+      "id": "test-javascript-runtime",
+      "name": "Test JavaScript Runtime",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama-gate:11435/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer local-ollama"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen3.8:27b', temperature: 0, stream: false, messages: [{ role: 'system', content: 'Return only a valid JSON object. No Markdown, no code fence, no commentary.' }, { role: 'user', content: 'Return exactly this JSON object: {\\\"test_id\\\":\\\"N8N-DOCTOR-OLLAMA-001\\\",\\\"backend\\\":\\\"ollama\\\",\\\"model\\\":\\\"qwen3.8:27b\\\",\\\"sum\\\":42,\\\"text_received\\\":\\\"IRM dynamique Nancy\\\",\\\"status\\\":\\\"OK\\\"}' }] }) }}",
+        "options": {"timeout": 300000}
+      },
+      "id": "ollama-qwen-local-inference",
+      "name": "Ollama Qwen Local Inference",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.choices?.[0]?.message?.content;\nif (raw === undefined || raw === null || String(raw).trim() === '') {\n  throw new Error('N8N_OLLAMA_EMPTY_RESPONSE');\n}\nlet response;\ntry {\n  response = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch (_) {\n  throw new Error('N8N_OLLAMA_INVALID_JSON');\n}\nconst expected = { test_id: 'N8N-DOCTOR-OLLAMA-001', backend: 'ollama', model: 'qwen3.8:27b', sum: 42, text_received: 'IRM dynamique Nancy', status: 'OK' };\nconst errors = { test_id: 'N8N_OLLAMA_WRONG_TEST_ID', backend: 'N8N_OLLAMA_WRONG_BACKEND', model: 'N8N_OLLAMA_WRONG_MODEL', sum: 'N8N_OLLAMA_WRONG_SUM', text_received: 'N8N_OLLAMA_TEXT_MISMATCH', status: 'N8N_OLLAMA_WRONG_STATUS' };\nif (!response || typeof response !== 'object' || Array.isArray(response)) throw new Error('N8N_OLLAMA_SCHEMA_INVALID');\nif (Object.keys(response).length !== Object.keys(expected).length) throw new Error('N8N_OLLAMA_SCHEMA_INVALID');\nfor (const [key, value] of Object.entries(expected)) {\n  if (!(key in response)) throw new Error('N8N_OLLAMA_SCHEMA_INVALID');\n  if (response[key] !== value) throw new Error(errors[key]);\n}\nreturn [{ json: { response_validation: 'OK' } }];"
+      },
+      "id": "validate-ollama-response",
+      "name": "Validate Ollama Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: true, doctor_status: 'PASS', test_id: 'N8N-DOCTOR-OLLAMA-001', n8n_execution: 'OK', javascript_runtime: 'OK', ollama_connection: 'OK', qwen_inference: 'OK', json_parsing: 'OK', response_validation: 'OK', backend: 'ollama', model: 'qwen3.8:27b' } }];"
+      },
+      "id": "doctor-pass",
+      "name": "DOCTOR PASS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {"main": [[{"node": "Prepare Doctor Test Data", "type": "main", "index": 0}]]},
+    "Prepare Doctor Test Data": {"main": [[{"node": "Test JavaScript Runtime", "type": "main", "index": 0}]]},
+    "Test JavaScript Runtime": {"main": [[{"node": "Ollama Qwen Local Inference", "type": "main", "index": 0}]]},
+    "Ollama Qwen Local Inference": {"main": [[{"node": "Validate Ollama Response", "type": "main", "index": 0}]]},
+    "Validate Ollama Response": {"main": [[{"node": "DOCTOR PASS", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "versionId": "doctor-n8n-local-ollama-v1",
+  "meta": {"templateCredsSetupCompleted": true},
+  "tags": []
+}

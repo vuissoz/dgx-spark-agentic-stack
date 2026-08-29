@@ -17,6 +17,8 @@ AGENT_GENERATE_HARNESS_PROFILES_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/generate_ha
 AGENT_SECRETS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/secrets_assistant.py"
 HARNESS_PROFILES_CONFIG="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles_config.yaml"
 HARNESS_PROFILES_PY="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles.py"
+N8N_DOCTOR_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/n8n_doctor.py"
+N8N_DOCTOR_WORKFLOW="${AGENTIC_REPO_ROOT}/examples/optional/n8n-workflows/doctor-n8n-local-ollama-validation.json"
 
 status=0
 fix_net=0
@@ -96,6 +98,7 @@ Environment:
   AGENTIC_DOCTOR_STREAM_MODEL=<model> (default: AGENTIC_DEFAULT_MODEL)
   AGENTIC_DOCTOR_STREAM_TIMEOUT_SEC=<seconds> (default: 90)
   AGENTIC_DOCTOR_STREAM_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 20)
+  AGENTIC_DOCTOR_N8N_TIMEOUT_SEC=<seconds> (default: 300)
   AGENTIC_OLLAMA_GPU_EXPECTED=1|0 (default: 1)
 USAGE
 }
@@ -3271,6 +3274,22 @@ if [[ -n "${optional_n8n_cid}" ]]; then
   n8n_status="$(curl -sS -o /tmp/doctor-n8n.out -w '%{http_code}' "http://127.0.0.1:${n8n_host_port}/healthz" 2>/dev/null || true)"
   if [[ ! "${n8n_status}" =~ ^(200|401|403)$ ]]; then
     doctor_fail "optional n8n endpoint is unreachable on loopback (http_status=${n8n_status:-none})"
+  elif [[ ! -x "${N8N_DOCTOR_SCRIPT}" ]]; then
+    doctor_fail "n8n doctor runner is missing or not executable: ${N8N_DOCTOR_SCRIPT}"
+  elif [[ ! -f "${N8N_DOCTOR_WORKFLOW}" ]]; then
+    doctor_fail "n8n doctor workflow template is missing: ${N8N_DOCTOR_WORKFLOW}"
+  else
+    n8n_doctor_timeout="${AGENTIC_DOCTOR_N8N_TIMEOUT_SEC:-300}"
+    if ! [[ "${n8n_doctor_timeout}" =~ ^[0-9]+$ ]] || (( n8n_doctor_timeout < 10 )); then
+      doctor_fail "AGENTIC_DOCTOR_N8N_TIMEOUT_SEC must be an integer >= 10 (got: ${n8n_doctor_timeout})"
+    elif ! python3 "${N8N_DOCTOR_SCRIPT}" \
+      --workflow "${N8N_DOCTOR_WORKFLOW}" \
+      --container "${optional_n8n_cid}" \
+      --timeout-seconds "${n8n_doctor_timeout}"; then
+      doctor_fail "n8n local Ollama validation workflow failed"
+    else
+      ok "n8n local Ollama validation workflow passed"
+    fi
   fi
 fi
 
