@@ -497,6 +497,109 @@ Critères d'acceptation :
 - un test e2e prouve que l'Assistant peut générer, construire et tester un workflow dans la sandbox sans exécuter de code sur l'hôte n8n.
 - une sandbox peut installer un paquet autorisé via la passerelle monitorée, la requête apparaît dans `proxy/logs/access.log`, et la même destination échoue lorsque la configuration proxy est explicitement contournée.
 
+### 9.3.1 Validation n8n déclenchée par `doctor`
+
+**CIBLE :** ajouter un workflow n8n dédié, créé avec l’Assistant n8n puis
+exécuté par `doctor` comme test fonctionnel local. Le prompt de construction
+est conservé dans la documentation d’exploitation ou dans un artefact de test,
+mais le résultat vérifié par `doctor` est exclusivement le contrat JSON final
+du workflow.
+
+Nom exact du workflow :
+
+```text
+DOCTOR - n8n local Ollama validation
+```
+
+Le workflow doit suivre le chemin :
+
+```text
+Manual Trigger
+  → Prepare Doctor Test Data
+  → Test JavaScript Runtime
+  → Ollama Qwen Local Inference
+  → Validate Ollama Response
+  → DOCTOR PASS
+```
+
+Le test vérifie obligatoirement :
+
+- l’exécution n8n et le runtime JavaScript ;
+- l’accès interne à `ollama-gate`, jamais à `localhost` depuis n8n ;
+- l’inférence locale du modèle exact `qwen3.8:27b` ;
+- le parsing réel de la réponse avec `JSON.parse()` lorsque nécessaire ;
+- la validation stricte de `test_id`, `backend`, `model`, `sum`, `text_received` et `status` ;
+- l’absence d’Agent, de Tool, de fournisseur distant, d’appel Internet, d’accès fichier et de commande système.
+
+Le dernier nœud `DOCTOR PASS` ne doit produire qu’un seul objet :
+
+```json
+{
+  "success": true,
+  "doctor_status": "PASS",
+  "test_id": "N8N-DOCTOR-OLLAMA-001",
+  "n8n_execution": "OK",
+  "javascript_runtime": "OK",
+  "ollama_connection": "OK",
+  "qwen_inference": "OK",
+  "json_parsing": "OK",
+  "response_validation": "OK",
+  "backend": "ollama",
+  "model": "qwen3.8:27b"
+}
+```
+
+Les erreurs de credential absente, réponse vide, JSON invalide, mauvais modèle,
+mauvaise somme, texte différent, identifiant incorrect, backend incorrect,
+statut incorrect ou schéma incomplet doivent faire échouer l’exécution avec un
+code explicite. Aucune valeur par défaut ne doit masquer une réponse invalide.
+
+`doctor` déclenche le workflow par l’API locale n8n, via le chemin loopback
+existant, avec une clé API dédiée stockée hors Git dans un fichier de mode
+`0600`. L’identifiant du workflow, l’URL loopback, le délai maximal et le nom
+de la credential sont des paramètres runtime ; aucun secret ne doit apparaître
+dans les logs ou les artefacts de release.
+
+Le contrôle `doctor` doit :
+
+1. vérifier que n8n est sain et que le workflow attendu existe ;
+2. déclencher une nouvelle exécution, sans réutiliser une exécution historique ;
+3. attendre l’état final avec un timeout borné ;
+4. échouer si l’exécution n’est pas réussie ;
+5. vérifier exactement le JSON du nœud `DOCTOR PASS` ;
+6. afficher une erreur actionnable sans afficher la clé API ni le contenu
+   sensible des credentials.
+
+Le workflow ne doit pas être considéré comme validé par le seul Assistant n8n :
+la preuve d’acceptation est une exécution réelle réussie et reproductible,
+visible dans les exécutions n8n et dans le rapport de `doctor`. Le test LLM
+reste volontairement sensible aux réponses JSON invalides afin de détecter une
+régression de formatage ou de routage.
+
+Tests à ajouter :
+
+- test statique du workflow : nœuds, connexions, credential, modèle et absence
+  de nœuds interdits ;
+- test offline avec provider simulé pour vérifier le contrat du `doctor` sans
+  charger Qwen ;
+- test e2e opt-in avec `qwen3.8:27b` via `ollama-gate` ;
+- test négatif : credential absente, gate indisponible, réponse invalide et
+  modèle incorrect doivent tous produire un diagnostic non-zéro ;
+- test de non-fuite vérifiant que la clé API n’apparaît ni dans la sortie du
+  test, ni dans les logs, ni dans les releases.
+
+Critère de terminé :
+
+```text
+./agent doctor
+→ n8n local workflow: PASS
+→ Ollama/Qwen local inference: PASS
+```
+
+Un échec de ce contrôle rend `doctor` non conforme, sauf lorsque le module
+optionnel n8n n’est pas activé ; dans ce cas, le contrôle doit être indiqué
+comme `SKIP` avec une raison explicite.
+
 ### 9.4 Extensions à risque
 
 - OpenWebUI Tools, Functions et Pipelines peuvent exécuter du Python : création/import désactivés par défaut, allowlist et revue ;
