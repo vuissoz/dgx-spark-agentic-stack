@@ -814,6 +814,36 @@ def ensure_gitconfig_value(gitconfig_path: pathlib.Path, key: str, value: str) -
     safe_chmod(gitconfig_path, 0o660)
 
 
+def converge_openhands_settings(account: dict[str, object]) -> None:
+    """Keep persisted OpenHands preferences aligned with the managed Git identity.
+
+    OpenHands applies ``settings.json`` to every new V1 conversation.  Merely
+    fixing ``~/.gitconfig`` is therefore insufficient: an upstream default
+    stored in that file would overwrite the Forgejo identity as soon as a
+    conversation starts.
+    """
+    if account.get("username") != "openhands":
+        return
+
+    host_home = pathlib.Path(str(account["host_home"]))
+    settings_path = host_home.parent / "settings.json"
+    if not settings_path.exists():
+        return
+
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"cannot read persisted OpenHands settings at {settings_path}: {exc}"
+        ) from exc
+    if not isinstance(settings, dict):
+        raise RuntimeError(f"persisted OpenHands settings must be a JSON object: {settings_path}")
+
+    settings["git_user_name"] = str(account["display_name"])
+    settings["git_user_email"] = str(account["email"])
+    write_if_changed(settings_path, json.dumps(settings, indent=2, sort_keys=True) + "\n", 0o660)
+
+
 def account_container_ssh_dir(account: dict[str, object]) -> str:
     return str(account.get("container_ssh_dir") or f"{account['container_home']}/.ssh")
 
@@ -908,6 +938,7 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
     ensure_gitconfig_value(gitconfig_path, "user.email", str(account["email"]))
     ensure_gitconfig_value(gitconfig_path, "credential.helper", container_helper_path)
     ensure_gitconfig_value(gitconfig_path, "init.defaultBranch", "main")
+    converge_openhands_settings(account)
 
 
 def forgejo_known_hosts_path() -> pathlib.Path:

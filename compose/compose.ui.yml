@@ -233,6 +233,10 @@ services:
       OH_APP_CONVERSATION_SANDBOX_STARTUP_POLL_FREQUENCY: "1"
       OH_PROCESS_SANDBOX_MAX_ACTIVE: "${OH_PROCESS_SANDBOX_MAX_ACTIVE:-2}"
       OH_APP_CONVERSATION_INIT_GIT_IN_EMPTY_WORKSPACE: "0"
+      # The V1 app uses these defaults to create settings.json. The Forgejo
+      # bootstrap also reconciles existing settings before every managed up.
+      OH_GIT_USER_NAME: OpenHands
+      OH_GIT_USER_EMAIL: openhands@forge.agentic.local
       OH_SANDBOX_SPEC_SPECS_0: '{"id":"ghcr.io/openhands/agent-server:c775ff6-python","command":["python","-m","openhands.agent_server"],"initial_env":{"OH_ENABLE_VS_CODE":"0","OH_CONVERSATIONS_PATH":"/workspace/conversations"},"working_dir":"/workspace"}'
       OH_WEBHOOKS_0_BASE_URL: "${OH_WEBHOOKS_BASE_URL:-http://127.0.0.1:3000/api/v1/webhooks}"
       OH_WEBHOOKS_0_EVENT_BUFFER_SIZE: "${OH_WEBHOOKS_EVENT_BUFFER_SIZE:-1}"
