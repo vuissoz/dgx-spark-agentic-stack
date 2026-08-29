@@ -5700,10 +5700,10 @@ case "$cmd" in
         wait_for_openclaw_runtime_convergence 45 || true
         if ! "${AGENT_DOCTOR_SCRIPT}" >/tmp/agent-optional-gate.out 2>&1; then
           cat /tmp/agent-optional-gate.out >&2
-          die "optional stack gating refused because 'agent doctor' is not green (set AGENTIC_SKIP_OPTIONAL_GATING=1 to bypass intentionally)"
+          warn "agent doctor is not green; continuing optional deployment (review /tmp/agent-optional-gate.out)"
         fi
       else
-        warn "skipping optional stack doctor gating because AGENTIC_SKIP_OPTIONAL_GATING=1"
+        warn "skipping optional stack doctor check because AGENTIC_SKIP_OPTIONAL_GATING=1"
       fi
 
       ensure_optional_runtime

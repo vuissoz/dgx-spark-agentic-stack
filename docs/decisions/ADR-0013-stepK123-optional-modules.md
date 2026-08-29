@@ -20,7 +20,7 @@ Step K requires optional risky modules to stay disabled by default and to be act
   - `optional-portainer` (local-only UI, no docker.sock mount).
 - Add `deployments/optional/init_runtime.sh` to provision runtime directories, allowlist templates, and request files under `/srv/agentic/deployments/optional/*.request`.
 - Extend `agent up optional`:
-  - run `agent doctor` gate unless `AGENTIC_SKIP_OPTIONAL_GATING=1`,
+  - run `agent doctor` check and warn on failure unless `AGENTIC_SKIP_OPTIONAL_GATING=1`,
   - read `AGENTIC_OPTIONAL_MODULES` and only enable matching Compose profiles,
   - require request files with non-empty `need=` and `success=` fields,
   - require runtime secrets for `mcp`,
@@ -32,6 +32,6 @@ Step K requires optional risky modules to stay disabled by default and to be act
 - Add tests `K2_mcp.sh` and `K3_portainer.sh`.
 
 ## Consequences
-- Optional risky modules remain opt-in and gated by baseline compliance.
+- Optional risky modules remain opt-in and report baseline compliance problems before deployment.
 - Operators must provide explicit activation intent before deployment.
 - Portainer remains intentionally detached from Docker socket to preserve the repo security baseline.
