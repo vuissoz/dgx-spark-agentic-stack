@@ -2141,6 +2141,53 @@ check_harness_memory_caps
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"
+comfyui_loopback_cid="$(service_container_id comfyui-loopback)"
+comfyui_secret_dir="${AGENTIC_ROOT}/secrets/runtime"
+comfyui_password_file="${comfyui_secret_dir}/comfyui.auth_password"
+comfyui_secret_expected=0
+if [[ -n "${comfyui_cid}" || -n "${comfyui_loopback_cid}" || -e "${comfyui_password_file}" ]] \
+  || agentic_csv_contains "ui" "${COMPOSE_PROFILES:-}" \
+  || agentic_csv_contains "m8" "${COMPOSE_PROFILES:-}"; then
+  comfyui_secret_expected=1
+fi
+
+if [[ "${comfyui_secret_expected}" -eq 1 ]]; then
+  if [[ ! -d "${comfyui_secret_dir}" ]]; then
+    doctor_fail "ComfyUI secret directory is missing: ${comfyui_secret_dir}"
+  elif [[ "$(stat -c '%a' "${comfyui_secret_dir}" 2>/dev/null || true)" != "700" ]]; then
+    doctor_fail "ComfyUI secret directory must use mode 700: ${comfyui_secret_dir}"
+  fi
+
+  if [[ ! -s "${comfyui_password_file}" ]]; then
+    doctor_fail "ComfyUI authentication password is missing or empty: ${comfyui_password_file}; run './agent up ui'"
+  elif [[ "$(stat -c '%a' "${comfyui_password_file}" 2>/dev/null || true)" != "600" ]]; then
+    doctor_fail "ComfyUI authentication password must use mode 600: ${comfyui_password_file}"
+  elif [[ "$(tr -d '\r\n' <"${comfyui_password_file}")" == "change-me" ]]; then
+    doctor_fail "ComfyUI authentication password still uses the forbidden change-me value: ${comfyui_password_file}"
+  else
+    ok "comfyui authentication password is file-backed with restrictive permissions"
+  fi
+fi
+
+if [[ -f "${AGENTIC_ROOT}/deployments/runtime.env" ]] \
+  && grep -Eq '^COMFYUI_AUTH_PASSWORD=' "${AGENTIC_ROOT}/deployments/runtime.env"; then
+  doctor_fail "deprecated COMFYUI_AUTH_PASSWORD must not be stored in ${AGENTIC_ROOT}/deployments/runtime.env; run './agent up ui' to migrate it"
+fi
+
+if [[ -n "${comfyui_loopback_cid}" ]]; then
+  comfyui_loopback_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${comfyui_loopback_cid}" 2>/dev/null || true)"
+  if printf '%s\n' "${comfyui_loopback_env}" | grep -Eq '^COMFYUI_AUTH_PASSWORD='; then
+    doctor_fail "comfyui-loopback exposes COMFYUI_AUTH_PASSWORD in container environment"
+  fi
+  if ! printf '%s\n' "${comfyui_loopback_env}" | grep -qx 'COMFYUI_AUTH_PASSWORD_FILE=/run/secrets/comfyui.auth_password'; then
+    doctor_fail "comfyui-loopback is missing the file-backed password contract"
+  fi
+  comfyui_secret_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/comfyui.auth_password"}}{{println .Source "|" .RW}}{{end}}{{end}}' "${comfyui_loopback_cid}" 2>/dev/null || true)"
+  if [[ "${comfyui_secret_mount}" != "${comfyui_password_file} | false" ]]; then
+    doctor_fail "comfyui-loopback must mount ${comfyui_password_file} read-only at /run/secrets/comfyui.auth_password"
+  fi
+fi
+
 proxy_allowlist_file="${AGENTIC_ROOT}/proxy/allowlist.txt"
 if [[ -n "${comfyui_cid}" ]]; then
   if [[ ! -d "${AGENTIC_ROOT}/comfyui" ]]; then

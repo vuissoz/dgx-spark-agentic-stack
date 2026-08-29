@@ -413,6 +413,7 @@ All file-based secrets live under:
 
 Baseline + optional secret files:
 - `${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token` (auto-created if missing)
+- `${AGENTIC_ROOT}/secrets/runtime/comfyui.auth_password` (auto-generated, ComfyUI Basic Auth)
 - `${AGENTIC_ROOT}/secrets/runtime/openai.api_key` (optional, for OpenAI routing)
 - `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key` (optional, for OpenRouter routing)
 - `${AGENTIC_ROOT}/secrets/runtime/openclaw.token` (required for core OpenClaw)

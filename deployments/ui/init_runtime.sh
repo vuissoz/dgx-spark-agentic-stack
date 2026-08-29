@@ -109,6 +109,75 @@ env_value() {
   sed -n "s/^${key}=//p" "${env_file}" | head -n1
 }
 
+remove_env_key() {
+  local env_file="$1"
+  local key="$2"
+  local tmp_file
+
+  [[ -f "${env_file}" ]] || return 0
+  grep -Eq "^${key}=" "${env_file}" || return 0
+
+  tmp_file="$(mktemp "${env_file}.tmp.XXXXXX")"
+  chmod 0600 "${tmp_file}"
+  awk -v prefix="${key}=" 'index($0, prefix) != 1 { print }' "${env_file}" >"${tmp_file}"
+  mv "${tmp_file}" "${env_file}"
+  chmod 0640 "${env_file}" || true
+  log "removed deprecated sensitive key ${key} from ${env_file}"
+}
+
+write_secret_value() {
+  local file="$1"
+  local value="$2"
+  local tmp_file
+
+  [[ -n "${value}" ]] || die "refusing to write an empty secret: ${file}"
+  [[ "${value}" != *$'\n'* && "${value}" != *$'\r'* ]] \
+    || die "secret value must be a single line: ${file}"
+
+  tmp_file="$(mktemp "${file}.tmp.XXXXXX")"
+  chmod 0600 "${tmp_file}"
+  printf '%s\n' "${value}" >"${tmp_file}"
+  mv "${tmp_file}" "${file}"
+  chmod 0600 "${file}"
+}
+
+initialize_comfyui_auth_secret() {
+  local secret_file="${AGENTIC_ROOT}/secrets/runtime/comfyui.auth_password"
+  local runtime_env="${AGENTIC_ROOT}/deployments/runtime.env"
+  local current_value=""
+  local legacy_value=""
+
+  ensure_secret_path_is_file "${secret_file}"
+  if [[ -s "${secret_file}" ]]; then
+    current_value="$(tr -d '\r\n' <"${secret_file}")"
+  fi
+
+  if [[ -f "${runtime_env}" ]]; then
+    legacy_value="$(env_value "${runtime_env}" "COMFYUI_AUTH_PASSWORD")"
+  fi
+
+  if [[ -n "${current_value}" && "${current_value}" != "change-me" ]]; then
+    chmod 0600 "${secret_file}"
+  elif [[ -n "${legacy_value}" && "${legacy_value}" != "change-me" ]]; then
+    write_secret_value "${secret_file}" "${legacy_value}"
+    log "migrated ComfyUI authentication password to file-backed runtime secret"
+  else
+    write_secret_value "${secret_file}" "$(random_secret_hex)"
+    log "generated ComfyUI authentication password file: ${secret_file}"
+  fi
+
+  # The password used to be interpolated into Compose from runtime.env. Remove
+  # every legacy occurrence after migration so releases and future shells do
+  # not retain the sensitive value.
+  remove_env_key "${runtime_env}" "COMFYUI_AUTH_PASSWORD"
+
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${secret_file}"
+  fi
+  chmod 0700 "${AGENTIC_ROOT}/secrets/runtime"
+  chmod 0600 "${secret_file}"
+}
+
 normalize_openhands_model() {
   local model="$1"
   if [[ "${model}" == */* ]]; then
@@ -353,6 +422,8 @@ main() {
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/ssh/comfyui"
   install -d -m 0700 "${AGENTIC_ROOT}/secrets/runtime"
   install -d -m 0750 "${AGENTIC_ROOT}/secrets/runtime/git-forge"
+
+  initialize_comfyui_auth_secret
 
   copy_if_missing "${TEMPLATE_DIR}/openwebui.env" "${AGENTIC_ROOT}/openwebui/config/openwebui.env" 0600
   copy_if_missing "${TEMPLATE_DIR}/openhands.env" "${AGENTIC_ROOT}/openhands/config/openhands.env" 0600

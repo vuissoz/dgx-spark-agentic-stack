@@ -31,15 +31,21 @@ for expected in (
     "deployments/images/comfyui-loopback/Dockerfile",
     "openssl passwd -apr1 -stdin",
     "ComfyUI Basic Auth password hash is empty",
+    "COMFYUI_AUTH_PASSWORD_FILE: /run/secrets/comfyui.auth_password",
+    "secrets/runtime/comfyui.auth_password:/run/secrets/comfyui.auth_password:ro",
     "Authorization: Basic $$auth_header",
 ):
     assert expected in block, expected
+
+assert "COMFYUI_AUTH_PASSWORD:" not in block
+assert "COMFYUI_AUTH_PASSWORD:-change-me" not in block
 
 assert "wait_for_loopback_api()" in test
 assert "wait_for_loopback_api" in test[test.index("docker restart"):]
 assert "/system_stats" in test
 assert "assert_loopback_auth_contract" in test
 assert "incorrect-password" in test
+assert "leaks COMFYUI_AUTH_PASSWORD through docker inspect" in test
 assert "apk add --no-cache openssl" in image
 PY
 

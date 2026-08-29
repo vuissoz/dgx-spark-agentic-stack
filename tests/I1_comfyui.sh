@@ -15,9 +15,24 @@ assert_cmd python3
 
 comfy_port="${COMFYUI_HOST_PORT:-8188}"
 comfy_username="${COMFYUI_AUTH_USERNAME:-admin}"
-comfy_password="${COMFYUI_AUTH_PASSWORD:-change-me}"
+comfy_password_file="${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/comfyui.auth_password"
+[[ -s "${comfy_password_file}" ]] || fail "ComfyUI password file is missing: ${comfy_password_file}"
+[[ "$(stat -c '%a' "${comfy_password_file}")" == "600" ]] \
+  || fail "ComfyUI password file must use mode 600: ${comfy_password_file}"
+comfy_password="$(tr -d '\r\n' <"${comfy_password_file}")"
+[[ -n "${comfy_password}" && "${comfy_password}" != "change-me" ]] \
+  || fail "ComfyUI password file is empty or insecure"
 comfy_cid="$(require_service_container comfyui)" || exit 1
+comfy_loopback_cid="$(require_service_container comfyui-loopback)" || exit 1
 wait_for_container_ready "${comfy_cid}" 300 || fail "comfyui is not ready"
+
+loopback_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${comfy_loopback_cid}")"
+if printf '%s\n' "${loopback_env}" | grep -Eq '^COMFYUI_AUTH_PASSWORD='; then
+  fail "comfyui-loopback leaks COMFYUI_AUTH_PASSWORD through docker inspect"
+fi
+printf '%s\n' "${loopback_env}" | grep -qx 'COMFYUI_AUTH_PASSWORD_FILE=/run/secrets/comfyui.auth_password' \
+  || fail "comfyui-loopback is missing its file-backed password path"
+ok "comfyui-loopback keeps the authentication password out of its environment"
 
 wait_for_loopback_api() {
   local deadline=$((SECONDS + 90))

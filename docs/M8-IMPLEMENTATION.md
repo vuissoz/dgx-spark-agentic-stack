@@ -34,8 +34,9 @@ All applications must satisfy G8: "accès sans port interne et selon le niveau d
 **Location**: `compose/compose.ui.yml` (lines 286-410)
 
 **Features**:
-- ✅ **RBAC**: Basic authentication via nginx proxy in `comfyui-loopback` service (lines 343-410)
-  - Authentication configured via `COMFYUI_AUTH_USERNAME` and `COMFYUI_AUTH_PASSWORD` environment variables
+- ✅ **RBAC**: Basic authentication via nginx proxy in `comfyui-loopback`
+  - Username configured with `COMFYUI_AUTH_USERNAME`
+  - Password generated in `${AGENTIC_ROOT}/secrets/runtime/comfyui.auth_password` and mounted read-only
   - Uses HTTP Basic Auth with nginx
 - ✅ **Plugins**: Governed via `COMFYUI_ALLOWED_PLUGINS` environment variable
   - Default: `ComfyUI-Manager`
@@ -129,7 +130,7 @@ All M8 services are available under the `m8` profile and the `ui` profile:
 
 ## Environment Variables
 
-The following environment variables can be configured:
+The following configuration values and secret files can be configured:
 
 ### Global
 - `AGENTIC_ROOT`: Root directory for agentic data (default: `/srv/agentic`)
@@ -141,7 +142,7 @@ The following environment variables can be configured:
 - `JUPYTERLAB_ALLOWED_PLUGINS`: Comma-separated list of allowed JupyterLab plugins
 - `COMFYUI_HOST_PORT`: ComfyUI host port (default: 8188)
 - `COMFYUI_AUTH_USERNAME`: ComfyUI authentication username
-- `COMFYUI_AUTH_PASSWORD`: ComfyUI authentication password
+- `${AGENTIC_ROOT}/secrets/runtime/comfyui.auth_password`: ComfyUI authentication password (mode `0600`)
 - `COMFYUI_ALLOWED_PLUGINS`: Comma-separated list of allowed ComfyUI plugins
 - `GIT_FORGE_HOST_PORT`: Forgejo HTTP port (default: 13010)
 - `GIT_FORGE_SSH_HOST_PORT`: Forgejo SSH port (default: 2222)
@@ -150,16 +151,26 @@ The following environment variables can be configured:
 
 ### ComfyUI authentication
 
-`COMFYUI_AUTH_USERNAME` and `COMFYUI_AUTH_PASSWORD` protect the loopback
-proxy exposed on port 8188. The built-in `admin` / `change-me` pair exists
-only as a first-run development default and must be replaced before remote
-access is enabled.
+`COMFYUI_AUTH_USERNAME` and the file-backed password protect the loopback
+proxy exposed on port 8188. During `./agent up ui`, runtime initialization
+creates a random password at
+`${AGENTIC_ROOT}/secrets/runtime/comfyui.auth_password` if none exists. The
+secret directory uses mode `0700` and the file mode `0600`; the proxy receives
+only its fixed path, never the password through the container environment.
 
-For a deployed stack, inject the values from an untracked, mode-600 runtime
-environment file (normally `${AGENTIC_ROOT}/deployments/runtime.env`) or from
-your deployment environment. Do not add real credentials to
-`examples/ui/comfyui.env`, tracked `.env` files, release artifacts, or issue
-comments. Recreate `comfyui-loopback` after changing either value.
+Existing `COMFYUI_AUTH_PASSWORD` entries in `deployments/runtime.env` are
+migrated once to the secret file and removed. The insecure legacy value
+`change-me` is never preserved: initialization replaces it with a random
+secret. Release artifacts contain neither the value nor a copy of the secret.
+
+To rotate the password atomically and recreate the proxy when it is running:
+
+```bash
+./agent comfyui rotate-password
+```
+
+Do not print the value or place it in `runtime.env`, tracked `.env` files,
+release artifacts, logs, issues, or shell command arguments.
 
 ## G8 Compliance
 

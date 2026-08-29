@@ -357,7 +357,9 @@ services:
       - no-new-privileges:true
     environment:
       COMFYUI_AUTH_USERNAME: ${COMFYUI_AUTH_USERNAME:-admin}
-      COMFYUI_AUTH_PASSWORD: ${COMFYUI_AUTH_PASSWORD:-change-me}
+      COMFYUI_AUTH_PASSWORD_FILE: /run/secrets/comfyui.auth_password
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/comfyui.auth_password:/run/secrets/comfyui.auth_password:ro
     depends_on:
       comfyui:
         condition: service_healthy
@@ -368,13 +370,18 @@ services:
         umask 077
         mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
         username="$${COMFYUI_AUTH_USERNAME:-}"
-        password="$${COMFYUI_AUTH_PASSWORD:-}"
+        password_file="$${COMFYUI_AUTH_PASSWORD_FILE:-/run/secrets/comfyui.auth_password}"
         if ! printf '%s' "$$username" | grep -Eq '^[A-Za-z0-9._-]+$$'; then
           echo 'COMFYUI_AUTH_USERNAME must contain only letters, digits, dot, underscore, or hyphen' >&2
           exit 1
         fi
-        if [ -z "$$password" ]; then
-          echo 'COMFYUI_AUTH_PASSWORD must not be empty' >&2
+        if [ ! -r "$$password_file" ]; then
+          echo 'ComfyUI authentication password file is missing or unreadable' >&2
+          exit 1
+        fi
+        password="$$(tr -d '\r\n' <"$$password_file")"
+        if [ -z "$$password" ] || [ "$$password" = 'change-me' ]; then
+          echo 'ComfyUI authentication password file is empty or insecure' >&2
           exit 1
         fi
         if ! auth_hash="$$(printf '%s' "$$password" | openssl passwd -apr1 -stdin)"; then
@@ -431,7 +438,8 @@ services:
       test:
         - CMD-SHELL
         - >
-          auth_header="$$(printf '%s:%s' "$${COMFYUI_AUTH_USERNAME}" "$${COMFYUI_AUTH_PASSWORD}" | base64 | tr -d '\n')";
+          password="$$(tr -d '\r\n' <"$${COMFYUI_AUTH_PASSWORD_FILE}")";
+          auth_header="$$(printf '%s:%s' "$${COMFYUI_AUTH_USERNAME}" "$$password" | base64 | tr -d '\n')";
           test -n "$$auth_header" &&
           wget -q -S -O /dev/null --header "Authorization: Basic $$auth_header" http://127.0.0.1:8188/ 2>&1 |
           grep -qE 'HTTP/1.[01] (200|302)' || exit 1

@@ -41,8 +41,14 @@ main() {
 
   local compose_effective_file="${release_dir}/compose.effective.yml"
   local compose_files_manifest="${release_dir}/compose.files"
+  local release_runtime_env="${release_dir}/runtime.env"
   local -a compose_files=()
   local -a compose_args=()
+
+  if { [[ -f "${compose_effective_file}" ]] && grep -Eq '^[[:space:]]*COMFYUI_AUTH_PASSWORD[[:space:]]*:' "${compose_effective_file}"; } \
+    || { [[ -f "${release_runtime_env}" ]] && grep -Eq '^COMFYUI_AUTH_PASSWORD=' "${release_runtime_env}"; }; then
+    die "release ${release_id} contains legacy inline ComfyUI credentials and cannot be rolled back safely; create a sanitized release with 'agent update'"
+  fi
 
   if [[ -s "${compose_effective_file}" ]]; then
     compose_args=("-f" "${compose_effective_file}")

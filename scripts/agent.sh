@@ -58,6 +58,7 @@ Usage:
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
   agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|comfyui> [project]
+  agent comfyui rotate-password
   agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json] [--verbose]
   agent openclaw init [project]
   agent openclaw status [--json]
@@ -4568,6 +4569,35 @@ cmd_comfyui() {
   shift || true
 
   case "${action}" in
+    rotate-password)
+      local secret_dir="${AGENTIC_ROOT}/secrets/runtime"
+      local secret_file="${secret_dir}/comfyui.auth_password"
+      local tmp_file
+
+      [[ "$#" -eq 0 ]] || die "Usage: agent comfyui rotate-password"
+      ensure_ui_runtime
+      tmp_file="$(mktemp "${secret_file}.tmp.XXXXXX")"
+      chmod 0600 "${tmp_file}"
+      if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 24 >"${tmp_file}"
+      else
+        od -An -N24 -tx1 /dev/urandom | tr -d ' \n' >"${tmp_file}"
+        printf '\n' >>"${tmp_file}"
+      fi
+      mv "${tmp_file}" "${secret_file}"
+      chmod 0600 "${secret_file}"
+      if [[ "${EUID}" -eq 0 ]]; then
+        chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${secret_file}"
+      fi
+
+      if [[ -n "$(service_container_any_id comfyui-loopback)" ]]; then
+        docker_compose_partial -f "$(stack_to_compose_file ui)" \
+          up -d --no-deps --force-recreate comfyui-loopback
+        wait_for_ui_loopback_service comfyui-loopback 120
+      fi
+      append_changes_log "comfyui-auth actor=${SUDO_USER:-${USER:-unknown}} action=rotate-password"
+      printf 'comfyui password rotated; secret_file=%s\n' "${secret_file}"
+      ;;
     flux-1-dev|flux1-dev|flux-dev)
       [[ -x "${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}" ]] \
         || die "comfyui flux setup script missing or not executable: ${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}"
@@ -4579,7 +4609,7 @@ cmd_comfyui() {
       "${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}" "${action}" "$@"
       ;;
     *)
-      die "Usage: agent comfyui <flux-1-dev|minimax-h3|flux2-dev|stable-audio-3|ace-step-v1|ace-step-1.5> [options]"
+      die "Usage: agent comfyui <rotate-password|flux-1-dev|minimax-h3|flux2-dev|stable-audio-3|ace-step-v1|ace-step-1.5> [options]"
       ;;
   esac
 }
@@ -5838,7 +5868,7 @@ case "$cmd" in
     ;;
   comfyui)
     case "${2:-}" in
-      flux-1-dev|flux1-dev|flux-dev|minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev|stable-audio-3|stable_audio_3|ace-step-v1|ace_step_v1|ace-step-1|ace-step-1.5|ace_step_1.5|ace-step-15)
+      rotate-password|flux-1-dev|flux1-dev|flux-dev|minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev|stable-audio-3|stable_audio_3|ace-step-v1|ace_step_v1|ace-step-1|ace-step-1.5|ace_step_1.5|ace-step-15)
         shift
         cmd_comfyui "$@"
         ;;
