@@ -733,6 +733,22 @@ Hermes natif référence, NemoClaw canari isolé, OpenClaw NemoClaw après parit
 
 OpenWebUI, ComfyUI/Flux, n8n, Forgejo, Grafana, DGX Dashboard et JupyterLab avec RBAC, plugins gouvernés, admission GPU et sauvegarde.
 
+#### Sécurisation de l’initialisation ComfyUI
+
+Le mot de passe Basic Auth de ComfyUI ne doit pas être une valeur sensible
+persistée dans `deployments/runtime.env`, passée directement dans
+`environment:` ou reprise dans les artefacts de release. L’utilisateur peut
+rester une configuration non sensible (`COMFYUI_AUTH_USERNAME`), mais le mot
+de passe doit être généré ou demandé lors de l’onboarding, puis conservé hors
+Git dans `${AGENTIC_ROOT}/secrets/runtime/`, avec un dossier en `0700` et un
+fichier en `0600`. Le proxy `comfyui-loopback` doit lire ce secret au démarrage
+et ne jamais l’écrire dans les logs, `docker inspect`, la configuration
+Compose effective ou les snapshots de release.
+
+La migration des installations existantes, la rotation, le diagnostic des
+permissions et les tests de non-fuite sont couverts par le Bead
+`dgx-spark-agentic-stack-ffer`.
+
 **G8 :** accès sans port interne et selon le niveau de confiance.
 
 ### M9 — RAG et documents
