@@ -32,7 +32,7 @@ N8N_SANDBOX_RUNNER_API_KEY=test-runner \
 N8N_SEARXNG_SECRET=test-searxng \
 N8N_SANDBOX_SERVICE_URL=http://10.40.163.2:8080 \
 N8N_SANDBOX_VM_IP=10.40.163.2 \
-AGENTIC_N8N_AI_MODEL=qwen3.8 \
+AGENTIC_N8N_AI_MODEL=qwen3.8:27b \
 N8N_INSTANCE_AI_SANDBOX_ENABLED=true \
 COMPOSE_PROFILES=optional-n8n-ai \
 docker compose \
@@ -73,7 +73,7 @@ for forbidden in (
 
 n8n_env = host_services["optional-n8n"]["environment"]
 expected = {
-    "N8N_INSTANCE_AI_MODEL": "qwen3.8",
+    "N8N_INSTANCE_AI_MODEL": "qwen3.8:27b",
     "N8N_INSTANCE_AI_MODEL_URL": "http://ollama-gate:11435/v1",
     "N8N_INSTANCE_AI_SANDBOX_ENABLED": "true",
     "N8N_INSTANCE_AI_SANDBOX_PROVIDER": "n8n-sandbox",

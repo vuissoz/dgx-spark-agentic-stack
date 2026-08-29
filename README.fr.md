@@ -72,7 +72,7 @@ Commandes operateur TRT:
 Un seul modele TRT est expose par la stack a la fois sur DGX Spark.
 Au premier démarrage natif, le backend peut rester plusieurs minutes en `status=starting` pendant le téléchargement/chargement Hugging Face; tant que `native_ready=false`, les requêtes gate reçoivent une `503` explicite au lieu de retomber silencieusement sur un mock.
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
-Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) et réutilisé pour le preload Ollama.
+Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `qwen3.8:27b`) et réutilisé pour le preload Ollama.
 La stack émet un avertissement explicite si vous choisissez `qwen3.5:35b`: au 26 mars 2026, nos runs locaux Codex/OpenHands ont déjà observé des pseudo balises d'outils au lieu de vrais tool calls, même si le modèle est annoncé avec support `tools` upstream sur Ollama. Le modèle n'est plus bloqué, car le problème est traité comme un bug d'intégration à corriger côté stack.
 La fenêtre de contexte est pilotée par `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (défaut `50909`) et propagée vers `OLLAMA_CONTEXT_LENGTH`.
 Quand `./agent onboard` peut lire les métadonnées Ollama du modèle choisi, il propose automatiquement la fenêtre maximale estimée qui tient dans `AGENTIC_LIMIT_OLLAMA_MEM`; sinon il retombe sur le défaut du dépôt `50909`.
@@ -478,7 +478,7 @@ Préchargement avec préservation du mode de mount courant (`rw`/`ro`):
 ```bash
 ./agent ollama-preload
 ./agent ollama-models status
-./agent ollama unload qwen3-coder:30b
+./agent ollama unload qwen3.8:27b
 ./agent ollama-models ro
 ./agent ollama-models rw
 ```
@@ -681,7 +681,7 @@ Assistant n8n entièrement local (modèle Ollama, sandbox en VM et recherche
 SearXNG préconfigurés automatiquement) :
 
 ```bash
-export AGENTIC_N8N_AI_MODEL=qwen3.8
+export AGENTIC_N8N_AI_MODEL=qwen3.8:27b
 ./agent n8n-sandbox-vm create
 AGENTIC_OPTIONAL_MODULES=n8n-ai ./agent up optional
 ```

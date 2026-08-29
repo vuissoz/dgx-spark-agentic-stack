@@ -137,7 +137,7 @@ Secrets runtime pour `git-forge` :
 | `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | chemin absolu (target rootless) | `${AGENTIC_ROOT}/ollama/models` (ou valeur derivee de `OLLAMA_MODELS_DIR` quand fournie par onboarding) | shell, `runtime.env` |
 | `OLLAMA_CONTAINER_MODELS_PATH` | chemin interne conteneur | `/root/.ollama/models` | `/tmp/ollama/models` en `rootless-dev` |
 | `OLLAMA_MODELS_MOUNT_MODE` | `rw` ou `ro` | `rw` | `runtime.env` |
-| `AGENTIC_DEFAULT_MODEL` | identifiant de modele | `nemotron-cascade-2:30b` | shell, `runtime.env` |
+| `AGENTIC_DEFAULT_MODEL` | identifiant de modele | `qwen3.8:27b` | shell, `runtime.env` |
 | `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` | entier `>= 2048` (tokens) | `50909` | shell, `runtime.env` |
 | `AGENTIC_AGENT_DEFAULT_MODEL` | identifiant modele par defaut pour les shells agents | `${AGENTIC_DEFAULT_MODEL}` | shell, `runtime.env` |
 | `AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW` | entier `>= 2048` (tokens) pour les shells agents | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
@@ -150,7 +150,7 @@ Secrets runtime pour `git-forge` :
 | `AGENTIC_CONTEXT_BUDGET_TOKENS` | entier `>= 2048` | derive de `min(AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW, OLLAMA_CONTEXT_LENGTH)` | shell, `runtime.env` |
 | `AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS` | entier `> 0` (`< danger`) | derive du budget et de `AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT` | shell, `runtime.env` |
 | `AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS` | entier `> soft` (`< budget`) | derive du budget et de `AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT` | shell, `runtime.env` |
-| `OLLAMA_PRELOAD_GENERATE_MODEL` | identifiant de modele | `${AGENTIC_DEFAULT_MODEL}` (fallback `nemotron-cascade-2:30b`) | `runtime.env` |
+| `OLLAMA_PRELOAD_GENERATE_MODEL` | identifiant de modele | `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3.8:27b`) | `runtime.env` |
 | `OLLAMA_PRELOAD_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | entier positif | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | identifiant de modele | `qwen3-embedding:0.6b` | `runtime.env` |

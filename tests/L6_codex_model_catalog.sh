@@ -14,7 +14,7 @@ assert_cmd docker
 assert_cmd timeout
 assert_cmd python3
 
-default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-nemotron-cascade-2:30b}}"
+default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-qwen3.8:27b}}"
 expected_context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}"
 expected_soft_threshold="${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}"
 expected_danger_threshold="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}"

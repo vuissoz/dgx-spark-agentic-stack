@@ -39,7 +39,7 @@ class SandboxSnapshot:
     limits_cpu: float = 1.0
     limits_memory_mb: int = 1024
     model_context_window: int = 50909
-    agent_default_model: str = "qwen3-coder:30b"
+    agent_default_model: str = "qwen3.8:27b"
 
 
 @dataclass(frozen=True)
@@ -125,7 +125,7 @@ class DockerRuntimeAdapter:
                 return {"success": False, "error": f"Failed to create tmux session '{tmux_session}' in {sandbox_id}"}
 
         # Build snapshot for cold recovery
-        model = context.get("model", "qwen3-coder:30b")
+        model = context.get("model", "qwen3.8:27b")
         context_window = int(context.get("context_window", 50909))
 
         snapshot = SandboxSnapshot(

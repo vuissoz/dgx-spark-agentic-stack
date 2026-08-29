@@ -72,7 +72,7 @@ Operator TRT commands:
 Only one TRT model is exposed by the stack at a time on DGX Spark.
 On the first native startup, the backend can remain in `status=starting` for several minutes while it downloads and warms the Hugging Face artifacts; until `native_ready=true`, gate requests receive an explicit `503` instead of silently falling back to a mock.
 Model-to-backend routing remains centralized in `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
-The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) and reused by Ollama preload.
+The default local model is controlled by `AGENTIC_DEFAULT_MODEL` (fallback `qwen3.8:27b`) and reused by Ollama preload.
 The stack now emits an explicit warning if you choose `qwen3.5:35b`: as of March 26, 2026, local Codex/OpenHands runs in this repo have already shown pseudo tool tags instead of real tool calls, even though Ollama upstream advertises the model with `tools` support. The model is no longer blocked, because this is treated as a stack integration bug to fix rather than a model capability contract.
 Context window size is controlled by `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (default `50909`) and propagated to `OLLAMA_CONTEXT_LENGTH`.
 `./agent context show` prints the effective runtime policy and explicitly labels the active stack-managed OpenClaw provider/model/window; it does not infer the active context from unrelated remote catalog entries. `./agent context set <tokens>` persists the context window into `${AGENTIC_ROOT}/deployments/runtime.env`, keeps `OLLAMA_CONTEXT_LENGTH` and `AGENTIC_GOOSE_CONTEXT_LIMIT` aligned, and recomputes `AGENTIC_CONTEXT_BUDGET_TOKENS` plus the derived compaction thresholds.
@@ -465,7 +465,7 @@ Preload then switch to read-only for smoke tests:
 ```bash
 ./agent ollama-preload
 ./agent ollama-models status
-./agent ollama unload qwen3-coder:30b
+./agent ollama unload qwen3.8:27b
 ./agent ollama-models ro
 ./agent ollama-models rw
 ```
@@ -654,7 +654,7 @@ Fully local n8n Assistant (Ollama model, VM sandbox, and automatically
 configured SearXNG search):
 
 ```bash
-export AGENTIC_N8N_AI_MODEL=qwen3.8
+export AGENTIC_N8N_AI_MODEL=qwen3.8:27b
 ./agent n8n-sandbox-vm create
 AGENTIC_OPTIONAL_MODULES=n8n-ai ./agent up optional
 ```

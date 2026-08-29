@@ -481,7 +481,7 @@ def warm_default_model(artifact_dir: pathlib.Path, *, timeout_seconds: int = OLL
     default_model = (
         os.environ.get("AGENTIC_DEFAULT_MODEL")
         or os.environ.get("OLLAMA_PRELOAD_GENERATE_MODEL")
-        or "nemotron-cascade-2:30b"
+        or "qwen3.8:27b"
     )
     env = os.environ.copy()
     env["OLLAMA_API_URL"] = env.get("OLLAMA_API_URL", OLLAMA_SMOKE_API_URL)

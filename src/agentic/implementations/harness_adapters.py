@@ -114,13 +114,13 @@ class CodexHarnessAdapter(_HarnessAdapter):
             "workspace": kwargs.get("workspace", f"/srv/agentic/codex/workspaces/workspace-{agent_identity[:8]}"),
             "cpu": float(os.environ.get("AGENTIC_LIMIT_AGENTIC_CODEX_CPUS", os.environ.get("AGENTIC_LIMIT_DEFAULT_CPUS", "1.0"))),
             "memory_mb": int(os.environ.get("AGENTIC_LIMIT_AGENTIC_CODEX_MEM", os.environ.get("AGENTIC_LIMIT_DEFAULT_MEM", "1024"))),
-            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3.8:27b")),
         })
         if not provision["success"]:
             return {"success": False, "error": provision["error"]}
 
         session_id = f"codex-{agent_identity[:8]}-{uuid.uuid4().hex[:6]}"
-        model = kwargs.get("model", os.environ.get("AGENTIC_AGENT_DEFAULT_MODEL", "qwen3-coder:30b"))
+        model = kwargs.get("model", os.environ.get("AGENTIC_AGENT_DEFAULT_MODEL", "qwen3.8:27b"))
         init_cmd = f'codex --model {model}'
         if project:
             init_cmd += f' --project {project}'
@@ -245,7 +245,7 @@ class OpenCodeHarnessAdapter(_HarnessAdapter):
             "harness": "opencode",
             "workspace": kwargs.get("workspace", f"/srv/agentic/opencode/workspaces/workspace-{agent_identity[:8]}"),
             "cpu": 1.0, "memory_mb": 1024,
-            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3.8:27b")),
         })
         if not provision["success"]:
             return {"success": False, "error": provision["error"]}
@@ -309,7 +309,7 @@ class KiloCodeHarnessAdapter(_HarnessAdapter):
             "harness": "kilocode",
             "workspace": kwargs.get("workspace", f"/srv/agentic/kilocode/workspaces/workspace-{agent_identity[:8]}"),
             "cpu": 1.5, "memory_mb": 2048,
-            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3.8:27b")),
         })
         if not provision["success"]:
             return {"success": False, "error": provision["error"]}
@@ -492,7 +492,7 @@ class GooseHarnessAdapter(_HarnessAdapter):
             "harness": "goose",
             "workspace": kwargs.get("workspace", f"/srv/agentic/goose/workspaces/workspace-{agent_identity[:8]}"),
             "cpu": 1.0, "memory_mb": 1024,
-            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3.8:27b")),
         })
         if not provision["success"]:
             return {"success": False, "error": provision["error"]}
@@ -554,7 +554,7 @@ class HermesHarnessAdapter(_HarnessAdapter):
             "harness": "hermes",
             "workspace": kwargs.get("workspace", f"/srv/agentic/hermes/workspaces/workspace-{agent_identity[:8]}"),
             "cpu": 2.0, "memory_mb": 4096,
-            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3.8:27b")),
         })
         if not provision["success"]:
             return {"success": False, "error": provision["error"]}
@@ -618,7 +618,7 @@ class HermesNemoClawAdapter(_HarnessAdapter):
             "harness": "hermes-nemoclaw",
             "workspace": kwargs.get("workspace", f"/srv/agentic/hermes-nemoclaw/workspaces/workspace-{agent_identity[:8]}"),
             "cpu": 2.0, "memory_mb": 4096,
-            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3.8:27b")),
         })
         if not provision["success"]:
             return {"success": False, "error": provision["error"]}
@@ -679,7 +679,7 @@ class OpenClawHarnessAdapter(_HarnessAdapter):
             "harness": "openclaw",
             "workspace": kwargs.get("workspace", f"/srv/agentic/openclaw/workspaces/workspace-{agent_identity[:8]}"),
             "cpu": 1.0, "memory_mb": 2048,
-            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3.8:27b")),
         })
         if not provision["success"]:
             return {"success": False, "error": provision["error"]}
@@ -749,7 +749,7 @@ class OpenHandsHarnessAdapter(_HarnessAdapter):
             "harness": "openhands",
             "workspace": kwargs.get("workspace", f"/srv/agentic/openhands/workspaces/workspace-{agent_identity[:8]}"),
             "cpu": 2.0, "memory_mb": 4096,
-            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3-coder:30b")),
+            "model": kwargs.get("model", os.environ.get("AGENTIC_DEFAULT_MODEL", "qwen3.8:27b")),
         })
         if not provision["success"]:
             return {"success": False, "error": provision["error"]}

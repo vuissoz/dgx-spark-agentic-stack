@@ -140,7 +140,7 @@ Notes:
 | `AGENTIC_OLLAMA_MODELS_TARGET_DIR` | absolute path (rootless real target) | `${AGENTIC_ROOT}/ollama/models` (or value derived from `OLLAMA_MODELS_DIR` when onboarding provides one) | shell, `runtime.env` |
 | `OLLAMA_CONTAINER_MODELS_PATH` | container path | `/root/.ollama/models` | `/tmp/ollama/models` in `rootless-dev` |
 | `OLLAMA_MODELS_MOUNT_MODE` | `rw` or `ro` | `rw` | `runtime.env` |
-| `AGENTIC_DEFAULT_MODEL` | model id string | `nemotron-cascade-2:30b` | shell, `runtime.env` |
+| `AGENTIC_DEFAULT_MODEL` | model id string | `qwen3.8:27b` | shell, `runtime.env` |
 | `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` | integer `>= 2048` (tokens) | `50909` | shell, `runtime.env` |
 | `AGENTIC_AGENT_DEFAULT_MODEL` | default interactive agent model id | `${AGENTIC_DEFAULT_MODEL}` | shell, `runtime.env` |
 | `AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW` | integer `>= 2048` (tokens) for agent shells | `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}` | shell, `runtime.env` |
@@ -153,7 +153,7 @@ Notes:
 | `AGENTIC_CONTEXT_BUDGET_TOKENS` | integer `>= 2048` | derived from `min(AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW, OLLAMA_CONTEXT_LENGTH)` | shell, `runtime.env` |
 | `AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS` | integer `> 0` (`< danger`) | derived from budget and `AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT` | shell, `runtime.env` |
 | `AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS` | integer `> soft` (`< budget`) | derived from budget and `AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT` | shell, `runtime.env` |
-| `OLLAMA_PRELOAD_GENERATE_MODEL` | model id string | `${AGENTIC_DEFAULT_MODEL}` (fallback `nemotron-cascade-2:30b`) | `runtime.env` |
+| `OLLAMA_PRELOAD_GENERATE_MODEL` | model id string | `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3.8:27b`) | `runtime.env` |
 | `OLLAMA_PRELOAD_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |
 | `OLLAMA_MODEL_STORE_BUDGET_GB` | positive integer | `32` | `runtime.env` |
 | `RAG_EMBED_MODEL` | model id string | `qwen3-embedding:0.6b` | `runtime.env` |

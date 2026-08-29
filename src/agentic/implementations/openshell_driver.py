@@ -45,7 +45,7 @@ class SandboxManifest:
     limits_memory_mb: int = 1024
     limits_gpu_count: int = 0
     model_context_window: int = 32768
-    agent_default_model: str = "qwen3-coder:30b"
+    agent_default_model: str = "qwen3.8:27b"
     created_at: str = ""
     updated_at: str = ""
 
@@ -143,7 +143,7 @@ class OpenShellDriver:
         cpu = float(context.get("cpu", 1.0))
         memory_mb = int(context.get("memory_mb", 1024))
         gpu_count = int(context.get("gpu_count", 0))
-        model = context.get("model", os.environ.get("AGENTIC_AGENT_DEFAULT_MODEL", "qwen3-coder:30b"))
+        model = context.get("model", os.environ.get("AGENTIC_AGENT_DEFAULT_MODEL", "qwen3.8:27b"))
         context_window = int(context.get("context_window", 32768))
 
         # Resolve container name from service mapping

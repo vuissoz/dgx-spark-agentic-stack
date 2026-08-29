@@ -62,7 +62,7 @@ sur `0.0.0.0` ou sur les interfaces LAN/Tailscale de l'hôte.
 
 ```bash
 ./agent up core
-export AGENTIC_N8N_AI_MODEL=qwen3.8
+export AGENTIC_N8N_AI_MODEL=qwen3.8:27b
 AGENTIC_OPTIONAL_MODULES=n8n-ai ./agent up optional
 ```
 

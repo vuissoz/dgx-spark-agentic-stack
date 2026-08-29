@@ -572,7 +572,7 @@ if [[ -z "${_agentic_trtllm_native_model_policy_raw}" ]] \
 fi
 unset _agentic_trtllm_native_model_policy_raw
 
-AGENTIC_DEFAULT_MODEL="${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}"
+AGENTIC_DEFAULT_MODEL="${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}"
 AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}"
 _agentic_default_agent_model="${AGENTIC_DEFAULT_MODEL}"
 _agentic_default_agent_context_window="${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}"
