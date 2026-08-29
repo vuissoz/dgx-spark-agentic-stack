@@ -283,6 +283,7 @@ services:
     profiles:
       - optional-n8n-ai
     restart: unless-stopped
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
     read_only: true
     tmpfs:
       - /tmp
