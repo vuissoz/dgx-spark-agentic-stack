@@ -341,7 +341,10 @@ services:
       N8N_ENABLE_INSTANT_WEBHOOK: "${N8N_ENABLE_INSTANT_WEBHOOK:-false}"
       N8N_MAX_MEMORY_USAGE: "${N8N_MAX_MEMORY_USAGE:-1024}"
       N8N_ENABLED_MODULES: "${N8N_ENABLED_MODULES:-instance-ai}"
-      N8N_INSTANCE_AI_MODEL: "${N8N_INSTANCE_AI_MODEL:-${AGENTIC_N8N_AI_MODEL:-qwen3.8}}"
+      # Keep the n8n assistant on the same model selected for the stack. The
+      # previous qwen3.8 fallback was not part of the model catalog and made
+      # assistant calls fail with a cancelled API request.
+      N8N_INSTANCE_AI_MODEL: "${N8N_INSTANCE_AI_MODEL:-${AGENTIC_N8N_AI_MODEL:-${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}}}"
       N8N_INSTANCE_AI_MODEL_URL: "${N8N_INSTANCE_AI_MODEL_URL:-http://ollama-gate:11435/v1}"
       N8N_INSTANCE_AI_MODEL_API_KEY: "${N8N_INSTANCE_AI_MODEL_API_KEY:-local-ollama}"
       N8N_INSTANCE_AI_SANDBOX_ENABLED: "${N8N_INSTANCE_AI_SANDBOX_ENABLED:-false}"
