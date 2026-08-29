@@ -269,6 +269,8 @@ services:
       OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw.operator-overlay.json
       OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-home/openclaw.state.json
       OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_GATEWAY_URL: ws://openclaw-gateway:8114
+      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: "1"
       OPENCLAW_TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram.bot_token
       OPENCLAW_DISCORD_BOT_TOKEN_FILE: /run/secrets/discord.bot_token
       OPENCLAW_SLACK_BOT_TOKEN_FILE: /run/secrets/slack.bot_token
@@ -278,7 +280,7 @@ services:
       AGENTIC_GIT_FORGE_SHARED_NAMESPACE: ${GIT_FORGE_SHARED_NAMESPACE:-agentic}
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,openclaw,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,openclaw,openclaw-gateway,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
     depends_on:
       openclaw-provider-bridge:
         condition: service_healthy

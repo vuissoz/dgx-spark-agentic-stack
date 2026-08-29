@@ -150,6 +150,12 @@ if [[ "${RUNTIME_ONLY}" == "0" ]]; then
   docker compose --project-name n8n-sandbox --env-file "${ENV_ROOT}/sandbox.env" \
     -f "${INSTALL_ROOT}/compose.yml" down --remove-orphans
   compose_up_args+=(--force-recreate)
+else
+  # The runner's HTTP health endpoint can stay green after its long-lived gRPC
+  # registration has disappeared from the API. Recreate only the stateless
+  # runner control process so every explicit VM start re-registers it; its
+  # inner Docker data remains on the persistent runner-data/docker-data mounts.
+  compose_up_args+=(--force-recreate runner)
 fi
 docker compose --project-name n8n-sandbox --env-file "${ENV_ROOT}/sandbox.env" \
   -f "${INSTALL_ROOT}/compose.yml" up "${compose_up_args[@]}"

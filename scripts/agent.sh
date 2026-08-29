@@ -34,6 +34,7 @@ AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openc
 AGENT_OPENCLAW_OPERATOR_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_operator.py"
 AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_module_manifest.py"
 AGENT_OPENCLAW_MANAGED_INIT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_managed_init.py"
+AGENT_OPENCLAW_TERMINAL_PAIRING_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_terminal_pairing.py"
 AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT="${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT:-${AGENTIC_REPO_ROOT}/deployments/optional/git_forge_bootstrap.py}"
 AGENT_REPO_E2E_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/agent_repo_e2e.py"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
@@ -65,6 +66,8 @@ Usage:
   agent openclaw status [--json]
   agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
   agent openclaw model set <id> [--json]
+  agent openclaw session new <name> --message <text> [--timeout <seconds>] [--json]
+  agent openclaw terminal [pending | authorize <request-id>]
   agent openclaw sandbox [ls [--json] | attach <sandbox_id> | destroy <sandbox_id> [--json]]
   agent openclaw approvals [list [--status <pending|approved|denied|expired|all>] [--json] | approve <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] | deny <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] [--reason <text>] | promote <id>]
   agent ls
@@ -650,14 +653,24 @@ load_n8n_sandbox_runtime_env() {
 }
 
 cmd_n8n_sandbox_vm() {
+  local action="${1:-status}"
   [[ -x "${AGENT_N8N_SANDBOX_VM_SCRIPT}" ]] \
     || die "n8n sandbox VM manager is missing: ${AGENT_N8N_SANDBOX_VM_SCRIPT}"
-  case "${1:-status}" in
+  case "${action}" in
     create)
       ensure_optional_runtime
       ;;
   esac
   "${AGENT_N8N_SANDBOX_VM_SCRIPT}" "$@"
+  case "${action}" in
+    create|start)
+      load_n8n_sandbox_runtime_env
+      ensure_runtime_env
+      set_runtime_env_value "N8N_INSTANCE_AI_SANDBOX_ENABLED" "true"
+      set_runtime_env_value "N8N_SANDBOX_SERVICE_URL" "${N8N_SANDBOX_SERVICE_URL}"
+      set_runtime_env_value "N8N_SANDBOX_VM_IP" "${N8N_SANDBOX_VM_IP}"
+      ;;
+  esac
 }
 
 log_optional_activation() {
@@ -1884,6 +1897,7 @@ cmd_tool_attach() {
       printf 'INFO: OpenClaw upstream Gateway WS is ws://127.0.0.1:%s.\n' "${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
       printf 'INFO: provider relay ingress is available at http://127.0.0.1:%s/v1/providers/<provider>/webhook.\n' "${OPENCLAW_RELAY_HOST_PORT:-18112}"
       printf 'INFO: OpenClaw onboarding SecretRef expects OPENCLAW_GATEWAY_TOKEN to be set in this shell.\n'
+      printf 'INFO: if the CLI requests a device scope upgrade, use "agent openclaw terminal pending", then explicitly authorize its request id.\n'
       printf 'INFO: run: export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\\''\\n'\\'' </run/secrets/openclaw.token)"\n'
       ;;
     comfyui-shell)
@@ -2233,6 +2247,10 @@ cmd_start_target() {
     forgejo|openwebui|openhands|comfyui) ensure_ui_runtime ;;
     pi-mono|goose|n8n) ensure_optional_runtime ;;
   esac
+  if [[ "${target}" == "n8n" && "${N8N_INSTANCE_AI_SANDBOX_ENABLED:-false}" == "true" ]]; then
+    validate_optional_module_prereqs n8n-ai
+    load_n8n_sandbox_runtime_env
+  fi
 
   docker_compose_partial -f "${compose_file}" up -d --no-deps "${services_to_start[@]}"
   wait_for_ui_loopback_services_for_targets 120 "${target}"
@@ -5086,6 +5104,125 @@ cmd_openclaw_operator() {
   esac
 }
 
+cmd_openclaw_session() {
+  local action="${1:-help}"
+  shift || true
+
+  case "${action}" in
+    -h|--help|help)
+      cat <<'USAGE'
+Usage:
+  agent openclaw session new <name> --message <text> [--timeout <seconds>] [--json]
+
+Creates a fresh, named OpenClaw session without deleting or resetting the
+existing transcript. Use this recovery path when a session exceeded its model
+context window. Names may contain letters, digits, dots, underscores and dashes.
+USAGE
+      return 0
+      ;;
+    new)
+      local name="${1:-}"
+      local message=""
+      local timeout_sec="600"
+      local json_flag=""
+      local openclaw_cid=""
+
+      [[ -n "${name}" && "${name}" != --* ]] \
+        || die "Usage: agent openclaw session new <name> --message <text> [--timeout <seconds>] [--json]"
+      shift
+      [[ "${name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]] \
+        || die "OpenClaw session name must match [A-Za-z0-9][A-Za-z0-9._-]{0,79}"
+
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --message)
+            [[ $# -ge 2 ]] || die "missing value for --message"
+            message="$2"
+            shift 2
+            ;;
+          --timeout)
+            [[ $# -ge 2 ]] || die "missing value for --timeout"
+            timeout_sec="$2"
+            shift 2
+            ;;
+          --json)
+            json_flag="--json"
+            shift
+            ;;
+          *)
+            die "Unsupported OpenClaw session option: $1"
+            ;;
+        esac
+      done
+      [[ -n "${message}" ]] || die "--message must not be empty"
+      [[ "${timeout_sec}" =~ ^[1-9][0-9]*$ ]] || die "--timeout must be a positive integer"
+
+      ensure_runtime_env
+      openclaw_cid="$(service_container_id openclaw)"
+      [[ -n "${openclaw_cid}" ]] \
+        || die "Service 'openclaw' is not running. Start it with: agent up core"
+
+      docker exec "${openclaw_cid}" openclaw agent \
+        --agent main \
+        --session-key "agent:main:${name}" \
+        --message "${message}" \
+        --timeout "${timeout_sec}" \
+        ${json_flag:+'--json'}
+      ;;
+    *)
+      die "Usage: agent openclaw session new <name> --message <text> [--timeout <seconds>] [--json]"
+      ;;
+  esac
+}
+
+cmd_openclaw_terminal() {
+  local action="${1:-pending}"
+  shift || true
+  local gateway_cid=""
+
+  case "${action}" in
+    -h|--help|help)
+      cat <<'USAGE'
+Usage:
+  agent openclaw terminal pending
+  agent openclaw terminal authorize <request-id>
+
+Lists CLI device pairing requests or explicitly authorizes one request through
+the loopback-bound managed gateway. Authorization is never performed
+automatically.
+USAGE
+      return 0
+      ;;
+    pending|authorize)
+      ensure_runtime_env
+      gateway_cid="$(service_container_id openclaw-gateway)"
+      [[ -n "${gateway_cid}" ]] \
+        || die "Service 'openclaw-gateway' is not running. Start it with: agent up core"
+      ;;
+    *)
+      die "Usage: agent openclaw terminal [pending | authorize <request-id>]"
+      ;;
+  esac
+
+  case "${action}" in
+    pending)
+      [[ $# -eq 0 ]] || die "Usage: agent openclaw terminal pending"
+      docker exec "${gateway_cid}" openclaw devices list --json
+      ;;
+    authorize)
+      local request_id="${1:-}"
+      [[ $# -eq 1 && "${request_id}" =~ ^[A-Za-z0-9-]+$ ]] \
+        || die "Usage: agent openclaw terminal authorize <request-id>"
+      [[ -f "${AGENT_OPENCLAW_TERMINAL_PAIRING_SCRIPT}" ]] \
+        || die "OpenClaw terminal pairing helper is missing: ${AGENT_OPENCLAW_TERMINAL_PAIRING_SCRIPT}"
+      python3 "${AGENT_OPENCLAW_TERMINAL_PAIRING_SCRIPT}" \
+        --state-dir "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw" \
+        --request-id "${request_id}"
+      append_changes_log "openclaw-terminal actor=${SUDO_USER:-${USER:-unknown}} action=authorize request_id=${request_id}"
+      ;;
+  esac
+}
+
 cmd_openclaw_approvals() {
   local action="${1:-list}"
   shift || true
@@ -5824,6 +5961,14 @@ case "$cmd" in
         openclaw_action="${2:-}"
         shift 2
         cmd_openclaw_operator "${openclaw_action}" "$@"
+        ;;
+      session)
+        shift 2
+        cmd_openclaw_session "$@"
+        ;;
+      terminal)
+        shift 2
+        cmd_openclaw_terminal "$@"
         ;;
       approvals)
         shift 2

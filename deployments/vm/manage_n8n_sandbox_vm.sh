@@ -177,6 +177,12 @@ case "${ACTION}" in
     resolved_ip="$(vm_ip)"
     host_gateway="$(vm_gateway)"
     install_restricted_tunnel_key
+    multipass transfer "${ASSET_DIR}/compose.yml" "${VM_NAME}:/tmp/n8n-sandbox-compose.yml"
+    multipass transfer "${ASSET_DIR}/provision_guest.sh" "${VM_NAME}:/tmp/n8n-sandbox-provision.sh"
+    multipass exec "${VM_NAME}" -- sudo install -m 0640 \
+      /tmp/n8n-sandbox-compose.yml /opt/n8n-sandbox/compose.yml
+    multipass exec "${VM_NAME}" -- sudo install -m 0750 \
+      /tmp/n8n-sandbox-provision.sh /opt/n8n-sandbox/provision_guest.sh
     multipass exec "${VM_NAME}" -- sudo env SANDBOX_VM_BIND_IP="${resolved_ip}" \
       SANDBOX_HOST_GATEWAY="${host_gateway}" SANDBOX_HOST_SSH_USER="${HOST_SSH_USER}" \
       SANDBOX_HOST_PROXY_PORT="${HOST_PROXY_PORT}" \

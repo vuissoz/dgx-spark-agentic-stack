@@ -102,6 +102,9 @@ AGENTIC_PI_MONO_WORKSPACES_DIR|pi_mono_workspaces_dir|persist,load,profile
 AGENTIC_GOOSE_WORKSPACES_DIR|goose_workspaces_dir|persist,load,profile
 AGENTIC_COMPOSE_PROJECT|compose_project|persist,profile
 COMPOSE_PROFILES|compose_profiles|persist,load,profile
+N8N_INSTANCE_AI_SANDBOX_ENABLED|n8n_ai_sandbox_enabled|persist,load,profile
+N8N_SANDBOX_SERVICE_URL|n8n_sandbox_service_url|persist,load,profile
+N8N_SANDBOX_VM_IP|n8n_sandbox_vm_ip|persist,load,profile
 AGENTIC_NETWORK|network|persist,load,profile
 AGENTIC_LLM_NETWORK|llm_network|persist,load,profile
 AGENTIC_EGRESS_NETWORK|egress_network|persist,load,profile

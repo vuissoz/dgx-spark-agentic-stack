@@ -97,6 +97,21 @@ ensure_squid_loopback_tunnel_acl() {
   fi
 }
 
+ensure_squid_internal_model_acl() {
+  local config_file="${AGENTIC_ROOT}/proxy/config/squid.conf"
+
+  [[ -f "${config_file}" ]] || return 0
+  if ! grep -Fqx 'acl agentic_internal_model dstdomain ollama-gate' "${config_file}"; then
+    sed -i '/^acl CONNECT method CONNECT$/a acl agentic_internal_model dstdomain ollama-gate' "${config_file}"
+  fi
+  if ! grep -Fqx 'acl agentic_internal_model_port port 11435' "${config_file}"; then
+    sed -i '/^acl agentic_internal_model dstdomain ollama-gate$/a acl agentic_internal_model_port port 11435' "${config_file}"
+  fi
+  if ! grep -Fqx 'http_access allow localnet CONNECT agentic_internal_model agentic_internal_model_port' "${config_file}"; then
+    sed -i '/^http_access deny !Safe_ports$/i http_access allow localnet CONNECT agentic_internal_model agentic_internal_model_port' "${config_file}"
+  fi
+}
+
 sync_runtime_file() {
   local src="$1"
   local dst="$2"
@@ -775,6 +790,7 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   copy_if_missing "${TEMPLATE_DIR}/unbound.conf" "${AGENTIC_ROOT}/dns/unbound.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/squid.conf" "${AGENTIC_ROOT}/proxy/config/squid.conf" 0644
   ensure_squid_loopback_tunnel_acl
+  ensure_squid_internal_model_acl
   copy_if_missing "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt" 0644
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.dm_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt" 0640

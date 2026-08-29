@@ -124,11 +124,26 @@ PY
 grep -Fq '127.0.0.1:${AGENTIC_PROXY_HOST_PORT:-3128}:3128' \
   "${REPO_ROOT}/compose/compose.core.yml" \
   || fail "host egress proxy must be published on loopback only"
+grep -Fq 'acl agentic_internal_model dstdomain ollama-gate' \
+  "${REPO_ROOT}/examples/core/squid.conf" \
+  || fail "egress proxy must identify only the internal Ollama gate"
+grep -Fq 'http_access allow localnet CONNECT agentic_internal_model agentic_internal_model_port' \
+  "${REPO_ROOT}/examples/core/squid.conf" \
+  || fail "n8n Assistant proxy tunnel must be limited to the internal model endpoint"
 grep -Fq 'iptables -A AGENTIC-SBX-EGRESS -j DROP' \
   "${REPO_ROOT}/deployments/vm/n8n-sandbox/provision_guest.sh" \
   || fail "inner sandbox direct egress must fail closed"
 grep -Fq '/etc/apt/apt.conf.d/99agentic-proxy' \
   "${REPO_ROOT}/deployments/vm/n8n-sandbox/compose.yml" \
   || fail "sandbox image must include package-manager proxy configuration"
+grep -Fq 'compose_up_args+=(--force-recreate runner)' \
+  "${REPO_ROOT}/deployments/vm/n8n-sandbox/provision_guest.sh" \
+  || fail "VM runtime start must refresh the runner gRPC registration"
+grep -Fq 'N8N_SANDBOX_SERVICE_URL|n8n_sandbox_service_url|persist,load,profile' \
+  "${REPO_ROOT}/scripts/lib/runtime.sh" \
+  || fail "n8n sandbox endpoint must persist across agent invocations"
+grep -Fq 'validate_optional_module_prereqs n8n-ai' \
+  "${REPO_ROOT}/scripts/agent.sh" \
+  || fail "agent start n8n must reload file-backed sandbox credentials"
 
 ok "K19_n8n_local_ai_sandbox passed"
