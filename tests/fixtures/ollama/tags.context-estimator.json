@@ -7,6 +7,10 @@
     {
       "name": "nemotron-cascade-2:30b",
       "size": 24272443719
+    },
+    {
+      "name": "qwen3.8:27b",
+      "size": 17741872154
     }
   ]
 }
