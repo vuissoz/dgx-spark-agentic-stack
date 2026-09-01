@@ -25,6 +25,7 @@ AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch.sh"
 AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_drift_watch_schedule.sh"
+AGENT_MEMORY_WATCHDOG_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/memory_watchdog.sh"
 AGENT_OLLAMA_CHAT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_chat_benchmark.py"
 AGENT_CODEX_CONTEXT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/codex_context_window_benchmark.py"
 AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
@@ -75,6 +76,7 @@ Usage:
   agent ls
   agent status
   agent ps
+  agent memory <status|watchdog [--once]|stop|resume <service>|clear-quarantine|install-autostart|uninstall-autostart>
   agent llm mode [local|hybrid|mixed|remote]
   agent llm backend [ollama|trtllm|both|remote]
   agent llm test-mode [on|off]
@@ -2241,6 +2243,87 @@ cmd_status() {
     --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
     --format '{{.Label "com.docker.compose.service"}}\t{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Image}}' \
     | sort
+}
+
+memory_watchdog_start() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+  [[ "${AGENTIC_MEMORY_WATCHDOG_ENABLED:-1}" == "1" ]] || return 0
+  [[ -x "${AGENT_MEMORY_WATCHDOG_SCRIPT}" ]] || die "memory watchdog script is missing or not executable: ${AGENT_MEMORY_WATCHDOG_SCRIPT}"
+  install -d -m 0750 "${AGENTIC_ROOT}/runtime" "${AGENTIC_ROOT}/logs"
+  if [[ -s "${AGENTIC_ROOT}/runtime/memory-watchdog.pid" ]] \
+    && kill -0 "$(cat "${AGENTIC_ROOT}/runtime/memory-watchdog.pid")" 2>/dev/null; then
+    return 0
+  fi
+  nohup env \
+    AGENTIC_PROFILE="${AGENTIC_PROFILE}" AGENTIC_ROOT="${AGENTIC_ROOT}" AGENTIC_COMPOSE_PROJECT="${AGENTIC_COMPOSE_PROJECT}" \
+    "${AGENT_MEMORY_WATCHDOG_SCRIPT}" --daemon \
+    >>"${AGENTIC_ROOT}/logs/memory-watchdog.stdout.log" 2>&1 < /dev/null &
+  printf 'memory watchdog started project=%s\n' "${AGENTIC_COMPOSE_PROJECT}"
+}
+
+memory_watchdog_stop() {
+  [[ -x "${AGENT_MEMORY_WATCHDOG_SCRIPT}" ]] || return 0
+  AGENTIC_PROFILE="${AGENTIC_PROFILE}" AGENTIC_ROOT="${AGENTIC_ROOT}" AGENTIC_COMPOSE_PROJECT="${AGENTIC_COMPOSE_PROJECT}" \
+    "${AGENT_MEMORY_WATCHDOG_SCRIPT}" --stop >/dev/null 2>&1 || true
+}
+
+memory_watchdog_reconcile() {
+  if ! docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}' 2>/dev/null | grep -q .; then
+    memory_watchdog_stop
+  fi
+}
+
+memory_watchdog_autostart() {
+  local unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+  local unit_file="${unit_dir}/agentic-memory-watchdog.service"
+  install -d -m 0750 "${unit_dir}"
+  {
+    printf '[Unit]\nDescription=Agentic rootless-dev RAM and VRAM watchdog\nAfter=default.target\n\n'
+    printf '[Service]\nType=simple\nEnvironment=AGENTIC_PROFILE=rootless-dev\nEnvironment=AGENTIC_ROOT=%s\nEnvironment=AGENTIC_COMPOSE_PROJECT=%s\nExecStart=%s --daemon\nRestart=always\nRestartSec=30\n\n' \
+      "${AGENTIC_ROOT}" "${AGENTIC_COMPOSE_PROJECT}" "${AGENT_MEMORY_WATCHDOG_SCRIPT}"
+    printf '[Install]\nWantedBy=default.target\n'
+  } >"${unit_file}"
+  chmod 0640 "${unit_file}"
+  systemctl --user daemon-reload
+  systemctl --user enable --now agentic-memory-watchdog.service >/dev/null
+  printf 'memory watchdog user autostart installed: %s\n' "${unit_file}"
+}
+
+memory_watchdog_autostart_remove() {
+  local unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+  local unit_file="${unit_dir}/agentic-memory-watchdog.service"
+  systemctl --user disable --now agentic-memory-watchdog.service >/dev/null 2>&1 || true
+  rm -f "${unit_file}"
+  systemctl --user daemon-reload >/dev/null 2>&1 || true
+  printf 'memory watchdog user autostart removed\n'
+}
+
+cmd_memory() {
+  local action="${1:-status}"
+  shift || true
+  case "${action}" in
+    status) "${AGENT_MEMORY_WATCHDOG_SCRIPT}" --status ;;
+    watchdog)
+      [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || die "memory watchdog is only supported in rootless-dev"
+      if [[ "${1:-}" == "--once" ]]; then "${AGENT_MEMORY_WATCHDOG_SCRIPT}" --once; else memory_watchdog_start; fi
+      ;;
+    stop) memory_watchdog_stop ;;
+    resume)
+      local service="${1:-}"
+      [[ -n "${service}" ]] || die "Usage: agent memory resume <service>"
+      local cid
+      cid="$(docker ps -aq --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --filter "label=com.docker.compose.service=${service}" | head -n 1)"
+      [[ -n "${cid}" ]] || die "service not found: ${service}"
+      docker update --restart=unless-stopped "${cid}" >/dev/null
+      docker start "${cid}" >/dev/null
+      rm -f "${AGENTIC_ROOT}/runtime/memory-watchdog.quarantine"
+      printf 'memory watchdog quarantine cleared service=%s\n' "${service}"
+      ;;
+    clear-quarantine) rm -f "${AGENTIC_ROOT}/runtime/memory-watchdog.quarantine"; printf 'memory watchdog quarantine cleared\n' ;;
+    install-autostart) [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || die "autostart is only supported in rootless-dev"; memory_watchdog_autostart ;;
+    uninstall-autostart) memory_watchdog_autostart_remove ;;
+    *) die "Usage: agent memory <status|watchdog [--once]|stop|resume <service>|clear-quarantine>" ;;
+  esac
 }
 
 cmd_stop_target() {
@@ -5931,6 +6014,7 @@ case "$cmd" in
       apply_core_network_policy
     fi
     cmd_ensure_release_manifest "${release_manifest_targets[@]}"
+    memory_watchdog_start
     ;;
   down)
     [[ $# -ge 2 ]] || die "Usage: agent down <core|agents|ui|obs|rag|optional>"
@@ -5977,6 +6061,7 @@ case "$cmd" in
         run_compose_on_targets down "$target_arg"
       fi
     fi
+    memory_watchdog_reconcile
     ;;
   stack)
     [[ $# -ge 2 ]] || die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
@@ -6032,6 +6117,10 @@ case "$cmd" in
     ;;
   status)
     cmd_status
+    ;;
+  memory)
+    shift
+    cmd_memory "$@"
     ;;
   ps)
     require_cmd docker

@@ -945,6 +945,9 @@ services:
 
   trtllm:
     image: agentic/trtllm-runtime:local
+    labels:
+      agentic.resource.gpu: "true"
+      agentic.resource.priority: "preemptible"
     build:
       context: ..
       dockerfile: deployments/trtllm/Dockerfile

@@ -19,6 +19,7 @@ HARNESS_PROFILES_CONFIG="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harnes
 HARNESS_PROFILES_PY="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles.py"
 N8N_DOCTOR_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/n8n_doctor.py"
 N8N_DOCTOR_WORKFLOW="${AGENTIC_REPO_ROOT}/examples/optional/n8n-workflows/doctor-n8n-local-ollama-validation.json"
+MEMORY_WATCHDOG_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/memory_watchdog.sh"
 
 status=0
 fix_net=0
@@ -171,6 +172,48 @@ check_harness_memory_caps() {
     warn "harness memory caps total ${total_cap_mb}MB across ${service_count} running services (reference ${allowed_cap_mb}MB); reduce enabled services or limits"
   else
     ok "harness memory caps are within the rootless-dev reference (${total_cap_mb}MB / ${allowed_cap_mb}MB across ${service_count} services)"
+  fi
+}
+
+check_memory_watchdog() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+  if [[ ! -x "${MEMORY_WATCHDOG_SCRIPT}" ]]; then
+    doctor_fail "rootless-dev memory watchdog is missing or not executable"
+    return
+  fi
+  local name value
+  for name in \
+    AGENTIC_MEMORY_WATCHDOG_INTERVAL_SEC \
+    AGENTIC_MEMORY_WATCHDOG_CONTAINER_WARN_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_CONTAINER_STOP_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_HOST_WARN_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_HOST_CRITICAL_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_GPU_WARN_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_GPU_STOP_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_GPU_RESERVED_MB; do
+    value="${!name:-}"
+    if ! [[ "${value}" =~ ^[0-9]+$ ]] || (( value < 1 )); then
+      doctor_fail "${name} must be a positive integer (got '${value}')"
+    fi
+  done
+  if (( AGENTIC_MEMORY_WATCHDOG_CONTAINER_WARN_PERCENT >= AGENTIC_MEMORY_WATCHDOG_CONTAINER_STOP_PERCENT )); then
+    doctor_fail "memory watchdog container warn threshold must be below stop threshold"
+  fi
+  if (( AGENTIC_MEMORY_WATCHDOG_HOST_CRITICAL_PERCENT >= AGENTIC_MEMORY_WATCHDOG_HOST_WARN_PERCENT )); then
+    doctor_fail "memory watchdog host critical threshold must be below warn threshold"
+  fi
+  if [[ "${AGENTIC_MEMORY_WATCHDOG_ENABLED:-0}" == "1" ]]; then
+    if docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}' 2>/dev/null | grep -q .; then
+      if [[ -s "${AGENTIC_ROOT}/runtime/memory-watchdog.pid" ]] && kill -0 "$(cat "${AGENTIC_ROOT}/runtime/memory-watchdog.pid")" 2>/dev/null; then
+        ok "rootless-dev memory watchdog is running"
+      else
+        doctor_fail "rootless-dev stack is running but memory watchdog is not running; run './agent memory watchdog'"
+      fi
+    else
+      ok "rootless-dev memory watchdog is configured (stack is stopped)"
+    fi
+  else
+    warn "rootless-dev memory watchdog is disabled"
   fi
 }
 
@@ -2149,6 +2192,7 @@ check_observability_retention_policy
 check_memory_footprint
 check_openhands_process_sandbox
 check_harness_memory_caps
+check_memory_watchdog
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"
