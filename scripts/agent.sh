@@ -28,6 +28,7 @@ AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_
 AGENT_MEMORY_WATCHDOG_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/memory_watchdog.sh"
 AGENT_OLLAMA_CHAT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_chat_benchmark.py"
 AGENT_CODEX_CONTEXT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/codex_context_window_benchmark.py"
+AGENT_CODEX_CONTEXT_SATURATION_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/codex_context_saturation.py"
 AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
 AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_model_bundle.sh"
 AGENT_TUNNEL_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/tunnel_matrix.py"
@@ -65,6 +66,7 @@ Usage:
   agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|comfyui> [project]
   agent comfyui rotate-password
   agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json] [--verbose]
+  agent codex saturate-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--target-percent <percent>] [--hard-stop-percent <percent>] [--model <name>] [--dry-run] [--json] [--verbose]
   agent openclaw init [project]
   agent openclaw status [--json]
   agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
@@ -3894,6 +3896,51 @@ USAGE
   python3 "${AGENT_CODEX_CONTEXT_BENCH_SCRIPT}" "${extra_args[@]}"
 }
 
+cmd_codex_saturate_context() {
+  local output_dir="${AGENTIC_ROOT}/codex/logs/context-saturation/$(date -u +%Y%m%dT%H%M%SZ)"
+  local -a extra_args=()
+  local codex_cid
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --output-dir)
+        [[ $# -ge 2 ]] || die "missing value for --output-dir"
+        output_dir="$2"
+        shift 2
+        ;;
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent codex saturate-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--target-percent <percent>] [--hard-stop-percent <percent>] [--model <name>] [--dry-run] [--json] [--verbose]
+
+Description:
+  Opt-in controlled context-window campaign. It loads complete Jules Verne
+  works in one Codex session, stops at the target (90% by default), and never
+  starts a turn predicted to cross the hard-stop threshold (95% by default).
+  Use --dry-run to plan the campaign without calling Codex.
+USAGE
+        return 0
+        ;;
+      *)
+        extra_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  ensure_runtime_env
+  ensure_agents_runtime
+  [[ -x "${AGENT_CODEX_CONTEXT_SATURATION_SCRIPT}" ]] || die "saturation script missing or not executable: ${AGENT_CODEX_CONTEXT_SATURATION_SCRIPT}"
+  codex_cid="$(service_container_id "agentic-codex" || true)"
+  [[ -n "${codex_cid}" ]] || die "Codex service is not running. Start it with: agent up agents"
+  install -d -m 0755 "${output_dir}"
+  python3 "${AGENT_CODEX_CONTEXT_SATURATION_SCRIPT}" \
+    --codex-container "${codex_cid}" \
+    --output-dir "${output_dir}" \
+    --workdir "/workspace" \
+    "${extra_args[@]}"
+}
+
 trtllm_model_prepared() {
   local host_dir
 
@@ -6101,6 +6148,10 @@ case "$cmd" in
       bench-context)
         shift 2
         cmd_codex_bench_context "$@"
+        ;;
+      saturate-context)
+        shift 2
+        cmd_codex_saturate_context "$@"
         ;;
       *)
         shift
