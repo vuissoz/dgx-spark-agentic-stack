@@ -973,6 +973,22 @@ Les smoke tests CI restent bornés. Les benchmarks lourds ont une fenêtre dédi
 
 Une release est bloquée sur régression au-delà des budgets validés ou sur OOM, reboot, corruption, fuite de secret ou throttling durable.
 
+#### 15.3.2 Test de saturation contrôlée de la fenêtre Codex
+
+Ajouter un test dédié, distinct de L17, qui charge progressivement les œuvres complètes de Jules Verne dans une session Codex unique jusqu’à un seuil configurable proche de la fenêtre de contexte, sans dépasser brutalement la limite ni mettre la DGX Spark en danger.
+
+Le test devra :
+
+- utiliser un corpus Gutenberg versionné ou dont les empreintes sont enregistrées ;
+- charger les textes par morceaux et mesurer `input_tokens`, `cached_input_tokens` et `context_fill_percent` à chaque tour ;
+- viser par défaut 90 %, avec un seuil d’arrêt dur configurable avant 100 % ;
+- interrompre proprement la campagne si Codex refuse un tour, si la mémoire disponible passe sous la réserve ou si le watchdog signale une pression ;
+- produire un rapport JSON/Markdown indiquant le dernier tour accepté, le pic d’occupation, les œuvres et morceaux chargés, les digests, le modèle et la fenêtre configurée ;
+- rester opt-in et ne jamais faire partie des smoke tests ou de la suite CI standard ;
+- vérifier qu’un dépassement contrôlé est signalé comme résultat attendu, et non comme panne silencieuse.
+
+Le test doit être reproductible avec un manifest local, un mode dry-run de calcul de campagne et un timeout global. La validation live sur DGX Spark est requise avant de conclure sur la capacité réelle de saturation.
+
 ### 15.4 Boucles d’optimisation automatique de l’implémentation v2
 
 **DÉCISION :** l’implémentation de la v2 est pilotée par deux boucles automatiques complémentaires et normatives :
