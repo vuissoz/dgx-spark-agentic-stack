@@ -947,6 +947,28 @@ La baseline attend une DGX Spark ARM64 avec 128 Go de mémoire unifiée ; les ca
 
 Coupe-circuits : température, erreurs GPU, mémoire disponible, swap, disque et latence du contrôle. La montée en charge est progressive, avec cooldown. Les seuils d’admission sont dérivés des mesures en réservant explicitement les ressources de l’OS et des services critiques.
 
+#### 15.3.1 Watchdog RAM/VRAM du chemin `rootless-dev`
+
+Le chemin quotidien `rootless-dev` doit disposer d’un watchdog de ressources capable d’arrêter préventivement un conteneur avant qu’une croissance mémoire ne bloque la DGX Spark. La mémoire RAM et la mémoire GPU sont deux budgets distincts : la VRAM est commune aux conteneurs GPU et doit être surveillée globalement, même lorsque l’usage ne peut pas être attribué parfaitement à un seul conteneur.
+
+**DÉCISION :** le watchdog est un processus utilisateur côté hôte, lancé et arrêté par le wrapper `./agent`, et non un conteneur privilégié. Il ne monte jamais `docker.sock` dans un conteneur et ne requiert aucune modification permanente du système (pas de service système, cron, `daemon.json`, `sysctl` ou règle réseau). `./agent up` le démarre après convergence du stack ; `./agent stop`, `./agent down` et le nettoyage rootless l’arrêtent. S’il ne voit plus de conteneur du projet pendant une période de grâce, il se termine seul.
+
+Un autostart utilisateur `systemd --user` est une option explicite, installée uniquement par `./agent memory install-autostart` et supprimable par `./agent memory uninstall-autostart`. Après reboot, le watchdog n’est donc présent automatiquement que si cette option a été activée ; dans tous les cas il reste dormant lorsque le stack est arrêté.
+
+Le watchdog doit :
+
+- lire la consommation et les limites RAM par conteneur via Docker/cgroups, ainsi que la mémoire disponible et la pression mémoire de l’hôte ;
+- lire la VRAM totale, utilisée et libre via NVML/`nvidia-smi` ou DCGM, conserver une réserve GPU configurable et détecter les processus CUDA ;
+- associer les PID GPU aux cgroups/conteneurs lorsque le runtime le permet, avec un mode dégradé global lorsque l’attribution est incertaine ;
+- appliquer des seuils d’alerte et d’arrêt avec hystérésis, durée de dépassement et arrêt gracieux puis forcé ;
+- sélectionner une victime selon des labels de priorité (`preemptible`, `normal`, `critical`), arrêter en premier les workloads optionnels et placer la victime en quarantaine pour empêcher un redémarrage immédiat ;
+- écrire un journal append-only dans `${AGENTIC_ROOT}/logs`, exposer un état lisible par `agent memory status` et produire des métriques d’observabilité ;
+- fonctionner en `--dry-run` avant activation de la préemption réelle.
+
+Les seuils et la réserve GPU sont dérivés des mesures matérielles effectives et configurables par environnement ; aucune capacité de 128 Go de mémoire unifiée ni quantité fixe de VRAM ne doit être supposée. Le watchdog est une deuxième ligne de défense : les `mem_limit`, les limites de concurrence, les tailles de contexte et les politiques de modèles restent obligatoires.
+
+La validation doit couvrir le lancement et l’arrêt liés au cycle de vie Compose, le reboot avec et sans autostart utilisateur, la détection RAM, la détection VRAM commune, l’attribution dégradée, la quarantaine anti-restart et l’arrêt avant épuisement de la mémoire hôte. Un test consommant volontairement RAM ou VRAM est opt-in et séparé des smoke tests.
+
 Les smoke tests CI restent bornés. Les benchmarks lourds ont une fenêtre dédiée et ne chargent jamais plusieurs gros modèles sans admission. Les artefacts enregistrent firmware, noyau, driver, digests, modèles, versions et commit.
 
 Une release est bloquée sur régression au-delà des budgets validés ou sur OOM, reboot, corruption, fuite de secret ou throttling durable.
