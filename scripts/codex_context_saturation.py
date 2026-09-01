@@ -81,6 +81,17 @@ def write_report(output_dir: Path, payload: dict) -> tuple[Path, Path]:
     return report_path, json_path
 
 
+def safe_chunk_chars(previous_tokens: int, context_window: int, hard_stop_percent: float) -> int:
+    """Reserve framing/headroom and cap text using a deliberately conservative ratio."""
+    hard_stop_tokens = math.floor(context_window * hard_stop_percent / 100.0)
+    available_tokens = hard_stop_tokens - previous_tokens - 4096
+    if available_tokens <= 2000:
+        return 0
+    # Live Codex turns can account for more than one token per source character
+    # once session framing and resumed history are included. Two is intentional.
+    return max(1000, math.floor(available_tokens / 2.0))
+
+
 def main() -> int:
     args = parse_args()
     context_window = configured_context_window(args.context_window)
@@ -168,37 +179,51 @@ def main() -> int:
     peak = 0.0
     turn_index = 0
     for book in books:
-        for part_index, chunk in enumerate(book.pop("_chunks"), start=1):
-            # Do not start a turn whose conservative estimate would cross the
-            # hard stop. The actual Codex-reported usage remains authoritative.
-            previous_tokens = accepted[-1]["input_tokens"] if accepted else 0
-            estimated_tokens = previous_tokens + math.ceil(len(chunk) / 3) + 256
-            estimated_fill = context_fill_percent(estimated_tokens, context_window) or 0.0
-            if estimated_fill >= args.hard_stop_percent:
-                status = "hard-stop-preflight"
-                break
-            turn_index += 1
-            output_jsonl = turns_dir / f"{turn_index:04d}-{book['id']}-part-{part_index:04d}.jsonl"
-            result = run_codex_turn(
-                codex_container=args.codex_container,
-                prompt=build_load_prompt(book, chunk, part_index, book["chunks"]),
-                output_jsonl=output_jsonl,
-                timeout_sec=args.request_timeout_sec,
-                session_id=session_id,
-                model=args.model,
-                workdir=args.workdir,
-            )
-            session_id = str(result["thread_id"])
-            input_tokens = int(result["usage"].get("input_tokens") or 0)
-            fill = context_fill_percent(input_tokens, context_window)
-            accepted.append({"turn_index": turn_index, "book": book["title"], "part_index": part_index, "chunk_chars": len(chunk), "input_tokens": input_tokens, "cached_input_tokens": int(result["usage"].get("cached_input_tokens") or 0), "context_fill_percent": fill, "output_jsonl": str(output_jsonl)})
-            peak = max(peak, fill or 0.0)
-            print_verbose(f"[saturation] {book['title']} part={part_index} input_tokens={input_tokens} fill={fill}%", enabled=args.verbose)
-            if fill is not None and fill >= args.hard_stop_percent:
-                status = "hard-stop-observed"
-                break
-            if fill is not None and fill >= args.target_percent:
-                status = "target-reached"
+        part_index = 0
+        for original_chunk in book.pop("_chunks"):
+            pending_chunk = original_chunk
+            while pending_chunk:
+                previous_tokens = accepted[-1]["input_tokens"] if accepted else 0
+                # Size toward the target; the independent hard-stop preflight
+                # below remains the final safety gate.
+                chunk_limit = safe_chunk_chars(previous_tokens, context_window, args.target_percent)
+                if chunk_limit <= 0:
+                    status = "hard-stop-preflight"
+                    break
+                chunk = pending_chunk[:chunk_limit]
+                pending_chunk = pending_chunk[len(chunk):]
+                part_index += 1
+                # Do not start a turn whose conservative estimate would cross
+                # the hard stop. The actual Codex-reported usage remains authoritative.
+                estimated_tokens = previous_tokens + math.ceil(len(chunk) * 2) + 4096
+                estimated_fill = context_fill_percent(estimated_tokens, context_window) or 0.0
+                if estimated_fill >= args.hard_stop_percent:
+                    status = "hard-stop-preflight"
+                    break
+                turn_index += 1
+                output_jsonl = turns_dir / f"{turn_index:04d}-{book['id']}-part-{part_index:04d}.jsonl"
+                result = run_codex_turn(
+                    codex_container=args.codex_container,
+                    prompt=build_load_prompt(book, chunk, part_index, book["chunks"]),
+                    output_jsonl=output_jsonl,
+                    timeout_sec=args.request_timeout_sec,
+                    session_id=session_id,
+                    model=args.model,
+                    workdir=args.workdir,
+                )
+                session_id = str(result["thread_id"])
+                input_tokens = int(result["usage"].get("input_tokens") or 0)
+                fill = context_fill_percent(input_tokens, context_window)
+                accepted.append({"turn_index": turn_index, "book": book["title"], "part_index": part_index, "chunk_chars": len(chunk), "input_tokens": input_tokens, "cached_input_tokens": int(result["usage"].get("cached_input_tokens") or 0), "context_fill_percent": fill, "output_jsonl": str(output_jsonl)})
+                peak = max(peak, fill or 0.0)
+                print_verbose(f"[saturation] {book['title']} part={part_index} input_tokens={input_tokens} fill={fill}%", enabled=args.verbose)
+                if fill is not None and fill >= args.hard_stop_percent:
+                    status = "hard-stop-observed"
+                    break
+                if fill is not None and fill >= args.target_percent:
+                    status = "target-reached"
+                    break
+            if status != "corpus-exhausted":
                 break
         if status != "corpus-exhausted":
             break
