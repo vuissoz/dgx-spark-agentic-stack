@@ -17,7 +17,7 @@ Les fichiers Compose sont dans `compose/`:
 - `compose/compose.ui.yml`: `optional-forgejo`, `optional-forgejo-loopback`, `openwebui`, `openhands`, `comfyui`
 - `compose/compose.obs.yml`: `prometheus`, `grafana`, `loki`, exporters
 - `compose/compose.rag.yml`: `qdrant`, `rag-retriever`, `rag-worker`, `opensearch` (profile `rag-lexical`)
-- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`
+- `compose/compose.optional.yml`: `optional-sentinel`, `optional-mcp-catalog`, `optional-pi-mono`, `optional-goose`, `optional-portainer`, `optional-n8n`, `optional-n8n-loopback` et le profil local `optional-n8n-ai` (sandbox en VM Multipass, SearXNG)
 
 ## Profils d'exécution
 
@@ -72,12 +72,12 @@ Commandes operateur TRT:
 Un seul modele TRT est expose par la stack a la fois sur DGX Spark.
 Au premier démarrage natif, le backend peut rester plusieurs minutes en `status=starting` pendant le téléchargement/chargement Hugging Face; tant que `native_ready=false`, les requêtes gate reçoivent une `503` explicite au lieu de retomber silencieusement sur un mock.
 Le routage modèle -> backend reste centralisé dans `ollama-gate` via `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
-Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `nemotron-cascade-2:30b`) et réutilisé pour le preload Ollama.
+Le modèle local par défaut est piloté par `AGENTIC_DEFAULT_MODEL` (fallback `qwen3.8:27b`) et réutilisé pour le preload Ollama.
 La stack émet un avertissement explicite si vous choisissez `qwen3.5:35b`: au 26 mars 2026, nos runs locaux Codex/OpenHands ont déjà observé des pseudo balises d'outils au lieu de vrais tool calls, même si le modèle est annoncé avec support `tools` upstream sur Ollama. Le modèle n'est plus bloqué, car le problème est traité comme un bug d'intégration à corriger côté stack.
 La fenêtre de contexte est pilotée par `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (défaut `50909`) et propagée vers `OLLAMA_CONTEXT_LENGTH`.
 Quand `./agent onboard` peut lire les métadonnées Ollama du modèle choisi, il propose automatiquement la fenêtre maximale estimée qui tient dans `AGENTIC_LIMIT_OLLAMA_MEM`; sinon il retombe sur le défaut du dépôt `50909`.
 `./agent doctor` remonte aussi cette fenêtre maximale estimée pour aider à corriger un contexte trop grand.
-`./agent context show` affiche la politique runtime effective; `./agent context set <tokens>` persiste la fenêtre de contexte dans `${AGENTIC_ROOT}/deployments/runtime.env`, aligne `OLLAMA_CONTEXT_LENGTH` et `AGENTIC_GOOSE_CONTEXT_LIMIT`, puis recalcule `AGENTIC_CONTEXT_BUDGET_TOKENS` ainsi que les seuils de compaction dérivés.
+`./agent context show` affiche la politique runtime effective et identifie explicitement le provider/modèle/fenêtre OpenClaw actif géré par la stack ; il ne déduit pas le contexte actif depuis des entrées de catalogue distant non liées. `./agent context set <tokens>` persiste la fenêtre de contexte dans `${AGENTIC_ROOT}/deployments/runtime.env`, aligne `OLLAMA_CONTEXT_LENGTH` et `AGENTIC_GOOSE_CONTEXT_LIMIT`, puis recalcule `AGENTIC_CONTEXT_BUDGET_TOKENS` ainsi que les seuils de compaction dérivés.
 Pour Goose (`optional-goose`), la limite de contexte client est pilotée séparément par `AGENTIC_GOOSE_CONTEXT_LIMIT` (défaut: `${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW}`) et propagée vers `GOOSE_CONTEXT_LIMIT`.
 La stack publie aussi une politique commune de compaction dérivée du budget de contexte effectif: `AGENTIC_CONTEXT_BUDGET_TOKENS`, `AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS` (politique par défaut `75%`) et `AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS` (politique par défaut `90%`). `codex` reçoit le seuil `soft` via `auto_compact_token_limit`, et `goose` / `openhands` reçoivent les mêmes seuils sous forme d’indices runtime.
 
@@ -99,7 +99,7 @@ Dossiers persistants clés:
 - `rag/{qdrant,qdrant-snapshots,docs,scripts,retriever/{state,logs},worker/{state,logs},opensearch,opensearch-logs}/`
 - `{claude,codex,opencode,kilocode,vibestral,hermes}/{state,logs,workspaces}/`
 - `openclaw/{config/{immutable,overlay},state,logs,relay/{state,logs},sandbox/{state,workspaces},workspaces}/`
-- `optional/{git,mcp,pi-mono,goose,portainer}/...`
+- `optional/{git,mcp,pi-mono,goose,portainer,n8n}/...`
 - `deployments/{releases,current}/`
 - `secrets/`
 - `shared-ro/`, `shared-rw/`
@@ -388,7 +388,7 @@ agent update
 agent rollback all <release_id>
 agent rollback host-net <backup_id>
 agent rollback ollama-link <backup_id|latest>
-agent repo-e2e [--agents <csv>] [--repo <name>] [--clone-url <url>] [--artifacts-dir <path>] [--attempts <int>] [--reset-agent-branches] [--dry-run]
+agent repo-e2e [--agents <csv>] [--repo <name>] [--clone-url <url>] [--artifacts-dir <path>] [--attempts <int>] [--reset-agent-branches] [--dry-run] [--verbose|-v]
 agent onboard [--profile ... --root ... --compose-project ... --network ... --egress-network ... --ollama-models-dir ... --default-model ... --grafana-admin-user ... --grafana-admin-password ... --openwebui-allow-model-pull <true|false> --huggingface-token ... --openclaw-init-project ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --limits-default-cpus ... --limits-default-mem ... --limits-core-cpus ... --limits-core-mem ... --limits-agents-cpus ... --limits-agents-mem ... --limits-ui-cpus ... --limits-ui-mem ... --limits-obs-cpus ... --limits-obs-mem ... --limits-rag-cpus ... --limits-rag-mem ... --limits-optional-cpus ... --limits-optional-mem ... --output ... --non-interactive]
 agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
 agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
@@ -438,7 +438,7 @@ Exemples:
 ```
 
 Notes:
-- `agent repo-e2e` diffuse maintenant une progression live sur `stderr` et conserve le JSON final sur `stdout`. En mode live avec OpenClaw sélectionné, la commande échoue immédiatement si `repo.eight_queens.solve` n'est pas présent dans l'allowlist d'outils effective OpenClaw.
+- `agent repo-e2e` diffuse maintenant une progression live sur `stderr` et conserve le JSON final sur `stdout`. En mode live avec OpenClaw sélectionné, la commande échoue immédiatement si le solveur revu du scénario (`repo.eight_queens.solve` ou `repo.normalize_identifier.solve`) n'est pas présent dans l'allowlist d'outils effective OpenClaw.
 - Les conteneurs agents baseline publient maintenant `/state/bootstrap/known-local-tools.md` et `/state/bootstrap/known-local-tools.json` ; les prompts `repo-e2e` s'appuient sur ces manifests pour orienter les agents vers un jeu de commandes shell local revu au lieu d'inventer des schémas d'outils.
 - `repo-e2e` injecte aussi des fichiers d'instructions locaux ignores dans chaque workspace clone (`AGENTS.md`, `AGENT.md`, `SKILLS.md`, plus un fichier specifique au harness comme `CLAUDE.md` ou `CODEX.md`) afin que chaque CLI voie d'abord des consignes de depot locales.
 - `kilocode` recoit maintenant un budget effectif d'invocation `repo-e2e` plus large (`1800s` minimum) avant d'etre classe en timeout ; les valeurs demandee et effective sont tracees dans les artefacts par agent.
@@ -478,7 +478,7 @@ Préchargement avec préservation du mode de mount courant (`rw`/`ro`):
 ```bash
 ./agent ollama-preload
 ./agent ollama-models status
-./agent ollama unload qwen3-coder:30b
+./agent ollama unload qwen3.8:27b
 ./agent ollama-models ro
 ./agent ollama-models rw
 ```
@@ -526,6 +526,15 @@ consommés par les noeuds Flux de ComfyUI :
 - `models/text_encoders/clip_l.safetensors`
 - `models/text_encoders/t5xxl_fp16.safetensors`
 
+Exemple de téléchargement direct via la CLI Comfy (depuis un shell `./agent comfyui`) :
+
+```bash
+comfy model download \
+  --url "https://huggingface.co/Comfy-Org/FLUX.1-Krea-dev_ComfyUI/resolve/main/split_files/diffusion_models/flux1-krea-dev_fp8_scaled.safetensors" \
+  --relative-path models/diffusion_models \
+  --filename flux1-krea-dev_fp8_scaled.safetensors
+```
+
 Sans `--hf-token-file`, le script lit automatiquement `${AGENTIC_ROOT}/secrets/runtime/huggingface.token` si present.
 
 Notes:
@@ -534,6 +543,29 @@ Notes:
 - Le runtime ComfyUI est persistant via un mount hôte unique `${AGENTIC_ROOT}/comfyui:/comfyui`.
 - En `rootless-dev` sur `arm64`, la stack publie un diagnostic explicite dans `${AGENTIC_ROOT}/comfyui/user/agentic-runtime/torch-runtime.json`; si aucun backend CUDA effectif n'est détecté, ComfyUI démarre volontairement en `--cpu`.
 - Smoke test e2e Flux : `bash tests/I3_comfyui_flux_generate.sh`
+
+### Dépannage Flux
+
+N’exécutez qu’un seul processus ComfyUI géré par la stack pour une racine runtime.
+Vérifiez-le avant d’envoyer un autre prompt Flux :
+
+```bash
+docker ps --filter name=comfyui --format 'table {{.Names}}\t{{.Status}}'
+docker inspect --format '{{.RestartCount}}' "$(docker ps -q --filter name=comfyui | head -n1)"
+```
+
+Le graphe de référence est celui de `tests/I3_comfyui_flux_generate.sh` :
+`UNETLoader` (`flux1-dev.safetensors`), `DualCLIPLoader` avec `type=flux`,
+`CLIPTextEncodeFlux`, `VAELoader` (`ae.safetensors`) et `SaveImage`. Un I3 réussi
+écrit un PNG et laisse `RestartCount` inchangé : c’est l’oracle de succès.
+
+`clip missing: ['text_projection.weight']` n’est à lui seul ni un succès ni un
+échec : l’amont le rapporte avec des exécutions Flux fonctionnelles comme avec des
+combinaisons CLIP/graphe incompatibles. Ne le traitez comme non bloquant que si le
+graphe I3 de référence termine et écrit son PNG ; sinon conservez le prompt,
+l’historique et `./agent logs comfyui` comme preuve d’échec. N’utilisez pas
+ComfyUI-Manager pour se mettre à jour lui-même dans l’image immuable : passez par
+le workflow d’image/update revu.
 
 Test e2e du modèle par défaut (Ollama, gate, agents, OpenWebUI, OpenHands):
 
@@ -642,8 +674,24 @@ Variables injectées dans les conteneurs agents:
 Activation explicite:
 
 ```bash
-AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer ./agent up optional
+AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer,n8n ./agent up optional
 ```
+
+Assistant n8n entièrement local (modèle Ollama, sandbox en VM et recherche
+SearXNG préconfigurés automatiquement) :
+
+```bash
+export AGENTIC_N8N_AI_MODEL=qwen3.8:27b
+./agent n8n-sandbox-vm create
+AGENTIC_OPTIONAL_MODULES=n8n-ai ./agent up optional
+```
+
+La VM CPU-only utilise par défaut 4 vCPU, 8 Gio de RAM et 60 Gio de disque
+sparse. Sysbox reste exclusivement dans la VM et le runtime NVIDIA de l'hôte
+n'est pas modifié. Les installations `apt`/`npm`/`pip` et les outils réseau des
+sandboxes passent par le Squid monitoré du stack ; l'egress direct est bloqué.
+Procédure complète :
+`docs/runbooks/n8n-local-ai-sandbox.md`.
 
 OpenClaw fait désormais partie du `core` et démarre via:
 
@@ -657,8 +705,11 @@ Préconditions (runtime) pour les modules optionnels restants:
   - `${AGENTIC_ROOT}/deployments/optional/pi-mono.request`
   - `${AGENTIC_ROOT}/deployments/optional/goose.request`
   - `${AGENTIC_ROOT}/deployments/optional/portainer.request`
+  - `${AGENTIC_ROOT}/deployments/optional/n8n.request`
+  - `${AGENTIC_ROOT}/deployments/optional/n8n-ai.request`
 - secret optionnel restant:
   - `${AGENTIC_ROOT}/secrets/runtime/mcp.token`
+  - `${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/{api.key,registration.token,runner.key,searxng.key}`
 
 Préconditions (runtime) pour OpenClaw core:
 - secrets:
@@ -678,6 +729,7 @@ Préconditions (runtime) pour OpenClaw core:
 ## Validation
 
 - Diagnostic global: `./agent doctor`
+- Vérification de drift structurel README EN/FR: `python3 scripts/check_readme_translation_drift.py`
 - Probe explicite stream tool-calls (codex, claude, openhands, opencode, openclaw, pi-mono, goose): `./agent doctor --check-tool-stream-e2e`
 - Orchestrateur E2E multi-agents piloté par dépôt: `./agent repo-e2e` (repo bootstrapé par `git-forge`: `eight-queens-agent-e2e`)
 - Vérification Goose (contrat contexte + bannière alignée avec `AGENTIC_GOOSE_CONTEXT_LIMIT`): `./agent test K`

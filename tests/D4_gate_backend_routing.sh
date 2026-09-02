@@ -36,8 +36,8 @@ wait_for_container_ready "${toolbox_cid}" 30 || fail "toolbox is not ready"
 wait_for_container_ready "${gate_cid}" 90 || fail "ollama-gate is not ready"
 wait_for_container_ready "${trt_cid}" 120 || fail "trtllm is not ready"
 
-gate_log="${AGENTIC_ROOT:-/srv/agentic}/gate/logs/gate.jsonl"
-[[ -e "${gate_log}" ]] || fail "gate log file missing: ${gate_log}"
+gate_log="$(resolve_gate_log_path "${gate_cid}")" \
+  || fail "unable to resolve the active gate audit-log path"
 
 call_chat() {
   local session="$1"
@@ -62,9 +62,20 @@ extract_body() {
 assert_log_backend() {
   local session="$1"
   local expected_backend="$2"
-  local line
+  local line=""
+  local elapsed=0
 
-  line="$(grep "\"session\":\"${session}\"" "${gate_log}" | tail -n 1 || true)"
+  # The audit file is created on the first decision. Do not require a stale
+  # pre-existing file from a previous run, but do wait for the decision made by
+  # this test and fail if durable correlation is absent.
+  while (( elapsed < 10 )); do
+    if [[ -f "${gate_log}" ]]; then
+      line="$(grep "\"session\":\"${session}\"" "${gate_log}" | tail -n 1 || true)"
+      [[ -n "${line}" ]] && break
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
   [[ -n "${line}" ]] || fail "no gate log entry found for session ${session}"
   printf '%s\n' "${line}" | grep -q "\"backend\":\"${expected_backend}\"" \
     || fail "unexpected backend for session ${session} (expected=${expected_backend}, line=${line})"

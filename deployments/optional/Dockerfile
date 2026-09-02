@@ -86,7 +86,7 @@ RUN install -d -m 0755 "${OPENCLAW_PREFIX}" /etc/agentic \
   && bash "${tmp_script}" --prefix "${OPENCLAW_PREFIX}" --version "${OPENCLAW_INSTALL_VERSION}" --no-onboard \
   && rm -f "${tmp_script}" \
   && test -x "${OPENCLAW_PREFIX}/bin/openclaw" \
-  && python3 /app/patch_openclaw_ddg.py --require-match "${OPENCLAW_PREFIX}" \
+  && python3 /app/patch_openclaw_ddg.py --allow-missing "${OPENCLAW_PREFIX}" \
   && printf '%s\n' "${OPENCLAW_PREFIX}/bin/openclaw" >/etc/agentic/openclaw-real-path \
   && chmod 0644 /etc/agentic/openclaw-real-path \
   && install -m 0755 /app/openclaw_wrapper.sh /usr/local/bin/openclaw \

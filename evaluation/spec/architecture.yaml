@@ -1,0 +1,47 @@
+{
+  "schema_version": "v2-architecture.v0",
+  "source": "PLAN.md sections 3, 4, 5, and 13",
+  "boundaries": [
+    {
+      "boundary_id": "control_plane",
+      "kind": "trusted-control",
+      "responsibilities": ["users", "projects", "roles", "desired-runtime-state", "audit", "scheduling"],
+      "must_not_own": ["native-harness-session-state", "model-files", "qdrant-index-data", "application-private-databases"]
+    },
+    {
+      "boundary_id": "agent_runtime",
+      "kind": "code-execution",
+      "responsibilities": ["sandbox-lifecycle", "workspace-mounts", "process-limits", "runtime-observation"],
+      "must_not_own": ["global-model-catalog", "project-quotas", "secret-source-of-truth"]
+    },
+    {
+      "boundary_id": "model_broker",
+      "kind": "managed-service",
+      "responsibilities": ["model-catalog", "routing", "usage", "quotas", "fallback", "backend-health"],
+      "must_not_own": ["user-secrets", "native-agent-sessions"]
+    },
+    {
+      "boundary_id": "rag_adapter",
+      "kind": "managed-service-adapter",
+      "responsibilities": ["v1-rag-health", "retrieve", "index-task-status", "snapshot-restore"],
+      "must_not_own": ["source-document-truth", "project-acl-source-of-truth"]
+    }
+  ],
+  "mutable_sources_of_truth": [
+    {"domain": "users-projects-roles", "owner": "control_plane_postgresql"},
+    {"domain": "runtime-desired-state", "owner": "control_plane"},
+    {"domain": "runtime-observed-state", "owner": "agent_runtime_adapter"},
+    {"domain": "native-sessions", "owner": "harness_native_store"},
+    {"domain": "models", "owner": "global_model_store"},
+    {"domain": "secrets", "owner": "secret_store"},
+    {"domain": "rag-source-documents", "owner": "original_source_location"},
+    {"domain": "release-artifacts", "owner": "deployments_releases"}
+  ],
+  "forbidden_patterns": [
+    "double-write mutable state between v1 and v2",
+    "agent containers mounting docker.sock",
+    "agent direct access to model backends",
+    "hidden egress outside the approved broker or proxy",
+    "retiring a v1 capability without a decision and regression test"
+  ]
+}

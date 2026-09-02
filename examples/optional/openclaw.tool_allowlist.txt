@@ -6,3 +6,4 @@ attachments.list
 attachments.read_text
 attachments.transcribe_audio
 repo.eight_queens.solve
+repo.normalize_identifier.solve

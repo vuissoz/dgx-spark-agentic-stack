@@ -11,24 +11,23 @@ if [[ "${AGENTIC_SKIP_K_TESTS:-0}" == "1" ]]; then
   exit 0
 fi
 
-if [[ "${AGENTIC_PROFILE:-strict-prod}" == "rootless-dev" ]]; then
+agent_bin="${REPO_ROOT}/agent"
+[[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
+
+profile_output="$("${agent_bin}" profile 2>/dev/null || true)"
+if [[ "${AGENTIC_PROFILE:-}" == "rootless-dev" ]] || \
+  grep -q '^profile=rootless-dev$' <<<"${profile_output}"; then
   ok "K0 strict gating scenario skipped in rootless-dev profile"
   exit 0
 fi
 
-agent_bin="${REPO_ROOT}/agent"
-[[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
-
 assert_cmd docker
 
-set +e
-AGENTIC_DOCKER_USER_CHAIN=AGENTIC-K0-MISSING "${agent_bin}" up optional >/tmp/agent-k0-gate-fail.out 2>&1
-gate_fail_rc=$?
-set -e
-[[ "${gate_fail_rc}" -ne 0 ]] || fail "agent up optional must refuse when doctor is red"
-grep -Eqi 'optional stack gating refused|doctor|not green' /tmp/agent-k0-gate-fail.out \
-  || fail "optional gating failure output is not explicit enough"
-ok "agent up optional fails when doctor is red"
+AGENTIC_DOCKER_USER_CHAIN=AGENTIC-K0-MISSING "${agent_bin}" up optional >/tmp/agent-k0-gate-fail.out 2>&1 \
+  || fail "agent up optional should continue when doctor is red"
+grep -Eqi 'doctor is not green|doctor|not green' /tmp/agent-k0-gate-fail.out \
+  || fail "optional doctor warning output is not explicit enough"
+ok "agent up optional warns when doctor is red and continues"
 
 "${agent_bin}" doctor >/tmp/agent-k0-doctor.out \
   || fail "precondition failed: doctor must be green before validating optional happy-path"

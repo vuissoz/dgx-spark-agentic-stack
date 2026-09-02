@@ -56,7 +56,7 @@ services:
       RAG_QDRANT_URL: http://qdrant:6333
       RAG_GATE_URL: http://ollama-gate:11435
       RAG_OPENSEARCH_URL: http://opensearch:9200
-      RAG_COLLECTION: ${RAG_COLLECTION:-agentic_docs}
+      RAG_COLLECTION: ${RAG_PROJECT_PREFIX:+${RAG_PROJECT_PREFIX}-}${RAG_COLLECTION:-personal-docs}
       RAG_LEXICAL_INDEX: ${RAG_LEXICAL_INDEX:-agentic_docs}
       RAG_EMBED_MODEL: ${RAG_EMBED_MODEL:-qwen3-embedding:0.6b}
       RAG_GATE_DRY_RUN: ${RAG_GATE_DRY_RUN:-1}
@@ -116,7 +116,7 @@ services:
       RAG_QDRANT_URL: http://qdrant:6333
       RAG_GATE_URL: http://ollama-gate:11435
       RAG_OPENSEARCH_URL: http://opensearch:9200
-      RAG_COLLECTION: ${RAG_COLLECTION:-agentic_docs}
+      RAG_COLLECTION: ${RAG_PROJECT_PREFIX:+${RAG_PROJECT_PREFIX}-}${RAG_COLLECTION:-personal-docs}
       RAG_LEXICAL_INDEX: ${RAG_LEXICAL_INDEX:-agentic_docs}
       RAG_EMBED_MODEL: ${RAG_EMBED_MODEL:-qwen3-embedding:0.6b}
       RAG_GATE_DRY_RUN: ${RAG_GATE_DRY_RUN:-1}

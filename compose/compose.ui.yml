@@ -1,6 +1,9 @@
 services:
   optional-forgejo:
     image: codeberg.org/forgejo/forgejo:14-rootless
+    # Intentionally no read_only: Forgejo rootless needs writable rootfs paths
+    # for SSH and application runtime state. Keep this exception aligned with
+    # scripts/lib/runtime.sh and docs/decisions/ADR-0098-forgejo-rootless-permission-fix.md.
     entrypoint:
       - /bin/sh
       - -c
@@ -192,6 +195,9 @@ services:
     build:
       context: ..
       dockerfile: deployments/images/openhands/Dockerfile
+    profiles:
+      - m7
+      - ui
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_OPENHANDS_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_OPENHANDS_MEM:-2g}
@@ -227,14 +233,18 @@ services:
       OH_APP_CONVERSATION_SANDBOX_STARTUP_POLL_FREQUENCY: "1"
       OH_PROCESS_SANDBOX_MAX_ACTIVE: "${OH_PROCESS_SANDBOX_MAX_ACTIVE:-2}"
       OH_APP_CONVERSATION_INIT_GIT_IN_EMPTY_WORKSPACE: "0"
+      # The V1 app uses these defaults to create settings.json. The Forgejo
+      # bootstrap also reconciles existing settings before every managed up.
+      OH_GIT_USER_NAME: OpenHands
+      OH_GIT_USER_EMAIL: openhands@forge.agentic.local
       OH_SANDBOX_SPEC_SPECS_0: '{"id":"ghcr.io/openhands/agent-server:c775ff6-python","command":["python","-m","openhands.agent_server"],"initial_env":{"OH_ENABLE_VS_CODE":"0","OH_CONVERSATIONS_PATH":"/workspace/conversations"},"working_dir":"/workspace"}'
       OH_WEBHOOKS_0_BASE_URL: "${OH_WEBHOOKS_BASE_URL:-http://127.0.0.1:3000/api/v1/webhooks}"
       OH_WEBHOOKS_0_EVENT_BUFFER_SIZE: "${OH_WEBHOOKS_EVENT_BUFFER_SIZE:-1}"
       OH_WEBHOOKS_0_FLUSH_DELAY: "${OH_WEBHOOKS_FLUSH_DELAY:-1.0}"
       LLM_BASE_URL: http://ollama-gate:11435/v1
-      AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
+      AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}
       AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}
-      AGENTIC_AGENT_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}}
+      AGENTIC_AGENT_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}
       AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}
       OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}}
       AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT: ${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}
@@ -308,8 +318,11 @@ services:
       NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,localhost,127.0.0.1
       XDG_CACHE_HOME: /tmp/.cache
       HF_HOME: /tmp/.cache/huggingface
+      COMFYUI_ALLOWED_PLUGINS: ${COMFYUI_ALLOWED_PLUGINS:-ComfyUI-Manager}
     labels:
-      - agentic.gpu-profile=lowprio
+      agentic.gpu-profile: "lowprio"
+      agentic.resource.gpu: "true"
+      agentic.resource.priority: "preemptible"
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/comfyui:/comfyui
       - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/comfyui.password:/run/secrets/git-forge.password:ro
@@ -333,7 +346,10 @@ services:
       - agentic
 
   comfyui-loopback:
-    image: nginxinc/nginx-unprivileged:1.27-alpine
+    image: agentic/comfyui-loopback:local
+    build:
+      context: ..
+      dockerfile: deployments/images/comfyui-loopback/Dockerfile
     restart: unless-stopped
     cpus: ${AGENTIC_LIMIT_COMFYUI_LOOPBACK_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_COMFYUI_LOOPBACK_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
@@ -345,6 +361,11 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    environment:
+      COMFYUI_AUTH_USERNAME: ${COMFYUI_AUTH_USERNAME:-admin}
+      COMFYUI_AUTH_PASSWORD_FILE: /run/secrets/comfyui.auth_password
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/comfyui.auth_password:/run/secrets/comfyui.auth_password:ro
     depends_on:
       comfyui:
         condition: service_healthy
@@ -352,11 +373,41 @@ services:
       - /bin/sh
       - -ec
       - |
+        umask 077
         mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
+        username="$${COMFYUI_AUTH_USERNAME:-}"
+        password_file="$${COMFYUI_AUTH_PASSWORD_FILE:-/run/secrets/comfyui.auth_password}"
+        if ! printf '%s' "$$username" | grep -Eq '^[A-Za-z0-9._-]+$$'; then
+          echo 'COMFYUI_AUTH_USERNAME must contain only letters, digits, dot, underscore, or hyphen' >&2
+          exit 1
+        fi
+        if [ ! -r "$$password_file" ]; then
+          echo 'ComfyUI authentication password file is missing or unreadable' >&2
+          exit 1
+        fi
+        password="$$(tr -d '\r\n' <"$$password_file")"
+        if [ -z "$$password" ] || [ "$$password" = 'change-me' ]; then
+          echo 'ComfyUI authentication password file is empty or insecure' >&2
+          exit 1
+        fi
+        if ! auth_hash="$$(printf '%s' "$$password" | openssl passwd -apr1 -stdin)"; then
+          echo 'failed to generate ComfyUI Basic Auth password hash' >&2
+          exit 1
+        fi
+        if [ -z "$$auth_hash" ]; then
+          echo 'ComfyUI Basic Auth password hash is empty' >&2
+          exit 1
+        fi
+        printf '%s:%s\n' "$$username" "$$auth_hash" > /tmp/nginx.htpasswd
+        chmod 600 /tmp/nginx.htpasswd
         cat >/tmp/nginx.conf <<'NGINX'
         pid /tmp/nginx.pid;
         events {}
         http {
+          # Docker recreates the backend on restart. Resolve its service name
+          # through Docker DNS at request time instead of retaining the stale
+          # container IP captured when nginx started.
+          resolver 127.0.0.11 valid=5s ipv6=off;
           map $$http_upgrade $$connection_upgrade {
             default upgrade;
             '' close;
@@ -369,13 +420,18 @@ services:
           server {
             listen 8188;
             location / {
-              proxy_pass http://comfyui:8188;
+              auth_basic "ComfyUI Authentication";
+              auth_basic_user_file /tmp/nginx.htpasswd;
+              set $$comfyui_upstream comfyui;
+              proxy_pass http://$$comfyui_upstream:8188;
               proxy_http_version 1.1;
               proxy_set_header Host comfyui;
               proxy_set_header Upgrade $$http_upgrade;
               proxy_set_header Connection $$connection_upgrade;
               proxy_read_timeout 3600s;
               proxy_send_timeout 3600s;
+              proxy_next_upstream error timeout invalid_header http_502 http_503 http_504;
+              proxy_next_upstream_tries 3;
               proxy_buffering off;
             }
           }
@@ -387,7 +443,12 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - wget -q -O- http://127.0.0.1:8188/ >/dev/null
+        - >
+          password="$$(tr -d '\r\n' <"$${COMFYUI_AUTH_PASSWORD_FILE}")";
+          auth_header="$$(printf '%s:%s' "$${COMFYUI_AUTH_USERNAME}" "$$password" | base64 | tr -d '\n')";
+          test -n "$$auth_header" &&
+          wget -q -S -O /dev/null --header "Authorization: Basic $$auth_header" http://127.0.0.1:8188/ 2>&1 |
+          grep -qE 'HTTP/1.[01] (200|302)' || exit 1
       interval: 30s
       timeout: 10s
       retries: 6
@@ -395,6 +456,156 @@ services:
     networks:
       - agentic
       - agentic-egress
+
+  jupyterlab:
+    image: jupyter/base-notebook:latest
+    profiles:
+      - m8
+      - ui
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_JUPYTERLAB_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_JUPYTERLAB_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-2g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    gpus: all
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      JUPYTER_TOKEN: ${JUPYTERLAB_TOKEN:-change-me}
+      JUPYTER_ENABLE_LAB: "True"
+      JUPYTER_NO_BROWSER: "True"
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama,ollama-gate,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/jupyterlab/data:/home/jovyan
+      - ${AGENTIC_ROOT:-/srv/agentic}/jupyterlab/config:/home/jovyan/.jupyter
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request,os;
+          token=os.environ.get("JUPYTER_TOKEN","");
+          r=urllib.request.urlopen("http://127.0.0.1:8888/api/status?token="+token, timeout=5);
+          sys.exit(0 if r.status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+    networks:
+      - agentic
+      - agentic-egress
+
+  jupyterlab-loopback:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    profiles:
+      - m8
+      - ui
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_JUPYTERLAB_LOOPBACK_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_JUPYTERLAB_LOOPBACK_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      jupyterlab:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
+        cat >/tmp/nginx.conf <<'NGINX'
+        pid /tmp/nginx.pid;
+        events {}
+        http {
+          client_body_temp_path /tmp/client_temp;
+          proxy_temp_path /tmp/proxy_temp;
+          fastcgi_temp_path /tmp/fastcgi_temp;
+          uwsgi_temp_path /tmp/uwsgi_temp;
+          scgi_temp_path /tmp/scgi_temp;
+          server {
+            listen 8888;
+            location / {
+              set $$jupyterlab_upstream jupyterlab;
+              proxy_pass http://$$jupyterlab_upstream:8888;
+              proxy_http_version 1.1;
+              proxy_set_header Host jupyterlab;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Host $$http_host;
+              proxy_set_header X-Forwarded-Proto $$scheme;
+              proxy_buffering off;
+            }
+          }
+        }
+        NGINX
+        exec nginx -g 'daemon off;' -c /tmp/nginx.conf
+    ports:
+      - 127.0.0.1:${JUPYTERLAB_HOST_PORT:-8888}:8888
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O- http://127.0.0.1:8888/ >/dev/null
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 15s
+    networks:
+      - agentic
+      - agentic-egress
+
+  dgx-dashboard:
+    # NVIDIA DGX Dashboard - Host-based service, not a container
+    # This is a placeholder to document that DGX Dashboard is expected to be
+    # running on the host (not in Docker). The adapter checks for nvidia-smi availability.
+    # URL: http://127.0.0.1:8443 (host-based, not proxied)
+    # Note: Per PLAN.md §9.2, no iframe/proxy is assumed compatible without test.
+    image: alpine:3.20
+    profiles:
+      - m8
+      - ui
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "DGX Dashboard is a host-based service."
+        echo "Please ensure NVIDIA DGX Dashboard is installed and running on the host."
+        echo "Access it at: http://127.0.0.1:8443"
+        echo "Checking GPU status via nvidia-smi..."
+        nvidia-smi -q 2>/dev/null || echo "nvidia-smi not available - DGX Dashboard may not be installed"
+        sleep infinity
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_DGX_DASHBOARD_CPUS:-${AGENTIC_LIMIT_UI_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-0.10}}}
+    mem_limit: ${AGENTIC_LIMIT_DGX_DASHBOARD_MEM:-${AGENTIC_LIMIT_UI_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-64m}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - 127.0.0.1:8443:8443
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - nvidia-smi -q >/dev/null 2>&1 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 10s
+    networks:
+      - agentic
 
 networks:
   agentic:

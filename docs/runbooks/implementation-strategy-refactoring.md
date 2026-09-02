@@ -1,5 +1,19 @@
 # Runbook: Implementation Strategy and Refactoring Priorities
 
+## Quarterly review — 2026-07-12
+
+This review supersedes the previous undated assessment. The operational surface has grown materially: `scripts/agent.sh` is now over 5,000 lines and the repository has a separately tested v2 evidence/evaluation path. Snapshot-first rollback remains the primary operational risk control and is covered by release-integrity tests. The next refactoring must preserve that contract and must not turn the v2 policy/evidence producers into a claim that target-DGX validation has occurred.
+
+Priorities are therefore updated as follows:
+
+1. Keep release artifacts hermetic and test the runtime ownership/evidence contracts alongside rollback.
+2. Extract command families from `scripts/agent.sh`, starting with release/update/rollback and test orchestration, without changing CLI output or exit codes.
+3. Move runtime-environment and compliance expectations to versioned machine-readable schemas shared by doctor, Compose checks, and v2 evidence producers.
+4. Reduce Compose duplication only after those schemas exist; preserve explicit hardening exceptions.
+5. Keep target-host, GPU, strict-prod, and long-running benchmark campaigns as explicit operational gates, never as CI substitutes.
+
+The outstanding DGX-only validations remain tracked in Beads. The next review is due **2026-10-10**, or immediately after a control-plane/runtime architecture change.
+
 This note reviews how `PLAN.md` is implemented in the current repository and where refactoring will provide the highest operational value.
 
 ## Current Strategy (What Works Well)
@@ -17,7 +31,7 @@ This is aligned with the CDC goals: local-only exposure, controlled egress, expl
 Yes, targeted refactoring is recommended.
 
 Why:
-- `scripts/agent.sh` has grown to a monolithic command router and orchestration layer (around 2500 lines), which increases coupling and change risk.
+- `scripts/agent.sh` has grown to a monolithic command router and orchestration layer (over 5,000 lines), which increases coupling and change risk.
 - Runtime configuration keys are duplicated across `scripts/lib/runtime.sh`, `load_runtime_env`, `ensure_runtime_env`, and `cmd_profile`, which can drift over time.
 - Compose service definitions repeat the same hardening and proxy blocks in many places, increasing maintenance overhead.
 - Rollback is now hermetic for current releases because `deployments/releases/rollback.sh` replays `compose.effective.yml` plus the pinned image manifest from the release snapshot. Legacy fallback via `compose.files` remains only for older releases that predate the effective compose snapshot artifact.

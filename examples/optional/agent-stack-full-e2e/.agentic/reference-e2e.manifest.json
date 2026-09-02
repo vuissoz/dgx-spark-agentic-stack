@@ -1,0 +1,1 @@
+{"schema_version":1,"kind":"agentic.reference-repo","id":"agent-stack-full-e2e","problem":"multi-file-red-green","entrypoint":"src/normalize.py","test_command":"python3 -m pytest -q","verification":{"type":"pytest","expected_exit_code":0},"branch_policy":{"protected_branch":"main","agent_branch_prefix":"agent/"}}

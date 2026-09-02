@@ -19,6 +19,26 @@ Provide one self-hosted Git forge inside the stack so:
 - forge SSH: enabled only on loopback for the host and on the private Docker network for containers
 - deployment path: converged together with `./agent up ui`, `./agent up agents,ui,obs,rag`, and `./agent first-up` so agent Git bootstrap exists before `./agent doctor`
 
+## Rootfs Hardening Exception
+
+`optional-forgejo` keeps the standard hardening baseline (`cap_drop: ALL`,
+`no-new-privileges:true`, non-root user, loopback-only publication), but it is
+one explicit exception to the repo-wide `read_only: true where compatible`
+policy.
+
+Reason:
+
+- Forgejo rootless needs writable rootfs paths for SSH and application runtime
+  state during normal operation.
+
+The exception is intentional and regression-covered:
+
+- Compose leaves `optional-forgejo` without `read_only: true`;
+- `scripts/lib/runtime.sh` is the single source of truth for writable-rootfs
+  exceptions;
+- `./agent doctor` reports the exception as documented instead of emitting a
+  contradictory readonly-rootfs failure.
+
 Reason for the default transport choice:
 
 - it avoids a public ingress surface;
@@ -242,12 +262,16 @@ The runner prepares the checkout, but the agent instruction itself must perform:
 
 Two adapters have stack-managed finalization around that contract:
 
-- OpenClaw executes the reviewed `repo.eight_queens.solve` sandbox tool through
-  its live `/v1/tools/execute` API. The tool is scoped to this reference repo
-  task and is not a general shell.
-- Before any live OpenClaw run, `repo-e2e` now verifies that
-  `repo.eight_queens.solve` is present in the effective OpenClaw tool allowlist
-  and aborts immediately if it is missing, instead of burning a full attempt.
+- OpenClaw executes the reviewed scenario-specific sandbox solver through its
+  live `/v1/tools/execute` API: `repo.eight_queens.solve` for the canary or
+  `repo.normalize_identifier.solve` for `agent-stack-full-e2e`. Neither tool
+  is a general shell: each fixes one fixed path, runs pytest, and can push only
+  `agent/openclaw` through the managed Forgejo SSH identity.
+- Before any live OpenClaw run, `repo-e2e` verifies that the selected solver is
+  present in the effective OpenClaw tool allowlist and aborts immediately if it
+  is missing, instead of burning a full attempt. Runtime initialization appends
+  missing reviewed baseline entries from the versioned template without
+  removing operator additions.
 - Vibestral keeps the same prompt, then the runner applies a common publish
   guard after tests pass so runs that stop after editing still end with a clean
   committed branch.

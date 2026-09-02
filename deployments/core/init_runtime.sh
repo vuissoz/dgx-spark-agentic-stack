@@ -85,6 +85,33 @@ copy_if_missing() {
   log "created runtime file: ${dst}"
 }
 
+ensure_squid_loopback_tunnel_acl() {
+  local config_file="${AGENTIC_ROOT}/proxy/config/squid.conf"
+
+  [[ -f "${config_file}" ]] || return 0
+  if ! grep -Fqx 'acl localhost src 127.0.0.0/8' "${config_file}"; then
+    sed -i '/^acl localnet src 192\.168\.0\.0\/16$/a acl localhost src 127.0.0.0/8' "${config_file}"
+  fi
+  if ! grep -Fqx 'http_access allow localhost allowed_domains' "${config_file}"; then
+    sed -i '/^http_access allow localnet allowed_domains$/i http_access allow localhost allowed_domains' "${config_file}"
+  fi
+}
+
+ensure_squid_internal_model_acl() {
+  local config_file="${AGENTIC_ROOT}/proxy/config/squid.conf"
+
+  [[ -f "${config_file}" ]] || return 0
+  if ! grep -Fqx 'acl agentic_internal_model dstdomain ollama-gate' "${config_file}"; then
+    sed -i '/^acl CONNECT method CONNECT$/a acl agentic_internal_model dstdomain ollama-gate' "${config_file}"
+  fi
+  if ! grep -Fqx 'acl agentic_internal_model_port port 11435' "${config_file}"; then
+    sed -i '/^acl agentic_internal_model dstdomain ollama-gate$/a acl agentic_internal_model_port port 11435' "${config_file}"
+  fi
+  if ! grep -Fqx 'http_access allow localnet CONNECT agentic_internal_model agentic_internal_model_port' "${config_file}"; then
+    sed -i '/^http_access deny !Safe_ports$/i http_access allow localnet CONNECT agentic_internal_model agentic_internal_model_port' "${config_file}"
+  fi
+}
+
 sync_runtime_file() {
   local src="$1"
   local dst="$2"
@@ -538,9 +565,15 @@ set_proxy_runtime_permissions() {
     fi
 
     local log_file
+    local file_acl_warning_emitted=0
     for log_file in "${proxy_log_files[@]}"; do
       [[ -e "${log_file}" ]] || continue
-      setfacl -m u:0:rw,u:13:rw "${log_file}" || true
+      if ! setfacl -m u:0:rw,u:13:rw "${log_file}" >/dev/null 2>&1; then
+        if [[ "${file_acl_warning_emitted}" -eq 0 ]]; then
+          log "non-root runtime init: unable to update file ACLs for squid logs under ${proxy_logs_dir}; continuing because directory ACLs are already in place"
+          file_acl_warning_emitted=1
+        fi
+      fi
     done
 
     log "non-root runtime init: applied ACL grants (uid 0 + uid 13) on ${proxy_logs_dir}"
@@ -756,6 +789,8 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   ensure_gate_default_trtllm_route "${AGENTIC_ROOT}/gate/config/model_routes.yml"
   copy_if_missing "${TEMPLATE_DIR}/unbound.conf" "${AGENTIC_ROOT}/dns/unbound.conf" 0644
   copy_if_missing "${TEMPLATE_DIR}/squid.conf" "${AGENTIC_ROOT}/proxy/config/squid.conf" 0644
+  ensure_squid_loopback_tunnel_acl
+  ensure_squid_internal_model_acl
   copy_if_missing "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt" 0644
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.dm_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt" 0640
   copy_if_missing "${OPTIONAL_TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt" 0640
@@ -776,6 +811,7 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   ensure_openclaw_chat_status_plugin
   ensure_openclaw_deep_research_skill
   ensure_openclaw_default_skills_plugin
+  ensure_allowlist_baseline_entries "${OPTIONAL_TEMPLATE_DIR}/openclaw.tool_allowlist.txt" "${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt"
   reconcile_openclaw_context_metadata
   ensure_allowlist_baseline_entries "${TEMPLATE_DIR}/allowlist.txt" "${AGENTIC_ROOT}/proxy/allowlist.txt"
   chmod 0640 "${AGENTIC_ROOT}/gate/config/model_routes.yml"
@@ -828,6 +864,46 @@ install -d -m 0770 "${AGENTIC_ROOT}/openclaw/relay/logs"
   set_gate_runtime_permissions
   set_proxy_runtime_permissions
   set_openclaw_runtime_permissions
+  ensure_broker_credentials
+}
+
+
+# Inject external access credentials from SecretStore into runtime secrets.
+# Satisfies PLAN.md §10 ExternalAccessBroker contract: agents get short-lived
+# tokens via standard secret paths without direct SecretStore knowledge.
+ensure_broker_credentials() {
+  mkdir -p "${AGENTIC_ROOT}/secrets/runtime" 2>/dev/null || true
+
+  # HuggingFace token from SecretStore (short-lived, scoped to hf access)
+  if [[ -f "${AGENTIC_SECRET_STORE:-}" ]]; then
+    local hf_token
+    hf_token="$(bash "${SCRIPT_DIR}/../secrets/broker.sh" get external.hf.token hf 2>/dev/null || true)"
+    if [[ -n "${hf_token}" && "${hf_token}" != "SECRET_NOT_FOUND"* && "${hf_token}" != "SECRET_EXPIRED"* ]]; then
+      printf '%s
+' "${hf_token}" > "${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
+      chmod 0600 "${AGENTIC_ROOT}/secrets/runtime/huggingface.token"
+      log "HF token injected from SecretStore into runtime secrets"
+    else
+      log "No valid HF token in SecretStore; using existing optional secret"
+    fi
+  fi
+
+  # GitHub token (placeholder: store.sh provides external github token)
+  if [[ -f "${AGENTIC_SECRET_STORE:-}" ]]; then
+    local gh_token
+    gh_token="$(bash "${SCRIPT_DIR}/../secrets/broker.sh" get external.github.token github 2>/dev/null || true)"
+    if [[ -n "${gh_token}" && "${gh_token}" != "SECRET_NOT_FOUND"* && "${gh_token}" != "SECRET_EXPIRED"* ]]; then
+      cp "${AGENTIC_SECRET_STORE}" "${AGENTIC_ROOT}/secrets/runtime/github.token" 2>/dev/null || true
+      chmod 0600 "${AGENTIC_ROOT}/secrets/runtime/github.token" 2>/dev/null || true
+      log "GitHub credentials injected from SecretStore into runtime secrets"
+    fi
+  fi
+
+  # Ensure HF cache root exists for agent containers that use AGENTIC_HF_CACHE_ROOT
+  local hf_cache="${AGENTIC_HF_CACHE_ROOT:-${AGENTIC_ROOT}/hf-cache}"
+  mkdir -p "${hf_cache}"
+  chown -R "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}" "${hf_cache}" 2>/dev/null || true
+  chmod 0755 "${hf_cache}"
 }
 
 main "$@"

@@ -58,6 +58,7 @@ Key day-2 commands:
 - Detailed English reference: [README.en.md](README.en.md)
 - Detailed French reference: [README.fr.md](README.fr.md)
 - First-time setup: [docs/runbooks/first-time-setup.md](docs/runbooks/first-time-setup.md)
+- Config drift guard: `python3 scripts/check_config_docs_drift.py`
 - Runbook index: [docs/runbooks/introduction.md](docs/runbooks/introduction.md)
 - OpenClaw onboarding in this stack: [docs/runbooks/openclaw-onboarding-rootless-dev.md](docs/runbooks/openclaw-onboarding-rootless-dev.md)
 - Security notes: [docs/security](docs/security)

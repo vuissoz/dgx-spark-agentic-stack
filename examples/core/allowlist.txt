@@ -25,6 +25,13 @@ api.bitbucket.org
 # PACKAGE REGISTRIES
 # ----------------------------------------------------------
 
+# Debian/Ubuntu system packages used by CPU-only sandboxes
+deb.debian.org
+security.debian.org
+archive.ubuntu.com
+ports.ubuntu.com
+security.ubuntu.com
+
 # Python
 pypi.org
 files.pythonhosted.org
@@ -46,6 +53,7 @@ sum.golang.org
 registry-1.docker.io
 auth.docker.io
 hub.docker.com
+production.cloudfront.docker.com
 
 ghcr.io
 quay.io
@@ -59,6 +67,7 @@ ngc.nvidia.com
 # ----------------------------------------------------------
 huggingface.co
 cdn-lfs.huggingface.co
+us.aws.cdn.hf.co
 cas-bridge.xethub.hf.co
 cas-server.xethub.hf.co
 transfer.xethub.hf.co
@@ -164,6 +173,9 @@ crossref.org
 # PubMed / biomedical
 pubmed.ncbi.nlm.nih.gov
 ncbi.nlm.nih.gov
+eutils.ncbi.nlm.nih.gov
+www.ncbi.nlm.nih.gov
+pmc.ncbi.nlm.nih.gov
 
 # Europe PMC
 europepmc.org

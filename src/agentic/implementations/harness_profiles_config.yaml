@@ -1,0 +1,137 @@
+# Harness Profiles Configuration - Source of Truth for harness_profiles.py generation
+# This file defines the canonical specifications for all harnesses.
+# Run scripts/generate_harness_profiles.py to regenerate harness_profiles.py
+
+harnesses:
+  codex:
+    model_protocol: openai_responses
+    upstream_version: "0.147.0"
+    npm_spec: "@openai/codex@0.147.0"
+    architecture: ARM64
+    persistent_files: ["config.toml", "sessions/"]
+    surfaces: ["cli", "ide", "web"]
+    permissions: {cpus: 2.0, memory_mb: 4096, gpu_count: 0}
+    sub_agents: {mode: "none", max_depth: 1, max_concurrency: 1}
+    tests: ["tests/L7*", "tests/F3*", "tests/J27*"]
+    supports_repo_e2e: true
+    removal_condition: "M6 validation complete"
+
+  claude:
+    model_protocol: anthropic_messages
+    upstream_version: "2.1.226"
+    npm_spec: "@anthropic-ai/claude-code@2.1.226"
+    architecture: ARM64
+    persistent_files: ["CLAUDE.md", ".claude/agents/", "sessions/"]
+    surfaces: ["cli", "web"]
+    permissions: {cpus: 2.0, memory_mb: 4096, gpu_count: 0}
+    sub_agents: {mode: "native", max_depth: 3, max_concurrency: 5}
+    tests: ["tests/L7*", "tests/K*", "tests/J27*"]
+    supports_repo_e2e: true
+    removal_condition: "M6 validation complete"
+
+  opencode:
+    model_protocol: chat_completions
+    upstream_version: "1.18.15"
+    npm_spec: "opencode-ai@1.18.15"
+    architecture: ARM64
+    persistent_files: ["opencode.json", "sessions/"]
+    surfaces: ["cli", "web"]
+    permissions: {cpus: 1.0, memory_mb: 2048, gpu_count: 0}
+    sub_agents: {mode: "none", max_depth: 1, max_concurrency: 1}
+    tests: ["tests/L7*", "tests/J27*"]
+    supports_repo_e2e: true
+    removal_condition: "M6 validation complete"
+
+  kilocode:
+    model_protocol: ollama_native
+    upstream_version: "7.4.5"
+    npm_spec: "@kilocode/cli@7.4.5"
+    architecture: ARM64
+    persistent_files: [".kilo/agents/", "sessions/"]
+    surfaces: ["cli", "ide", "web_console"]
+    permissions: {cpus: 1.5, memory_mb: 2048, gpu_count: 0}
+    sub_agents: {mode: "native", max_depth: 2, max_concurrency: 3}
+    tests: ["tests/F27*", "tests/L7*", "tests/J27*"]
+    supports_repo_e2e: true
+    removal_condition: "M6 validation complete"
+
+  vibestral:
+    model_protocol: configurable_endpoint
+    upstream_version: "2.24.0"
+    npm_spec: "@mistralai/vibe-cli@2.24.0"
+    architecture: ARM64
+    persistent_files: ["VIBE_HOME/", "AGENTS.md"]
+    surfaces: ["cli", "vscode", "acp"]
+    permissions: {cpus: 1.0, memory_mb: 1024, gpu_count: 0}
+    sub_agents: {mode: "none", max_depth: 1, max_concurrency: 1}
+    tests: ["tests/L5*", "tests/F2*", "tests/J27*"]
+    supports_repo_e2e: true
+    removal_condition: "M6 validation complete"
+
+  hermes:
+    model_protocol: chat_completions
+    upstream_version: "v2026.4.3"
+    git_url: "https://github.com/NousResearch/hermes-agent.git"
+    git_ref: "v2026.4.3"
+    git_sha: "abf1e98f6253f6984479fe03d1098173a9b065a7"
+    architecture: ARM64
+    persistent_files: ["HERMES_HOME/", "sessions/", "kanban/"]
+    surfaces: ["web_dashboard", "desktop", "cli"]
+    permissions: {cpus: 2.0, memory_mb: 4096, gpu_count: 0}
+    sub_agents: {mode: "native", max_depth: 4, max_concurrency: 10}
+    tests: ["tests/K*", "tests/L11*"]
+    supports_repo_e2e: false
+    removal_condition: ""
+
+  pi-mono:
+    model_protocol: configurable
+    upstream_version: "0.73.1"
+    npm_spec: "@mariozechner/pi-coding-agent@0.73.1"
+    architecture: ARM64
+    persistent_files: ["pi-sessions/", "extensions/"]
+    surfaces: ["cli", "desktop"]
+    permissions: {cpus: 1.0, memory_mb: 512, gpu_count: 0}
+    sub_agents: {mode: "none", max_depth: 1, max_concurrency: 1}
+    tests: ["tests/K4*", "tests/L7*", "tests/J27*"]
+    supports_repo_e2e: true
+    removal_condition: "M6 validation complete"
+
+  goose:
+    model_protocol: chat_completions
+    upstream_version: "1.45.0"
+    binary_url: "https://github.com/aaif-goose/goose/releases/latest"
+    architecture: ARM64
+    persistent_files: ["goose-sessions/", "recipes/", "extensions/"]
+    surfaces: ["cli", "acp"]
+    permissions: {cpus: 1.0, memory_mb: 2048, gpu_count: 0}
+    sub_agents: {mode: "native", max_depth: 2, max_concurrency: 5}
+    tests: ["tests/K5*", "tests/L7*", "tests/J27*"]
+    supports_repo_e2e: true
+    removal_condition: "M6 validation complete"
+
+  openclaw:
+    model_protocol: ollama_openai_compatible
+    upstream_version: "latest"
+    install_script: "https://openclaw.ai/install-cli.sh"
+    install_version: "latest"
+    architecture: ARM64
+    persistent_files: ["agentDir/", "sessions/", "skills/"]
+    surfaces: ["control_ui", "cli", "relay_channels"]
+    permissions: {cpus: 1.0, memory_mb: 2048, gpu_count: 0}
+    sub_agents: {mode: "native", max_depth: 3, max_concurrency: 5}
+    tests: ["tests/K1*", "tests/K8*", "tests/K7*"]
+    supports_repo_e2e: false
+    removal_condition: ""
+
+  openhands:
+    model_protocol: openai_compatible
+    upstream_version: "latest"
+    install_script: "https://install.openhands.dev/install.sh"
+    architecture: ARM64
+    persistent_files: ["settings/", "conversations/", "skills/", "hooks/"]
+    surfaces: ["web_ui", "terminal", "browser"]
+    permissions: {cpus: 2.0, memory_mb: 4096, gpu_count: 0}
+    sub_agents: {mode: "native", max_depth: 3, max_concurrency: 5}
+    tests: ["tests/H2*", "tests/L7*"]
+    supports_repo_e2e: false
+    removal_condition: ""

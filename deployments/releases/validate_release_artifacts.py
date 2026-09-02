@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import pathlib
+import re
 import sys
 
 INTEGRITY_FILE = "artifact-integrity.json"
@@ -30,6 +31,9 @@ PRIVATE_KEY_MARKERS = (
     "-----BEGIN RSA PRIVATE KEY-----",
     "-----BEGIN EC PRIVATE KEY-----",
     "-----BEGIN PRIVATE KEY-----",
+)
+FORBIDDEN_INLINE_SECRET_KEYS = (
+    "COMFYUI_AUTH_PASSWORD",
 )
 
 
@@ -135,6 +139,11 @@ def validate_secret_hygiene(release_dir: pathlib.Path, secrets_dir: pathlib.Path
             if marker in raw:
                 errors.append(f"release artifact leaks private key material: {path.relative_to(release_dir)}")
                 break
+        for key in FORBIDDEN_INLINE_SECRET_KEYS:
+            if re.search(rf"(?m)^\s*{re.escape(key)}\s*[:=]", raw):
+                errors.append(
+                    f"release artifact contains forbidden inline secret key {key}: {path.relative_to(release_dir)}"
+                )
         for secret_name, secret_value in secret_values:
             if secret_value in raw:
                 errors.append(

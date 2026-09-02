@@ -18,6 +18,7 @@ SERVICE_NAME = "optional-forgejo"
 SHARED_TEAM = "agents"
 SHARED_REPOSITORY = os.environ.get("GIT_FORGE_SHARED_REPOSITORY", "shared-workbench")
 REFERENCE_REPOSITORY = os.environ.get("GIT_FORGE_REFERENCE_REPOSITORY", "eight-queens-agent-e2e")
+FULL_REFERENCE_REPOSITORY = "agent-stack-full-e2e"
 AGENTIC_PROFILE = os.environ.get("AGENTIC_PROFILE", "strict-prod")
 if AGENTIC_PROFILE == "rootless-dev":
     _default_root = pathlib.Path.home() / ".local" / "share" / "agentic"
@@ -45,6 +46,7 @@ GIT_HELPER_IMAGE = os.environ.get("AGENTIC_GIT_FORGE_GIT_HELPER_IMAGE", "ghcr.io
 SECRETS_ROOT = pathlib.Path(AGENTIC_ROOT) / "secrets" / "runtime" / "git-forge"
 BOOTSTRAP_DIR = pathlib.Path(AGENTIC_ROOT) / "optional" / "git" / "bootstrap"
 REFERENCE_TEMPLATE_DIR = pathlib.Path(__file__).resolve().parents[2] / "examples" / "optional" / REFERENCE_REPOSITORY
+FULL_REFERENCE_TEMPLATE_DIR = pathlib.Path(__file__).resolve().parents[2] / "examples" / "optional" / FULL_REFERENCE_REPOSITORY
 REFERENCE_MANIFEST_PATH = ".agentic/reference-e2e.manifest.json"
 OPENHANDS_RUNTIME_UID = 42420
 OPENHANDS_SSH_READER_UIDS = (OPENHANDS_RUNTIME_UID,)
@@ -629,9 +631,9 @@ def git_with_askpass(
         return run(cmd, check=check)
 
 
-def sync_reference_template(target_dir: pathlib.Path) -> None:
-    if not REFERENCE_TEMPLATE_DIR.is_dir():
-        fail(f"reference repository template is missing: {REFERENCE_TEMPLATE_DIR}")
+def sync_reference_template(target_dir: pathlib.Path, template_dir: pathlib.Path) -> None:
+    if not template_dir.is_dir():
+        fail(f"reference repository template is missing: {template_dir}")
 
     for entry in target_dir.iterdir():
         if entry.name == ".git":
@@ -641,8 +643,8 @@ def sync_reference_template(target_dir: pathlib.Path) -> None:
         else:
             entry.unlink()
 
-    for source in REFERENCE_TEMPLATE_DIR.rglob("*"):
-        relative = source.relative_to(REFERENCE_TEMPLATE_DIR)
+    for source in template_dir.rglob("*"):
+        relative = source.relative_to(template_dir)
         destination = target_dir / relative
         if source.is_dir():
             destination.mkdir(parents=True, exist_ok=True)
@@ -687,9 +689,9 @@ def ensure_remote_branch_exists(
     info(f"created reference branch '{branch_name}'")
 
 
-def ensure_main_branch_protection(admin_user: str, admin_password: str) -> None:
+def ensure_main_branch_protection(repository: str, admin_user: str, admin_password: str) -> None:
     branch_path = (
-        f"{repo_api_path(REFERENCE_REPOSITORY)}/branch_protections/"
+        f"{repo_api_path(repository)}/branch_protections/"
         f"{urllib.parse.quote('main', safe='')}"
     )
     payload = {
@@ -715,7 +717,7 @@ def ensure_main_branch_protection(admin_user: str, admin_password: str) -> None:
         api_request(
             container_id,
             "POST",
-            f"{repo_api_path(REFERENCE_REPOSITORY)}/branch_protections",
+            f"{repo_api_path(repository)}/branch_protections",
             username=admin_user,
             password=admin_password,
             payload=payload,
@@ -735,18 +737,18 @@ def ensure_main_branch_protection(admin_user: str, admin_password: str) -> None:
     )
 
 
-def seed_reference_repo(admin_user: str, admin_password: str) -> None:
+def seed_reference_repo(repository: str, template_dir: pathlib.Path, title: str, admin_user: str, admin_password: str) -> None:
     ensure_repository(
-        REFERENCE_REPOSITORY,
-        "Stack-managed repository for the repository-driven multi-agent E2E scenario",
+        repository,
+        title,
         admin_user,
         admin_password,
     )
 
     with tempfile.TemporaryDirectory(prefix="agentic-reference-repo-") as temp_dir:
-        repo_dir = pathlib.Path(temp_dir) / REFERENCE_REPOSITORY
+        repo_dir = pathlib.Path(temp_dir) / repository
         git_with_askpass(
-            ["clone", repo_clone_url(INTERNAL_BASE_URL, REFERENCE_REPOSITORY), str(repo_dir)],
+            ["clone", repo_clone_url(INTERNAL_BASE_URL, repository), str(repo_dir)],
             username=admin_user,
             password=admin_password,
         )
@@ -754,13 +756,13 @@ def seed_reference_repo(admin_user: str, admin_password: str) -> None:
         run(["git", "config", "user.email", f"{GIT_FORGE_ADMIN_USER}@forge.agentic.local"], cwd=repo_dir)
 
         if repo_is_managed_reference(repo_dir) or repo_is_seedable_default(repo_dir):
-            sync_reference_template(repo_dir)
+            sync_reference_template(repo_dir, template_dir)
             run(["git", "add", "-A"], cwd=repo_dir)
             status = run(["git", "status", "--porcelain"], cwd=repo_dir)
             if status.stdout.strip():
-                run(["git", "commit", "-m", "Bootstrap reference eight queens E2E repository"], cwd=repo_dir)
+                run(["git", "commit", "-m", f"Bootstrap reference {repository} E2E repository"], cwd=repo_dir)
                 git_with_askpass(["push", "origin", "main"], username=admin_user, password=admin_password, cwd=repo_dir)
-                info(f"seeded managed reference repository '{REFERENCE_REPOSITORY}'")
+                info(f"seeded managed reference repository '{repository}'")
         else:
             info(
                 "reference repository already contains non-managed content; "
@@ -771,7 +773,7 @@ def seed_reference_repo(admin_user: str, admin_password: str) -> None:
         for branch_name in REFERENCE_AGENT_BRANCHES:
             ensure_remote_branch_exists(repo_dir, branch_name, username=admin_user, password=admin_password)
 
-    ensure_main_branch_protection(admin_user, admin_password)
+    ensure_main_branch_protection(repository, admin_user, admin_password)
 
 
 def write_if_changed(path: pathlib.Path, content: str, mode: int) -> None:
@@ -810,6 +812,36 @@ def ensure_gitconfig_value(gitconfig_path: pathlib.Path, key: str, value: str) -
     gitconfig_path.touch(exist_ok=True)
     run(["git", "config", "--file", str(gitconfig_path), key, value])
     safe_chmod(gitconfig_path, 0o660)
+
+
+def converge_openhands_settings(account: dict[str, object]) -> None:
+    """Keep persisted OpenHands preferences aligned with the managed Git identity.
+
+    OpenHands applies ``settings.json`` to every new V1 conversation.  Merely
+    fixing ``~/.gitconfig`` is therefore insufficient: an upstream default
+    stored in that file would overwrite the Forgejo identity as soon as a
+    conversation starts.
+    """
+    if account.get("username") != "openhands":
+        return
+
+    host_home = pathlib.Path(str(account["host_home"]))
+    settings_path = host_home.parent / "settings.json"
+    if not settings_path.exists():
+        return
+
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"cannot read persisted OpenHands settings at {settings_path}: {exc}"
+        ) from exc
+    if not isinstance(settings, dict):
+        raise RuntimeError(f"persisted OpenHands settings must be a JSON object: {settings_path}")
+
+    settings["git_user_name"] = str(account["display_name"])
+    settings["git_user_email"] = str(account["email"])
+    write_if_changed(settings_path, json.dumps(settings, indent=2, sort_keys=True) + "\n", 0o660)
 
 
 def account_container_ssh_dir(account: dict[str, object]) -> str:
@@ -906,6 +938,7 @@ printf 'password=%s\\n' "$(cat /run/secrets/git-forge.password)"
     ensure_gitconfig_value(gitconfig_path, "user.email", str(account["email"]))
     ensure_gitconfig_value(gitconfig_path, "credential.helper", container_helper_path)
     ensure_gitconfig_value(gitconfig_path, "init.defaultBranch", "main")
+    converge_openhands_settings(account)
 
 
 def forgejo_known_hosts_path() -> pathlib.Path:
@@ -1060,6 +1093,9 @@ def write_bootstrap_state() -> None:
         "reference_repository": REFERENCE_REPOSITORY,
         "reference_clone_url_host": repo_clone_url(HOST_BASE_URL, REFERENCE_REPOSITORY),
         "reference_clone_url_internal": repo_clone_url(INTERNAL_BASE_URL, REFERENCE_REPOSITORY),
+        "full_reference_repository": FULL_REFERENCE_REPOSITORY,
+        "full_reference_clone_url_host": repo_clone_url(HOST_BASE_URL, FULL_REFERENCE_REPOSITORY),
+        "full_reference_clone_url_internal": repo_clone_url(INTERNAL_BASE_URL, FULL_REFERENCE_REPOSITORY),
         "reference_branch_policy": {
             "protected_branch": "main",
             "main_push_allowlist_users": [GIT_FORGE_ADMIN_USER],
@@ -1119,7 +1155,8 @@ def main() -> None:
         reconcile_ssh_permissions(account)
         add_ssh_key_to_forgejo(container_id, username, public_key, GIT_FORGE_ADMIN_USER, admin_password)
     ensure_shared_repo(GIT_FORGE_ADMIN_USER, admin_password)
-    seed_reference_repo(GIT_FORGE_ADMIN_USER, admin_password)
+    seed_reference_repo(REFERENCE_REPOSITORY, REFERENCE_TEMPLATE_DIR, "Stack-managed eight queens multi-agent E2E canary", GIT_FORGE_ADMIN_USER, admin_password)
+    seed_reference_repo(FULL_REFERENCE_REPOSITORY, FULL_REFERENCE_TEMPLATE_DIR, "Stack-managed multi-file multi-agent E2E reference", GIT_FORGE_ADMIN_USER, admin_password)
     write_bootstrap_state()
     info("git-forge bootstrap finished")
 

@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN mkdir -p /gate/config /gate/state /gate/logs /gate/secrets /gate/mcp /gate/mcp/state /gate/mcp/logs
+
 COPY deployments/gate/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 

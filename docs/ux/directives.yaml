@@ -1,0 +1,67 @@
+# DGX Spark Agentic Platform — UX Directives (PLAN.md §15.5.4)
+# Each directive: active, experimental, superseded, or revoked.
+
+directives:
+  - directive_id: DXR-001
+    author: platform team
+    date: "2026-07-13"
+    scope: global
+    text: >-
+      Favor simplicity over exhaustiveness. When a minimal implementation
+      covers the primary user path, prefer it over feature-completeness.
+    justification: Reduces cognitive load and maintenance burden for single-user DGX Spark deployments.
+    status: active
+    review_condition: >-
+      Reassess when multi-user or team workflows become mainstream on this platform.
+
+  - directive_id: DXR-002
+    author: platform team
+    date: "2026-07-13"
+    scope: CLI, portal
+    text: >-
+      Never require infrastructure knowledge (Docker, ports, service names)
+      for the primary user path. Infrastructure commands are expert-mode only.
+    justification: The product contract (PLAN.md §1.1) requires users to choose an agent first, not manage containers.
+    status: active
+    superseded_directive: null
+    review_condition: >-
+      Reassess if native desktop apps become the primary interface.
+
+  - directive_id: DXR-003
+    author: platform team
+    date: "2026-07-13"
+    scope: error handling
+    text: >-
+      All errors must identify the genuinely responsible component and provide
+      an actionable next step. Never expose raw stack traces or internal identifiers.
+    justification: PLAN.md §1.1 — errors must be actionable and designate the truly faulty component.
+    status: active
+    superseded_directive: null
+    review_condition: >-
+      Reassess based on user support tickets.
+
+  - directive_id: DXR-004
+    author: platform team
+    date: "2026-07-13"
+    scope: security, permissions
+    text: >-
+      Never weaken a P0 security gate (no secrets in git, no docker.sock in agents,
+      loopback-only binds) to improve usability. Safety gates are non-negotiable.
+    justification: AGENTS.md Règle zéro and PLAN.md §15.4.2 — P0 gates cannot be weakened for any reason.
+    status: active
+    superseded_directive: null
+    review_condition: >-
+      Reassess if a security gate is found to block legitimate workflows without safe alternatives.
+
+  - directive_id: DXR-005
+    author: platform team
+    date: "2026-07-13"
+    scope: CLI, portal
+    text: >-
+      Do not expose an experimental feature to ordinary users by default.
+      Experimental features may be documented but must require explicit opt-in.
+    justification: PLAN.md §15.5.1 — avoid exposing experimental functions to ordinary users.
+    status: active
+    superseded_directive: null
+    review_condition: >-
+      Reassess when the feature graduates from experimental to stable.

@@ -401,10 +401,16 @@ sudo ./agent up core
 Notes:
 - In `strict-prod`, `agent up core` also applies host `DOCKER-USER` controls (unless explicitly disabled).
 - In `rootless-dev`, host-level root-only checks are intentionally degraded.
+- Keep `AGENTIC_DOCKER_USER_SOURCE_NETWORKS` on its default `${AGENTIC_NETWORK},${AGENTIC_EGRESS_NETWORK}` in `strict-prod` unless you are intentionally narrowing source coverage for a non-standard topology; this dual-network default is the hardened baseline.
+- Leave `AGENTIC_ALLOW_NON_ROOT_NET_ADMIN=0` in `strict-prod`. Set `AGENTIC_ALLOW_NON_ROOT_NET_ADMIN=1` only for controlled local validation where a trusted `iptables` helper is already mediating host netfilter access.
 
 ## 5. Tune Runtime Config Files
 
 After `core` is up, edit the egress allowlist:
+
+This is deliberately not an OpenClaw approval action: proxy destinations grant
+stack-wide egress and must be changed by an administrator through this reviewed
+runtime artifact.
 
 ```bash
 # strict-prod

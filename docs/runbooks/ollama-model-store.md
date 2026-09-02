@@ -6,7 +6,7 @@
 - Preserve the initial mount mode (`rw` or `ro`) after preload.
 
 ## Defaults
-- Generate model: `${AGENTIC_DEFAULT_MODEL}` (fallback `nemotron-cascade-2:30b`)
+- Generate model: `${AGENTIC_DEFAULT_MODEL}` (fallback `qwen3.8:27b`)
 - Embedding model: `qwen3-embedding:0.6b`
 - Budget: `32` GB
 
@@ -26,14 +26,14 @@ Preload with automatic mode preservation:
 Custom models/budget:
 
 ```bash
-./agent ollama-preload --generate-model nemotron-cascade-2:30b --embed-model qwen3-embedding:0.6b --budget-gb 32
+./agent ollama-preload --generate-model qwen3.8:27b --embed-model qwen3-embedding:0.6b --budget-gb 32
 ```
 
 Switch mount mode manually:
 
 ```bash
 ./agent ollama-models status
-./agent ollama unload qwen3-coder:30b
+./agent ollama unload qwen3.8:27b
 ./agent ollama-models rw
 ./agent ollama-models ro
 ```

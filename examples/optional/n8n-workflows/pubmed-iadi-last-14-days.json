@@ -1,0 +1,159 @@
+{
+  "name": "PubMed - IADI U1254 CIC-IT Nancy - last 14 days",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Run on click",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "pubmed-term",
+              "name": "term",
+              "type": "string",
+              "value": "(IADI[All Fields] OR U1254[All Fields] OR CIC-IT Nancy[All Fields]) AND (\"last 14 days\"[PDat])"
+            },
+            {
+              "id": "model",
+              "name": "model",
+              "type": "string",
+              "value": "={{ $env.N8N_INSTANCE_AI_MODEL || $env.AGENTIC_DEFAULT_MODEL || 'qwen3.8:27b' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "configuration",
+      "name": "Search configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "db", "value": "pubmed" },
+            { "name": "term", "value": "={{ $json.term }}" },
+            { "name": "retmode", "value": "json" },
+            { "name": "retmax", "value": "100" },
+            { "name": "sort", "value": "pub date" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "search-pubmed",
+      "name": "PubMed search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = $json.esearchresult?.idlist || [];\nreturn [{ json: { ids, count: ids.length, empty: ids.length === 0 } }];"
+      },
+      "id": "ids",
+      "name": "Extract PMID list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": { "boolean": [{ "value1": "={{ $json.empty }}", "operation": "isFalse" }] }
+      },
+      "id": "has-results",
+      "name": "Results found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "db", "value": "pubmed" },
+            { "name": "id", "value": "={{ $json.ids.join(',') }}" },
+            { "name": "retmode", "value": "xml" }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "fetch-records",
+      "name": "Fetch PubMed records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const xml = $json.data || $json.body || '';\nconst text = (tag) => [...xml.matchAll(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'g'))].map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim());\nconst esc = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');\nconst blocks = xml.match(/<PubmedArticle>[\\s\\S]*?<\\/PubmedArticle>/g) || [];\nconst articles = blocks.map(block => {\n  const get = tag => esc((block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`)) || [,''])[1].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim());\n  const pmid = get('PMID');\n  const pmc = (block.match(/<ArticleId IdType=\\\"pmc\\\">([^<]+)/i) || [,''])[1];\n  const doi = (block.match(/<ArticleId IdType=\\\"doi\\\">([^<]+)/i) || [,''])[1];\n  return { pmid, title: get('ArticleTitle'), abstract: get('AbstractText'), journal: get('Title'), doi, pmc, pubmedUrl: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`, pdfUrl: pmc ? `https://www.ncbi.nlm.nih.gov/pmc/articles/${pmc}/pdf/` : null, pdfNote: pmc ? 'PMC PDF available; open the PDF and capture its first page.' : 'No PMC identifier in PubMed; a free PDF may not be available.' };\n});\nconst source = articles.map((a, i) => `\\n[${i + 1}] ${a.title}\\nPMID: ${a.pmid}; Journal: ${a.journal}; DOI: ${a.doi || 'n/a'}\\nAbstract: ${a.abstract || 'not supplied'}`).join('\\n');\nreturn [{ json: { articles, count: articles.length, source, model: $input.first().json.model || $env.N8N_INSTANCE_AI_MODEL || $env.AGENTIC_DEFAULT_MODEL || 'qwen3.8:27b' } }];"
+      },
+      "id": "parse-records",
+      "name": "Build publication dossier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.N8N_INSTANCE_AI_MODEL_URL || 'http://ollama-gate:11435/v1').replace(/\\/$/, '') + '/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer local-ollama" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, temperature: 0.2, stream: false, messages: [{ role: 'system', content: 'You are a biomedical literature analyst. Answer in French. Do not invent facts. For each paper give the objective, methods, main findings, limitations, and why it matters. Clearly say when the abstract is insufficient.' }, { role: 'user', content: 'Summarize these PubMed publications published in the last 14 days. Keep one section per paper and add a short overall synthesis.\\n' + $json.source }] }) }}",
+        "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "local-synthesis",
+      "name": "Local AI synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const dossier = $('Build publication dossier').first().json;\nconst content = $json.choices?.[0]?.message?.content || 'La synthèse IA n’a pas été générée. Vérifiez le modèle, /v1/models et les logs ollama-gate.';\nreturn [{ json: { generatedAt: new Date().toISOString(), period: 'last 14 days', count: dossier.count, synthesis: content, publications: dossier.articles, pdfScreenshotInstruction: 'Pour chaque publication avec pdfUrl, ouvrir le PDF et enregistrer une capture de sa première page. Les articles sans pmc n’ont pas nécessairement de PDF libre.', aiError: $json.error || null } }];"
+      },
+      "id": "final-report",
+      "name": "Final report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 220]
+    },
+    {
+      "parameters": { "jsCode": "return [{ json: { generatedAt: new Date().toISOString(), period: 'last 14 days', count: 0, synthesis: 'Aucune publication PubMed ne correspond aux critères IADI, U1254 ou CIC-IT Nancy sur les 14 derniers jours.', publications: [] } }" },
+      "id": "empty-report",
+      "name": "Empty report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Run on click": { "main": [[{ "node": "Search configuration", "type": "main", "index": 0 }]] },
+    "Search configuration": { "main": [[{ "node": "PubMed search", "type": "main", "index": 0 }]] },
+    "PubMed search": { "main": [[{ "node": "Extract PMID list", "type": "main", "index": 0 }]] },
+    "Extract PMID list": { "main": [[{ "node": "Results found?", "type": "main", "index": 0 }]] },
+    "Results found?": { "main": [[{ "node": "Fetch PubMed records", "type": "main", "index": 0 }], [{ "node": "Empty report", "type": "main", "index": 0 }]] },
+    "Fetch PubMed records": { "main": [[{ "node": "Build publication dossier", "type": "main", "index": 0 }]] },
+    "Build publication dossier": { "main": [[{ "node": "Local AI synthesis", "type": "main", "index": 0 }]] },
+    "Local AI synthesis": { "main": [[{ "node": "Final report", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "pubmed-iadi-v1",
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

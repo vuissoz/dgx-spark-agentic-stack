@@ -38,7 +38,7 @@ run_default_answers() {
       TRTLLM_NATIVE_MAX_NUM_TOKENS= \
       TRTLLM_NATIVE_MAX_SEQ_LEN= \
       AGENTIC_OLLAMA_ESTIMATOR_TAGS_FILE="${ollama_fixtures_dir}/tags.context-estimator.json" \
-      AGENTIC_OLLAMA_ESTIMATOR_SHOW_FILE="${ollama_fixtures_dir}/show.nemotron-cascade-2-30b.json" \
+      AGENTIC_OLLAMA_ESTIMATOR_SHOW_FILE="${ollama_fixtures_dir}/show.qwen3-coder-30b.json" \
       "${wizard_script}" --output "${default_env_file}" >"${default_log}" 2>&1; then
     cat "${default_log}" >&2 || true
     fail "wizard failed with default Enter answers"
@@ -61,7 +61,7 @@ run_override_answers() {
   local custom_goose_workspace="${work_dir}/custom-workspaces/goose"
   local custom_models="${work_dir}/custom-ollama-models"
   local custom_default_model="llama3.2:1b"
-  local custom_trt_models="qwen3-nvfp4-demo,nemotron-cascade-2:30b"
+  local custom_trt_models="qwen3-nvfp4-demo,qwen3.8:27b"
   local custom_compose="agentic-ci"
   local custom_network="agentic-ci-net"
   local custom_egress_network="agentic-ci-egress"
@@ -245,12 +245,12 @@ grep -q "^export AGENTIC_EGRESS_NETWORK='agentic-egress'$" "${default_env_file}"
   || fail "default AGENTIC_EGRESS_NETWORK is not agentic-egress"
 grep -q "^export OLLAMA_MODELS_DIR='/srv/agentic/ollama/models'$" "${default_env_file}" \
   || fail "default OLLAMA_MODELS_DIR is not /srv/agentic/ollama/models"
-grep -q "^export AGENTIC_DEFAULT_MODEL='nemotron-cascade-2:30b'$" "${default_env_file}" \
-  || fail "default AGENTIC_DEFAULT_MODEL is not nemotron-cascade-2:30b"
-grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='91239'$" "${default_env_file}" \
-  || fail "default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 91239"
-grep -q "^export OLLAMA_CONTEXT_LENGTH='91239'$" "${default_env_file}" \
-  || fail "default OLLAMA_CONTEXT_LENGTH is not 91239"
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3.8:27b'$" "${default_env_file}" \
+  || fail "default AGENTIC_DEFAULT_MODEL is not qwen3.8:27b"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='262144'$" "${default_env_file}" \
+  || fail "default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 262144"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='262144'$" "${default_env_file}" \
+  || fail "default OLLAMA_CONTEXT_LENGTH is not 262144"
 grep -q "^export TRTLLM_MODELS='${default_trt_model}'$" "${default_env_file}" \
   || fail "default TRTLLM_MODELS must be ${default_trt_model}"
 grep -q "^export TRTLLM_NATIVE_MAX_BATCH_SIZE='1'$" "${default_env_file}" \
@@ -279,10 +279,10 @@ fi
 if grep -q '^export TRTLLM_NVFP4_HF_REVISION=' "${default_env_file}"; then
   fail "default onboarding env must not hardcode TRTLLM_NVFP4_HF_REVISION anymore"
 fi
-grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='91239'$" "${default_env_file}" \
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='262144'$" "${default_env_file}" \
   || fail "default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
-grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='nemotron-cascade-2:30b'$" "${default_env_file}" \
-  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not nemotron-cascade-2:30b"
+grep -q "^export OLLAMA_PRELOAD_GENERATE_MODEL='qwen3.8:27b'$" "${default_env_file}" \
+  || fail "default OLLAMA_PRELOAD_GENERATE_MODEL is not qwen3.8:27b"
 grep -q "^export GRAFANA_ADMIN_USER='admin'$" "${default_env_file}" \
   || fail "default GRAFANA_ADMIN_USER is not admin"
 grep -q "^export GRAFANA_ADMIN_PASSWORD='replace-with-strong-password'$" "${default_env_file}" \
@@ -370,7 +370,7 @@ grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='50909'$" "${override_env_
   || fail "override default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW should remain 50909 when not overridden"
 grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${override_env_file}" \
   || fail "override default OLLAMA_CONTEXT_LENGTH should remain 50909 when not overridden"
-grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo,nemotron-cascade-2:30b'$" "${override_env_file}" \
+grep -q "^export TRTLLM_MODELS='qwen3-nvfp4-demo,qwen3.8:27b'$" "${override_env_file}" \
   || fail "override TRTLLM_MODELS is not applied after enabling trt"
 if grep -q '^export TRTLLM_ACTIVE_MODEL_KEY=' "${override_env_file}"; then
   fail "override flow must not export TRTLLM_ACTIVE_MODEL_KEY anymore"
@@ -464,12 +464,12 @@ grep -q "^export AGENTIC_PI_MONO_WORKSPACES_DIR='${work_dir}/rootless-default-ro
   || fail "rootless default AGENTIC_PI_MONO_WORKSPACES_DIR is not <root>/optional/pi-mono/workspaces"
 grep -q "^export AGENTIC_GOOSE_WORKSPACES_DIR='${work_dir}/rootless-default-root/optional/goose/workspaces'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_GOOSE_WORKSPACES_DIR is not <root>/optional/goose/workspaces"
-grep -q "^export AGENTIC_DEFAULT_MODEL='nemotron-cascade-2:30b'$" "${rootless_default_env_file}" \
-  || fail "rootless default AGENTIC_DEFAULT_MODEL is not nemotron-cascade-2:30b"
-grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='50909'$" "${rootless_default_env_file}" \
-  || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 50909"
-grep -q "^export OLLAMA_CONTEXT_LENGTH='50909'$" "${rootless_default_env_file}" \
-  || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 50909"
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3.8:27b'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_DEFAULT_MODEL is not qwen3.8:27b"
+grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='187439'$" "${rootless_default_env_file}" \
+  || fail "rootless default AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW is not 187439"
+grep -q "^export OLLAMA_CONTEXT_LENGTH='187439'$" "${rootless_default_env_file}" \
+  || fail "rootless default OLLAMA_CONTEXT_LENGTH is not 187439"
 grep -q "^export TRTLLM_MODELS='${rootless_default_trt_model}'$" "${rootless_default_env_file}" \
   || fail "rootless default TRTLLM_MODELS must stay ${rootless_default_trt_model}"
 grep -q "^export TRTLLM_NATIVE_MAX_NUM_TOKENS='8192'$" "${rootless_default_env_file}" \
@@ -479,7 +479,7 @@ grep -q "^export TRTLLM_NATIVE_MAX_SEQ_LEN='98304'$" "${rootless_default_env_fil
 if grep -q '^export TRTLLM_ACTIVE_MODEL_KEY=' "${rootless_default_env_file}"; then
   fail "rootless default onboarding env must not export TRTLLM_ACTIVE_MODEL_KEY anymore"
 fi
-grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='50909'$" "${rootless_default_env_file}" \
+grep -q "^export AGENTIC_GOOSE_CONTEXT_LIMIT='187439'$" "${rootless_default_env_file}" \
   || fail "rootless default AGENTIC_GOOSE_CONTEXT_LIMIT must align with AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW"
 grep -q "^export OPENWEBUI_ENABLE_OLLAMA_API='False'$" "${rootless_default_env_file}" \
   || fail "rootless default OPENWEBUI_ENABLE_OLLAMA_API must be False"
@@ -692,13 +692,13 @@ if ! AGENTIC_PROFILE=strict-prod \
   --skip-ui-bootstrap \
   --skip-network-bootstrap \
   --skip-secret-bootstrap \
-  --default-model nemotron-cascade-2:30b \
+  --default-model qwen3.8:27b \
   --limits-ollama-mem 110g \
   --output "${recommended_context_env_file}" >/dev/null 2>&1; then
   fail "wizard recommended-context mode failed"
 fi
 assert_generated_file_baseline "${recommended_context_env_file}"
-grep -q "^export AGENTIC_DEFAULT_MODEL='nemotron-cascade-2:30b'$" "${recommended_context_env_file}" \
+grep -q "^export AGENTIC_DEFAULT_MODEL='qwen3.8:27b'$" "${recommended_context_env_file}" \
   || fail "recommended-context flow must export the selected model"
 grep -q "^export AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW='108883'$" "${recommended_context_env_file}" \
   || fail "recommended-context flow must auto-select the max fitting context"

@@ -1,0 +1,38 @@
+{
+  "schema_version": "v2-visible-corpus.v0",
+  "corpus_id": "v2-walking-skeleton",
+  "corpus_version": "v0",
+  "source": "PLAN.md section 15.4.5",
+  "journeys": [
+    {
+      "journey_id": "bootstrap-doctor",
+      "capability_id": "bootstrap_doctor",
+      "class": "P0",
+      "oracle": "Bootstrap, start, and doctor complete with release and security evidence."
+    },
+    {
+      "journey_id": "codex-repo-change",
+      "capability_id": "codex_project_run",
+      "class": "P1",
+      "oracle": "Codex changes, tests, commits, and pushes an authorized repository."
+    },
+    {
+      "journey_id": "context-isolation",
+      "capability_id": "workspace_isolation",
+      "class": "P0",
+      "oracle": "Personal and project contexts are isolated and negative leakage checks fail closed."
+    },
+    {
+      "journey_id": "model-backend-failure",
+      "capability_id": "model_broker_basic",
+      "class": "P0",
+      "oracle": "A backend failure triggers explicit fallback or actionable refusal with recovery evidence."
+    },
+    {
+      "journey_id": "snapshot-restore-rollback",
+      "capability_id": "snapshot_restore_rollback",
+      "class": "P0",
+      "oracle": "A snapshot, mutation, restore, and release rollback return the platform to the selected checkpoint."
+    }
+  ]
+}

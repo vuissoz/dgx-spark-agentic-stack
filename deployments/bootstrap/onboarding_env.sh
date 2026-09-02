@@ -54,6 +54,7 @@ limits_rag_cpus_override=""
 limits_rag_mem_override=""
 limits_optional_cpus_override=""
 limits_optional_mem_override=""
+limits_rootless_dev_memory_override=""
 git_forge_host_port_override=""
 git_forge_admin_user_override=""
 git_forge_shared_namespace_override=""
@@ -140,6 +141,7 @@ Runtime options:
   --limits-rag-mem <size>
   --limits-optional-cpus <cores>
   --limits-optional-mem <size>
+  --limits-rootless-dev-memory <mb>
   --git-forge-host-port <port>
   --git-forge-admin-user <name>
   --git-forge-shared-namespace <slug>
@@ -424,6 +426,15 @@ default_limits_stack_mem_for_profile() {
   fi
 }
 
+default_limits_rootless_dev_memory_for_profile() {
+  local profile="$1"
+  if [[ "${profile}" == "rootless-dev" ]]; then
+    printf '%s\n' "307200"
+  else
+    printf '%s\n' "61440"
+  fi
+}
+
 validate_profile() {
   case "$1" in
     strict-prod|rootless-dev) return 0 ;;
@@ -457,6 +468,23 @@ validate_memory_limit_value() {
   }
   [[ "${value}" =~ ^[0-9]+([.][0-9]+)?[bBkKmMgG]$ ]] || {
     echo "${key} must use docker memory format (example: 512m, 1g, 2G)" >&2
+    return 1
+  }
+}
+
+validate_positive_int_value() {
+  local key="$1"
+  local value="$2"
+  [[ -n "${value}" ]] || {
+    echo "${key} cannot be empty" >&2
+    return 1
+  }
+  [[ "${value}" =~ ^[0-9]+$ ]] || {
+    echo "${key} must be a positive integer" >&2
+    return 1
+  }
+  (( value > 0 )) || {
+    echo "${key} must be positive" >&2
     return 1
   }
 }
@@ -886,11 +914,11 @@ validate_optional_modules_csv() {
       none)
         saw_none=1
         ;;
-      mcp|pi-mono|goose|portainer)
+      mcp|pi-mono|goose|portainer|n8n|n8n-ai)
         saw_module=1
         ;;
       *)
-        echo "unknown optional module '${entry}' (allowed: mcp,pi-mono,goose,portainer,none)" >&2
+        echo "unknown optional module '${entry}' (allowed: mcp,pi-mono,goose,portainer,n8n,n8n-ai,none)" >&2
         return 1
         ;;
     esac
@@ -1596,6 +1624,7 @@ export AGENTIC_LIMIT_RAG_CPUS=$(shell_quote "${limits_rag_cpus}")
 export AGENTIC_LIMIT_RAG_MEM=$(shell_quote "${limits_rag_mem}")
 export AGENTIC_LIMIT_OPTIONAL_CPUS=$(shell_quote "${limits_optional_cpus}")
 export AGENTIC_LIMIT_OPTIONAL_MEM=$(shell_quote "${limits_optional_mem}")
+export AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB=$(shell_quote "${limits_rootless_dev_memory}")
 export AGENTIC_OPTIONAL_MODULES=$(shell_quote "${optional_modules_csv}")
 EOF_ENV
 
@@ -1993,6 +2022,11 @@ while [[ $# -gt 0 ]]; do
       limits_optional_mem_override="$2"
       shift 2
       ;;
+    --limits-rootless-dev-memory)
+      [[ $# -ge 2 ]] || die "missing value for --limits-rootless-dev-memory"
+      limits_rootless_dev_memory_override="$2"
+      shift 2
+      ;;
     --git-forge-host-port)
       [[ $# -ge 2 ]] || die "missing value for --git-forge-host-port"
       git_forge_host_port_override="$2"
@@ -2221,7 +2255,7 @@ collect_text_value network "AGENTIC_NETWORK" "${default_network}" "${network_ove
 collect_text_value egress_network "AGENTIC_EGRESS_NETWORK" "${default_egress_network}" "${egress_network_override}" validate_compose_or_network_name "AGENTIC_EGRESS_NETWORK is dedicated to controlled outbound traffic."
 
 collect_path_value ollama_models "OLLAMA_MODELS_DIR" "${profile}" "$(default_ollama_models_for_profile "${profile}" "${root_path}")" "${ollama_models_override}" "OLLAMA_MODELS_DIR points to the shared Ollama model storage path on host."
-collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-nemotron-cascade-2:30b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
+collect_text_value default_model "AGENTIC_DEFAULT_MODEL" "${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}" "${default_model_override}" validate_model_id_value "AGENTIC_DEFAULT_MODEL controls the default local model used for preload and onboarding-generated OpenHands config."
 warn_agentic_tool_call_model_regression "AGENTIC_DEFAULT_MODEL" "${default_model}" || die "invalid AGENTIC_DEFAULT_MODEL"
 collect_text_value default_model_context_window "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW" "${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}" "${default_model_context_window_override}" validate_context_window_value "AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW controls Ollama context length (tokens) for the default local model. Onboarding may recommend a different value later once AGENTIC_LIMIT_OLLAMA_MEM is known."
   trtllm_models="${trtllm_models_override:-$(default_trtllm_models_for_profile "${profile}")}"
@@ -2286,10 +2320,13 @@ collect_mem_limit limits_rag_mem "AGENTIC_LIMIT_RAG_MEM" "$(default_limits_stack
 collect_cpu_limit limits_optional_cpus "AGENTIC_LIMIT_OPTIONAL_CPUS" "$(default_limits_stack_cpus_for_profile "${profile}" "optional")" "${limits_optional_cpus_override}" "AGENTIC_LIMIT_OPTIONAL_CPUS/AGENTIC_LIMIT_OPTIONAL_MEM set defaults for optional modules."
 collect_mem_limit limits_optional_mem "AGENTIC_LIMIT_OPTIONAL_MEM" "$(default_limits_stack_mem_for_profile "${profile}" "optional")" "${limits_optional_mem_override}"
 
+# Rootless-dev memory footprint limit (configurable, default 300GB for rootless-dev, 60GB for strict-prod)
+collect_text_value limits_rootless_dev_memory "AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB" "$(default_limits_rootless_dev_memory_for_profile "${profile}")" "${limits_rootless_dev_memory_override}" validate_positive_int_value "AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB sets the total memory footprint limit for the rootless-dev profile (in MB)."
+
 optional_modules_raw="${optional_modules_override:-none}"
 if [[ "${non_interactive}" -eq 0 && -z "${optional_modules_override}" ]]; then
   while true; do
-    candidate="$(prompt_with_default "AGENTIC_OPTIONAL_MODULES (csv: none,mcp,pi-mono,goose,portainer)" "${optional_modules_raw}")"
+    candidate="$(prompt_with_default "AGENTIC_OPTIONAL_MODULES (csv: none,mcp,pi-mono,goose,portainer,n8n,n8n-ai)" "${optional_modules_raw}")"
     if validate_optional_modules_csv "${candidate}"; then
       optional_modules_raw="${candidate}"
       break
@@ -2852,6 +2889,7 @@ if [[ "${profile}" == "strict-prod" ]]; then
   echo "  source \"${output_file}\""
   echo "  ./agent profile"
   echo "  sudo ./deployments/bootstrap/init_fs.sh"
+  echo "  sudo -E ./agent secrets --profiles ui"
   echo "  sudo ./agent up core"
   echo "  sudo ./agent up agents,ui,obs,rag"
   echo "  sudo ./agent doctor"
@@ -2860,6 +2898,7 @@ else
   echo "  source \"${output_file}\""
   echo "  ./agent profile"
   echo "  ./deployments/bootstrap/init_fs.sh"
+  echo "  ./agent secrets --profiles ui"
   echo "  ./agent up core"
   echo "  ./agent up agents,ui,obs,rag"
   echo "  ./agent doctor"

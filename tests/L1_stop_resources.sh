@@ -43,6 +43,8 @@ AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" up optional >/tmp/agent-l1-up.out 
 
 sentinel_cid="$(require_service_container optional-sentinel)" || exit 1
 wait_for_container_ready "${sentinel_cid}" 60 || fail "optional-sentinel did not become ready"
+assert_container_non_root_user "${sentinel_cid}" || fail "optional-sentinel must run as non-root in rootless-dev"
+ok "optional-sentinel runs as non-root in rootless-dev"
 
 "${agent_bin}" stop service optional-sentinel >/tmp/agent-l1-stop-service.out \
   || fail "agent stop service optional-sentinel failed"
@@ -53,6 +55,7 @@ service_state="$(docker inspect --format '{{.State.Status}}' "${sentinel_cid}")"
   || fail "agent start service optional-sentinel failed"
 service_state="$(docker inspect --format '{{.State.Status}}' "${sentinel_cid}")"
 [[ "${service_state}" == "running" ]] || fail "optional-sentinel should be running after service start (state=${service_state})"
+assert_container_non_root_user "${sentinel_cid}" || fail "optional-sentinel must stay non-root after service restart"
 
 sentinel_name="$(docker ps -a \
   --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
@@ -69,5 +72,6 @@ container_state="$(docker inspect --format '{{.State.Status}}' "${sentinel_name}
   || fail "agent start container failed"
 container_state="$(docker inspect --format '{{.State.Status}}' "${sentinel_name}")"
 [[ "${container_state}" == "running" ]] || fail "container should be running after container start (state=${container_state})"
+assert_container_non_root_user "${sentinel_name}" || fail "optional-sentinel must stay non-root after container restart"
 
 ok "L1_stop_resources passed"

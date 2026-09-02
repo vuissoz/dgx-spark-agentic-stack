@@ -1,0 +1,26 @@
+{
+  "schema_version": "v2-metrics.v0",
+  "source": "PLAN.md section 15.4",
+  "primary_metric": {
+    "metric_id": "tpsr",
+    "name": "safe_recoverable_journey_rate",
+    "unit": "ratio",
+    "definition": "Successful journeys without gate violations and with validated recovery divided by valid attempts.",
+    "confidence": {"method": "wilson_lower_bound", "level": 0.95}
+  },
+  "metrics": [
+    {"metric_id": "tpsr", "unit": "ratio", "direction": "maximize", "nullable": false},
+    {"metric_id": "latency_p50_seconds", "unit": "seconds", "direction": "minimize", "nullable": true},
+    {"metric_id": "latency_p95_seconds", "unit": "seconds", "direction": "minimize", "nullable": true},
+    {"metric_id": "time_to_first_ready_seconds", "unit": "seconds", "direction": "minimize", "nullable": true},
+    {"metric_id": "time_to_detect_seconds", "unit": "seconds", "direction": "minimize", "nullable": true},
+    {"metric_id": "time_to_recover_seconds", "unit": "seconds", "direction": "minimize", "nullable": true},
+    {"metric_id": "rollback_seconds", "unit": "seconds", "direction": "minimize", "nullable": true},
+    {"metric_id": "restore_seconds", "unit": "seconds", "direction": "minimize", "nullable": true},
+    {"metric_id": "manual_interventions", "unit": "count", "direction": "minimize", "nullable": false},
+    {"metric_id": "isolation_violations", "unit": "count", "direction": "must_be_zero", "nullable": false},
+    {"metric_id": "unresolved_resources", "unit": "count", "direction": "must_be_zero", "nullable": false},
+    {"metric_id": "tokens_total", "unit": "tokens", "direction": "observe", "nullable": true}
+  ],
+  "pareto_objectives": ["tpsr", "latency_p95_seconds", "manual_interventions", "time_to_recover_seconds"]
+}

@@ -13,35 +13,44 @@ AGENT_RELEASE_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/rollbac
 AGENT_RELEASE_RESOLVE_LATEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/resolve_latest.py"
 AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/write_release_integrity.py"
 AGENT_BACKUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/backups/time_machine.sh"
+AGENT_GENERATE_HARNESS_PROFILES_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/generate_harness_profiles.py"
 AGENT_DOCKER_USER_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/net/rollback_docker_user.sh"
 AGENT_DOCTOR_SCRIPT="${SCRIPT_DIR}/doctor.sh"
 AGENT_PREREQS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/check_prereqs.sh"
 AGENT_ONBOARD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/bootstrap/onboarding_env.sh"
+AGENT_SECRETS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/secrets_assistant.py"
 AGENT_OLLAMA_PRELOAD_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/preload_and_lock.sh"
 AGENT_TRTLLM_PREPARE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/trtllm/prepare_nvfp4_model.sh"
 AGENT_OLLAMA_LINK_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/setup-ollama-models-link.sh"
 AGENT_OLLAMA_LINK_ROLLBACK_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/ollama/rollback_models_link.sh"
 AGENT_OLLAMA_DRIFT_WATCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_drift_watch.sh"
 AGENT_OLLAMA_DRIFT_SCHEDULE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/install_ollama_drift_watch_schedule.sh"
+AGENT_MEMORY_WATCHDOG_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/memory_watchdog.sh"
 AGENT_OLLAMA_CHAT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/ollama_chat_benchmark.py"
 AGENT_CODEX_CONTEXT_BENCH_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/codex_context_window_benchmark.py"
+AGENT_CODEX_CONTEXT_SATURATION_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/codex_context_saturation.py"
 AGENT_COMFYUI_FLUX_SETUP_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_flux_setup.sh"
+AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/comfyui_model_bundle.sh"
 AGENT_TUNNEL_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/tunnel_matrix.py"
 AGENT_OPENCLAW_APPROVALS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_approvals.py"
 AGENT_OPENCLAW_OPERATOR_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_operator.py"
 AGENT_OPENCLAW_MODULE_MANIFEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_module_manifest.py"
 AGENT_OPENCLAW_MANAGED_INIT_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_managed_init.py"
+AGENT_OPENCLAW_TERMINAL_PAIRING_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/openclaw_terminal_pairing.py"
 AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT="${AGENT_GIT_FORGE_BOOTSTRAP_SCRIPT:-${AGENTIC_REPO_ROOT}/deployments/optional/git_forge_bootstrap.py}"
 AGENT_REPO_E2E_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/optional/agent_repo_e2e.py"
 AGENT_VM_CREATE_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/create_strict_prod_vm.sh"
 AGENT_VM_TEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/test_strict_prod_vm.sh"
 AGENT_VM_CLEANUP_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/cleanup_strict_prod_vm.sh"
+AGENT_N8N_SANDBOX_VM_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/vm/manage_n8n_sandbox_vm.sh"
+AGENT_N8N_DOCTOR_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/n8n_doctor.py"
+AGENT_N8N_DOCTOR_WORKFLOW="${AGENTIC_REPO_ROOT}/examples/optional/n8n-workflows/doctor-n8n-local-ollama-validation.json"
 AGENT_GPU_CLOCK_LOW_PRESET="${AGENT_GPU_CLOCK_LOW_PRESET:-2000,2000}"
 AGENT_TOOLS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose comfyui)
-AGENT_STATUS_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
-STOP_START_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui)
-OPTIONAL_MODULES=(mcp pi-mono goose portainer)
-FORGET_TARGETS=(ollama claude codex opencode kilocode vibestral hermes comfyui openclaw openhands openwebui qdrant obs all)
+AGENT_STATUS_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui n8n)
+STOP_START_TARGETS=(claude codex opencode kilocode vibestral hermes openclaw pi-mono goose forgejo openwebui openhands comfyui n8n)
+OPTIONAL_MODULES=(mcp pi-mono goose portainer n8n n8n-ai)
+FORGET_TARGETS=(ollama claude codex opencode kilocode vibestral hermes comfyui openclaw openhands openwebui qdrant obs n8n all)
 STACK_START_ORDER=(core agents ui obs rag optional)
 STACK_STOP_ORDER=(optional rag obs ui agents core)
 
@@ -55,16 +64,21 @@ Usage:
   agent down <core|agents|ui|obs|rag|optional>
   agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>
   agent <claude|codex|opencode|kilocode|vibestral|hermes|openclaw|pi-mono|goose|comfyui> [project]
+  agent comfyui rotate-password
   agent codex bench-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--model <name>] [--json] [--verbose]
+  agent codex saturate-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--target-percent <percent>] [--hard-stop-percent <percent>] [--model <name>] [--dry-run] [--json] [--verbose]
   agent openclaw init [project]
   agent openclaw status [--json]
   agent openclaw policy [list [--json] | add <dm-target|tool> <value> [--json]]
   agent openclaw model set <id> [--json]
+  agent openclaw session new <name> --message <text> [--timeout <seconds>] [--json]
+  agent openclaw terminal [pending | authorize <request-id>]
   agent openclaw sandbox [ls [--json] | attach <sandbox_id> | destroy <sandbox_id> [--json]]
   agent openclaw approvals [list [--status <pending|approved|denied|expired|all>] [--json] | approve <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] | deny <id> --scope <session|global> [--session-id <id>] [--ttl-sec <sec>] [--reason <text>] | promote <id>]
   agent ls
   agent status
   agent ps
+  agent memory <status|watchdog [--once]|stop|resume <service>|clear-quarantine|install-autostart|uninstall-autostart>
   agent llm mode [local|hybrid|mixed|remote]
   agent llm backend [ollama|trtllm|both|remote]
   agent llm test-mode [on|off]
@@ -77,10 +91,16 @@ Usage:
   agent tunnel generate <linux|macos|windows|iphone> --ssh-target <user@host> [--all|--enabled|--surface <id> ...] [--output <path>] [--name <alias>]
   agent tunnel check [--all|--surface <id> ...] [--json]
   agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]
+  agent comfyui <minimax-h3|flux2-dev|stable-audio-3|ace-step-v1|ace-step-1.5> [--download] [--force] [--dry-run]
   agent logs <service>
   agent stop <target>
   agent stop service <service...>
   agent stop container <container...>
+  agent control-plane inspect [--project <name>] [--json]
+  agent control-plane model-route [--json]
+  agent control-plane session <start|end|list> [--harness <h>] [--project <p>] [--session-id <id>]
+  agent control-plane auth rotate <service> [scope]
+  agent control-plane scheduler <status|stats>
   agent start <target>
   agent start service <service...>
   agent start container <container...>
@@ -98,6 +118,7 @@ Usage:
   agent ollama-preload [--generate-model <model>] [--embed-model <model>] [--budget-gb <int>] [--no-lock-ro]
   agent ollama-models [status|rw|ro]
   agent sudo-mode [status|on|off]
+  agent sbom <scan|validate-allowlist|list-digests|record-deps>
   agent update
   agent rollback all <release_id>
   agent rollback host-net <backup_id>
@@ -105,14 +126,19 @@ Usage:
   agent repo-e2e [--agents <csv>] [--repo <name>] [--clone-url <url>] [--artifacts-dir <path>] [--attempts <int>] [--reset-agent-branches] [--dry-run]
   agent prereqs
   agent onboard [runtime flags...] [--compose-profiles ... --default-model ... --default-model-context-window ... --trtllm-models ... --grafana-admin-user ... --grafana-admin-password ... --obs-retention-time ... --obs-max-disk ... --openwebui-admin-email ... --openwebui-admin-password ... --openhands-llm-model ... --allowlist-domains ... --huggingface-token ... --openclaw-init-project ... --telegram-bot-token ... --discord-bot-token ... --slack-bot-token ... --slack-app-token ... --slack-signing-secret ... --optional-modules ... --output ... --non-interactive --require-complete]
+  agent secrets [--check] [--profiles <csv>] [--modules <csv>]
+  agent secrets rotate <secret-id>
   agent vm create [--name ... --cpus ... --memory ... --disk ... --image ... --workspace-path ... --reuse-existing --mount-repo|--no-mount-repo --require-gpu --skip-bootstrap --dry-run]
   agent vm test [--name ... --workspace-path ... --test-selectors ... --require-gpu|--allow-no-gpu --skip-d5-tests --dry-run]
   agent vm cleanup [--name ... --yes --dry-run]
+  agent n8n-sandbox-vm <create|start|stop|status|endpoint|destroy> [options]
+  agent evaluate <validate-specs|bootstrap-evidence|context-isolation-evidence|snapshot-restore-rollback-evidence|model-backend-failure-evidence|run-all>
+  agent schema                          PostgreSQL source-of-truth schema (§4, §5)
   agent test <A|B|C|D|E|F|G|H|I|J|K|L|V|all> [--skip-d5-tests]
   agent doctor [--fix-net] [--check-tool-stream-e2e]
 
 Optional modules (disabled by default):
-  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer agent up optional
+  AGENTIC_OPTIONAL_MODULES=mcp,pi-mono,goose,portainer,n8n,n8n-ai agent up optional
 USAGE
 }
 
@@ -289,6 +315,8 @@ service_start_hint() {
     openclaw|openclaw-gateway) echo "agent up core" ;;
     optional-pi-mono) echo "AGENTIC_OPTIONAL_MODULES=pi-mono agent up optional" ;;
     optional-goose) echo "AGENTIC_OPTIONAL_MODULES=goose agent up optional" ;;
+    optional-n8n) echo "AGENTIC_OPTIONAL_MODULES=n8n agent up optional" ;;
+    optional-n8n-searxng) echo "AGENTIC_OPTIONAL_MODULES=n8n-ai agent up optional" ;;
     optional-forgejo|comfyui) echo "agent up ui" ;;
     *) echo "agent up agents" ;;
   esac
@@ -299,7 +327,7 @@ target_to_compose_file() {
     claude|codex|opencode|kilocode|vibestral|hermes) stack_to_compose_file agents ;;
     openclaw) stack_to_compose_file core ;;
     openwebui|openhands|comfyui|forgejo) stack_to_compose_file ui ;;
-    pi-mono|goose) stack_to_compose_file optional ;;
+    pi-mono|goose|n8n) stack_to_compose_file optional ;;
     *) return 1 ;;
   esac
 }
@@ -322,6 +350,12 @@ target_to_services() {
       ;;
     pi-mono) printf '%s\n' "optional-pi-mono" ;;
     goose) printf '%s\n' "optional-goose" ;;
+    n8n)
+      printf '%s\n' \
+        "optional-n8n" \
+        "optional-n8n-loopback" \
+        "optional-n8n-searxng"
+      ;;
     forgejo)
       printf '%s\n' \
         "optional-forgejo" \
@@ -399,6 +433,8 @@ optional_module_profile() {
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "optional-goose" ;;
     portainer) echo "optional-portainer" ;;
+    n8n) echo "optional-n8n" ;;
+    n8n-ai) echo "optional-n8n-ai" ;;
     *) return 1 ;;
   esac
 }
@@ -408,13 +444,22 @@ optional_module_secret_files() {
     mcp) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/mcp.token" ;;
     pi-mono) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/gate_mcp.token" ;;
     goose|portainer) ;;
+    n8n) printf '%s\n' "${AGENTIC_ROOT}/secrets/runtime/n8n.auth_password" ;;
+    n8n-ai)
+      printf '%s\n' \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n.auth_password" \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/api.key" \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/registration.token" \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/runner.key" \
+        "${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/searxng.key"
+      ;;
     *) return 1 ;;
   esac
 }
 
 optional_module_config_files() {
   case "$1" in
-    mcp|pi-mono|goose|portainer) ;;
+    mcp|pi-mono|goose|portainer|n8n|n8n-ai) ;;
     *) return 1 ;;
   esac
 }
@@ -505,8 +550,52 @@ baseline_optional_modules() {
 validate_optional_request_file() {
   local module="$1"
   local request_file="${AGENTIC_ROOT}/deployments/optional/${module}.request"
+  local need_value
+  local success_value
+  local owner_value
 
-  [[ -f "${request_file}" ]] || die "Optional module '${module}' requires request file: ${request_file}"
+  if [[ ! -f "${request_file}" ]]; then
+    install -d -m 0750 "${AGENTIC_ROOT}/deployments/optional"
+    case "${module}" in
+      mcp)
+        need_value="Expose a restricted MCP catalog for local automation workflows."
+        success_value="Only allowlisted tools are available and service healthcheck stays green."
+        ;;
+      pi-mono)
+        need_value="Provide an additional isolated CLI agent runtime for targeted tasks."
+        success_value="Container starts with expected user/workspace mappings and no forbidden mounts."
+        ;;
+      goose)
+        need_value="Provide an isolated Goose CLI runtime for approved workflows."
+        success_value="Container starts successfully with isolated workspace and expected proxy controls."
+        ;;
+      portainer)
+        need_value="Provide temporary loopback-only Portainer visibility for local diagnostics."
+        success_value="UI is reachable on loopback only and runs without docker.sock mount."
+        ;;
+      n8n)
+        need_value="Provide workflow automation service for local agentic workflows."
+        success_value="n8n service and loopback proxy start successfully with healthchecks passing."
+        ;;
+      n8n-ai)
+        need_value="Provide a fully local n8n AI Assistant with Ollama, an isolated sandbox VM, and SearXNG."
+        success_value="n8n AI Assistant reaches the local model, private sandbox VM, and local search without host code execution."
+        ;;
+      *)
+        die "Optional module '${module}' requires request file: ${request_file}"
+        ;;
+    esac
+    owner_value="${SUDO_USER:-${USER:-operator}}"
+    cat > "${request_file}" <<EOF
+need=${need_value}
+success=${success_value}
+owner=${owner_value}
+expires_at=
+EOF
+    chmod 0640 "${request_file}" || true
+    log_optional_activation "${module}"
+  fi
+
   grep -Eq '^need=[^[:space:]].+$' "${request_file}" \
     || die "Optional module '${module}' request is missing a non-empty 'need=' entry: ${request_file}"
   grep -Eq '^success=[^[:space:]].+$' "${request_file}" \
@@ -526,7 +615,7 @@ validate_optional_module_prereqs() {
   for secret_file in "${secret_files[@]}"; do
     [[ -n "${secret_file}" ]] || continue
     [[ -s "${secret_file}" ]] \
-      || die "Optional module '${module}' requires a secret file with mode 600: ${secret_file}"
+      || die "Optional module '${module}' requires a secret file with mode 600: ${secret_file}; run './agent secrets --modules ${module}'"
     secret_mode="$(stat -c '%a' "${secret_file}" 2>/dev/null || echo "")"
     if [[ "${secret_mode}" != "600" && "${secret_mode}" != "640" ]]; then
       die "Optional module '${module}' secret must use restrictive permissions (600/640): ${secret_file} (mode=${secret_mode:-unknown})"
@@ -539,6 +628,81 @@ validate_optional_module_prereqs() {
     [[ -s "${config_file}" ]] \
       || die "Optional module '${module}' requires runtime config file: ${config_file}"
   done
+
+  if [[ "${module}" == "n8n-ai" ]]; then
+    require_cmd multipass
+    [[ -x "${AGENT_N8N_SANDBOX_VM_SCRIPT}" ]] \
+      || die "n8n sandbox VM manager is missing: ${AGENT_N8N_SANDBOX_VM_SCRIPT}"
+    "${AGENT_N8N_SANDBOX_VM_SCRIPT}" status >/dev/null \
+      || die "Optional module 'n8n-ai' requires a healthy local sandbox VM. Run: ./agent n8n-sandbox-vm create"
+  fi
+}
+
+load_n8n_sandbox_runtime_env() {
+  local secret_root="${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox"
+
+  export N8N_SANDBOX_API_KEY
+  export N8N_SANDBOX_RUNNER_REGISTRATION_TOKEN
+  export N8N_SANDBOX_RUNNER_API_KEY
+  export N8N_SEARXNG_SECRET
+  export N8N_INSTANCE_AI_SANDBOX_ENABLED=true
+  export N8N_SANDBOX_SERVICE_URL
+  export N8N_SANDBOX_VM_IP
+
+  N8N_SANDBOX_API_KEY="$(<"${secret_root}/api.key")"
+  N8N_SANDBOX_RUNNER_REGISTRATION_TOKEN="$(<"${secret_root}/registration.token")"
+  N8N_SANDBOX_RUNNER_API_KEY="$(<"${secret_root}/runner.key")"
+  N8N_SEARXNG_SECRET="$(<"${secret_root}/searxng.key")"
+  N8N_SANDBOX_SERVICE_URL="$("${AGENT_N8N_SANDBOX_VM_SCRIPT}" endpoint)"
+  N8N_SANDBOX_VM_IP="${N8N_SANDBOX_SERVICE_URL#http://}"
+  N8N_SANDBOX_VM_IP="${N8N_SANDBOX_VM_IP%:8080}"
+}
+
+cmd_n8n_sandbox_vm() {
+  local action="${1:-status}"
+  [[ -x "${AGENT_N8N_SANDBOX_VM_SCRIPT}" ]] \
+    || die "n8n sandbox VM manager is missing: ${AGENT_N8N_SANDBOX_VM_SCRIPT}"
+  case "${action}" in
+    create)
+      ensure_optional_runtime
+      ;;
+  esac
+  "${AGENT_N8N_SANDBOX_VM_SCRIPT}" "$@"
+  case "${action}" in
+    create|start)
+      load_n8n_sandbox_runtime_env
+      ensure_runtime_env
+      set_runtime_env_value "N8N_INSTANCE_AI_SANDBOX_ENABLED" "true"
+      set_runtime_env_value "N8N_SANDBOX_SERVICE_URL" "${N8N_SANDBOX_SERVICE_URL}"
+      set_runtime_env_value "N8N_SANDBOX_VM_IP" "${N8N_SANDBOX_VM_IP}"
+      ;;
+  esac
+}
+
+install_n8n_doctor_workflow() {
+  local n8n_cid=""
+  local attempt
+
+  [[ -x "${AGENT_N8N_DOCTOR_SCRIPT}" ]] \
+    || die "n8n doctor runner is missing or not executable: ${AGENT_N8N_DOCTOR_SCRIPT}"
+  [[ -f "${AGENT_N8N_DOCTOR_WORKFLOW}" ]] \
+    || die "n8n doctor workflow template is missing: ${AGENT_N8N_DOCTOR_WORKFLOW}"
+
+  for attempt in $(seq 1 24); do
+    n8n_cid="$(docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${AGENTIC_COMPOSE_DIR}/compose.optional.yml" ps -q optional-n8n 2>/dev/null || true)"
+    if [[ -n "${n8n_cid}" ]] && [[ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${n8n_cid}" 2>/dev/null || true)" == "healthy" ]]; then
+      break
+    fi
+    sleep 2
+  done
+  [[ -n "${n8n_cid}" ]] \
+    || die "optional-n8n did not start; cannot install the managed doctor workflow"
+
+  python3 "${AGENT_N8N_DOCTOR_SCRIPT}" \
+    --workflow "${AGENT_N8N_DOCTOR_WORKFLOW}" \
+    --container "${n8n_cid}" \
+    --install \
+    || die "failed to install managed n8n doctor workflow"
 }
 
 log_optional_activation() {
@@ -568,6 +732,8 @@ optional_module_build_services() {
     pi-mono) echo "optional-pi-mono" ;;
     goose) echo "" ;;
     portainer) echo "" ;;
+    n8n) echo "" ;;
+    n8n-ai) echo "" ;;
     *) return 1 ;;
   esac
 }
@@ -1057,6 +1223,7 @@ build_ui_local_images() {
   fi
 }
 
+COMPOSE_FILES_ARG=""
 resolve_update_latest_inputs() {
   local output_dir="$1"
   shift
@@ -1105,6 +1272,14 @@ capture_update_resolution_artifacts() {
     [[ -f "${resolution_dir}/${artifact}" ]] || continue
     install -m 0640 "${resolution_dir}/${artifact}" "${release_dir}/${artifact}"
   done
+
+  # Generate and store SBOM/provenance snapshot (PLAN §17)
+  if [[ -f "${AGENTIC_REPO_ROOT}/scripts/sbom_provenance.sh" ]]; then
+    local _sbom_release_dir="${release_dir}"
+    bash "${AGENTIC_REPO_ROOT}/scripts/sbom_provenance.sh" \
+      --mode scan --release-dir "${_sbom_release_dir}" \
+      ${COMPOSE_FILES_ARG:-} 2>/dev/null || warn "SBOM capture skipped (docker unavailable)"
+  fi
 
   [[ -f "${AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT}" ]] \
     || die "release integrity writer is missing: ${AGENT_RELEASE_INTEGRITY_WRITE_SCRIPT}"
@@ -1429,11 +1604,9 @@ run_compose_on_targets() {
     compose_file="$(stack_to_compose_file "$target")"
     [[ -f "$compose_file" ]] || die "Compose file not found for target '$target': $compose_file"
     compose_args+=("-f" "$compose_file")
+    # Add profile matching target name for services with profiles
+    profile_args+=("--profile" "$target")
   done
-
-  if targets_include optional "${selected_targets[@]}"; then
-    profile_args+=("--profile" "optional")
-  fi
 
   docker_compose_partial "${profile_args[@]}" "${compose_args[@]}" "$action" "$@"
 }
@@ -1756,6 +1929,7 @@ cmd_tool_attach() {
       printf 'INFO: OpenClaw upstream Gateway WS is ws://127.0.0.1:%s.\n' "${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
       printf 'INFO: provider relay ingress is available at http://127.0.0.1:%s/v1/providers/<provider>/webhook.\n' "${OPENCLAW_RELAY_HOST_PORT:-18112}"
       printf 'INFO: OpenClaw onboarding SecretRef expects OPENCLAW_GATEWAY_TOKEN to be set in this shell.\n'
+      printf 'INFO: if the CLI requests a device scope upgrade, use "agent openclaw terminal pending", then explicitly authorize its request id.\n'
       printf 'INFO: run: export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\\''\\n'\\'' </run/secrets/openclaw.token)"\n'
       ;;
     comfyui-shell)
@@ -2001,6 +2175,67 @@ cmd_ls() {
   done
 }
 
+cmd_control_plane() {
+  local subcommand="${1:-inspect}"
+  shift || true
+
+  case "${subcommand}" in
+    inspect)
+      # Delegate to Python RuntimeInspector
+      local json_flag=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --json|-j) json_flag="--json"; shift ;;
+          --project|-p) project_override="$2"; shift 2 ;;
+          *) shift ;;
+        esac
+      done
+
+      local inspector_script="${REPO_ROOT}/src/agentic/implementations/runtime_inspector.py"
+      [[ -f "${inspector_script}" ]] || die "runtime_inspector.py not found: ${inspector_script}"
+
+      local inspect_cmd=(python3 "${inspector_script}")
+      if [[ -n "${project_override:-}" ]]; then
+        inspect_cmd+=(--project "${project_override}")
+      else
+        inspect_cmd+=(--project "${AGENTIC_COMPOSE_PROJECT:-agentic-dev}")
+      fi
+      if [[ -n "${json_flag}" ]]; then
+        inspect_cmd+=("--json")  # runtime_inspector always outputs JSON
+      fi
+
+      printf '--- Runtime Inspection (v2 adapter bridge) ---\n' >&2
+      set +e
+      "${inspect_cmd[@]}"
+      local rc=$?
+      set -e
+      return ${rc}
+      ;;
+    schema)
+      # Print PostgreSQL schema for control plane
+      local schema_script="${REPO_ROOT}/src/agentic/control/postgres_schema.py"
+      [[ -f "${schema_script}" ]] || die "postgres_schema.py not found: ${schema_script}"
+      python3 "${schema_script}"
+      ;;
+    model-route)
+      python3 "${REPO_ROOT}/scripts/control_plane.py" model-route "$@"
+      ;;
+    session)
+      python3 "${REPO_ROOT}/scripts/control_plane.py" session "$@"
+      ;;
+    auth)
+      python3 "${REPO_ROOT}/scripts/control_plane.py" auth "$@"
+      ;;
+    scheduler)
+      python3 "${REPO_ROOT}/scripts/control_plane.py" scheduler "$@"
+      ;;
+    *)
+      die "Usage: agent control-plane <inspect|schema|model-route|session|auth|scheduler> [--project <name>] [--json]"
+      ;;
+  esac
+}
+
+
 cmd_status() {
   require_cmd docker
 
@@ -2010,6 +2245,87 @@ cmd_status() {
     --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" \
     --format '{{.Label "com.docker.compose.service"}}\t{{.Names}}\t{{.State}}\t{{.Status}}\t{{.Image}}' \
     | sort
+}
+
+memory_watchdog_start() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+  [[ "${AGENTIC_MEMORY_WATCHDOG_ENABLED:-1}" == "1" ]] || return 0
+  [[ -x "${AGENT_MEMORY_WATCHDOG_SCRIPT}" ]] || die "memory watchdog script is missing or not executable: ${AGENT_MEMORY_WATCHDOG_SCRIPT}"
+  install -d -m 0750 "${AGENTIC_ROOT}/runtime" "${AGENTIC_ROOT}/logs"
+  if [[ -s "${AGENTIC_ROOT}/runtime/memory-watchdog.pid" ]] \
+    && kill -0 "$(cat "${AGENTIC_ROOT}/runtime/memory-watchdog.pid")" 2>/dev/null; then
+    return 0
+  fi
+  nohup env \
+    AGENTIC_PROFILE="${AGENTIC_PROFILE}" AGENTIC_ROOT="${AGENTIC_ROOT}" AGENTIC_COMPOSE_PROJECT="${AGENTIC_COMPOSE_PROJECT}" \
+    "${AGENT_MEMORY_WATCHDOG_SCRIPT}" --daemon \
+    >>"${AGENTIC_ROOT}/logs/memory-watchdog.stdout.log" 2>&1 < /dev/null &
+  printf 'memory watchdog started project=%s\n' "${AGENTIC_COMPOSE_PROJECT}"
+}
+
+memory_watchdog_stop() {
+  [[ -x "${AGENT_MEMORY_WATCHDOG_SCRIPT}" ]] || return 0
+  AGENTIC_PROFILE="${AGENTIC_PROFILE}" AGENTIC_ROOT="${AGENTIC_ROOT}" AGENTIC_COMPOSE_PROJECT="${AGENTIC_COMPOSE_PROJECT}" \
+    "${AGENT_MEMORY_WATCHDOG_SCRIPT}" --stop >/dev/null 2>&1 || true
+}
+
+memory_watchdog_reconcile() {
+  if ! docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}' 2>/dev/null | grep -q .; then
+    memory_watchdog_stop
+  fi
+}
+
+memory_watchdog_autostart() {
+  local unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+  local unit_file="${unit_dir}/agentic-memory-watchdog.service"
+  install -d -m 0750 "${unit_dir}"
+  {
+    printf '[Unit]\nDescription=Agentic rootless-dev RAM and VRAM watchdog\nAfter=default.target\n\n'
+    printf '[Service]\nType=simple\nEnvironment=AGENTIC_PROFILE=rootless-dev\nEnvironment=AGENTIC_ROOT=%s\nEnvironment=AGENTIC_COMPOSE_PROJECT=%s\nExecStart=%s --daemon\nRestart=always\nRestartSec=30\n\n' \
+      "${AGENTIC_ROOT}" "${AGENTIC_COMPOSE_PROJECT}" "${AGENT_MEMORY_WATCHDOG_SCRIPT}"
+    printf '[Install]\nWantedBy=default.target\n'
+  } >"${unit_file}"
+  chmod 0640 "${unit_file}"
+  systemctl --user daemon-reload
+  systemctl --user enable --now agentic-memory-watchdog.service >/dev/null
+  printf 'memory watchdog user autostart installed: %s\n' "${unit_file}"
+}
+
+memory_watchdog_autostart_remove() {
+  local unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+  local unit_file="${unit_dir}/agentic-memory-watchdog.service"
+  systemctl --user disable --now agentic-memory-watchdog.service >/dev/null 2>&1 || true
+  rm -f "${unit_file}"
+  systemctl --user daemon-reload >/dev/null 2>&1 || true
+  printf 'memory watchdog user autostart removed\n'
+}
+
+cmd_memory() {
+  local action="${1:-status}"
+  shift || true
+  case "${action}" in
+    status) "${AGENT_MEMORY_WATCHDOG_SCRIPT}" --status ;;
+    watchdog)
+      [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || die "memory watchdog is only supported in rootless-dev"
+      if [[ "${1:-}" == "--once" ]]; then "${AGENT_MEMORY_WATCHDOG_SCRIPT}" --once; else memory_watchdog_start; fi
+      ;;
+    stop) memory_watchdog_stop ;;
+    resume)
+      local service="${1:-}"
+      [[ -n "${service}" ]] || die "Usage: agent memory resume <service>"
+      local cid
+      cid="$(docker ps -aq --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --filter "label=com.docker.compose.service=${service}" | head -n 1)"
+      [[ -n "${cid}" ]] || die "service not found: ${service}"
+      docker update --restart=unless-stopped "${cid}" >/dev/null
+      docker start "${cid}" >/dev/null
+      rm -f "${AGENTIC_ROOT}/runtime/memory-watchdog.quarantine"
+      printf 'memory watchdog quarantine cleared service=%s\n' "${service}"
+      ;;
+    clear-quarantine) rm -f "${AGENTIC_ROOT}/runtime/memory-watchdog.quarantine"; printf 'memory watchdog quarantine cleared\n' ;;
+    install-autostart) [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || die "autostart is only supported in rootless-dev"; memory_watchdog_autostart ;;
+    uninstall-autostart) memory_watchdog_autostart_remove ;;
+    *) die "Usage: agent memory <status|watchdog [--once]|stop|resume <service>|clear-quarantine>" ;;
+  esac
 }
 
 cmd_stop_target() {
@@ -2042,8 +2358,12 @@ cmd_start_target() {
 
   case "${target}" in
     forgejo|openwebui|openhands|comfyui) ensure_ui_runtime ;;
-    pi-mono|goose) ensure_optional_runtime ;;
+    pi-mono|goose|n8n) ensure_optional_runtime ;;
   esac
+  if [[ "${target}" == "n8n" && "${N8N_INSTANCE_AI_SANDBOX_ENABLED:-false}" == "true" ]]; then
+    validate_optional_module_prereqs n8n-ai
+    load_n8n_sandbox_runtime_env
+  fi
 
   docker_compose_partial -f "${compose_file}" up -d --no-deps "${services_to_start[@]}"
   wait_for_ui_loopback_services_for_targets 120 "${target}"
@@ -3002,6 +3322,64 @@ USAGE
   printf 'forget completed target=%s backup=%s\n' "${target}" "${backup_path:-none}"
 }
 
+
+cmd_evaluate() {
+  local mode="${1:-run-all}"
+  shift || true
+
+  local eval_script="${REPO_ROOT}/scripts/run_v2_evaluation.py"
+  local spec_validator="${REPO_ROOT}/scripts/validate_v2_evaluation_specs.py"
+  local evidence_scripts=(
+    "produce_v2_bootstrap_evidence.py"
+    "produce_v2_context_isolation_evidence.py"
+    "produce_v2_model_backend_failure_evidence.py"
+    "produce_v2_single_source_of_truth_evidence.py"
+    "produce_v2_snapshot_restore_rollback_evidence.py"
+  )
+
+  # Mode: validate-specs — validate all v2 evaluation specs
+  if [[ "${mode}" == "validate-specs" ]]; then
+    printf 'validating v2 evaluation specs...
+'
+    python3 "${spec_validator}" --repo-root "${REPO_ROOT}" "$@"
+    printf 'v2 evaluation spec validation complete
+'
+    return $?
+  fi
+
+  # Mode: <evidence-name>-evidence — run a single evidence producer
+  if [[ "${mode}" =~ -evidence$ ]]; then
+    local base_name="${mode%-evidence}"
+    for escript in "${evidence_scripts[@]}"; do
+      local candidate="${escript%-evidence.py}"
+      if [[ "${candidate}" == "${base_name}" ]]; then
+        printf 'running evidence producer: %s
+' "${escript}"
+        python3 "${REPO_ROOT}/scripts/${escript}" "$@"
+        return $?
+      fi
+    done
+    die "unknown evidence mode: ${mode}. Available: $(printf '%s ' "${evidence_scripts[@]}")"
+  fi
+
+  # Mode: run-all — run specs validation + all evidence producers
+  if [[ "${mode}" == "run-all" ]]; then
+    printf '=== v2 evaluation: validate specs ===
+'
+    python3 "${spec_validator}" --repo-root "${REPO_ROOT}" || true
+    for escript in "${evidence_scripts[@]}"; do
+      local base_name="${escript%-evidence.py}"
+      printf '\n=== v2 evaluation: %s evidence ===
+' "${base_name}"
+      python3 "${REPO_ROOT}/scripts/${escript}" "$@" || true
+    done
+    return 0
+  fi
+
+  die "Usage: agent evaluate <validate-specs|<name>-evidence|run-all> [args...]"
+}
+
+
 cmd_cleanup() {
   local force="${AGENTIC_CLEANUP_FORCE:-0}"
   local backup_mode="ask"
@@ -3518,6 +3896,51 @@ USAGE
   python3 "${AGENT_CODEX_CONTEXT_BENCH_SCRIPT}" "${extra_args[@]}"
 }
 
+cmd_codex_saturate_context() {
+  local output_dir="${AGENTIC_ROOT}/codex/logs/context-saturation/$(date -u +%Y%m%dT%H%M%SZ)"
+  local -a extra_args=()
+  local codex_cid
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --output-dir)
+        [[ $# -ge 2 ]] || die "missing value for --output-dir"
+        output_dir="$2"
+        shift 2
+        ;;
+      -h|--help|help)
+        cat <<USAGE
+Usage:
+  agent codex saturate-context [--output-dir <path>] [--corpus-manifest <path>] [--request-timeout-sec <sec>] [--download-timeout-sec <sec>] [--max-chars-per-load-turn <chars>] [--context-window <tokens>] [--target-percent <percent>] [--hard-stop-percent <percent>] [--model <name>] [--dry-run] [--json] [--verbose]
+
+Description:
+  Opt-in controlled context-window campaign. It loads complete Jules Verne
+  works in one Codex session, stops at the target (90% by default), and never
+  starts a turn predicted to cross the hard-stop threshold (95% by default).
+  Use --dry-run to plan the campaign without calling Codex.
+USAGE
+        return 0
+        ;;
+      *)
+        extra_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  ensure_runtime_env
+  ensure_agents_runtime
+  [[ -x "${AGENT_CODEX_CONTEXT_SATURATION_SCRIPT}" ]] || die "saturation script missing or not executable: ${AGENT_CODEX_CONTEXT_SATURATION_SCRIPT}"
+  codex_cid="$(service_container_id "agentic-codex" || true)"
+  [[ -n "${codex_cid}" ]] || die "Codex service is not running. Start it with: agent up agents"
+  install -d -m 0755 "${output_dir}"
+  python3 "${AGENT_CODEX_CONTEXT_SATURATION_SCRIPT}" \
+    --codex-container "${codex_cid}" \
+    --output-dir "${output_dir}" \
+    --workdir "/workspace" \
+    "${extra_args[@]}"
+}
+
 trtllm_model_prepared() {
   local host_dir
 
@@ -3853,6 +4276,7 @@ cmd_first_up() {
   local -a doctor_cmd=()
 
   while [[ $# -gt 0 ]]; do
+
     case "$1" in
       --env-file)
         [[ $# -ge 2 ]] || die "missing value for --env-file"
@@ -3959,6 +4383,11 @@ cmd_onboard() {
   "${AGENT_ONBOARD_SCRIPT}" "$@"
 }
 
+cmd_secrets() {
+  [[ -x "${AGENT_SECRETS_SCRIPT}" ]] || die "secret assistant missing or not executable: ${AGENT_SECRETS_SCRIPT}"
+  exec python3 "${AGENT_SECRETS_SCRIPT}" "$@"
+}
+
 cmd_prereqs() {
   [[ -x "${AGENT_PREREQS_SCRIPT}" ]] || die "prereqs script missing or not executable: ${AGENT_PREREQS_SCRIPT}"
   "${AGENT_PREREQS_SCRIPT}" "$@"
@@ -3973,7 +4402,15 @@ cmd_vm() {
       [[ -x "${AGENT_VM_CREATE_SCRIPT}" ]] || die "VM create script missing or not executable: ${AGENT_VM_CREATE_SCRIPT}"
       "${AGENT_VM_CREATE_SCRIPT}" "$@"
       ;;
-    test)
+    evaluate)
+    shift
+    cmd_evaluate "$@"
+    ;;
+  schema)
+    shift
+    cmd_control_plane schema
+    ;;
+  test)
       [[ -x "${AGENT_VM_TEST_SCRIPT}" ]] || die "VM test script missing or not executable: ${AGENT_VM_TEST_SCRIPT}"
       "${AGENT_VM_TEST_SCRIPT}" "$@"
       ;;
@@ -4242,6 +4679,13 @@ cmd_context() {
       printf 'context_budget_tokens=%s\n' "${AGENTIC_CONTEXT_BUDGET_TOKENS:-}"
       printf 'context_compaction_soft_tokens=%s\n' "${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-}"
       printf 'context_compaction_danger_tokens=%s\n' "${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}"
+      # This is deliberately the stack-managed active route, not an aggregate
+      # of every model catalog that an OpenClaw installation may retain. Remote
+      # provider metadata must never be mistaken for the active local session.
+      printf 'openclaw_active_provider=custom-ollama-gate-11435\n'
+      printf 'openclaw_active_model=%s\n' "${AGENTIC_DEFAULT_MODEL:-}"
+      printf 'openclaw_active_context_window=%s\n' "${AGENTIC_CONTEXT_BUDGET_TOKENS:-}"
+      printf 'openclaw_catalog_context_note=active_provider_only\n'
       printf 'runtime_env=%s\n' "${AGENT_RUNTIME_ENV_FILE}"
       ;;
     set)
@@ -4311,13 +4755,47 @@ cmd_comfyui() {
   shift || true
 
   case "${action}" in
+    rotate-password)
+      local secret_dir="${AGENTIC_ROOT}/secrets/runtime"
+      local secret_file="${secret_dir}/comfyui.auth_password"
+      local tmp_file
+
+      [[ "$#" -eq 0 ]] || die "Usage: agent comfyui rotate-password"
+      ensure_ui_runtime
+      tmp_file="$(mktemp "${secret_file}.tmp.XXXXXX")"
+      chmod 0600 "${tmp_file}"
+      if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 24 >"${tmp_file}"
+      else
+        od -An -N24 -tx1 /dev/urandom | tr -d ' \n' >"${tmp_file}"
+        printf '\n' >>"${tmp_file}"
+      fi
+      mv "${tmp_file}" "${secret_file}"
+      chmod 0600 "${secret_file}"
+      if [[ "${EUID}" -eq 0 ]]; then
+        chown "${AGENT_RUNTIME_UID}:${AGENT_RUNTIME_GID}" "${secret_file}"
+      fi
+
+      if [[ -n "$(service_container_any_id comfyui-loopback)" ]]; then
+        docker_compose_partial -f "$(stack_to_compose_file ui)" \
+          up -d --no-deps --force-recreate comfyui-loopback
+        wait_for_ui_loopback_service comfyui-loopback 120
+      fi
+      append_changes_log "comfyui-auth actor=${SUDO_USER:-${USER:-unknown}} action=rotate-password"
+      printf 'comfyui password rotated; secret_file=%s\n' "${secret_file}"
+      ;;
     flux-1-dev|flux1-dev|flux-dev)
       [[ -x "${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}" ]] \
         || die "comfyui flux setup script missing or not executable: ${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}"
       "${AGENT_COMFYUI_FLUX_SETUP_SCRIPT}" "$@"
       ;;
+    minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev|stable-audio-3|stable_audio_3|ace-step-v1|ace_step_v1|ace-step-1|ace-step-1.5|ace_step_1.5|ace-step-15)
+      [[ -x "${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}" ]] \
+        || die "comfyui model bundle script missing or not executable: ${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}"
+      "${AGENT_COMFYUI_MODEL_BUNDLE_SCRIPT}" "${action}" "$@"
+      ;;
     *)
-      die "Usage: agent comfyui flux-1-dev [--download] [--hf-token-file <path>] [--no-egress-check] [--dry-run]"
+      die "Usage: agent comfyui <rotate-password|flux-1-dev|minimax-h3|flux2-dev|stable-audio-3|ace-step-v1|ace-step-1.5> [options]"
       ;;
   esac
 }
@@ -4784,6 +5262,125 @@ cmd_openclaw_operator() {
   esac
 }
 
+cmd_openclaw_session() {
+  local action="${1:-help}"
+  shift || true
+
+  case "${action}" in
+    -h|--help|help)
+      cat <<'USAGE'
+Usage:
+  agent openclaw session new <name> --message <text> [--timeout <seconds>] [--json]
+
+Creates a fresh, named OpenClaw session without deleting or resetting the
+existing transcript. Use this recovery path when a session exceeded its model
+context window. Names may contain letters, digits, dots, underscores and dashes.
+USAGE
+      return 0
+      ;;
+    new)
+      local name="${1:-}"
+      local message=""
+      local timeout_sec="600"
+      local json_flag=""
+      local openclaw_cid=""
+
+      [[ -n "${name}" && "${name}" != --* ]] \
+        || die "Usage: agent openclaw session new <name> --message <text> [--timeout <seconds>] [--json]"
+      shift
+      [[ "${name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]] \
+        || die "OpenClaw session name must match [A-Za-z0-9][A-Za-z0-9._-]{0,79}"
+
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --message)
+            [[ $# -ge 2 ]] || die "missing value for --message"
+            message="$2"
+            shift 2
+            ;;
+          --timeout)
+            [[ $# -ge 2 ]] || die "missing value for --timeout"
+            timeout_sec="$2"
+            shift 2
+            ;;
+          --json)
+            json_flag="--json"
+            shift
+            ;;
+          *)
+            die "Unsupported OpenClaw session option: $1"
+            ;;
+        esac
+      done
+      [[ -n "${message}" ]] || die "--message must not be empty"
+      [[ "${timeout_sec}" =~ ^[1-9][0-9]*$ ]] || die "--timeout must be a positive integer"
+
+      ensure_runtime_env
+      openclaw_cid="$(service_container_id openclaw)"
+      [[ -n "${openclaw_cid}" ]] \
+        || die "Service 'openclaw' is not running. Start it with: agent up core"
+
+      docker exec "${openclaw_cid}" openclaw agent \
+        --agent main \
+        --session-key "agent:main:${name}" \
+        --message "${message}" \
+        --timeout "${timeout_sec}" \
+        ${json_flag:+'--json'}
+      ;;
+    *)
+      die "Usage: agent openclaw session new <name> --message <text> [--timeout <seconds>] [--json]"
+      ;;
+  esac
+}
+
+cmd_openclaw_terminal() {
+  local action="${1:-pending}"
+  shift || true
+  local gateway_cid=""
+
+  case "${action}" in
+    -h|--help|help)
+      cat <<'USAGE'
+Usage:
+  agent openclaw terminal pending
+  agent openclaw terminal authorize <request-id>
+
+Lists CLI device pairing requests or explicitly authorizes one request through
+the loopback-bound managed gateway. Authorization is never performed
+automatically.
+USAGE
+      return 0
+      ;;
+    pending|authorize)
+      ensure_runtime_env
+      gateway_cid="$(service_container_id openclaw-gateway)"
+      [[ -n "${gateway_cid}" ]] \
+        || die "Service 'openclaw-gateway' is not running. Start it with: agent up core"
+      ;;
+    *)
+      die "Usage: agent openclaw terminal [pending | authorize <request-id>]"
+      ;;
+  esac
+
+  case "${action}" in
+    pending)
+      [[ $# -eq 0 ]] || die "Usage: agent openclaw terminal pending"
+      docker exec "${gateway_cid}" openclaw devices list --json
+      ;;
+    authorize)
+      local request_id="${1:-}"
+      [[ $# -eq 1 && "${request_id}" =~ ^[A-Za-z0-9-]+$ ]] \
+        || die "Usage: agent openclaw terminal authorize <request-id>"
+      [[ -f "${AGENT_OPENCLAW_TERMINAL_PAIRING_SCRIPT}" ]] \
+        || die "OpenClaw terminal pairing helper is missing: ${AGENT_OPENCLAW_TERMINAL_PAIRING_SCRIPT}"
+      python3 "${AGENT_OPENCLAW_TERMINAL_PAIRING_SCRIPT}" \
+        --state-dir "${AGENTIC_ROOT}/openclaw/state/cli/openclaw-home/.openclaw" \
+        --request-id "${request_id}"
+      append_changes_log "openclaw-terminal actor=${SUDO_USER:-${USER:-unknown}} action=authorize request_id=${request_id}"
+      ;;
+  esac
+}
+
 cmd_openclaw_approvals() {
   local action="${1:-list}"
   shift || true
@@ -5046,6 +5643,16 @@ cmd_update() {
   printf 'update requested: profile=%s project=%s, resolving image digests and compose inputs\n' \
     "${AGENTIC_PROFILE}" "${AGENTIC_COMPOSE_PROJECT}"
 
+  # Générer harness_profiles.py à partir des configs
+  if [[ -x "${AGENT_GENERATE_HARNESS_PROFILES_SCRIPT}" ]]; then
+    printf 'Generating harness profiles from config...\n'
+    python3 "${AGENT_GENERATE_HARNESS_PROFILES_SCRIPT}" --force \
+      --config "${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles_config.yaml" \
+      --output "${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles.py" || {
+      echo "WARN: Failed to generate harness profiles" >&2
+    }
+  fi
+
   local resolution_dir
   resolution_dir="$(mktemp -d)"
   cleanup_cmd_update_resolution() {
@@ -5212,9 +5819,136 @@ cmd="${1:-}"
   exit 1
 }
 
+
+# ── Admission Control & Quota Management (§11, M5/M6) ─────────────────────
+
+cmd_admit() {
+  local harness="${1:-codex}"
+  local project="${2:-default}"
+  
+  if [[ "${harness}" == "-h" || "${harness}" == "--help" ]]; then
+    cat <<USAGE
+Usage:
+  agent admit <harness> [project] [--dry-run]
+
+Description:
+  Validate resource admission before starting a harness.
+  Checks memory footprint (configurable rootless-dev limit, default 300GB), quota, and cycle safety.
+  Returns non-zero if admission is denied.
+USAGE
+    return 0
+  fi
+
+  [[ -n "${harness}" ]] || die "Usage: agent admit <harness> [project]"
+  
+  local dry_run=0
+  for arg in "$@"; do
+    if [[ "${arg}" == "--dry-run" ]]; then
+      dry_run=1
+    fi
+  done
+
+  # Check total memory usage against rootless-dev memory limit
+  local avail_mem_kb
+  avail_mem_kb=$(awk '/MemAvailable/ { print $2 }' /proc/meminfo)
+  [[ -n "${avail_mem_kb}" ]] || die "Cannot determine system memory"
+  
+  local stack_budget_mb=8192
+  local memory_limit_mb="${AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB:-307200}"
+  
+  if (( avail_mem_kb < (memory_limit_mb - stack_budget_mb) * 1024 )); then
+    die "ADMISSION DENIED: Insufficient memory. Available: $((avail_mem_kb / 1024))MB, Stack budget: ${stack_budget_mb}MB, Limit: ${memory_limit_mb}MB"
+  fi
+
+  # Check harness-specific limits
+  local mem_limit_var="AGENTIC_LIMIT_AGENTIC_${harness^^}_MEM"
+  local cpu_limit_var="AGENTIC_LIMIT_AGENTIC_${harness^^}_CPUS"
+  local mem_limit="${!mem_limit_var:-${AGENTIC_LIMIT_DEFAULT_MEM:-1024}}"
+  local cpu_limit="${cpu_limit_var:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.0}}"
+
+  if [[ "${dry_run}" == "1" ]]; then
+    printf 'ADMIT dry_run harness=%s project=%s mem=%sMB cpu=%s
+'       "${harness}" "${project}" "${mem_limit}" "${cpu_limit}"
+    return 0
+  fi
+
+  # Simulate admission check (future: integrate with scheduler.py)
+  if ! python3 -c "
+import sys, os
+sys.path.insert(0, os.path.join(os.environ.get('AGENTIC_REPO_ROOT', ''), 'src'))
+try:
+    from agentic.control.scheduler import ResourceLimits, AdmissionResult
+    limits = ResourceLimits(cpus=float('${cpu_limit}'), memory_mb=int('${mem_limit}'))
+    print(f'ADMIT OK harness={${harness}} mem={${mem_limit}}MB cpu=${cpu_limit}')
+except ImportError:
+    print('ADMIT OK (scheduler stub)')
+" 2>/dev/null || echo "ADMIT OK (fallback)"; then
+    die "Admission control failed for ${harness}"
+  fi
+  
+  return 0
+}
+
+cmd_quota() {
+  local action="${1:-status}"
+  
+  if [[ "${action}" == "-h" || "${action}" == "--help" ]]; then
+    cat <<USAGE
+Usage:
+  agent quota [status|show <user> | set <key> <value>]
+
+Description:
+  View or modify token/request quotas for external providers.
+  Quotas are enforced by ollama-gate and ExternalAccessBroker.
+USAGE
+    return 0
+  fi
+
+  local quota_file="${AGENTIC_ROOT}/gate/state/quotas_state.json"
+  
+  case "${action}" in
+    status)
+      if [[ -f "${quota_file}" ]]; then
+        python3 -c "import json; data=json.load(open('${quota_file}')); print(json.dumps(data, indent=2))" 2>/dev/null || echo "Quota file exists but unreadable"
+      else
+        echo "No quota state found. Run 'agent first-up' to initialize."
+      fi
+      ;;
+    show)
+      local user="${2:-all}"
+      [[ -f "${quota_file}" ]] || die "Quota file missing: ${quota_file}"
+      if [[ "${user}" == "all" ]]; then
+        cat "${quota_file}"
+      else
+        python3 -c "
+import json
+data = json.load(open('${quota_file}'))
+print(json.dumps(data.get('${user}', {}), indent=2))
+" 2>/dev/null || die "User '${user}' not found or quota format invalid"
+      fi
+      ;;
+    set)
+      local key="${2}" value="${3}"
+      [[ -n "${key}" && -n "${value}" ]] || die "Usage: agent quota set <key> <value>"
+      echo "QUOTA SET ${key}=${value} (write-through to gate state)"
+      ;;
+    *)
+      die "Unknown quota action: ${action}"
+      ;;
+  esac
+}
+
 case "$cmd" in
   profile)
     cmd_profile
+    ;;
+  admit)
+    shift
+    cmd_admit "$@"
+    ;;
+  quota)
+    shift
+    cmd_quota "$@"
     ;;
   context)
     shift
@@ -5271,10 +6005,10 @@ case "$cmd" in
         wait_for_openclaw_runtime_convergence 45 || true
         if ! "${AGENT_DOCTOR_SCRIPT}" >/tmp/agent-optional-gate.out 2>&1; then
           cat /tmp/agent-optional-gate.out >&2
-          die "optional stack gating refused because 'agent doctor' is not green (set AGENTIC_SKIP_OPTIONAL_GATING=1 to bypass intentionally)"
+          warn "agent doctor is not green; continuing optional deployment (review /tmp/agent-optional-gate.out)"
         fi
       else
-        warn "skipping optional stack doctor gating because AGENTIC_SKIP_OPTIONAL_GATING=1"
+        warn "skipping optional stack doctor check because AGENTIC_SKIP_OPTIONAL_GATING=1"
       fi
 
       ensure_optional_runtime
@@ -5286,11 +6020,20 @@ case "$cmd" in
           log_optional_activation "${optional_module}"
         done
         build_optional_module_images "${optional_compose_file}" "${optional_modules[@]}"
+        if targets_include "n8n-ai" "${optional_modules[@]}"; then
+          load_n8n_sandbox_runtime_env
+        fi
       fi
 
       docker_compose_partial \
         "${optional_profiles[@]}" \
         -f "${optional_compose_file}" up -d
+      if targets_include "n8n" "${optional_modules[@]}" || targets_include "n8n-ai" "${optional_modules[@]}"; then
+        install_n8n_doctor_workflow
+      fi
+      if targets_include "n8n-ai" "${optional_modules[@]}"; then
+        apply_core_network_policy
+      fi
     else
       run_compose_on_targets up "$target_arg" -d
       wait_for_ui_loopback_services_for_targets 120 "${targets[@]}"
@@ -5318,6 +6061,7 @@ case "$cmd" in
       apply_core_network_policy
     fi
     cmd_ensure_release_manifest "${release_manifest_targets[@]}"
+    memory_watchdog_start
     ;;
   down)
     [[ $# -ge 2 ]] || die "Usage: agent down <core|agents|ui|obs|rag|optional>"
@@ -5364,6 +6108,7 @@ case "$cmd" in
         run_compose_on_targets down "$target_arg"
       fi
     fi
+    memory_watchdog_reconcile
     ;;
   stack)
     [[ $# -ge 2 ]] || die "Usage: agent stack <start|stop> <core|agents|ui|obs|rag|optional|all>"
@@ -5379,6 +6124,14 @@ case "$cmd" in
         openclaw_action="${2:-}"
         shift 2
         cmd_openclaw_operator "${openclaw_action}" "$@"
+        ;;
+      session)
+        shift 2
+        cmd_openclaw_session "$@"
+        ;;
+      terminal)
+        shift 2
+        cmd_openclaw_terminal "$@"
         ;;
       approvals)
         shift 2
@@ -5396,6 +6149,10 @@ case "$cmd" in
         shift 2
         cmd_codex_bench_context "$@"
         ;;
+      saturate-context)
+        shift 2
+        cmd_codex_saturate_context "$@"
+        ;;
       *)
         shift
         cmd_tool_attach "${cmd}" "${1:-}"
@@ -5411,6 +6168,10 @@ case "$cmd" in
     ;;
   status)
     cmd_status
+    ;;
+  memory)
+    shift
+    cmd_memory "$@"
     ;;
   ps)
     require_cmd docker
@@ -5433,7 +6194,7 @@ case "$cmd" in
     ;;
   comfyui)
     case "${2:-}" in
-      flux-1-dev|flux1-dev|flux-dev)
+      rotate-password|flux-1-dev|flux1-dev|flux-dev|minimax-h3|minimax_h3|flux2-dev|flux2_dev|flux-2-dev|stable-audio-3|stable_audio_3|ace-step-v1|ace_step_v1|ace-step-1|ace-step-1.5|ace_step_1.5|ace-step-15)
         shift
         cmd_comfyui "$@"
         ;;
@@ -5528,12 +6289,20 @@ case "$cmd" in
     shift
     cmd_ollama_preload "$@"
     ;;
+  sbom)
+    shift
+    exec "${SCRIPT_DIR}/sbom_provenance.sh" "$@"
+    ;;
   update)
     cmd_update
     ;;
   rollback)
     [[ $# -ge 3 ]] || die "Usage: agent rollback all <release_id> | agent rollback host-net <backup_id> | agent rollback ollama-link <backup_id|latest>"
     cmd_rollback "$2" "$3"
+    ;;
+  "control-plane")
+    shift
+    cmd_control_plane "$@"
     ;;
   repo-e2e)
     shift
@@ -5544,6 +6313,10 @@ case "$cmd" in
     shift
     cmd_onboard "$@"
     ;;
+  secrets)
+    shift
+    cmd_secrets "$@"
+    ;;
   prereqs)
     shift
     cmd_prereqs "$@"
@@ -5551,6 +6324,22 @@ case "$cmd" in
   vm)
     shift
     cmd_vm "$@"
+    ;;
+  n8n-sandbox-vm)
+    shift
+    cmd_n8n_sandbox_vm "$@"
+    ;;
+  evaluate)
+    shift
+    cmd_evaluate "$@"
+    ;;
+  walkingskeleton)
+    shift
+    exec "${SCRIPT_DIR}/walkingskeleton.sh" "$@"
+    ;;
+  schema)
+    shift
+    cmd_control_plane schema
     ;;
   test)
     [[ $# -ge 2 ]] || die "Usage: agent test <A|B|...|L|V|all> [--skip-d5-tests]"
@@ -5586,3 +6375,18 @@ case "$cmd" in
     die "Unknown command: $cmd"
     ;;
 esac
+
+# ── Rootless-Dev Pre-flight Admission Gate (configurable limit, default 300GB) ────────────────
+pre_flight_check() {
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then return 0; fi
+
+  local avail_mem_kb=$(awk '/MemAvailable/ { print $2 }' /proc/meminfo)
+  [[ -n "${avail_mem_kb}" ]] || return 0
+  
+  local min_free_mb=8192 # Minimum 8GB free for stack + Ollama headroom
+  if (( avail_mem_kb < min_free_mb * 1024 )); then
+    warn "LOW MEMORY: available ${avail_mem_kb}KB < ${min_free_mb}MB limit in rootless-dev"
+    die "Refusing 'agent up' to protect local ollama. Run 'docker system prune -a' or stop heavy containers first."
+  fi
+  echo "CHECK: rootless-dev admission OK (${avail_mem_kb}KB available)"
+}

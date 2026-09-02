@@ -270,6 +270,34 @@ docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_OPERATOR_OVERLAY_FILE}" =
   || fail "openclaw must expose operator overlay path"
 docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_STATE_CONFIG_FILE}" = "/state/cli/openclaw-home/openclaw.state.json"' \
   || fail "openclaw must expose writable state config path"
+docker exec "${openclaw_cid}" sh -lc 'test "${OPENCLAW_GATEWAY_URL}" = "ws://openclaw-gateway:8114"' \
+  || fail "openclaw operator CLI must target the stack-private gateway proxy"
+timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw gateway call health --json' >/tmp/agent-k6-openclaw-terminal-gateway.out \
+  || fail "openclaw terminal CLI must reach the managed gateway"
+python3 - /tmp/agent-k6-openclaw-terminal-gateway.out <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if payload.get("ok") is not True:
+    raise SystemExit("OpenClaw terminal gateway health payload is not ok")
+PY
+"${agent_bin}" openclaw session --help >/tmp/agent-k6-openclaw-session-help.out \
+  || fail "OpenClaw fresh-session recovery help must be available"
+grep -q 'session new <name>' /tmp/agent-k6-openclaw-session-help.out \
+  || fail "OpenClaw recovery help must document the non-destructive fresh-session path"
+"${agent_bin}" openclaw terminal pending >/tmp/agent-k6-openclaw-terminal-pending.json \
+  || fail "OpenClaw terminal pairing requests must be inspectable through the managed gateway"
+python3 - /tmp/agent-k6-openclaw-terminal-pending.json <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not isinstance(payload.get("pending"), list) or not isinstance(payload.get("paired"), list):
+    raise SystemExit("OpenClaw terminal pairing payload is malformed")
+PY
 
 timeout 30 docker exec "${openclaw_cid}" sh -lc 'openclaw onboard --help' >/tmp/agent-k6-openclaw-onboard-help.out \
   || fail "openclaw onboard command must be available in-container"

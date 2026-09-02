@@ -214,6 +214,10 @@ Promotion writes to one of:
 - `${AGENTIC_ROOT}/openclaw/config/dm_allowlist.txt`
 - `${AGENTIC_ROOT}/openclaw/config/tool_allowlist.txt`
 
+It never writes `${AGENTIC_ROOT}/proxy/allowlist.txt`. Proxy destinations are
+a stack-wide egress authority and stay administrator-managed; follow the core
+egress change procedure and redeploy `core` after a reviewed host edit.
+
 State transitions are durable and auditable:
 - `pending`
 - `approved`
@@ -439,7 +443,7 @@ If you run interactive/manual onboarding (`openclaw onboard` prompts, or Web UI 
 | "IP of ollama-gate" | Do not set fixed IP | Container IPs are ephemeral. Always use `ollama-gate` hostname on the `agentic` network. |
 | API key field for custom provider | Non-empty placeholder (example: `local-gate`) | Empty keys can be rejected by onboarding forms; local `ollama-gate` path does not require a real upstream key. |
 | Entrypoint compatibility | OpenAI-compatible / enabled | `ollama-gate` OpenAI endpoint is `/v1/*`. |
-| Model ID | `${AGENTIC_DEFAULT_MODEL}` (default: `nemotron-cascade-2:30b`) | Keeps onboarding aligned with stack defaults and `agent doctor` checks. |
+| Model ID | `${AGENTIC_DEFAULT_MODEL}` (default: `qwen3.8:27b`) | Keeps onboarding aligned with stack defaults and `agent doctor` checks. |
 | Gateway port | Leave the stack-managed value unchanged if already proposed; do not try to "fix" it manually | The stack-managed upstream gateway service listens on host loopback port `18789`. The core API service is a different service on port `8111`. Mixing them in the wizard causes confusing health output. |
 | Gateway auth mode | `Token` | Stack gateway service is configured with `OPENCLAW_GATEWAY_AUTH_MODE=token`. |
 | Gateway bind | `Loopback (127.0.0.1)` | Required by stack security policy. |

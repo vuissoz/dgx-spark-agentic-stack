@@ -128,9 +128,9 @@ services:
       ANTHROPIC_API_KEY: ollama
       GATE_MCP_URL: http://gate-mcp:8123
       GATE_MCP_AUTH_TOKEN_FILE: /run/secrets/gate_mcp.token
-      AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}
+      AGENTIC_DEFAULT_MODEL: ${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}
       AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}
-      AGENTIC_AGENT_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}}
+      AGENTIC_AGENT_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}
       AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}
       OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}}
       AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT: ${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}
@@ -207,7 +207,7 @@ services:
       XDG_DATA_HOME: /state/home/.local/share
       XDG_STATE_HOME: /state/home/.local/state
       GOOSE_PROVIDER: ${AGENTIC_GOOSE_PROVIDER:-ollama}
-      GOOSE_MODEL: ${AGENTIC_GOOSE_MODEL:-${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}}}
+      GOOSE_MODEL: ${AGENTIC_GOOSE_MODEL:-${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}}
       GOOSE_CONTEXT_LIMIT: ${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}}
       AGENTIC_CONTEXT_BUDGET_TOKENS: ${AGENTIC_CONTEXT_BUDGET_TOKENS:-50909}
       AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT: ${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}
@@ -273,6 +273,170 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 15s
+    networks:
+      - agentic
+      - agentic-egress
+
+  optional-n8n-searxng:
+    image: ${N8N_SEARXNG_IMAGE:-searxng/searxng:latest}
+    profiles:
+      - optional-n8n-ai
+    restart: unless-stopped
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/searxng
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      SEARXNG_SECRET: ${N8N_SEARXNG_SECRET:-}
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_REPO_ROOT:-..}/examples/optional/n8n-searxng-settings.yml:/etc/searxng/settings.yml:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O- http://127.0.0.1:8080/healthz >/dev/null
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - agentic
+      - agentic-egress
+
+  optional-n8n:
+    image: n8nio/n8n:latest
+    profiles:
+      - optional-n8n
+      - optional-n8n-ai
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_N8N_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_N8N_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/node/.cache:mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "${N8N_BASIC_AUTH_ACTIVE:-true}"
+      N8N_BASIC_AUTH_USER: "${N8N_BASIC_AUTH_USER:-admin}"
+      N8N_BASIC_AUTH_PASSWORD_FILE: /run/secrets/n8n.auth_password
+      N8N_HOST: 0.0.0.0
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      NODE_ENV: production
+      N8N_LOG_LEVEL: "${N8N_LOG_LEVEL:-info}"
+      N8N_LOG_OUTPUT: console
+      N8N_TIMEZONE: "${N8N_TIMEZONE:-UTC}"
+      N8N_ENABLE_INSTANT_WEBHOOK: "${N8N_ENABLE_INSTANT_WEBHOOK:-false}"
+      N8N_MAX_MEMORY_USAGE: "${N8N_MAX_MEMORY_USAGE:-1024}"
+      N8N_ENABLED_MODULES: "${N8N_ENABLED_MODULES:-instance-ai}"
+      # Keep the n8n assistant on the same model selected for the stack. The
+      # previous qwen3.8 fallback was not part of the model catalog and made
+      # assistant calls fail with a cancelled API request.
+      N8N_INSTANCE_AI_MODEL: "${N8N_INSTANCE_AI_MODEL:-${AGENTIC_N8N_AI_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}}"
+      N8N_INSTANCE_AI_MODEL_URL: "${N8N_INSTANCE_AI_MODEL_URL:-http://ollama-gate:11435/v1}"
+      N8N_INSTANCE_AI_MODEL_API_KEY: "${N8N_INSTANCE_AI_MODEL_API_KEY:-local-ollama}"
+      N8N_INSTANCE_AI_SANDBOX_ENABLED: "${N8N_INSTANCE_AI_SANDBOX_ENABLED:-false}"
+      N8N_INSTANCE_AI_SANDBOX_PROVIDER: n8n-sandbox
+      N8N_INSTANCE_AI_SANDBOX_API_URL: ${N8N_SANDBOX_SERVICE_URL:-}
+      N8N_INSTANCE_AI_SANDBOX_API_KEY: "${N8N_SANDBOX_API_KEY:-}"
+      N8N_SANDBOX_SERVICE_URL: ${N8N_SANDBOX_SERVICE_URL:-}
+      N8N_SANDBOX_SERVICE_API_KEY: "${N8N_SANDBOX_API_KEY:-}"
+      N8N_INSTANCE_AI_SANDBOX_IMAGE: ${N8N_SANDBOX_IMAGE:-n8nio/n8n-sandbox-service-sandbox:latest}
+      N8N_INSTANCE_AI_SEARXNG_URL: http://optional-n8n-searxng:8080
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ${N8N_SANDBOX_VM_IP:-},ollama-gate,optional-n8n-searxng,optional-forgejo,unbound,egress-proxy,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/data:/home/node/.n8n
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/custom:/home/node/.n8n/custom
+      - ${AGENTIC_ROOT:-/srv/agentic}/optional/n8n/logs:/home/node/.n8n/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/n8n.auth_password:/run/secrets/n8n.auth_password:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O- http://127.0.0.1:5678/healthz >/dev/null
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 20s
+    networks:
+      - agentic
+      - agentic-egress
+
+  optional-n8n-loopback:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    profiles:
+      - optional-n8n
+      - optional-n8n-ai
+    depends_on:
+      optional-n8n:
+        condition: service_healthy
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPTIONAL_N8N_LOOPBACK_CPUS:-${AGENTIC_LIMIT_OPTIONAL_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPTIONAL_N8N_LOOPBACK_MEM:-${AGENTIC_LIMIT_OPTIONAL_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
+        cat >/tmp/nginx.conf <<'NGINX'
+        pid /tmp/nginx.pid;
+        events {}
+        http {
+          resolver 127.0.0.11 valid=30s ipv6=off;
+          client_body_temp_path /tmp/client_temp;
+          proxy_temp_path /tmp/proxy_temp;
+          fastcgi_temp_path /tmp/fastcgi_temp;
+          uwsgi_temp_path /tmp/uwsgi_temp;
+          scgi_temp_path /tmp/scgi_temp;
+          server {
+            listen 5678;
+            location / {
+              set $$n8n_upstream optional-n8n;
+              proxy_pass http://$$n8n_upstream:5678;
+              proxy_http_version 1.1;
+              proxy_set_header Host $$http_host;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Host $$http_host;
+              proxy_set_header X-Forwarded-Proto $$scheme;
+              proxy_buffering off;
+              proxy_read_timeout 3600s;
+              proxy_send_timeout 3600s;
+            }
+          }
+        }
+        NGINX
+        exec nginx -g 'daemon off;' -c /tmp/nginx.conf
+    ports:
+      - 127.0.0.1:${N8N_HOST_PORT:-5678}:5678
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O- http://127.0.0.1:5678/healthz >/dev/null
+      interval: 30s
+      timeout: 10s
+      retries: 6
       start_period: 15s
     networks:
       - agentic

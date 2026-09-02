@@ -20,22 +20,30 @@ export AGENTIC_PROFILE=rootless-dev
 export AGENTIC_ROOT="${REPO_ROOT}/.runtime/${suffix}-root"
 export AGENTIC_COMPOSE_PROJECT="agentic-${suffix}"
 export AGENTIC_NETWORK="agentic-${suffix}"
+export AGENTIC_LLM_NETWORK="agentic-${suffix}-llm"
 export AGENTIC_EGRESS_NETWORK="agentic-${suffix}-egress"
 
 cleanup() {
   AGENTIC_SKIP_OPTIONAL_GATING=1 "${agent_bin}" down optional >/tmp/agent-f5-down.out 2>&1 || true
+  "${agent_bin}" down core >/tmp/agent-f5-down-core.out 2>&1 || true
+  docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" \
+    -f "${REPO_ROOT}/compose/compose.core.yml" \
+    -f "${REPO_ROOT}/compose/compose.optional.yml" \
+    down --remove-orphans >/tmp/agent-f5-compose-down.out 2>&1 || true
   docker network rm "${AGENTIC_EGRESS_NETWORK}" >/dev/null 2>&1 || true
+  docker network rm "${AGENTIC_LLM_NETWORK}" >/dev/null 2>&1 || true
   docker network rm "${AGENTIC_NETWORK}" >/dev/null 2>&1 || true
   if [[ -d "${AGENTIC_ROOT}" ]]; then
     find "${AGENTIC_ROOT}" -mindepth 1 -depth \( -type f -o -type l -o -type s -o -type p \) -delete || true
     find "${AGENTIC_ROOT}" -mindepth 1 -depth -type d -empty -delete || true
+    if [[ -d "${AGENTIC_ROOT}" ]]; then
+      docker run --rm -v "${AGENTIC_ROOT}:/cleanup" alpine:3.21 \
+        sh -c 'rm -rf /cleanup/* /cleanup/.[!.]* /cleanup/..?*' >/dev/null 2>&1 || true
+    fi
     rmdir "${AGENTIC_ROOT}" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
-
-docker network create --driver bridge --internal "${AGENTIC_NETWORK}" >/dev/null
-docker network create --driver bridge "${AGENTIC_EGRESS_NETWORK}" >/dev/null
 
 "${REPO_ROOT}/deployments/bootstrap/init_fs.sh" >/tmp/agent-f5-initfs.out
 
@@ -67,5 +75,8 @@ grep -q '/compose\.core\.yml$' "${release_compose_files}" \
   || fail "automatic release snapshot must retain compose.core.yml after a later up"
 grep -q '/compose\.optional\.yml$' "${release_compose_files}" \
   || fail "automatic release snapshot must include compose.optional.yml after optional up"
+
+cleanup
+trap - EXIT
 
 ok "F5_auto_release_manifest passed"

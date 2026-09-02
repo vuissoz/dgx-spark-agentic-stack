@@ -10,8 +10,9 @@ import asyncio
 import os
 from urllib.parse import urlencode, urlparse, urlunparse
 
+import httpx
 import socketio
-from fastapi import Depends, HTTPException, WebSocket, status
+from fastapi import Depends, HTTPException, Query, Request, WebSocket, status
 from starlette.websockets import WebSocketState
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
@@ -46,6 +47,22 @@ async def _depends_ws_app_conversation_start_task_service(websocket: WebSocket):
         yield service
 
 
+async def _depends_http_app_conversation_service(request: Request):
+    """Inject the V1 conversation service for same-origin HTTP bridges."""
+    injector = get_global_config().app_conversation
+    assert injector is not None
+    async for service in injector.inject(request.state, request):
+        yield service
+
+
+async def _depends_http_app_conversation_start_task_service(request: Request):
+    """Inject the V1 start-task service for same-origin HTTP bridges."""
+    injector = get_global_config().app_conversation_start_task
+    assert injector is not None
+    async for service in injector.inject(request.state, request):
+        yield service
+
+
 def _build_runtime_events_ws_url(
     conversation_url: str,
     conversation_id: str,
@@ -62,6 +79,144 @@ def _build_runtime_events_ws_url(
     if resend_all:
         query['resend_all'] = 'true'
     return urlunparse((scheme, parsed.netloc, path, '', urlencode(query), ''))
+
+
+def _build_runtime_http_url(conversation_url: str, runtime_path: str) -> str:
+    """Build an agent-server URL from a V1 conversation endpoint.
+
+    ``_resolve_v1_runtime_endpoint`` returns a conversation-scoped URL.  Git
+    operations live on the agent-server root, so preserve only the runtime
+    origin and any path prefix preceding ``/api/conversations``.
+    """
+    parsed = urlparse(conversation_url)
+    path_root = parsed.path.split('/api/conversations', 1)[0].rstrip('/')
+    return urlunparse(
+        (parsed.scheme, parsed.netloc, f'{path_root}{runtime_path}', '', '', '')
+    )
+
+
+def _validate_workspace_path(path: str) -> str:
+    """Keep the bridge scoped to the workspace mounted into ProcessSandbox."""
+    if not path.startswith('/workspace/') or '..' in path.split('/'):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='workspace path must stay below /workspace',
+        )
+    return path
+
+
+async def _forward_v1_git_request(
+    conversation_id: str,
+    runtime_path: str,
+    app_conversation_service,
+    app_conversation_start_task_service,
+    expected_type: type,
+) -> list | dict:
+    """Forward a Git read request to a V1 runtime without exposing its port."""
+    resolved = await _resolve_v1_runtime_endpoint(
+        conversation_id,
+        app_conversation_service,
+        app_conversation_start_task_service,
+    )
+    if resolved is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Conversation {conversation_id} not found',
+        )
+
+    conversation_url, session_api_key = resolved
+    headers: dict[str, str] = {}
+    if session_api_key:
+        headers['X-Session-API-Key'] = session_api_key
+    runtime_url = _build_runtime_http_url(conversation_url, runtime_path)
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(runtime_url, headers=headers, timeout=30.0)
+    except httpx.HTTPError as exc:
+        logger.warning(
+            'V1 Git bridge cannot reach runtime for conversation %s: %s',
+            conversation_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='V1 runtime is unavailable; retry after the conversation is ready',
+        ) from exc
+
+    if response.status_code >= 400:
+        logger.warning(
+            'V1 Git bridge runtime request failed for conversation %s: status=%s',
+            conversation_id,
+            response.status_code,
+        )
+        raise HTTPException(
+            status_code=response.status_code,
+            detail='V1 runtime rejected the Git request',
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        logger.warning(
+            'V1 Git bridge received non-JSON payload for conversation %s',
+            conversation_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='V1 runtime returned an invalid Git response',
+        ) from exc
+
+    if not isinstance(payload, expected_type):
+        logger.warning(
+            'V1 Git bridge received unexpected payload type for conversation %s',
+            conversation_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail='V1 runtime returned an invalid Git response',
+        )
+    return payload
+
+
+@base_app.get('/api/v1/app-conversations/{conversation_id}/git/changes')
+async def bridge_v1_git_changes(
+    conversation_id: str,
+    path: str = Query('/workspace/project'),
+    app_conversation_service=Depends(_depends_http_app_conversation_service),
+    app_conversation_start_task_service=Depends(
+        _depends_http_app_conversation_start_task_service
+    ),
+) -> list:
+    """Return V1 runtime Git changes through the public OpenHands origin."""
+    workspace_path = _validate_workspace_path(path)
+    return await _forward_v1_git_request(
+        conversation_id,
+        f'/api/git/changes/{workspace_path}',
+        app_conversation_service,
+        app_conversation_start_task_service,
+        list,
+    )
+
+
+@base_app.get('/api/v1/app-conversations/{conversation_id}/git/diff')
+async def bridge_v1_git_diff(
+    conversation_id: str,
+    path: str = Query(...),
+    app_conversation_service=Depends(_depends_http_app_conversation_service),
+    app_conversation_start_task_service=Depends(
+        _depends_http_app_conversation_start_task_service
+    ),
+) -> dict:
+    """Return a V1 runtime Git diff through the public OpenHands origin."""
+    file_path = _validate_workspace_path(path)
+    return await _forward_v1_git_request(
+        conversation_id,
+        f'/api/git/diff/{file_path}',
+        app_conversation_service,
+        app_conversation_start_task_service,
+        dict,
+    )
 
 
 async def _proxy_websocket_traffic(

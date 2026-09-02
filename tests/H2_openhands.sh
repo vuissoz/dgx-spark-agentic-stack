@@ -375,6 +375,91 @@ asyncio.run(run_smoke())
 PY
 ok "openhands V1 websocket bridge is operational"
 
+git_bridge_workspace="$(
+  docker exec "${openhands_cid}" sh -lc 'mktemp -d /workspace/h2-v1-git-bridge.XXXXXX'
+)" || fail "unable to allocate OpenHands Git bridge smoke workspace"
+[[ "${git_bridge_workspace}" == /workspace/h2-v1-git-bridge.* ]] \
+  || fail "unexpected OpenHands Git bridge smoke workspace: ${git_bridge_workspace}"
+
+docker exec "${openhands_cid}" sh -lc "
+  set -eu
+  git -C '${git_bridge_workspace}' init -q
+  git -C '${git_bridge_workspace}' config user.email h2@example.invalid
+  git -C '${git_bridge_workspace}' config user.name h2
+  printf 'base\\n' >'${git_bridge_workspace}/bridge.txt'
+  git -C '${git_bridge_workspace}' add bridge.txt
+  git -C '${git_bridge_workspace}' commit -qm baseline
+  printf 'changed\\n' >>'${git_bridge_workspace}/bridge.txt'
+" || fail "unable to prepare OpenHands Git bridge smoke repository"
+
+python3 - "${openhands_port}" "${git_bridge_workspace}" <<'PY' || fail "openhands V1 Git changes bridge is broken"
+import json
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+port = int(sys.argv[1])
+workspace = sys.argv[2]
+base = f"http://127.0.0.1:{port}"
+
+req = urllib.request.Request(
+    f"{base}/api/v1/app-conversations",
+    data=json.dumps({"title": "h2-v1-git-bridge", "agent_type": "default"}).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(req, timeout=30) as resp:
+    task = json.loads(resp.read().decode("utf-8"))
+task_id = task.get("id")
+if not isinstance(task_id, str) or not task_id:
+    raise SystemExit(f"missing start-task id for Git bridge: {task}")
+
+deadline = time.time() + 90
+conversation_id = None
+while time.time() < deadline:
+    with urllib.request.urlopen(
+        f"{base}/api/v1/app-conversations/start-tasks?ids={task_id}", timeout=30
+    ) as resp:
+        tasks = json.loads(resp.read().decode("utf-8"))
+    if isinstance(tasks, list) and tasks:
+        state = tasks[0] or {}
+        if state.get("status") == "READY":
+            conversation_id = state.get("app_conversation_id")
+            break
+        if state.get("status") == "ERROR":
+            raise SystemExit(f"Git bridge start-task failed: {state.get('detail')}")
+
+    time.sleep(1)
+
+if not isinstance(conversation_id, str) or not conversation_id:
+    raise SystemExit("Git bridge conversation did not reach READY")
+
+query = urllib.parse.urlencode({"path": workspace})
+with urllib.request.urlopen(
+    f"{base}/api/v1/app-conversations/{conversation_id}/git/changes?{query}", timeout=30
+) as resp:
+    changes = json.loads(resp.read().decode("utf-8"))
+
+if not isinstance(changes, list):
+    raise SystemExit(f"V1 Git changes bridge did not return a list: {changes}")
+if not any(item.get("path") == "bridge.txt" for item in changes if isinstance(item, dict)):
+    raise SystemExit(f"V1 Git changes bridge missed bridge.txt: {changes}")
+
+query = urllib.parse.urlencode({"path": f"{workspace}/bridge.txt"})
+with urllib.request.urlopen(
+    f"{base}/api/v1/app-conversations/{conversation_id}/git/diff?{query}", timeout=30
+) as resp:
+    diff = json.loads(resp.read().decode("utf-8"))
+
+if not isinstance(diff, dict):
+    raise SystemExit(f"V1 Git diff bridge did not return an object: {diff}")
+PY
+ok "openhands V1 Git Changes/Diff bridge is operational"
+
+docker exec "${openhands_cid}" sh -lc "rm -rf -- '${git_bridge_workspace}'" \
+  || fail "unable to remove OpenHands Git bridge smoke workspace"
+
 restart_after="$(docker inspect --format '{{.RestartCount}}' "${openhands_cid}" 2>/dev/null || echo "0")"
 [[ "${restart_after}" == "${restart_before}" ]] \
   || fail "openhands container restarted during conversation startup flow (before=${restart_before}, after=${restart_after})"

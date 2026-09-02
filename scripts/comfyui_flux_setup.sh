@@ -103,6 +103,16 @@ cat >"${manifest_file}" <<'JSON'
       "gated": true
     },
     {
+      "target": "diffusion_models/flux1-fill-dev.safetensors",
+      "relative_path": "models/diffusion_models",
+      "repo_id": "Comfy-Org/flux1-dev",
+      "filename": "flux1-fill-dev.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/flux1-dev/resolve/main/split_files/diffusion_models/flux1-fill-dev.safetensors",
+      "expected_size": 23804922408,
+      "sha256": "03e289f530df51d014f48e675a9ffa2141bc003259bf5f25d75b957e920a41ca",
+      "gated": false
+    },
+    {
       "target": "vae/ae.safetensors",
       "relative_path": "models/vae",
       "repo_id": "black-forest-labs/FLUX.1-dev",
@@ -135,6 +145,7 @@ cat >"${manifest_file}" <<'JSON'
   ],
   "sources": [
     "https://huggingface.co/black-forest-labs/FLUX.1-dev",
+    "https://huggingface.co/Comfy-Org/flux1-dev",
     "https://huggingface.co/comfyanonymous/flux_text_encoders",
     "https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/model-list.json",
     "https://api.comfy.org/nodes"
@@ -215,6 +226,8 @@ if [[ "${download_models}" == "1" ]]; then
       -e FLUX_MANIFEST_FILE="/comfyui/models/flux1-dev.manifest.json" \
       "${comfy_cid}" \
       python3 - <<'PY'
+import fcntl
+import hashlib
 import json
 import os
 import pathlib
@@ -226,6 +239,19 @@ token = os.getenv("HF_TOKEN") or None
 manifest_file = pathlib.Path(os.getenv("FLUX_MANIFEST_FILE", "/comfyui/models/flux1-dev.manifest.json"))
 models_root = manifest_file.parent
 payload = json.loads(manifest_file.read_text(encoding="utf-8"))
+lock_handle = (models_root / ".flux1-dev.download.lock").open("w", encoding="utf-8")
+try:
+    fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    raise SystemExit("Flux.1-dev installer already running; wait for the active download to finish")
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(8 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 for item in payload.get("files", []):
     if not isinstance(item, dict):
@@ -236,13 +262,29 @@ for item in payload.get("files", []):
     filename = item.get("filename")
     repo_id = item.get("repo_id")
     gated = bool(item.get("gated"))
+    expected_size = item.get("expected_size")
+    expected_sha256 = item.get("sha256")
     if not target or not url or not relative_path or not filename:
         raise SystemExit(f"invalid manifest entry: {item!r}")
 
     target_path = models_root / target
     target_path.parent.mkdir(parents=True, exist_ok=True)
     if target_path.exists() and not force:
-        print(f"skip existing: {target_path}")
+        if expected_size is not None and target_path.stat().st_size != expected_size:
+            raise SystemExit(
+                f"existing file has unexpected size: {target_path} "
+                f"({target_path.stat().st_size} != {expected_size}); rerun with --force"
+            )
+        if expected_sha256 is not None:
+            actual_sha256 = sha256_file(target_path)
+            if actual_sha256 != expected_sha256:
+                raise SystemExit(
+                    f"existing file checksum mismatch: {target_path} "
+                    f"({actual_sha256} != {expected_sha256}); rerun with --force"
+                )
+            print(f"skip verified: {target_path} (sha256={actual_sha256})")
+        else:
+            print(f"skip existing: {target_path}")
         continue
     if gated and not token:
         raise SystemExit(
@@ -267,6 +309,21 @@ for item in payload.get("files", []):
 
     print(f"download: {url} -> {target_path}")
     subprocess.run(cmd, check=True)
+    if not target_path.is_file():
+        raise SystemExit(f"download completed without expected target: {target_path}")
+    if expected_size is not None and target_path.stat().st_size != expected_size:
+        raise SystemExit(
+            f"download size mismatch for {target_path}: "
+            f"{target_path.stat().st_size} != {expected_size}"
+        )
+    if expected_sha256 is not None:
+        actual_sha256 = sha256_file(target_path)
+        if actual_sha256 != expected_sha256:
+            raise SystemExit(
+                f"download checksum mismatch for {target_path}: "
+                f"{actual_sha256} != {expected_sha256}"
+            )
+        print(f"verified: {target_path} (sha256={actual_sha256})")
 PY
   fi
 fi

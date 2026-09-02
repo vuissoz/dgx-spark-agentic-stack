@@ -1,1493 +1,1585 @@
-# DGX Spark Canonical Plan
-
-Ce fichier est la **source de vérité unique** du dépôt pour le plan DGX Spark. Il fusionne l’ancien `PLAN.md` (roadmap d’implémentation A→L) et l’ancien `Plan.md` (tracking d’exécution, umbrella Beads, addenda et follow-ups). Il ne doit plus exister qu’un seul fichier de plan dans le repo.
-
-Ce plan reste conçu pour être exécuté par un agent de coding : chaque sous-tâche doit produire des artefacts concrets (fichiers, scripts, compose) et **chaque sous-tâche a un test automatique** avec critères d’acceptation binaires. On n’enchaîne pas une étape tant que ses tests ne sont pas verts.
-
-Hypothèses d’exécution : hôte Linux (DGX Spark), Docker Engine + Docker Compose v2, NVIDIA Container Toolkit, accès distant via Tailscale/SSH. Invariant : **aucun service web n’écoute sur `0.0.0.0`** (bind hôte sur `127.0.0.1` uniquement). Les conteneurs communiquent via un réseau Docker privé.
-
-## Comment lire ce plan
-
-- `Current State` : où en est réellement le dépôt aujourd’hui, avec statuts Beads normalisés.
-- `Profils d’exécution` puis sections `0` à `L` : roadmap détaillée et exigences d’implémentation/test.
-- `Définition “terminé”` et `Ordre d’exécution imposé` : critères finaux et chemin critique.
-
-## Current State
-
-### Canonical tracking merge
-
-- L’ancien fichier `Plan.md` est absorbé ici.
-- Les statuts Beads ci-dessous sont normalisés d’après le tracker local au `2026-05-05`.
-- Quand un ancien addendum de `Plan.md` indiquait `[OPEN]` mais que Beads est désormais `closed`, le statut canonique est celui de Beads.
-
-### Active umbrella merged from former `Plan.md`
-
-- Umbrella : `dgx-spark-agentic-stack-5bz` (`closed`)
-- Objectif exécuté :
-  - basculer le modèle local par défaut vers une cible plus fiable pour le tool-calling multi-agents ;
-  - pousser la fenêtre de contexte au maximum utile du modèle avec contrôle ressources ;
-  - ajouter le test fonctionnel 5 agents sur opérations fichiers ;
-  - renforcer la compatibilité des intégrations agents avec les contrats Ollama ;
-  - livrer la trajectoire OpenClaw inspirée de `ollama launch openclaw`.
-
-### Scope recap merged from former `Plan.md`
-
-- `AGENTIC_DEFAULT_MODEL` par défaut vers `qwen3-coder:30b`.
-- `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` ajouté et propagé vers `OLLAMA_CONTEXT_LENGTH`.
-- `agent doctor` vérifie la cohérence contexte/capacité modèle/mémoire.
-- `tests/L7_default_model_tool_call_fs_ops.sh` couvre les opérations fichier sur `claude`, `codex`, `opencode`, `vibestral`, `openhands`.
-- Suivi livré `dgx-spark-agentic-stack-yzk0` : test d’intégration end-to-end piloté par dépôt sur `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`, avec runner commun, collecte d’artefacts et doctor final.
-- Suivi livré `dgx-spark-agentic-stack-i4o2` : tous les conteneurs agents ciblés par `repo-e2e` embarquent désormais la toolchain `git/python3/pytest` dès leur création, avec fallback runtime `codex` quand `bwrap`/user namespaces ne sont pas disponibles.
-- Les images `agentic/agent-cli-base:local` et `agentic/optional-modules:local` embarquent désormais aussi `ffmpeg`, `vlc` et `openai-whisper`, avec wrappers `whisper-fr` et `whisper-en` pour la transcription locale en français et en anglais dans les conteneurs agents et `openclaw-sandbox`.
-- La commande opérateur `agent context` existe désormais avec persistance runtime et documentation de surface dans les README.
-- OpenClaw réconcilie maintenant ses métadonnées de contexte avec le budget effectif de la stack, avec contrôle `doctor` et test dédié.
-- `agent doctor` attend désormais la convergence runtime OpenClaw avant de statuer, ce qui évite des faux négatifs au démarrage.
-- La compatibilité agents inspirée des contrats Ollama inclut :
-  - profils de configuration par agent versionnés ;
-  - chemins explicites `/v1/chat/completions`, `/v1/responses`, `/v1/messages` ;
-  - variables/env générées de manière déterministe.
-- Le repo embarque désormais aussi un benchmark opérateur `agent ollama bench`
-  qui découvre les modèles Ollama `completion`, envoie un `Hello`, précharge un
-  corpus versionné du chapitre 1 de _Vingt mille lieues sous les mers_, puis
-  retourne par modèle les métriques de chargement et de débit demandées.
-- Les écarts majeurs de compat couverts incluent :
-  - `tools` / `tool_choice` / `tool_calls` ;
-  - `usage` / tokens réels ;
-  - `ANTHROPIC_AUTH_TOKEN` pour Claude ;
-  - suppression du bypass direct OpenWebUI -> Ollama par défaut.
-- La trajectoire OpenClaw couvre :
-  - profil d’intégration versionné ;
-  - bootstrap config/env ;
-  - endpoints/auth/audit/sandbox alignés ;
-  - tests E2 et non-régression ;
-  - relay webhook provider “production-safe”.
-
-### Umbrella step status
-
-| Step | Status | Beads / note |
-| --- | --- | --- |
-| 1 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
-| 2 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
-| 3 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
-| 4 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
-| 5 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
-| 6 | complete | umbrella `dgx-spark-agentic-stack-5bz` |
-| 7 | complete | `dgx-spark-agentic-stack-7gw` |
-| 8 | complete | `dgx-spark-agentic-stack-3xx` |
-| 9 | complete | `dgx-spark-agentic-stack-eta` |
-| 10 | complete | `dgx-spark-agentic-stack-p1i` |
-| 11 | complete | `dgx-spark-agentic-stack-m3z` |
-| 12 | complete | `dgx-spark-agentic-stack-a5m` |
-| 13 | complete | `dgx-spark-agentic-stack-ik6` |
-| 14 | complete | `dgx-spark-agentic-stack-ygu` |
-| 15 | complete for umbrella scope | validations `dgx-spark-agentic-stack-b32`, `dgx-spark-agentic-stack-de9`, doc refresh `dgx-spark-agentic-stack-mvzt` |
-
-### Delivered tracking from former `Plan.md`
-
-- Core Ollama / compat agents:
-  - `dgx-spark-agentic-stack-5bz` : modèle local par défaut, onboarding contexte, test 5 agents FS ops.
-  - `dgx-spark-agentic-stack-3xx` : `tools` / `tool_choice` / `tool_calls` sur endpoints compatibles.
-  - `dgx-spark-agentic-stack-eta` : usages/tokens réels sur `/v1/chat/completions`, `/v1/responses`, `/v1/messages`.
-  - `dgx-spark-agentic-stack-p1i` : bootstrap Claude aligné sur `ANTHROPIC_AUTH_TOKEN`.
-  - `dgx-spark-agentic-stack-m3z` : OpenWebUI gate-only par défaut.
-  - `dgx-spark-agentic-stack-ygu` : veille automatisée de drift upstream Ollama.
-  - `dgx-spark-agentic-stack-djri` : benchmark live des modèles Ollama chat/agent avec corpus chapitre versionné, métriques de chargement/débit et smoke test rootless-dev borné au plus petit modèle disponible.
-  - `dgx-spark-agentic-stack-1r0` : commande opérateur `agent ollama unload <model>` pour décharger explicitement un modèle local avec traçabilité.
-  - `dgx-spark-agentic-stack-7gw` : matrice d’intégration `opencode/openclaw/openhands/vibestral`.
-  - `dgx-spark-agentic-stack-a5m` : enforcement opencode/vibestral via `ollama-gate`.
-  - `dgx-spark-agentic-stack-b32` : validation D8/E2 sur stack compose démarrée.
-  - `dgx-spark-agentic-stack-goh` : estimation du contexte maximal qui tient dans le budget mémoire.
-  - `dgx-spark-agentic-stack-ahl` : arbitrage dynamique `ollama|trtllm|both|remote`.
-  - `dgx-spark-agentic-stack-de9` : clôture des gaps résiduels du plan umbrella.
-- OpenClaw livré :
-  - `dgx-spark-agentic-stack-0hk` : relay webhook provider -> queue/file -> injection locale.
-  - `dgx-spark-agentic-stack-j01` : dashboard opérateur via tunnel SSH/Tailscale, loopback-only.
-  - `dgx-spark-agentic-stack-69e` : parité wizard CLI en conteneur.
-  - `dgx-spark-agentic-stack-x00` : couverture tests setup/config OpenClaw CLI.
-  - `dgx-spark-agentic-stack-4xu` : sandboxes dédiés par session.
-  - `dgx-spark-agentic-stack-qcy` : OpenClaw basculé du module optional vers le core `agent`.
-  - `dgx-spark-agentic-stack-lhm` : séparation config immuable / overlay valide / état writable.
-  - `dgx-spark-agentic-stack-e0q` : approvals interactives d’egress par destination.
-  - `dgx-spark-agentic-stack-fcb` : résolution déterministe des valeurs `latest`.
-  - `dgx-spark-agentic-stack-oop` : registre d’état persistant sessions/sandboxes.
-  - `dgx-spark-agentic-stack-0n8` : dualité API interne / CLI opérateur.
-  - `dgx-spark-agentic-stack-zj4` : blueprint/manifest de module OpenClaw.
-  - `dgx-spark-agentic-stack-irt` : commande in-chat de statut OpenClaw.
-  - `dgx-spark-agentic-stack-433` : vrai Control UI OpenClaw sur `127.0.0.1:18789`.
-  - `dgx-spark-agentic-stack-qik` : provider bridges stack-managed pour Telegram/Slack/Discord + bootstrap WhatsApp.
-  - `dgx-spark-agentic-stack-u326` : `agent openclaw init` livré comme chemin stack-managed d’onboarding/réparation, réexécutable en mode réparation idempotente.
-  - la trajectoire `repo-e2e` OpenClaw est complétée par un push SSH canonique vers la forge interne, un préflight plus strict avec progression terminale exploitable, et une réconciliation explicite des métadonnées de contexte avec le budget stack.
-- UI / ComfyUI / docs / onboarding :
-  - transcription locale intégrée dans les conteneurs agents et `openclaw-sandbox` via `ffmpeg`/`vlc`/`openai-whisper`, avec wrappers `whisper-fr` et `whisper-en`, caches persistants compatibles `read_only`, contrat d’image renforcé et documentation/ADR associées.
-  - OpenHands reste maintenant aligné sur son UID natif `42420`, avec bootstrap runtime et tests ajustés pour préserver la stabilité d’exécution rootless.
-  - un runbook dédié documente maintenant l’onboarding du canal Telegram OpenClaw stack-managed.
-  - `dgx-spark-agentic-stack-3yi` : garde-fou OpenHands contre restart/OOM au démarrage de nouvelles conversations.
-  - `dgx-spark-agentic-stack-8cx` : proxy WebSocket ComfyUI et bootstrap Flux.1-dev clarifiés.
-  - `dgx-spark-agentic-stack-hz0n` : test e2e rootless-dev Flux.1-dev avec préparation/téléchargement des assets requis, garde-fou sur restart backend et validation d'image PNG produite.
-  - `dgx-spark-agentic-stack-p94` : secret `huggingface.token` dans l’onboarding.
-  - `dgx-spark-agentic-stack-s0m` : runbook `rootless-dev` OpenClaw.
-  - `dgx-spark-agentic-stack-0ik` : persistance ComfyUI sur mount hôte unique.
-  - `dgx-spark-agentic-stack-6nn` : contrat CUDA arm64/rootless-dev explicité.
-  - `dgx-spark-agentic-stack-mvzt` : `README.md` devenu landing page anglaise concise, références EN/FR préservées.
-- Observabilité / policy:
-  - `dgx-spark-agentic-stack-im5` : politique de rétention et d’occupation disque intégrée à l’onboarding/runtime.
-  - `dgx-spark-agentic-stack-wlx` : métriques Prometheus natives pour forwarders TCP OpenClaw exposées et scrappées.
-  - `dgx-spark-agentic-stack-cx9` est resolu : l'onboarding exporte maintenant `COMPOSE_PROFILES` et `TRTLLM_MODELS`, avec prompt explicite d'activation TRT.
-  - `dgx-spark-agentic-stack-wav3` : le défaut `agent onboard` pour `TRTLLM_MODELS` pointe maintenant vers le slug Hugging Face `NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, avec fallback runtime cohérent et vérification `agent doctor` exécutée sur le profil actif.
-  - `dgx-spark-agentic-stack-vb7p` est resolu : test hermetique `C10_trtllm_native_hello_gate_warmup` prouvant le warm-up natif TRT, `trtllm /healthz` avec `native_ready=true`, puis un premier `Hello` reussi via `ollama-gate` avec log `backend=trtllm`.
-  - `dgx-spark-agentic-stack-c8n` : ajout d'un mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` pour DGX Spark, avec répertoire local NVFP4 imposé et absence de fallback silencieux vers HF/FP8.
-  - `dgx-spark-agentic-stack-z6r` : bootstrap automatique du snapshot NVFP4 vers `${AGENTIC_ROOT}/trtllm/models/super_fp4` pendant `agent up core` quand TRT + token HF + modèle Nemotron par défaut sont présents.
-  - `dgx-spark-agentic-stack-eut5` : catalogue local TRT NVFP4 (`nemotron-super-120b`, `nemotron-cascade-30b`) + commandes `agent trtllm prepare|load|unload` pour ne garder qu'un seul modèle actif en mémoire.
-  - `dgx-spark-agentic-stack-06ol` : `agent cleanup` preserve maintenant par défaut les répertoires de modèles locaux (Ollama/TRT/ComfyUI) et exige `--purge-models` pour les effacer explicitement.
-  - `dgx-spark-agentic-stack-qxh7` : `nemotron-cascade-30b` devient le modèle TRT par défaut dans le catalogue, l'onboarding, Compose, le backend TRT et les tests associés.
-  - `dgx-spark-agentic-stack-cg57` : le service Compose `trtllm` propage maintenant `TRTLLM_NVFP4_HF_REPO` et `TRTLLM_NVFP4_HF_REVISION`, ce qui corrige le démarrage strict local-only de `nemotron-cascade-30b` sans retomber sur le slug `super-120b`.
-  - `dgx-spark-agentic-stack-799i` : `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` devient l'alias TRT expose par defaut dans l'onboarding, Compose, le runtime et l'adapter TRT, tout en laissant `nemotron-cascade-30b` comme entree par defaut du catalogue local NVFP4.
-  - `dgx-spark-agentic-stack-9lhm` : le runtime TRT Nano borne maintenant `max_num_tokens=4096`, `max_seq_len=32768`, desactive les CUDA graphs par defaut et reroute les caches Triton/TorchInductor sous `/state/cache` pour eviter le crash `.so` sur `/tmp` monte `noexec`.
-  - `dgx-spark-agentic-stack-j4b0` : le warm-up TRT de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` aboutit maintenant jusqu'a un vrai `Hello` via le wrapper `trtllm`, sans rester bloque en `503 starting`.
-  - `dgx-spark-agentic-stack-xe3w` : `agent up core` avec TRT prefetch maintenant explicitement le cache HF de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`, sans telecharger `cascade` ou `super` sur ce chemin par defaut.
-  - `dgx-spark-agentic-stack-u94j` : le bootstrap `agent up core` n'appelle plus aucun prechargement NVFP4 local automatique; `cascade` et `super` restent uniquement en manuel.
-  - `dgx-spark-agentic-stack-1kso` : le gate restaure `/v1/models` sans tomber sur les backends distants sans cle, ajoute une route explicite pour `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` et valide le passage `ollama-gate -> trtllm` pour le modele TRT par defaut.
-  - `dgx-spark-agentic-stack-nuya` : le catalogue `trtllm` derive maintenant un alias UI lisible a partir du modele TRT configure, afin qu'OpenWebUI puisse afficher et selectionner clairement le modele TRT actif sans dependre d'une URL Hugging Face brute ou d'un alias code en dur.
-  - `dgx-spark-agentic-stack-4zhv` : simplification TRT-LLM autour d'un seul modele configure (`TRTLLM_MODELS`), suppression du catalogue local multi-modele, retrait de `TRTLLM_ACTIVE_MODEL_KEY` et des operateurs `list/load/unload`.
-  - `dgx-spark-agentic-stack-3s3a` : vrai streaming SSE/chunked `trtllm` pour `/v1/chat/completions`, avec pass-through `ollama-gate -> trtllm` sans buffering de la réponse complète.
-  - `dgx-spark-agentic-stack-wj3` : la stack derive maintenant des seuils de compaction `soft` / `danger` depuis le budget de contexte effectif, les expose aux agents (`codex`, `goose`, `openhands`, runtimes CLI) et `agent doctor` verifie leur coherence avec le budget memoire.
-
-### Remaining active follow-ups merged from former `Plan.md`
-
-- Nouvel axe OpenClaw skills par defaut :
-  - `dgx-spark-agentic-stack-dy95` : definir et integrer un catalogue par defaut de skills OpenClaw stack-managed couvrant la liste demandee (`Capability Evolver`, `Clawflows`, `GOG`, `GitHub`, `Summarize`, `Knowledge Base`, `Mission Control`, `Code Reviewer`, `Decision Assistant`, `Red Team`, `Pre-Mortem`, `Literature Scout`, `Paper Reviewer`, `Grant Writer`, `Citation Auditor`, `Architecture Reviewer`, `Documentation Builder`, `Dependency Auditor`, `Test Engineer`, `Knowledge Curator`, `Knowledge Gap Detector`, `Workspace Cartographer`, `Capability Evolver++`, `Agent Security Watcher`, `Meeting Synthesizer`), avec provenance epinglee, prerequis documentes, bootstrap runtime, couverture `doctor` et tests.
-
-### Closed since former `Plan.md` snapshot
-
-| Issue | Status | Delivered scope |
-| --- | --- | --- |
-| `dgx-spark-agentic-stack-m00n` | closed | intégration Hermes déjà livrée comme surface core managée (`agentic-hermes`, commandes opérateur, persistance, doctor/tests/docs/ADR) ; le reliquat upstream est suivi dans `dgx-spark-agentic-stack-vonj` |
-| `dgx-spark-agentic-stack-vb7p` | closed | validation C10 du premier `Hello` TRT-LLM natif Nemotron-3-Nano via `ollama-gate` après warm-up |
-| `dgx-spark-agentic-stack-wj3` | closed | seuils de compaction `soft` / `danger` dérivés du budget de contexte et exposés aux agents |
-| `dgx-spark-agentic-stack-u326` | closed | `agent openclaw init` stack-managed d’onboarding/réparation |
-| `dgx-spark-agentic-stack-im5` | closed | rétention max + budget disque max collectés en onboarding et appliqués au runtime |
-| `dgx-spark-agentic-stack-wlx` | closed | métriques Prometheus pour les forwarders TCP OpenClaw |
-| `dgx-spark-agentic-stack-zu7n` | closed | forge Git interne loopback-only avec comptes dédiés et gestion opérateur documentée |
-| `dgx-spark-agentic-stack-yzk0` | closed | test de stack end-to-end piloté par dépôt avec runner commun, artefacts unifiés et doctor final |
-| `dgx-spark-agentic-stack-i4o2` | closed | conteneurs agents `repo-e2e` autonomes avec toolchain Python/Git/pytest et fallback runtime `codex` |
-| `dgx-spark-agentic-stack-5ahj` | closed | stabilisation de la preuve `ollama-gate` de `tests/H2_openhands.sh` |
-| `dgx-spark-agentic-stack-r1my` | closed | alignement des assertions `rootless-dev` de `tests/E2_agents_confinement.sh` et `tests/K5_goose.sh` |
-| `dgx-spark-agentic-stack-ywl` | closed | rollback hermétique depuis artefacts release uniquement, livré et validé par `tests/F17_rollback_artifact_hermetic.sh` |
-| `dgx-spark-agentic-stack-7eo` | closed | intégrité des artefacts de release + anti-fuite secrets, livrés et validés par `tests/F10b_release_artifact_integrity.sh` |
-| `dgx-spark-agentic-stack-3je` | closed | test anti-drift du schéma runtime env livré par `tests/F11_runtime_env_schema_drift.sh` |
-| `dgx-spark-agentic-stack-eus` | closed | contrat `agent doctor` par profil livré par `tests/F12_doctor_profile_contract.sh` |
-
-## Profils d’exécution (obligatoires)
-
-Le plan doit rester exécutable via deux profils explicites :
-
-- `strict-prod` (défaut) :
-  - cible CDC stricte ;
-  - root hôte requis ;
-  - racine runtime : `/srv/agentic` ;
-  - enforcement `DOCKER-USER` requis ;
-  - `agent doctor` échoue sur tout écart structurant.
-- `rootless-dev` :
-  - mode développement local sans privilèges root sur l’hôte principal ;
-  - racine runtime : `${HOME}/.local/share/agentic` (sauf override) ;
-  - pas d’attente `DOCKER-USER` (check/apply désactivés par défaut) ;
-  - `agent doctor` conserve les checks applicables (bind loopback, santé services, hardening conteneurs), et dégrade en warning les contrôles hôte impossibles sans root.
-
-Sélection du profil :
-- `AGENTIC_PROFILE=strict-prod` (défaut)
-- `AGENTIC_PROFILE=rootless-dev`
-
-Règle de conformité : toute exigence CDC “hôte root” reste normative en `strict-prod`; `rootless-dev` est un mode d’implémentation/développement, pas un substitut de conformité finale.
-
-### Option pratique : VM dédiée pour tester `strict-prod`
-
-Un troisième chemin d’exécution est autorisé pour les tests d’intégration “prod-like” sans modifier l’hôte principal :
-
-- créer une **VM dédiée** (où l’opérateur a les droits root) ;
-- exécuter le profil `strict-prod` dans la VM ;
-- garder les mêmes garde-fous (`/srv/agentic`, `DOCKER-USER`, bind loopback, doctor strict).
-- la VM doit avoir un **accès GPU** (passthrough/équivalent selon hyperviseur) validé par `nvidia-smi` dans la VM ;
-- la **taille mémoire de la VM** doit être **paramétrable** (variable/flag explicite dans le provisionnement, pas une valeur figée en dur).
-
-Contrainte mémoire (Ollama) :
-
-- si la VM n’a pas assez de RAM pour des modèles 7B+, utiliser un **petit modèle** uniquement pour les smoke tests (ex: 0.5B à 3B quantisé) ;
-- ce mode valide la posture stack/ops (A→L), pas la performance/capacité cible d’un modèle lourd.
-
----
-
-## 0) Convention “repo” + harness de tests (à créer avant A)
-
-### 0.1 Arborescence cible sur l’hôte
-Racine runtime selon profil :
-- `strict-prod` : `/srv/agentic/`
-- `rootless-dev` : `${HOME}/.local/share/agentic/`
-
-Le contenu attendu reste identique :
-
-- `/srv/agentic/deployments/` : compose, scripts, snapshots (rollback), policies
-- `/srv/agentic/bin/agent` : point d’entrée opérateur (commande unique)
-- `/srv/agentic/tests/` : tests automatiques (A→L)
-- `/srv/agentic/secrets/` : secrets runtime + logs rotation
-- `/srv/agentic/{ollama,gate,proxy,dns,openwebui,openhands,comfyui,rag,monitoring}/`
-- `/srv/agentic/{claude,codex,opencode,vibestral,hermes}/{state,logs,workspaces}/`
-- `/srv/agentic/optional/git/{config,state,logs,db,repositories,bootstrap}/`
-- `AGENTIC_AGENT_WORKSPACES_ROOT` peut séparer les workspaces agents du reste :
-  - `strict-prod` par défaut : `${AGENTIC_ROOT}` (donc `${AGENTIC_ROOT}/<tool>/workspaces`)
-  - `rootless-dev` par défaut : `${AGENTIC_ROOT}/agent-workspaces` (donc `${AGENTIC_AGENT_WORKSPACES_ROOT}/<tool>/workspaces`)
-- `/srv/agentic/shared-ro/` et `/srv/agentic/shared-rw/`
-
-### 0.2 Standard “tests”
-Chaque test est un script shell idempotent dans `<AGENTIC_ROOT>/tests/` :
-- `tests/A_*.sh … tests/L_*.sh` + `tests/V_*.sh`
-- retour code `0` si OK, `!=0` sinon
-- output lisible (OK/FAIL) + option : JSON dans `deployments/test-reports/<ts>/`
-
-Créer `tests/lib/common.sh` (helpers) :
-- `fail()`, `ok()`, `assert_cmd()`, `assert_no_public_bind()`, `assert_container_security()`, `assert_proxy_enforced()`, etc.
-
-### 0.3 Commande unique `agent` (squelette immédiat)
-Créer `<AGENTIC_ROOT>/bin/agent` avec au minimum :
-- `agent up <core|agents|ui|obs|rag|optional>`
-- `agent down <…>`
-- `agent ps`
-- `agent logs <service>`
-- `agent llm mode <local|hybrid|remote>` (pilotage providers externes/local sans casser les agents)
-- `agent llm backend <ollama|trtllm|both|remote>` (politique backend desiree + arbitrage runtime)
-- `agent llm test-mode [on|off]` (mode test runtime du gate pour campagnes automatisées)
-- `agent forget <target> --yes` (reset destructif ciblé d’un domaine persistant)
-- `agent backup <run|list|restore <snapshot_id>>` (snapshots incrémentaux des données persistantes + config non-secrète)
-- `agent ollama-link` + `agent rollback ollama-link <backup_id|latest>` (gestion store modèles rootless)
-- `agent ollama-models [status|rw|ro]` (pilotage mode de mount des modèles Ollama)
-- `agent sudo-mode [status|on|off]` (élévation intra-conteneur agents, contrôlée et réversible)
-- `agent vm create ...` + `agent vm test ...` + `agent vm cleanup ...` (campagne `strict-prod` en VM dédiée)
-- `agent test <A|B|…|L|V|all>` (exécute le(s) script(s) correspondants)
-- `agent doctor` (agrégat de conformité “doit rester vert”)
-- `agent profile` (affiche le profil effectif + chemins/réseaux)
-
-**Test automatique** : `tests/00_harness.sh`
-- vérifie que `agent test A` appelle bien un script
-- vérifie que `agent doctor` existe et retourne `!=0` si aucun compose n’est déployé (mode “pas prêt” explicite)
-
-### 0.4 Script d’onboarding débutant (variables d’environnement)
-**Implémentation**
-- créer un wizard interactif `deployments/bootstrap/onboarding_env.sh` (ou `agent onboard`) qui :
-  - explique en langage simple le rôle de chaque variable d’environnement requise avant déploiement ;
-  - pose des questions une par une avec valeur par défaut affichée ;
-  - accepte `Entrée` comme réponse “garder la valeur par défaut” ;
-  - valide les chemins saisis (existants ou créables) et refuse les valeurs invalides avec message actionnable ;
-  - génère un fichier shell sourçable (ex: `${AGENTIC_ROOT}/deployments/env.sh` ou `.runtime/env.generated.sh`, non committé) ;
-  - propose en fin de wizard la commande exacte à exécuter (`source ...`) puis `./agent profile`.
-- variables minimales couvertes par le wizard :
-  - `AGENTIC_PROFILE` (`strict-prod` par défaut, `rootless-dev` proposé pour dev local),
-  - `AGENTIC_ROOT`,
-  - `AGENTIC_OPTIONAL_MODULES`,
-  - `AGENTIC_AGENT_WORKSPACES_ROOT`,
-  - `AGENTIC_CLAUDE_WORKSPACES_DIR`,
-  - `AGENTIC_CODEX_WORKSPACES_DIR`,
-  - `AGENTIC_OPENCODE_WORKSPACES_DIR`,
-  - `AGENTIC_VIBESTRAL_WORKSPACES_DIR`,
-  - `AGENTIC_OPENHANDS_WORKSPACES_DIR`,
-  - `AGENTIC_COMPOSE_PROJECT`,
-  - `AGENTIC_NETWORK`,
-  - `AGENTIC_EGRESS_NETWORK`,
-  - `OLLAMA_MODELS_DIR`.
-- si le module `git-forge` est sélectionné dans `AGENTIC_OPTIONAL_MODULES`, le wizard couvre aussi au minimum :
-  - `GIT_FORGE_HOST_PORT` (bind loopback-only côté hôte),
-  - `GIT_FORGE_ADMIN_USER` (défaut : `system-manager`),
-  - `GIT_FORGE_SHARED_NAMESPACE` (organisation/groupe commun pour projets partagés),
-  - `GIT_FORGE_ENABLE_PUSH_CREATE` (`0/1`, désactivé par défaut),
-  - chemins de secrets attendus pour le mot de passe admin initial et les credentials/tokens des comptes agents,
-  - option de préconfiguration Git agents pour que le premier shell `agent <tool>` puisse faire immédiatement `git clone`/checkout sans saisie manuelle de credential.
-- contraintes UX :
-  - aucune question “bloquante” sans valeur par défaut ;
-  - mode non interactif disponible via flags (`--profile`, `--root`, etc.) pour CI ;
-  - pas d’écriture de secrets.
-
-**Test** : `tests/00_onboarding_env_wizard.sh`
-- exécution non-interactive avec réponses simulées (stdin) :
-  - `Entrée` sur chaque question -> fichier généré avec valeurs par défaut attendues ;
-  - override d’au moins 2 chemins -> fichier généré avec valeurs custom ;
-- shellcheck/parse du fichier généré (`bash -n`) ;
-- vérifie que le fichier est ignoré par git et n’inclut aucun secret.
-
-### 0.5 Onboarding complet “type CMake/ccmake” (premier démarrage)
-Suivi Beads : `dgx-spark-agentic-stack-kvs`
-
-**Implémentation**
-- étendre `agent onboard` avec une interface guidée plus ergonomique (mode “assistant de configuration” inspiré CMake/ccmake : sections claires, navigation simple, validation immédiate).
-- couvrir **tout** le setup obligatoire du premier démarrage dans le même flux, sans étape cachée :
-  - profil/runtime (`AGENTIC_PROFILE`, `AGENTIC_ROOT`, réseaux, project name) ;
-  - bootstrap admin pour services UI activés (utilisateur admin + mot de passe via prompt masqué) ;
-  - configuration réseau/egress (allowlist initiale domaines/CIDR autorisés selon politique), avec une baseline incluant les endpoints GitHub nécessaires aux agents (`github.com`, `api.github.com`, `codeload.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`) ;
-  - secrets requis par modules activés (création/génération guidée ou saisie manuelle) ;
-  - si `git-forge` est activé :
-    - activer le module dans `AGENTIC_OPTIONAL_MODULES`,
-    - demander/valider `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`,
-    - générer ou recueillir hors git le secret admin initial et les credentials des comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`,
-    - préparer la configuration Git initiale par agent (au minimum remote base URL, helper de credentials ou fichier équivalent hors git, `user.name`, `user.email`) pour qu’un premier `git clone`/checkout fonctionne dès la première connexion shell,
-    - créer de manière idempotente, dès la première initialisation complète de la stack, des dépôts/projets partagés de référence pour les tests E2E dans la forge interne :
-      - `eight-queens-agent-e2e` reste le **canari rapide** :
-        - la formulation du problème des 8 reines dans le dépôt lui-même ;
-        - la consigne de sortie attendue et les contraintes de vérification ;
-        - la commande de test à exécuter et les critères binaires de succès/échec ;
-        - un état initial volontairement non conforme ou incomplet que l’agent doit corriger en Python ;
-      - `agent-stack-full-e2e` (nom de travail, peut être ajusté) devient le **test complet informatif** :
-        - petit dépôt applicatif réaliste, volontairement cassé mais borné, couvrant plusieurs fichiers (`src/`, `tests/`, éventuellement `README.md` ou config) ;
-        - au moins un test initialement rouge, plus un contrat de qualité minimal (`pytest` obligatoire, lint optionnel si présent) ;
-        - correctif attendu de type “debug + compréhension du repo”, pas simple génération algorithmique isolée ;
-        - scénario imposant lecture du dépôt, identification de la panne, correction du code, mise à jour éventuelle du test/doc, puis exécution complète des vérifications ;
-        - artefacts de vérification permettant de classer les échecs par catégorie (`prepare`, `invoke`, `test`, `publish`, `artifact`) plutôt qu’en simple succès/échec ;
-        - charge suffisamment petite pour rester exécutable sur toute la matrice agents, mais assez riche pour exposer les écarts de compréhension, navigation multi-fichiers et discipline Git.
-    - protéger la branche par défaut (`main`) contre les pushes directs agents et créer/préparer une branche dédiée par agent (ex: `agent/<tool>` pour `codex`, `openclaw`, `claude`, `opencode`, `openhands`, `pi-mono`, `goose`, `vibestral`) ;
-    - documenter et injecter dans la consigne standard des agents l’interdiction de pousser sur `main` : chaque agent ne doit pousser que sur sa propre branche dédiée,
-    - récapituler les chemins secrets et la commande d’activation `./agent up optional`.
-- sortie des secrets :
-  - fichiers séparés sous `${AGENTIC_ROOT}/secrets/runtime/` uniquement ;
-  - permissions strictes (`chmod 600`) ;
-  - jamais écrits dans les fichiers versionnés ni affichés en clair dans les logs.
-- produire un récapitulatif final “prêt à exécuter” :
-  - fichiers générés,
-  - modules activés,
-  - commandes suivantes exactes (`agent profile`, `agent up ...`, `agent doctor`),
-  - alertes bloquantes explicites si un paramètre obligatoire manque.
-
-**Test** : `tests/00_onboarding_full_setup_wizard.sh`
-- chemin interactif simulé : complète les sections runtime/admin/network/secrets et vérifie qu’aucune question obligatoire n’est contournée ;
-- chemin non interactif (`--non-interactive` + flags/fichiers) : génère la même structure cible ;
-- vérifie les permissions des secrets (`600`) et leur absence des artefacts versionnés/logs ;
-- vérifie qu’un setup incomplet retourne un code non-zéro avec message actionnable ;
-- valide que la sortie finale liste toutes les commandes post-onboarding nécessaires.
-
----
-
-## A — Fondations hôte & arborescence `/srv/agentic`
-
-### A1 Pré-requis Docker/Compose/NVIDIA
-**Implémentation**
-- documenter dans `deployments/README-host.md` les commandes de diag minimales
-- note backlog : ajouter une commande simple `scripts/check_prereqs.sh` (ou alias `./agent prereqs`) qui vérifie la présence des prérequis opérateur (`docker`, `docker compose`, `multipass`, `nvidia-smi`, `iptables`, `setfacl`) et renvoie une sortie actionnable (OK/FAIL par dépendance).
-- aucun compose à ce stade
-
-**Test** : `tests/A1_host_prereqs.sh`
-- `docker version` OK
-- `docker compose version` OK
-- `nvidia-smi` OK sur l’hôte
-- option GPU conteneur : `docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi` OK
-
-### A2 Création arbo + permissions
-**Implémentation**
-- script idempotent `deployments/bootstrap/init_fs.sh`
-  - `strict-prod` : crée groupe `agentic`, crée tous les dossiers sous `/srv/agentic`, applique permissions strictes ;
-  - `rootless-dev` : ne modifie pas les groupes système, crée les dossiers sous `${HOME}/.local/share/agentic` avec permissions compatibles rootless ;
-  - dans les deux cas : pas de secrets world-readable.
-
-**Test** : `tests/A2_fs_layout_permissions.sh`
-- `test -d <AGENTIC_ROOT>/{deployments,bin,tests,secrets,ollama,gate,proxy,dns}` OK
-- `find <AGENTIC_ROOT> -maxdepth 2 -type d -perm -0002` → **vide**
-- `<AGENTIC_ROOT>/secrets` : pas accessible “others”, fichiers `600/640` selon besoin
-
-### A3 Invariant “aucun bind 0.0.0.0”
-**Implémentation**
-- ajouter dans `tests/lib/common.sh` : `assert_no_public_bind()`
-- intégrer `assert_no_public_bind` dans `agent doctor`
-
-**Test** : `tests/A3_no_public_bind.sh`
-- `ss -lntp` ne doit montrer **aucun** port critique (ex: 11434, 8080, 3000, 8188, 9090, 3100, 9100…) écoutant sur `0.0.0.0`
-
-### A4 Contrôle explicite “pas de docker.sock” (statique + runtime)
-Suivi Beads : `dgx-spark-agentic-stack-ao5`
-
-**Implémentation**
-- ajouter un test dédié qui valide l’invariant “pas de mount `docker.sock`” :
-  - statique (`docker compose config`) sur tous les plans ;
-  - runtime (`docker inspect`) sur les conteneurs du projet.
-- vérifier l’absence de motifs de contournement évidents :
-  - `/var/run/docker.sock`
-  - `/run/docker.sock`
-  - bind implicite via volume nommé pointant vers le socket hôte.
-
-**Test** : `tests/A4_no_docker_sock_static_and_runtime.sh`
-- échoue si un mount socket Docker apparaît dans la config Compose effective.
-- échoue si un mount socket Docker apparaît sur un conteneur en exécution.
-- passe en nominal sur baseline `core+agents+ui`.
-
----
-
-## B — Noyau réseau : réseau privé, DNS interne, proxy egress, enforcement DOCKER-USER
-
-### B1 Réseau Docker privé `agentic`
-**Implémentation**
-- `deployments/compose/compose.core.yml` :
-  - réseau `agentic` avec `internal: true`
-  - service “toolbox” minimal (busybox/alpine) pour tests réseau
-
-**Test** : `tests/B1_network_internal.sh`
-- `docker network inspect agentic` → `.Internal == true`
-
-### B2 DNS interne (Unbound)
-**Implémentation**
-- ajouter service `unbound` dans `compose.core.yml` (interne uniquement)
-- config dans `/srv/agentic/dns/unbound.conf`
-
-**Test** : `tests/B2_dns_unbound.sh`
-- depuis le conteneur toolbox : `drill @unbound example.com` OK
-- preuve de non-dépendance DNS externe directe : requête vers `@1.1.1.1` doit échouer (si DOCKER-USER appliqué à ce stade) ou être explicitement bloquée plus tard (B4)
-
-### B3 Proxy egress (allowlist)
-**Implémentation**
-- ajouter service `egress-proxy` (ex: squid/tinyproxy) dans `compose.core.yml` (interne uniquement)
-- policy allowlist : `/srv/agentic/proxy/allowlist.txt`
-- logs proxy : `/srv/agentic/proxy/logs/`
-- inclure dans l’allowlist par défaut les endpoints GitHub nécessaires aux workflows git des agents (au minimum `github.com`, `api.github.com`, `codeload.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`) ; option SSH explicite via `ssh.github.com:443` si activée.
-
-**Test** : `tests/B3_proxy_policy.sh`
-- depuis toolbox (sans proxy env) : `curl -fsS https://example.com` **échoue**
-- depuis toolbox (avec proxy) : `curl -fsS -x http://egress-proxy:3128 https://example.com` :
-  - OK si `example.com` allowlisté
-  - sinon doit retourner un DENY explicite (acceptable si mode strict) + log présent
-- depuis toolbox (avec proxy) : accès `https://github.com` et `https://api.github.com/meta` OK quand baseline allowlist active
-
-### B4 DOCKER-USER : anti-bypass (DROP+LOG)
-**Implémentation**
-- script idempotent `deployments/net/apply_docker_user.sh`
-  - chaîne DOCKER-USER : `ESTABLISHED,RELATED` ACCEPT
-  - allow strict : DNS→unbound, HTTP(S)→proxy, LLM→gate (quand gate existe)
-  - le reste : LOG rate-limited + DROP
-- intégrer `apply_docker_user.sh` dans `agent up core` (ou `agent doctor --fix-net`)
-- en `rootless-dev` : `apply/check DOCKER-USER` désactivés par défaut (pas d’échec bloquant)
-
-**Test** : `tests/B4_docker_user_enforced.sh`
-- `iptables -S DOCKER-USER` contient un DROP final + règle LOG
-- tentative d’egress direct (sans proxy) échoue systématiquement
-- compteur/log DOCKER-USER augmente après tentative bloquée (preuve d’enforcement)
-- en `rootless-dev` : test explicitement skip (attendu)
-
-### B5 Rollback hôte des changements `sudo` (DOCKER-USER)
-**Implémentation**
-- avant toute application de règles host firewall, sauvegarder l’état précédent (`iptables-save`) dans `${AGENTIC_ROOT}/deployments/host-net/backups/<ts>/`.
-- fournir `deployments/net/rollback_docker_user.sh <backup_id>` :
-  - restaure la chaîne `DOCKER-USER` et la chaîne dédiée `AGENTIC-DOCKER-USER` à l’état sauvegardé ;
-  - retire les règles ajoutées par la stack si le backup d’origine n’en contenait pas.
-- exposer via l’interface opérateur :
-  - `agent net apply` (applique + crée backup),
-  - `agent rollback host-net <backup_id>` (rollback déterministe côté hôte).
-- journaliser chaque `apply/rollback` hôte dans `${AGENTIC_ROOT}/deployments/changes.log` avec acteur, horodatage UTC, backup_id.
-
-**Test** : `tests/B5_host_net_rollback.sh`
-- capture état initial `iptables-save` (hash),
-- applique la politique DOCKER-USER,
-- exécute le rollback du backup créé,
-- vérifie que l’état final (`iptables-save`) est identique à l’état initial (hash égal).
-- en `rootless-dev` : test explicitement skip (attendu).
-
-### B6 Résistance anti-contournement egress depuis conteneurs agents
-Suivi Beads : `dgx-spark-agentic-stack-39m`
-
-**Implémentation**
-- ajouter un test orienté conteneurs agents (pas uniquement `toolbox`) qui tente des bypass classiques :
-  - requête directe sans proxy ;
-  - `NO_PROXY=*` / désactivation explicite des variables proxy ;
-  - tentative directe vers IP publique (pour éviter le seul contrôle DNS).
-- valider en parallèle que le chemin proxy continue de fonctionner quand la destination est allowlistée.
-- en `rootless-dev`, conserver le comportement de skip explicite des assertions host-root-only.
-
-**Test** : `tests/B6_egress_bypass_resistance.sh`
-- depuis au moins un conteneur agent (`agentic-codex` ou `agentic-claude`) :
-  - egress direct = refus explicite ;
-  - egress via proxy = succès/deny conforme à la policy allowlist.
-- en `strict-prod`, preuve de blocage via règles DOCKER-USER/proxy.
-- en `rootless-dev`, skip explicite des contrôles impossibles sans root.
-
----
-
-## C — Inference de base : Ollama (local-only)
-
-### C1 Déployer Ollama + volume persistant
-**Implémentation**
-- ajouter service `ollama` (GPU) dans `compose.core.yml`
-- configurer un env `OLLAMA_MODELS_DIR` pour le mount des modèles (ex: `${OLLAMA_MODELS_DIR:-/srv/agentic/ollama/models}:/root/.ollama/models`)
-- valeur locale existante à supporter sans copie : `/home/vuissoz/wkdir/open-webui/ollama_data/models/`
-- bind hôte : `127.0.0.1:11434:11434`
-- healthcheck HTTP `/api/version`
-
-**Test** : `tests/C1_ollama_basic.sh`
-- hôte : `curl -fsS http://127.0.0.1:11434/api/version` OK
-- `ss -lntp | grep 11434` → écoute sur `127.0.0.1` uniquement
-- interne : `curl -fsS http://ollama:11434/api/version` OK
-- health docker : `healthy`
-- `docker inspect ollama` confirme le source mount des modèles = valeur effective de `OLLAMA_MODELS_DIR` (ou fallback par défaut)
-
-### C1b Gestion du store modèles Ollama (link rootless + mode mount)
-**Implémentation**
-- fournir un helper rootless `agent ollama-link` pour relier un store modèles local existant vers le chemin runtime attendu, sans copie destructive.
-- fournir `agent rollback ollama-link <backup_id|latest>` pour restaurer l’état précédent du lien.
-- fournir `agent ollama-models [status|rw|ro]` pour auditer/changer le mode de mount du store modèles, avec persistance dans `runtime.env`.
-
-**Test** : `tests/C1_ollama_basic.sh`
-- `agent ollama-models status` expose le mode de mount effectif + source runtime.
-- cohérence entre mode configuré et mode réellement monté sur le conteneur `ollama`.
-
-### C2 Smoke test génération
-**Implémentation**
-- script `deployments/ollama/smoke_generate.sh` (prompt court)
-- prévoir modèle minimal de test (ou skip si aucun modèle présent)
-- en VM dédiée à RAM contrainte : autoriser un petit modèle de validation (0.5B–3B) pour ce smoke test
-
-**Test** : `tests/C2_ollama_generate.sh`
-- POST `/api/generate` retourne 200 + payload non vide (avec timeout court)
-- logs ollama présents
-
-### C2b Modèle Ollama par défaut configurable + validation e2e “hello”
-Suivi Beads : `dgx-spark-agentic-stack-ahh`
-
-**Implémentation**
-- introduire une variable runtime canonique `AGENTIC_DEFAULT_MODEL` (fallback `qwen3-coder:30b`) utilisée comme source de vérité pour:
-  - preload Ollama (`OLLAMA_PRELOAD_GENERATE_MODEL`),
-  - onboarding (`agent onboard --default-model`),
-  - bootstrap OpenHands (`LLM_MODEL` par défaut).
-- ajouter `AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW` (onboarding + runtime) et propager vers `OLLAMA_CONTEXT_LENGTH`.
-- conserver la compatibilité avec les variables existantes (`OLLAMA_PRELOAD_GENERATE_MODEL`, `LLM_MODEL`) sans régression.
-- exposer la valeur effective dans `agent profile` et la persister dans `${AGENTIC_ROOT}/deployments/runtime.env`.
-
-**Test** : `tests/L5_default_model_e2e.sh`
-- vérifie que le modèle par défaut est présent dans `ollama /api/tags`.
-- exécute un appel `hello` direct sur Ollama (`/api/generate`) et valide une réponse non vide.
-- exécute le même appel via `ollama-gate`.
-- exécute le même appel depuis chaque agent (`claude`, `codex`, `opencode`, `vibestral`) via `ollama-gate`.
-- exécute le même appel depuis `openwebui` et `openhands` via `ollama-gate`.
-
-### C3 Backend alternatif : TRT-LLM (NVFP4) derrière le gate
-**Implémentation**
-- ajouter un service `trtllm` dédié dans un compose séparé (ex: `compose.trt.yml`) activé via profile (ex: `trt`), sans exposition host.
-- bind réseau interne uniquement (pas de `ports:`), accès exclusivement depuis `ollama-gate`.
-- stockage dédié (ex: `${AGENTIC_ROOT}/trtllm/{models,state,logs}`) pour moteurs/modèles NVFP4.
-- healthcheck interne du runtime TRT-LLM.
-- `agent onboard` propose par défaut `TRTLLM_MODELS=https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`, et le fallback Compose/runtime reste aligné sur cette valeur.
-- le conteneur `trtllm` embarque maintenant l'image NVIDIA `nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc5`, lance `trtllm-serve serve` en backend natif quand `huggingface.token` est present, et garde un mode `mock` deterministe sans token.
-- le mode standard `TRTLLM_NATIVE_MODEL_POLICY=auto` conserve le comportement générique, y compris la canonicalisation FP8 du slug Nemotron NVFP4 quand le backend natif sert directement un handle HF.
-- le mode `TRTLLM_NATIVE_MODEL_POLICY=strict-nvfp4-local-only` impose au contraire un runtime local unique (`TRTLLM_NVFP4_LOCAL_MODEL_DIR`, défaut `/models/trtllm-model`) aligné sur le seul modèle exposé par `TRTLLM_MODELS`, sans fallback silencieux.
-- avec le modèle TRT par défaut et un `huggingface.token` non vide, `agent up core` prefetch uniquement le cache Hugging Face de `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` sous `${AGENTIC_ROOT}/trtllm/models/huggingface`. Le répertoire local strict n'est jamais téléchargé automatiquement; il reste opt-in via `agent trtllm prepare`.
-- la stack TRT ne maintient plus de catalogue local multi-modele ni de variable `TRTLLM_ACTIVE_MODEL_KEY`; le contrat runtime se résume à `TRTLLM_MODELS` et, si besoin, `TRTLLM_NVFP4_LOCAL_MODEL_DIR` / `TRTLLM_NVFP4_HF_REPO` / `TRTLLM_NVFP4_HF_REVISION`.
-- les commandes opérateur TRT sont réduites à `agent trtllm status` et `agent trtllm prepare` pour coller au modèle unique exposé.
-- un essai live `Hello` sur `NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` retourne encore `503 status=starting` tant que le backend TRT termine le téléchargement Hugging Face derrière le proxy.
-- documenter les prérequis GPU/moteurs NVFP4 et la procédure de chargement des modèles.
-
-**Test** : `tests/C3_trtllm_basic.sh`
-- `trtllm` est `healthy` lorsqu’activé.
-- aucun port `trtllm` n’est publié sur l’hôte.
-- accès direct externe refusé, accès interne depuis `ollama-gate` seulement.
-- au premier boot natif, `/healthz` peut rester en `status=starting` pendant le téléchargement/chargement initial du modèle avant le premier `hello`.
- 
----
-
-## D — Point de contrôle LLM : `ollama-gate` (queue/priorités/sticky + logs/metrics)
-
-### D1 Déployer `ollama-gate` devant Ollama
-**Implémentation**
-- ajouter service `ollama-gate` dans `compose.core.yml` (interne)
-- endpoints :
-  - compat OpenAI `/v1/*`
-  - inclure explicitement `POST /v1/embeddings` (compat OpenAI) pour les flux RAG
-  - `/metrics`
-- ajouter un routage multi-backend dans `ollama-gate` :
-  - backend par défaut = `ollama`;
-  - backend alternatif = `trtllm` pour modèles NVFP4 (règles explicites par nom/pattern de modèle);
-  - routage décidé par politique versionnée (ex: `${AGENTIC_ROOT}/gate/config/model_routes.yml`).
-- persistance : `/srv/agentic/gate/{state,logs}/`
-- config : concurrence=1, queue activée, sticky session via header `X-Agent-Session`
-
-**Test** : `tests/D1_gate_up_metrics.sh`
-- `curl -fsS http://ollama-gate:<port>/metrics | grep -q queue_depth` OK
-- `/v1/models` répond
-- `POST /v1/embeddings` répond (200 ou erreur modèle explicite, mais pas 404)
-
-### D2 Discipline de concurrence + queue/deny explicite
-**Implémentation**
-- implémenter comportement “1 actif, le reste queued/denied avec raison”
-- logs gate JSON (au minimum : ts, session, project, decision, latency, model_requested, model_served)
-
-**Test** : `tests/D2_gate_concurrency.sh`
-- lancer 2 requêtes longues en parallèle :
-  - 1 passe, 1 queued/denied (statut vérifié)
-- logs contiennent les champs attendus
-
-### D3 Sticky model par session + switch contrôlé
-**Implémentation**
-- “sticky” : session -> modèle stable sur N requêtes
-- endpoint admin interne (option) pour switch explicite
-
-**Test** : `tests/D3_gate_sticky.sh`
-- 3 requêtes même session → `model_served` identique
-- tentative de changer modèle “à la volée” sans switch → refus/ignorée
-- switch explicite → OK + log `model_switch:true`
-
-### D4 Routage backend par modèle (Ollama vs TRT-LLM)
-**Implémentation**
-- exposer dans les logs gate le backend résolu (`backend=ollama|trtllm`) pour audit.
-- forcer les modèles NVFP4 vers `trtllm` via la table de routage.
-- conserver l’API client inchangée: les clients appellent toujours `ollama-gate` uniquement.
-
-**Test** : `tests/D4_gate_backend_routing.sh`
-- requête avec modèle standard -> backend `ollama` (preuve logs/headers gate).
-- requête avec modèle NVFP4 -> backend `trtllm` (preuve logs/headers gate).
-- si `trtllm` indisponible pour un modèle NVFP4 routé: erreur explicite et actionnable (pas de fallback silencieux non maîtrisé).
-
-### D5 Backends LLM externes via `ollama-gate` (OpenAI/OpenRouter)
-**Implémentation**
-- ajouter un routage provider externe (au minimum `openai`, `openrouter`) dans `ollama-gate`, piloté par config versionnée `${AGENTIC_ROOT}/gate/config/model_routes.yml`.
-- garder l’API client inchangée (`/v1/*`) : les agents/UIs appellent toujours uniquement `ollama-gate`.
-- stocker les credentials providers hors git, fichiers root-only (ex: `${AGENTIC_ROOT}/secrets/runtime/openai.api_key`, `${AGENTIC_ROOT}/secrets/runtime/openrouter.api_key`).
-- egress minimal : allowlist explicite des endpoints providers activés (pas d’ouverture générale).
-- journaux gate enrichis : `backend`, `provider`, `model_requested`, `model_served`, sans fuite de secrets/tokens.
-
-**Test** : `tests/D5_gate_external_providers.sh`
-- modèle routé `openai` -> appel sortant via proxy vers endpoint OpenAI autorisé, réponse exploitable.
-- modèle routé `openrouter` -> appel sortant via proxy vers endpoint OpenRouter autorisé, réponse exploitable.
-- aucun secret provider dans logs gate/proxy.
-- sans clé API valide : erreur explicite/actionnable (pas de fallback implicite non maîtrisé).
-
-### D6 Mode “ressources locales” + quotas de tokens des appels externes
-**Implémentation**
-- ajouter un mode opératoire explicite : `agent llm mode <local|hybrid|remote>`.
-- `local` : backends locaux seulement (Ollama/TRT-LLM), appels externes refusés.
-- `hybrid` : local prioritaire + externe selon routage/politiques.
-- `remote` : providers externes autorisés ; possibilité d’arrêter `ollama` et/ou `trtllm` pour libérer GPU/RAM tout en gardant les agents opérationnels via `ollama-gate`.
-- implémenter des quotas de tokens/cout côté gate pour les providers externes :
-  - budget journalier/mensuel par provider (et optionnellement par outil/projet) ;
-  - compteurs persistants `${AGENTIC_ROOT}/gate/state/quotas.*` ;
-  - refus explicite quand quota dépassé (erreur dédiée + logs d’audit).
-- exposer métriques de coût/usage (`external_tokens_total`, `external_requests_total`, `external_quota_remaining`, etc.) pour alerting.
-
-**Test** : `tests/D6_gate_quota_and_local_pause.sh`
-- en mode `remote`, après arrêt `ollama`/`trtllm`, une requête agent passe encore via provider externe.
-- en mode `local`, appel d’un modèle externe est refusé explicitement.
-- dépassement quota simulé -> requêtes externes refusées, agents non plantés, logs/metrics cohérents.
-
-### D7 MCP local pour visibilité runtime (modèle actif + tokens restants)
-**Implémentation**
-- ajouter un MCP local (service interne, sans exposition host) consommable par les agents locaux.
-- exposer au minimum des outils MCP:
-  - `gate.current_model` : retourne le modèle effectivement servi derrière `ollama-gate` (backend/provider/model_served), avec contexte session/projet.
-  - `gate.quota_remaining` : retourne le quota/tokens restants pour les appels externes (global + par provider, et optionnellement par outil/projet).
-  - `gate.switch_model` : demande un changement explicite de modèle pour une session (appel contrôlé vers `ollama-gate` `/admin/sessions/{session_id}/switch`), avec validation du modèle cible et traçabilité d’audit.
-- source de vérité: état/métriques du gate (`${AGENTIC_ROOT}/gate/state/*` + endpoints internes) ; aucun secret provider ne doit être renvoyé.
-- intégrer l’endpoint MCP local dans l’environnement des conteneurs agents (variables runtime dédiées), en gardant l’isolation réseau actuelle.
-- hardening: auth locale minimale (token runtime local), rate limiting, logs d’audit.
-
-**Test** : `tests/D7_local_mcp_gate_visibility.sh`
-- depuis un conteneur agent, appel MCP `gate.current_model` -> réponse non vide avec backend/provider/model_served cohérents.
-- depuis un conteneur agent, appel MCP `gate.quota_remaining` -> réponse avec compteurs restants cohérents.
-- depuis un conteneur agent, appel MCP `gate.switch_model` (session existante) -> modèle sticky mis à jour et visible via `gate.current_model`; trace `model_switch:true` côté logs gate.
-- en mode `remote` avec `ollama`/`trtllm` arrêtés, le MCP continue de refléter correctement le provider externe actif.
-- accès non autorisé ou hors réseau interne -> refus explicite.
-
-### D8 Compatibilité protocolaire multi-clients (`/v1/responses`, `/v1/messages`)
-**Implémentation**
-- exposer des endpoints de compatibilité OpenAI/Anthropic au niveau `ollama-gate` :
-  - `POST /v1/responses` + alias `POST /responses` ;
-  - `POST /v1/messages` + alias `POST /messages`.
-- conserver une API client stable côté agents/UIs sans bypass direct vers les providers.
-- supporter le streaming SSE sur `messages` (événements compatibles clients Anthropic).
-- conserver la cohérence sticky/session du routage modèle pendant ces appels.
-
-**Test** : `tests/D8_gate_protocol_compat.sh`
-- `/v1/responses` et `/responses` retournent `200` + payload compatible.
-- `/v1/messages` et `/messages` retournent `200` + payload compatible.
-- stream `/v1/messages` expose les événements attendus (`content_block_delta`, `message_stop`).
-
-### D9 Contrat `/v1/models` enrichi (metadata interop)
-**Implémentation**
-- enrichir la réponse `GET /v1/models` de `ollama-gate` avec des champs `metadata` non sensibles dérivés des catalogues backend (ex: Ollama `/api/tags`) tout en conservant les champs de base OpenAI-compatibles (`id`, `object`, `owned_by`).
-- garantir une dégradation sûre: absence de metadata détaillée ne doit pas casser le endpoint.
-
-**Test** : `tests/D9_gate_models_metadata.sh`
-- `/v1/models` retourne `200` avec `object=list` et une liste non vide.
-- chaque entrée conserve les champs de base compatibles (`id/object/owned_by`).
-- au moins un modèle expose `metadata` avec provenance `ollama:/api/tags`.
-- pour un modèle commun `/v1/models` <-> `/api/tags`, les champs enrichis clés (digest/size/family quand présents) sont cohérents.
-
----
- 
-## E — Agents CLI persistants : image `agent-cli-base` + tmux + workspaces
-
-### E1 Construire `agent-cli-base`
-**Implémentation**
-- `deployments/images/agent-cli-base/Dockerfile`
-  - base NVIDIA CUDA **devel** compatible DGX Spark (ARM64), version explicitement épinglée
-  - socle CLI/runtime : bash, tmux, git, git-lfs, curl, ca-certificates, openssh-client, rsync
-  - socle dev général : build-essential, cmake, ninja-build, pkg-config, python3+venv+pip, nodejs+npm, golang-go, rustc+cargo
-  - outillage productivité/qualité : ripgrep, fd-find, jq, shellcheck, shfmt, direnv
-  - socle C/C++ pro : gdb, gdbserver, valgrind, clang, clangd, lld, lldb, clang-format, clang-tidy, cppcheck, ccache, bear, meson, autoconf, automake, libtool
-  - dépendances build natives communes : libc6-dev, libssl-dev, zlib1g-dev, libffi-dev, libbz2-dev, libreadline-dev, libsqlite3-dev
-  - installer les CLIs agents officiels dans l'image commune (codex, claude code, opencode, vibe, openhands CLI, openclaw CLI) ainsi que le runtime/CLI Hermes dérivé de `https://github.com/NousResearch/hermes-agent.git`, avec traçabilité de l'état d'installation (`/etc/agentic/*-real-path`) et wrappers de fallback explicites en cas d'échec egress
-  - conserver user non-root + entrypoint tmux compatible
-- pas de docker.sock, pas de privilèges
-
-**Test** : `tests/E1_image_build.sh`
-- `docker image inspect agent-cli-base:<tag>` OK
-- `.Config.User` non-root
-- `docker run --rm ... sh -lc 'command -v gcc g++ cmake ninja clang python3 pip node npm go rustc cargo nvcc'` OK
-- `docker run --rm ... sh -lc 'command -v codex claude opencode vibe openhands openclaw hermes'` OK
-- smoke C/C++ : compilation simple (`gcc` + `g++`) OK
-- smoke CUDA : `nvcc --version` OK (et test compile minimal CUDA si GPU/toolkit dispo)
-- invariants sécurité conservés (`read_only`, `cap_drop=ALL`, `no-new-privileges`, pas de `docker.sock`)
-
-### E1b Image de base commune customisable (Dockerfile override)
-**Implémentation**
-- permettre de surcharger le Dockerfile de base des agents (`agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`) via variables runtime (ex: `AGENTIC_AGENT_BASE_DOCKERFILE`, `AGENTIC_AGENT_BASE_BUILD_CONTEXT`).
-- conserver un fallback sûr par défaut sur `deployments/images/agent-cli-base/Dockerfile` si aucun override n’est fourni.
-- option de tagging explicite de l’image commune custom (ex: `AGENTIC_AGENT_BASE_IMAGE=agentic/agent-cli-base:custom`) pour traçabilité des releases.
-- documenter clairement le contrat minimal du Dockerfile custom (user non-root, entrypoint compatible, outils de base requis).
-- documenter dans un **nouveau runbook débutant** (`docs/runbooks/`) l’environnement de travail des agents (image de base, volumes, contraintes sécurité) et la procédure de personnalisation de l’image (variables `AGENTIC_AGENT_BASE_*`, exemple socle dev pro avec CUDA, rollback).
-- le mécanisme custom ne doit pas casser le durcissement conteneur existant (`read_only`, `cap_drop=ALL`, `no-new-privileges`, pas de `docker.sock`).
-
-**Test** : `tests/E1b_agent_base_image_override.sh`
-- sans override: build/déploiement utilisent bien le Dockerfile par défaut.
-- avec override: build utilise le Dockerfile custom fourni et l’image/tag attendu.
-- les quatre services agents démarrent avec l’image commune custom.
-- le nouveau runbook débutant existe et est référencé depuis la documentation d’introduction/runbooks.
-- les invariants sécurité des agents restent inchangés.
-
-### E2 Déployer `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral`, `agentic-hermes`
-**Implémentation**
-- `deployments/compose/compose.agents.yml`
-- volumes par outil :
-  - `${AGENTIC_ROOT}/<tool>/{state,logs}`
-  - `${AGENTIC_AGENT_WORKSPACES_ROOT}/<tool>/workspaces` (fallback `${AGENTIC_ROOT}/<tool>/workspaces`)
-- env :
-  - `OLLAMA_BASE_URL=http://ollama-gate:<port>`
-  - `HTTP(S)_PROXY=http://egress-proxy:3128`
-  - `NO_PROXY=ollama-gate,unbound,egress-proxy,localhost,127.0.0.1`
-- bootstrap first-run des agents : matérialiser un fichier persistant de defaults LLM dans `/srv/agentic/<tool>/state/bootstrap/ollama-gate-defaults.env` (ou `${AGENTIC_ROOT}` équivalent) pour forcer par défaut les endpoints `OLLAMA_BASE_URL` + `OPENAI_*_BASE_URL` vers `ollama-gate`, sans écraser un override explicite.
-- sécurité conteneur :
-  - `read_only: true`, `tmpfs: /tmp`
-  - `cap_drop: [ALL]`
-  - `security_opt: [no-new-privileges:true]`
-- service dédié `agentic-vibestral` (même baseline sécurité que `codex-agent`) avec bootstrap Vibe CLI:
-  1. `curl -LsSf https://mistral.ai/vibe/install.sh | bash`
-  2. `vibe --setup`
-- persister l’état Vibe dans `${AGENTIC_ROOT}/vibestral/state` (ou sous-répertoire explicite) pour éviter de relancer `--setup` à chaque redémarrage.
-- service dédié `agentic-hermes` (même baseline sécurité que les autres agents core), dérivé du dépôt upstream `NousResearch/hermes-agent` avec contrat d'intégration stack-managed explicite :
-  1. version/source pinées (tag, commit ou release) dans l'image commune ou un wrapper dédié, sans dépendance implicite à une branche flottante ;
-  2. bootstrap non interactif compatible tmux/workspace et persistance de l’état Hermes sous `${AGENTIC_ROOT}/hermes/state` ;
-  3. routage modèle déterministe vers `ollama-gate` ou backend explicitement supporté par Hermes, sans contourner la politique réseau/egress de la stack ;
-  4. documentation des écarts éventuels entre le contrat upstream Hermes et les invariants de cette stack.
-- expliciter pour chaque service son binaire CLI principal (`AGENT_PRIMARY_CLI`) et vérifier sa présence via `doctor` et tests E2.
-
-**Test** : `tests/E2_agents_confinement.sh`
-- `docker exec agentic-claude tmux has-session -t claude` OK (idem codex/opencode/vibestral/hermes)
-- `docker exec agentic-claude sh -lc 'command -v claude'` OK (idem codex/opencode/vibe/hermes)
-- `docker exec agentic-claude sh -lc 'test -f /state/bootstrap/ollama-gate-defaults.env'` OK (idem codex/opencode/vibestral/hermes) + variables résolues vers `http://ollama-gate:11435(/v1)`
-- `docker inspect` prouve : non-root, readonly rootfs, cap_drop ALL, NNP
-- egress : direct KO, via proxy conforme
-- pour chaque agent (`claude`, `codex`, `opencode`, `vibestral`, `hermes`) :
-  - `getent hosts github.com` renvoie une résolution DNS valide ;
-  - `ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -T git@github.com` ne doit jamais échouer sur `Temporary failure in name resolution` (un refus d’authentification est acceptable).
-- écritures : OK dans workspace/state/logs, KO ailleurs
-
----
-
-## F — Commande unique `agent` + conformité + update/rollback par digest
-
-### F1 Implémenter `agent` (opérations)
-**Implémentation**
-- compléter `/srv/agentic/bin/agent` :
-  - `agent <tool>` : attache tmux, sélection projet (basename git ou dir)
-  - `agent ls` : sessions actives + taille workspaces + modèle sticky (si dispo)
-  - `agent logs <tool>`
-  - `agent stop <tool>`
-  - `agent up/down` multi-compose
-- inclure `vibestral` et `hermes` comme tools de première classe (`agent vibestral <project>`, `agent hermes <project>`).
-- stocker config runtime dans `/srv/agentic/deployments/runtime.env` (non committé)
-
-**Test** : `tests/F1_agent_cli.sh`
-- `agent ls` fonctionne même si aucune session (retour propre)
-- `agent claude` crée/attache une session tmux et workspace projet
-- `agent vibestral` crée/attache une session tmux et workspace projet
-- `agent hermes` crée/attache une session tmux et workspace projet
-
-### F2 Snapshot par digest + rollback strict
-**Implémentation**
-- `deployments/releases/snapshot.sh` :
-  - capture digests (`docker compose images --digests` ou inspect)
-  - copie compose effectifs + runtime.env (sans secrets)
-  - enregistre `health_report.json`
-- `deployments/releases/rollback.sh <id>` :
-  - repin images par digest (ou tags->digests figés)
-  - redeploy compose
-- en `strict-prod`, associer le snapshot de release au dernier backup host-net disponible (référence `backup_id`) pour pouvoir restaurer aussi les changements imposés par `sudo`.
-- journal : `deployments/changes.log`
-- ajouter un bootstrap automatique de manifest release au premier `agent up ...` réussi si aucun `deployments/current/images.json` n’existe encore.
-
-**Test** : `tests/F2_update_rollback.sh`
-- `agent update` crée un snapshot complet (`deployments/releases/<ts>/…`)
-- après un “changement” (pull latest), `agent rollback <ts>` restaure exactement les digests
-- healthchecks redeviennent `healthy`
-- complément de couverture : `tests/F5_auto_release_manifest.sh` valide la création auto d’un manifest release lors d’un `up`.
-
-### F3 `agent doctor` (gating sécurité)
-**Implémentation**
-- `agent doctor` agrège :
-  - `assert_no_public_bind`
-  - DOCKER-USER présent + DROP final
-  - proxy enforced (pas d’egress direct)
-  - conformité conteneurs agents (non-root, NNP, cap_drop, ro)
-  - health des conteneurs critiques
-- comportement par profil :
-  - `strict-prod` : tout écart structurant = `FAILED`;
-  - `rootless-dev` : les checks host-root-only (DOCKER-USER, enforcement hôte impossible) passent en warning.
-
-**Test** : `tests/F3_doctor.sh`
-- en état nominal : doctor=PASSED
-- si on force un bind `0.0.0.0` dans un compose de test : doctor=FAILED
-- si DOCKER-USER absent : doctor=FAILED
-- en `rootless-dev` : le test valide l’exécution de doctor sans exiger l’échec DOCKER-USER
-
-### F3b Matrice de hardening Compose (contrôle statique global)
-**Implémentation**
-- ajouter un contrôle statique rendu `docker compose config` sur tous les services (core/agents/ui/obs/rag/optional) pour éviter les régressions de baseline sécurité.
-- vérifier au minimum :
-  - `cap_drop: [ALL]` ;
-  - `security_opt` avec `no-new-privileges` cohérent avec le mode agent (`sudo-mode`) ;
-  - `read_only: true` hors exceptions explicitement documentées ;
-  - présence healthcheck ;
-  - politique user non-root hors exceptions système explicites.
-
-**Test** : `tests/F6_hardening_matrix.sh`
-- échoue sur toute dérive de hardening dans la config Compose effective.
-
-### F4 `agent forget` : reset ciblé des environnements persistants (mode “fresh install”)
-**Implémentation**
-- ajouter une commande destructive explicite :
-  - `agent forget <target> --yes`
-  - sans `--yes` : mode interactif obligatoire avec **deux confirmations successives** ;
-  - chaque confirmation a `No` comme valeur par défaut (Entrée vide = `No`) ;
-  - si l’une des deux confirmations n’est pas un `yes` explicite : refus + code non-zéro.
-- objectifs :
-  - supprimer toutes les données persistantes du domaine ciblé ;
-  - recréer immédiatement l’arborescence/permissions/fichiers runtime comme à l’installation initiale (via `init_runtime.sh` concerné) ;
-  - laisser les autres domaines intacts.
-- cibles minimales à supporter :
-  - `ollama`
-  - `claude`
-  - `codex`
-  - `opencode`
-  - `vibestral`
-  - `comfyui`
-  - `openclaw`
-- cibles recommandées en plus (cohérence opératoire) :
-  - `openhands`, `openwebui`, `qdrant`, `obs`, `all`.
-- mapping attendu (exemples) :
-  - `ollama` -> `${AGENTIC_ROOT}/ollama/**`
-  - `claude` -> `${AGENTIC_ROOT}/claude/{state,logs,workspaces}/**`
-  - `codex` -> `${AGENTIC_ROOT}/codex/{state,logs,workspaces}/**`
-  - `opencode` -> `${AGENTIC_ROOT}/opencode/{state,logs,workspaces}/**`
-  - `vibestral` -> `${AGENTIC_ROOT}/vibestral/{state,logs,workspaces}/**`
-  - `comfyui` -> `${AGENTIC_ROOT}/comfyui/{models,input,output,user}/**`
-  - `openclaw` -> `${AGENTIC_ROOT}/optional/openclaw/{config,state,logs}/**`
-- orchestration de sécurité :
-  - arrêter les services dépendants avant purge (`agent down` ciblé) ;
-  - purge atomique par cible ;
-  - ré-init runtime via scripts existants (`deployments/*/init_runtime.sh`) ;
-  - journaliser l’action dans `${AGENTIC_ROOT}/deployments/changes.log` (acteur, UTC, cible, résultat).
-- sauvegarde avant destruction :
-  - créer un backup daté dans `${AGENTIC_ROOT}/deployments/forget-backups/<ts>-<target>.tar.gz` ;
-  - option `--no-backup` possible mais non défaut.
-- profils :
-  - `strict-prod` : commande exécutable avec privilèges adaptés ;
-  - `rootless-dev` : comportement équivalent sans exiger root, sauf chemins non accessibles (erreur explicite).
-
-**Test** : `tests/F4_forget_command.sh`
-  - pour chaque cible minimale (`ollama`, `claude`, `codex`, `opencode`, `vibestral`, `comfyui`, `openclaw`) :
-  - créer un marqueur fichier persistant ;
-  - exécuter `agent forget <target>` sans `--yes` puis Entrée vide à l’un des prompts -> refus attendu ;
-  - exécuter `agent forget <target>` sans `--yes` et répondre `yes` aux deux prompts -> succès ;
-  - exécuter `agent forget <target> --yes` -> succès ;
-  - vérifier :
-    - marqueur supprimé ;
-    - arborescence runtime recréée ;
-    - permissions minimales conformes ;
-    - entrée `changes.log` présente ;
-    - backup créé (sauf `--no-backup`).
-- test d’isolation :
-  - un `forget codex` ne supprime pas `claude/opencode`.
-- test idempotence :
-  - relancer `agent forget <target> --yes` sur cible déjà vide -> succès + état cohérent.
-
-### F5 Pilotage ressources ciblé (stop/start services et conteneurs)
-**Implémentation**
-- ajouter des commandes de contrôle fin pour libérer/reprendre des ressources sans arrêter toute la stack :
-  - `agent stop service <service...>`
-  - `agent start service <service...>`
-  - `agent stop container <container...>`
-  - `agent start container <container...>`
-- garde-fou : `stop/start container` doit refuser les conteneurs hors `com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}`.
-
-**Test** : `tests/L1_stop_resources.sh`
-- démarre une stack minimale (`optional-sentinel`) en projet isolé ;
-- valide `stop/start service` ;
-- valide `stop/start container` ;
-- vérifie les transitions d’état (`running` <-> `exited`).
-
-### F6 Orchestration stack stepwise (partielle ou complète)
-**Implémentation**
-- ajouter une commande unique d’orchestration sûre :
-  - `agent stack stop <targets|all>` : arrêt stepwise en ordre sûr `optional -> rag -> obs -> ui -> agents -> core`
-  - `agent stack start <targets|all>` : démarrage stepwise `core -> agents -> ui -> obs -> rag -> optional`
-- fonctionnement sans intervention manuelle ; en cas d’échec d’une étape, retour non-zéro explicite.
-- `all` doit représenter la baseline complète par défaut.
-
-**Test** : `tests/L2_stack_stepwise.sh`
-- valide le démarrage/arrêt stepwise via `agent stack start all` et `agent stack stop all` ;
-- vérifie l’ordre effectif des étapes dans la sortie ;
-- vérifie que les services ciblés sont bien up/down en fin d’opération.
-
-### F7 Cleanup global “brand new” avec export/backup optionnel
-Suivi Beads : `dgx-spark-agentic-stack-49e`
-
-**Implémentation**
-- ajouter une commande destructive explicite :
-  - `agent cleanup [--yes] [--backup|--no-backup]`
-  - `agent strict-prod cleanup [--yes] [--backup|--no-backup]`
-  - `agent rootless-dev cleanup [--yes] [--backup|--no-backup]`
-- comportement attendu :
-  - exécuter la purge sur la racine runtime du profil actif :
-    - `strict-prod` -> `/srv/agentic`
-    - `rootless-dev` -> `${HOME}/.local/share/agentic` (ou override `AGENTIC_ROOT`) ;
-  - demande interactive si un backup/export est souhaité (par défaut `yes`) ;
-  - confirmation explicite obligatoire avant purge (ou `--yes`) ;
-  - stop stepwise de la stack ;
-  - export archive si demandé ;
-  - purge complète de `${AGENTIC_ROOT}` pour revenir à un état “fresh/brand new” ;
-  - suppression des images Docker locales de la stack ;
-  - la suppression de fichiers/répertoires ne doit jamais suivre les liens symboliques (symlink-safe).
-
-**Test** : `tests/L3_cleanup.sh`
-- couvre le flux interactif (`backup + confirmation`) ;
-- vérifie qu’une archive d’export est produite si demandée ;
-- vérifie que `${AGENTIC_ROOT}` est vidé et que les services ciblés sont arrêtés ;
-- vérifie que la commande profilée (`agent rootless-dev cleanup`) fonctionne ;
-- vérifie qu’un symlink sous `${AGENTIC_ROOT}` est supprimé sans supprimer sa cible ;
-- vérifie que les images Docker locales de la stack sont supprimées.
-
-### F8 Backup incrémental “Time Machine” (persistant + config non-secrète)
-**Implémentation**
-- ajouter une commande dédiée :
-  - `agent backup run` : snapshot incrémental horodaté ;
-  - `agent backup list` : liste snapshots + taille + date + policy retention ;
-  - `agent backup restore <snapshot_id>` : restauration déterministe d’un snapshot (opt-in destructif).
-- couvrir les dossiers persistants `${AGENTIC_ROOT}` (états, logs, workspaces, releases), plus une copie de configuration système utile à l’exploitation (ex: règles réseau/compose effectif), **sans secrets**.
-- exclure explicitement :
-  - `${AGENTIC_ROOT}/secrets/**`,
-  - clés/tokens/certs privés,
-  - toute variable/fichier marqué secret.
-- stratégie incrémentale “time machine” :
-  - snapshots fréquents, déduplication/blocs ou hardlinks selon outil choisi ;
-  - politique de rétention configurable (ex: hourly/daily/weekly).
-- journaliser run/restore dans `${AGENTIC_ROOT}/deployments/changes.log` avec acteur, UTC, snapshot_id, résultat.
-
-**Test** : `tests/F8_backup_incremental.sh`
-- deux runs successifs sans changement -> second snapshot quasi nul (incrémental).
-- après modification ciblée d’un dossier persistant -> snapshot suivant contient uniquement le delta attendu.
-- `restore <snapshot_id>` restaure les fichiers persistants ciblés.
-- vérification stricte : aucun fichier secret inclus dans snapshot/manifest.
-
-### F9 Rollback hermétique depuis artefacts snapshot
-Suivi Beads : `dgx-spark-agentic-stack-ywl`
-
-**Implémentation**
-- renforcer le rollback pour qu’il soit déterministe à partir des artefacts release uniquement :
-  - source de vérité = `${AGENTIC_ROOT}/deployments/releases/<id>/{compose.effective.yml,images.json,...}` ;
-  - éviter la dépendance aux fichiers Compose du working tree courant.
-- conserver un mode de compatibilité explicite pour anciennes releases si nécessaire (fallback documenté).
-
-**Test** : `tests/F17_rollback_artifact_hermetic.sh`
-- créer une release via `agent update` ;
-- modifier ensuite un compose local (drift contrôlé) ;
-- exécuter `agent rollback all <release_id>` ;
-- vérifier que le rollback restaure l’état de la release (images/services/health) malgré le drift du repo.
-
-### F10 Intégrité des artefacts de release + anti-fuite secrets
-Suivi Beads : `dgx-spark-agentic-stack-7eo`
-
-**Implémentation**
-- formaliser le contrat minimal des artefacts de release :
-  - `release.meta`, `images.json`, `health_report.json`, `compose.effective.yml`, `compose.files`, `runtime.env` (redacté).
-- ajouter un contrôle anti-fuite de secrets dans les artefacts exportés (mots-clés + patterns usuels).
-
-**Test** : `tests/F10b_release_artifact_integrity.sh`
-- vérifie la présence/cohérence des fichiers obligatoires d’une release.
-- vérifie que `runtime.env` exporté n’expose pas de clés/valeurs sensibles.
-- vérifie que `images.json` contient les champs requis par service (image configurée/résolue, digest, état, santé).
-
-### F11 Cohérence du schéma runtime env (anti-drift)
-Suivi Beads : `dgx-spark-agentic-stack-3je`
-
-**Implémentation**
-- centraliser/normaliser la liste des clés runtime attendues pour réduire la dérive entre :
-  - `scripts/lib/runtime.sh` (defaults/export),
-  - `load_runtime_env` / `ensure_runtime_env`,
-  - `agent profile`.
-- rendre la dérive détectable en CI via test dédié.
-
-**Test** : `tests/F11_runtime_env_schema_drift.sh`
-- compare les clés exposées dans les différents points de vérité runtime.
-- échoue si une clé est présente dans une couche mais absente/incohérente ailleurs.
-- vérifie la stabilité minimale du contrat `agent profile` pour les clés critiques.
-
-### F12 Contrat `agent doctor` par profil (strict-prod vs rootless-dev)
-Suivi Beads : `dgx-spark-agentic-stack-eus`
-
-**Implémentation**
-- expliciter et figer le contrat attendu :
-  - `strict-prod` : écarts structurants => échec non-zéro ;
-  - `rootless-dev` : checks host-root-only => warning/skip, sans masquer les échecs runtime réels.
-- couvrir les cas limites de flags `AGENTIC_SKIP_*` pour éviter les régressions de sévérité.
-
-**Test** : `tests/F12_doctor_profile_contract.sh`
-- valide que `doctor` échoue en `strict-prod` sur une dérive host-root structurante.
-- valide que la même dérive est downgradée en warning/skip en `rootless-dev`.
-- valide que les dérives runtime (ex: santé conteneur, bind public critique) restent bloquantes dans les deux profils.
-
----
-
-## G — Observabilité : Prometheus + Grafana + Loki + DCGM exporter
-
-### G0 Réparation ownership rootless + migration promtail (pré-vol obs)
-**Implémentation**
-- rendre `deployments/obs/init_runtime.sh` idempotent en mode `rootless-dev`, y compris après dérive d’ownership/permissions.
-- corriger automatiquement ownership UID:GID runtime des dossiers `monitoring/*`.
-- migrer la config promtail legacy (`/var/log/agentic-proxy/...`) vers le chemin runtime attendu (`/tmp/agentic-proxy/...`) quand nécessaire.
-
-**Test** : `tests/G0_obs_rootless_ownership_repair.sh`
-- vérifie réparation ownership/permissions + idempotence.
-- vérifie migration de chemin promtail et suppression de l’ancien chemin legacy.
-
-### G1 Déployer stack obs
-**Implémentation**
-- `deployments/compose/compose.obs.yml` :
-  - prometheus, grafana, loki, promtail (ou vector), node_exporter, cadvisor, dcgm-exporter
-- binds hôte : grafana/prometheus en `127.0.0.1` seulement
-- persistance : `/srv/agentic/monitoring/…`
-
-**Test** : `tests/G1_obs_up.sh`
-- `curl -fsS http://127.0.0.1:<grafana>/login` OK (et pas sur 0.0.0.0)
-- prometheus targets UP via API `/api/v1/targets`
-- loki reçoit des logs (query retourne ≥1 entrée)
-- métriques GPU (`dcgm_*`) présentes
-
-### G2 Dashboard Grafana “first-run” pour activité agents/outils/réseau/modèles
-**Implémentation**
-- provisioning Grafana automatique au premier démarrage (`datasources` + `dashboard provider` + dashboard JSON) via `${AGENTIC_ROOT}/monitoring/config/grafana/...` ;
-- dashboard par défaut “home” : **DGX Spark Agentic Activity Overview** ;
-- panneaux couvrant au minimum :
-  - appels modèles par agent/projet (`claude`, `codex`, `opencode`, `vibestral`, `openwebui`, `openhands`) ;
-  - latence et tokens externes côté `ollama-gate` ;
-  - appels outils via audit `gate-mcp` ;
-  - activité réseau (requêtes egress + throughput par service).
-- ingestion promtail étendue pour logs structurés `gate` + `gate-mcp` afin d’alimenter les panels sans configuration manuelle post-install.
-
-**Test** : `tests/G2_obs_dashboard_provisioning.sh`
-- artefacts de provisioning présents sous `${AGENTIC_ROOT}/monitoring/config/grafana/...` ;
-- fichiers montés dans le conteneur Grafana ;
-- datasources provisionnées (`Prometheus`, `Loki`) visibles via API Grafana ;
-- dashboard `uid=dgx-spark-activity` présent via API Grafana.
-
----
-
-## H — UIs web demandées : OpenWebUI + OpenHands (durci)
-
-### H1 OpenWebUI (auth obligatoire, via gate)
-**Implémentation**
-- `deployments/compose/compose.ui.yml` : openwebui
-- bind hôte : `127.0.0.1:8080`
-- auth obligatoire (bootstrap admin)
-- backend LLM = `ollama-gate`
-- onboarding : ajouter un flag explicite (désactivé par défaut) pour autoriser le pull de modèles depuis OpenWebUI via l’API Ollama native, tout en conservant le chemin OpenAI-compatible via `ollama-gate` par défaut
-- onboarding/allowlist par défaut : inclure `registry.ollama.ai` (nécessaire au téléchargement de modèles Ollama)
-- persistance : `/srv/agentic/openwebui/`
-
-**Test** : `tests/H1_openwebui.sh`
-- port local-only
-- accès sans auth refusé (code cohérent)
-- une requête LLM depuis OpenWebUI apparaît dans logs gate (tag/header “client” si configuré)
-
-### H2 OpenHands (pas de docker.sock par défaut)
-**Implémentation**
-- openhands bind `127.0.0.1:3000`
-- persistance `/srv/agentic/openhands/`
-- interdiction montage `/var/run/docker.sock`
-- option : docker-socket-proxy filtrant (désactivé par défaut, activable étape K)
-
-**Test** : `tests/H2_openhands.sh`
-- port local-only
-- `docker inspect` : aucun mount docker.sock
-- OpenHands utilise gate (preuve logs gate)
-
----
-
-## I — ComfyUI (GPU) : génération d’images sous contrôle
-
-### I1 Déployer ComfyUI
-**Implémentation**
-- service comfyui dans `compose.ui.yml` (ou `compose.comfy.yml`)
-- bind : `127.0.0.1:8188`
-- volumes :
-  - `/srv/agentic/comfyui/models`
-  - `/srv/agentic/comfyui/input`, `/output`, `/user`
-- profil GPU “lowprio” (au moins séparation logique)
-
-**Test** : `tests/I1_comfyui.sh`
-- UI répond
-- exécuter un workflow “smoke” (API si dispo) produisant un fichier dans `output/`
-- port local-only
-- downloads éventuels passent par proxy (sinon bloqués)
-
----
-
-## J — RAG hybride progressif : dense + lexical (skeleton J3/J4)
-
-### J1 Déployer Qdrant interne
-**Implémentation**
-- `deployments/compose/compose.rag.yml` : qdrant
-- **pas** de port host publié
-- persistance : `/srv/agentic/rag/qdrant/`
-
-**Test** : `tests/J1_qdrant.sh`
-- aucun publish host sur 6333/6334
-- health OK depuis toolbox interne
-
-### J2 Ingestion reproductible + mini-corpus
-**Implémentation**
-- `/srv/agentic/rag/docs/` corpus test
-- `/srv/agentic/rag/scripts/ingest.sh` :
-  - embeddings via `ollama-gate` (backend effectif selon routage : `ollama` ou `trtllm`)
-  - index qdrant
-- `/srv/agentic/rag/scripts/query_smoke.sh`
-
-**Test** : `tests/J2_rag_smoke.sh`
-- ingestion : nb docs indexés == attendu
-- query : retourne ≥N hits
-- mode offline : si proxy coupé, RAG continue de fonctionner sur corpus local (sans fetch web)
-
-### J3 Schéma canonique des chunks (dense + lexical)
-**Implémentation**
-- définir un schéma unique de document/chunk (JSON Schema) utilisé par ingestion/retrieval :
-  - `doc_id`, `chunk_id`, `text`, `source_type`, `source_path`,
-  - provenance code/pdf (`page` ou `file_path` + `start_line`/`end_line`),
-  - versioning (`repo`, `branch`, `commit_sha`, `timestamp`, `version`),
-  - métadonnées utiles (`section`, `title`, `authors`, `doi`, `language`).
-- artefacts :
-  - `deployments/rag/document.schema.json` (source contrôlée git),
-  - `${AGENTIC_ROOT}/rag/config/document.schema.json` (runtime matérialisé).
-
-**Test** : `tests/J3_rag_schema.sh`
-- schéma JSON valide ;
-- champs requis présents ;
-- champs de provenance code/pdf présents ;
-- enum `source_type` contient au minimum `pdf` et `code`.
-
-### J4 Retrieval orchestrator hybride (full)
-**Implémentation**
-- étendre `compose/compose.rag.yml` avec services internes (sans exposition host) :
-  - `rag-retriever` (API orchestrateur dense+lexical+fusion),
-  - `rag-worker` (worker async pour pipeline retrieval/indexation),
-  - `opensearch` optionnel sous profile `rag-lexical` (BM25 lexical).
-- comportement full attendu :
-  - endpoint `rag-retriever` `/v1/retrieve` exécute réellement `dense` (`qdrant`) et `lexical` (`opensearch` si activé) ;
-  - contrat de réponse conserve les sections `dense`, `lexical`, `fusion` avec résultats ;
-  - fusion effective par défaut en `rrf` ;
-  - audit minimal des requêtes retrieval et indexation.
-
-**Test** : `tests/J4_rag_hybrid_skeleton.sh`
-- `rag-retriever` et `rag-worker` démarrent et passent healthchecks ;
-- aucun port host publié pour les services retrieval ;
-- `/v1/retrieve` répond avec contrat full (`fusion.method=rrf`, `dense.backend=qdrant`, hits non vides après indexation) ;
-- si profile `rag-lexical` activé : `opensearch` reste interne-only (pas de publish host).
-
----
-
-## K — Modules optionnels à risque : OpenClaw / MCP Catalog / pi-mono / goose / Portainer / Git forge (activation conditionnelle)
-
-Principe : **désactivé par défaut**. Un module n’est activé que si :
-- besoin explicite + définition de succès
-- il passe la même barre que le noyau (confinement, traçabilité, pas d’expo host, secrets propres)
-
-### K0 Harness “optional gating”
-**Implémentation**
-- `deployments/compose/compose.optional.yml` (vide par défaut ou services commentés)
-- `agent up optional` refuse si `agent doctor` n’est pas vert (garde-fou)
-- en `rootless-dev` : ce scénario de refus peut être neutralisé si la non-conformité ne concerne que des contrôles host-root-only.
-
-**Test** : `tests/K0_optional_gating.sh`
-- `agent up optional` échoue si doctor rouge, passe si doctor vert
-
-### K1 OpenClaw (si activé)
-**Implémentation**
-- auth token fort (secret runtime)
-- DM policy allowlist
-- sandbox activée
-- **option sandbox séparée** : exécution des actions OpenClaw dans un nouveau conteneur dédié (ex: `optional-openclaw-sandbox`) distinct de `optional-openclaw`, sur réseau Docker interne uniquement, sans bind host direct
-- canal interne OpenClaw -> sandbox explicite (API interne ou queue), avec timeouts et logs d’exécution corrélés (`request_id`)
-- vérification de reachability sandbox côté agent OpenClaw (healthcheck interne + check applicatif de disponibilité avant exécution d’outil)
-- ingress entrant contrôlé pour webhooks (loopback-only côté hôte, auth/signature obligatoire, pas d’ouverture publique)
-- outils OpenClaw exécutables via sandbox dédié avec allowlist explicite des outils/commandes autorisés
-- egress via proxy + DOCKER-USER
-- logs d’audit centralisés
-
-**Test** : `tests/K1_openclaw.sh`
-- endpoint refuse sans token
-- actions génèrent logs d’audit
-- OpenClaw confirme que le sandbox dédié est joignable (health endpoint interne OK)
-- webhook entrant signé atteint OpenClaw (cas nominal) et est rejeté si signature/token invalide
-- au moins un outil allowlisté est exécutable via OpenClaw -> sandbox et produit une trace d’audit
-- aucune ouverture `0.0.0.0`
-- aucun egress direct possible
-
-### K2 MCP Catalog (si activé)
-**Implémentation**
-- allowlist stricte des tools
-- secrets minimaux dans `/srv/agentic/secrets/runtime`
-- pas d’expo host, logs fins
-
-**Test** : `tests/K2_mcp.sh`
-- tool non allowlisté → refus
-- secrets non présents dans workspaces
-- logs centralisés
-
-### K3 Portainer (si activé)
-**Implémentation**
-- bind local-only
-- pas de docker.sock brut : docker-socket-proxy filtrant, ou alternative CLI
-- justification d’activation dans `deployments/changes.log`
-
-**Test** : `tests/K3_portainer.sh`
-- port local-only
-- pas de mount docker.sock direct
-- si socket-proxy : seules APIs allowlistées répondent
-
-### K4 pi-mono (si activé)
-**Implémentation**
-- profile Compose : `optional-pi-mono`.
-- exécution via image `agent-cli-base` locale, persistance dédiée `${AGENTIC_ROOT}/optional/pi-mono/{state,logs,workspaces}`.
-- baseline hardening identique aux agents CLI (non-root, read-only, cap_drop ALL, NNP).
-
-**Test** : `tests/F6_hardening_matrix.sh`
-- vérifie la baseline hardening de `optional-pi-mono` dans la config Compose rendue.
-
-### K5 goose (si activé)
-**Implémentation**
-- profile Compose : `optional-goose`.
-- service interne-only, persistance dédiée `${AGENTIC_ROOT}/optional/goose/{state,logs,workspaces}`.
-- baseline hardening alignée optional (read-only, cap_drop ALL, NNP, pas de bind public).
-
-**Test** : `tests/F6_hardening_matrix.sh`
-- vérifie la baseline hardening de `optional-goose` dans la config Compose rendue.
-
-### K6 Git forge partagé (si activé)
-Suivi Beads : `dgx-spark-agentic-stack-zu7n`
-
-**Implémentation**
-- profile Compose : `optional-git-forge`.
-- service recommandé : `optional-forgejo` (ou autre forge Gitea-compatible) avec UI/API HTTP bindées uniquement sur `127.0.0.1:${GIT_FORGE_HOST_PORT:-13010}` et reachability interne via le réseau Docker privé.
-- persistance dédiée :
-  - `${AGENTIC_ROOT}/optional/git/config`
-  - `${AGENTIC_ROOT}/optional/git/state`
-  - `${AGENTIC_ROOT}/optional/git/bootstrap`
-- base de données et dépôts doivent survivre aux redémarrages ; `agent update` enregistre le digest image réellement déployé, la version de la forge et les artefacts utiles au rollback ; `agent rollback` doit pouvoir restaurer une release cohérente avec la base et les dépôts persistants.
-- bootstrap initial idempotent d’un compte opérateur `system-manager` avec rôle System Manager / admin, accessible depuis l’hôte via l’UI loopback-only.
-- bootstrap initial idempotent de comptes dédiés pour `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose`.
-- chaque compte agent reçoit des credentials stockés hors git (fichiers root-only ou secrets injectés) permettant `git clone`, `fetch`, `pull`, `push` contre la forge interne ; les chemins et la rotation de ces credentials doivent être documentés.
-- chaque conteneur agent concerné doit aussi recevoir une préconfiguration Git stack-managed (identity + auth) pointant vers la forge interne, de façon à permettre un premier `git clone`/checkout direct dès la première session sans setup manuel dans le shell utilisateur.
-- transport par défaut : HTTP interne sur le réseau Docker privé + fichiers mot de passe dédiés ; SSH côté forge activé pour permettre aux agents de pousser via SSH. Les clés SSH des agents doivent être préconfigurées et montées dans les conteneurs respectifs pour permettre une authentification SSH sécurisée.
-- prévoir un bootstrap minimal d’organisation/projet partagé pour permettre à plusieurs agents de collaborer sur les mêmes dépôts sans dépendre d’un fournisseur externe.
-- à la première initialisation complète de la stack avec `git-forge` actif, créer de façon idempotente deux dépôts/projets partagés de référence pour le test d’intégration agentique :
-  - dépôt 1 : `eight-queens-agent-e2e`
-    - canari rapide conservé pour comparabilité historique ;
-    - le dépôt doit porter l’énoncé du problème, la structure Python cible, la commande de test et le contrat de vérification de sortie ;
-    - les tests du dépôt doivent vérifier au minimum la correction fonctionnelle attendue et produire un résultat exploitable automatiquement par l’orchestrateur/doctor ;
-  - dépôt 2 : `agent-stack-full-e2e` (nom de travail, peut être ajusté)
-    - dépôt plus informatif qu’un puzzle isolé, ciblé sur un vrai scénario de maintenance de repo ;
-    - état initial : au moins un test rouge, une cause dans le code applicatif, et au moins une attente de cohérence multi-fichiers ;
-    - structure minimale attendue : `src/`, `tests/`, consigne de tâche dans le dépôt, commande unique de validation, et éventuelle doc/config à réaligner ;
-    - l’agent doit réussir un flux complet : lecture du repo, diagnostic, modification du bon fichier, exécution des tests, commit propre, push sur sa branche dédiée ;
-    - l’orchestrateur doit pouvoir distinguer explicitement les échecs d’invocation, de compréhension de tâche, de correction fonctionnelle, de validation et de publication Git ;
-    - le dépôt doit rester assez petit pour tourner sur toute la matrice agents avec budget de temps borné.
-  - pour les deux dépôts :
-    - la branche par défaut `main` doit être protégée contre les pushes directs des comptes agents ;
-    - une branche dédiée par agent doit être créée ou réservée (`agent/codex`, `agent/openclaw`, `agent/claude`, `agent/opencode`, `agent/openhands`, `agent/pi-mono`, `agent/goose`, `agent/vibestral`, `agent/kilocode`, `agent/hermes`) ;
-    - le scénario E2E doit imposer à chaque agent de ne pousser que sur sa branche dédiée et le doctor doit signaler explicitement tout push agent sur `main` comme échec de conformité.
-- onboarding explicite requis : `agent onboard` doit proposer l’activation de `git-forge`, écrire les variables non secrètes (`AGENTIC_OPTIONAL_MODULES`, `GIT_FORGE_HOST_PORT`, `GIT_FORGE_ADMIN_USER`, `GIT_FORGE_SHARED_NAMESPACE`, `GIT_FORGE_ENABLE_PUSH_CREATE`) dans le fichier env généré, créer/recueillir séparément les secrets runtime nécessaires, et annoncer que la configuration Git des agents sera préchargée pour un premier checkout direct. La configuration SSH pour les agents doit être préparée lors du premier démarrage de la stack (`first-up`), incluant la génération et la distribution des clés SSH pour chaque agent.
-- `agent doctor` vérifie, quand le profile est actif, le bind loopback-only, l’absence de `docker.sock`, la persistance DB/repos au bon endroit, la présence d’un healthcheck, l’existence du compte opérateur, la cohérence de la liste des comptes agents attendus, et la configuration SSH des agents pour permettre les pushes via SSH.
-- **Fix de permissions rootless** : Le script `deployments/ui/init_runtime.sh` inclut désormais `prepare_forgejo_volumes()` qui corrige automatiquement les permissions des volumes Forgejo pour le conteneur rootless (queues directory en 775, suppression des locks obsolètes, config directory accessible). Voir ADR-0098.
-- documentation opérateur obligatoire : bootstrap initial, création/rotation/révocation des comptes, création de dépôt, partage inter-agents, sauvegarde/restauration, conformité.
-
-**Test** : `tests/K10_git_forge.sh`
-- service `optional-forgejo` healthy ; UI répond sur `127.0.0.1` uniquement.
-- **Vérification des permissions rootless** : Après un redémarrage complet (`agent down ui && agent up ui`), le service Forgejo démarre correctement sans intervention manuelle (ADR-0098).
-- aucun bind `0.0.0.0`, aucun mount `docker.sock`, baseline hardening conforme.
-- volumes DB et dépôts pointent vers `${AGENTIC_ROOT}/optional/git/...`.
-- compte `system-manager` existe avec rôle admin/manager.
-- comptes `openclaw`, `openhands`, `comfyui`, `claude`, `codex`, `opencode`, `vibestral`, `pi-mono`, `goose` existent.
-- les dépôts/projets partagés `eight-queens-agent-e2e` et `agent-stack-full-e2e` existent après première initialisation ; le premier fournit le canari rapide, le second le scénario complet informatif, avec pour chacun l’énoncé, la commande de test et le contrat de vérification de sortie.
-- `main` est protégée contre les pushes directs des comptes agents ; les branches `agent/<tool>` attendues existent ou sont réservées.
-- depuis au moins deux conteneurs agents distincts : première session shell -> `git clone`/checkout d’un dépôt de la forge sans saisie de credential manuelle fonctionne ; puis `git commit`, `git push`, `git fetch`, `git pull` sur un même dépôt partagé fonctionnent.
-- les tests E2E de référence échouent explicitement si un agent pousse sur `main` au lieu de sa branche dédiée.
-- le scénario `agent-stack-full-e2e` échoue explicitement si l’agent ne corrige qu’un symptôme sans remettre au vert la commande de validation complète du dépôt.
-- backup/restore ou rollback restaure un dépôt test et la métadonnée DB correspondante.
-
----
-
-## L — Exploitation transverse (ressources, cleanup, modèle par défaut)
-
-Cette section regroupe des capacités déjà implémentées mais transverses aux sections C/F.
-
-### L1 Stop/start ciblé services & conteneurs
-**Implémentation**
-- `agent stop service <service...>` / `agent start service <service...>`.
-- `agent stop container <container...>` / `agent start container <container...>`.
-- garde-fou : refus hors projet Compose actif.
-
-**Test** : `tests/L1_stop_resources.sh`
-- valide les transitions `running <-> exited` sur service et conteneur.
-
-### L2 Orchestration stepwise de la stack
-**Implémentation**
-- `agent stack start <targets|all>` (`core -> agents -> ui -> obs -> rag -> optional`).
-- `agent stack stop <targets|all>` (`optional -> rag -> obs -> ui -> agents -> core`).
-
-**Test** : `tests/L2_stack_stepwise.sh`
-- valide ordre effectif + état final des services.
-
-### L3 Cleanup global profilé (brand new)
-**Implémentation**
-- `agent cleanup` avec variantes profilées (`agent strict-prod cleanup`, `agent rootless-dev cleanup`).
-- purge symlink-safe + export optionnel + suppression images locales stack.
-
-**Test** : `tests/L3_cleanup.sh`
-- valide flow interactif, sécurité symlink et état final propre.
-
-### L4 Fallback cleanup rootless en cas de permission denied
-**Implémentation**
-- en `rootless-dev`, si purge directe échoue sur arborescence runtime (permissions), basculer sur un helper Docker de nettoyage.
-- conserver un log explicite du fallback et terminer sur un état runtime propre.
-
-**Test** : `tests/L4_cleanup_permission_denied_fallback.sh`
-- simule une arborescence non purgeable en direct et valide le fallback + résultat final.
-
-### L5 Modèle par défaut e2e multi-clients
-**Implémentation**
-- propager `AGENTIC_DEFAULT_MODEL` de bout en bout (Ollama direct, gate, agents, UIs).
-- garantir une réponse non vide sur scénario de smoke `hello`.
-- vérifier la cohérence modèle/contexte/ressources locales dans `agent doctor`.
-
-**Test** : `tests/L5_default_model_e2e.sh`
-- valide le flux `hello` via Ollama, gate, agents et UIs.
-
-### L7 Tool-calling FS ops sur 5 agents (modèle local par défaut)
-Suivi Beads : `dgx-spark-agentic-stack-5bz`
-
-**Implémentation**
-- ajouter un test agentique qui valide, via `ollama-gate`, les opérations tool-calling `write_file`, `read_file`, `run_python`, `delete_file`.
-- exécuter le scénario pour `agentic-claude`, `agentic-codex`, `agentic-opencode`, `agentic-vibestral` et `openhands`.
-
-**Test** : `tests/L7_default_model_tool_call_fs_ops.sh`
-- échoue si un des 5 services n’arrive pas à effectuer le workflow fichiers complet avec le modèle local par défaut.
-
----
-
-## Validation complémentaire — VM dédiée `strict-prod` (prod-like)
-
-Suivi Beads : `dgx-spark-agentic-stack-9kz`
-
-### V1 Campagne de validation complète en VM
-**Implémentation**
-- provisionner une VM Linux dédiée (Ubuntu LTS recommandé) avec privilèges root ;
-- ajouter des commandes opérateur dédiées :
-  - `agent vm create --name <vm-name> --cpus <n> --memory <size> --disk <size> [--require-gpu]`
-  - `agent vm test --name <vm-name> [--test-selectors <csv|all>] [--allow-no-gpu|--require-gpu] [--skip-d5-tests]`
-  - `agent vm cleanup --name <vm-name>`
-  - comportement attendu : create/test/cleanup orchestrés sans toucher d’autres VMs ;
-- exécuter strictement le profil :
-  - `export AGENTIC_PROFILE=strict-prod`
-  - `sudo ./deployments/bootstrap/init_fs.sh`
-  - `sudo ./agent up core`
-  - `sudo ./agent up agents,ui,obs,rag`
-  - `sudo ./agent doctor`
-  - `sudo ./agent update`
-  - `sudo ./agent rollback all <release_id>`
-  - `sudo ./agent test all`
-- capturer les preuves dans `${AGENTIC_ROOT}/deployments/validation/vm-strict-prod/<ts>/` :
-  - sortie `agent doctor`,
-  - rapport des tests,
-  - identifiants de release update/rollback,
-  - état final `agent ps`.
-- si la VM n’a pas de GPU passthrough : documenter explicitement les tests GPU en `skip/blocked` avec justification (pas de contournement sécurité).
-
-**Test** : `tests/V1_vm_strict_prod_validation.sh`
-- contrat dry-run create : `tests/00_vm_create_dry_run.sh`
-- contrat dry-run cleanup : `tests/00_vm_cleanup_dry_run.sh`
-- vérifie que le script de campagne retourne `0` quand la VM satisfait les prérequis ;
-- vérifie la présence des artefacts de preuve ;
-- échoue si `doctor` strict est non vert hors exceptions explicitement marquées ;
-- échoue si update/rollback ne laissent pas la stack dans un état `healthy`.
-
----
-
-## Backlog transverse — limites, hardening uniforme, doctor
-
-Suivi Beads :
-- `dgx-spark-agentic-stack-blw` — onboarding/runtime : customisation des limites CPU/RAM pour l’ensemble des services conteneurisés.
-- `dgx-spark-agentic-stack-vgl` — onboarding : ajouter une question explicite `AGENTIC_LIMIT_OLLAMA_MEM` (et son flag non-interactif) pour éviter un héritage implicite trop restrictif depuis `AGENTIC_LIMIT_CORE_MEM`.
-- `dgx-spark-agentic-stack-2oj` — étude + remédiation du hardening non uniforme (services encore root par défaut en `strict-prod`, healthchecks manquants sur services longue durée).
-- `dgx-spark-agentic-stack-dvo` — extension de `agent doctor` pour appliquer des contrôles de sécurité profonds de manière uniforme sur tous les services gérés.
-- `dgx-spark-agentic-stack-0li` — accès `sudo` pour les agents dans leur propre conteneur uniquement (sans élévation hôte, sans `docker.sock`), avec cadrage conformité/sécurité.
-- `dgx-spark-agentic-stack-kvs` — onboarding premier démarrage complet (interface type CMake/ccmake) incluant admin/password, allowances réseau et secrets sans étape manuelle cachée.
-- `dgx-spark-agentic-stack-581` — onboarding OpenWebUI : flag optionnel “allow model pull” + extension allowlist par défaut `registry.ollama.ai`.
-- `dgx-spark-agentic-stack-0p4` — `agent ollama-preload` doit préserver le mode de mount initial (`rw`/`ro`) pour éviter les recreates inutiles et les changements d’état inattendus.
-- `dgx-spark-agentic-stack-2ld` — enrichir `/v1/models` dans `ollama-gate` avec des métadonnées de modèles non sensibles (issues des backends, notamment Ollama `/api/tags`) pour améliorer l’interopérabilité client.
-- `dgx-spark-agentic-stack-41m` — introduire `AGENTIC_AGENT_WORKSPACES_ROOT` (onboarding/runtime + defaults `rootless-dev`) pour isoler proprement les workspaces agents.
-- `dgx-spark-agentic-stack-zs0` — onboarding/runtime : ajouter des chemins persistants `/workspace` dédiés par conteneur (`AGENTIC_{CLAUDE,CODEX,OPENCODE,VIBESTRAL,OPENHANDS}_WORKSPACES_DIR`) pour montage explicite service par service.
-- `dgx-spark-agentic-stack-seu8` — ajouter un benchmark Codex de saturation quasi-complete du KV cache base sur les corpus francais Jules Verne Project Gutenberg (`Vingt mille lieues sous les mers`, `L'ile mysterieuse`, `Voyage au centre de la Terre`, `De la terre a la lune`) dans une meme session de contexte, avec synthese apres chaque roman, synthese finale agregee, et journalisation de la fenetre/occupation de contexte a chaque etape.
-- `dgx-spark-agentic-stack-7g8k` — fermé après clarification et instrumentation opérateur: le fallback runtime Codex + le confinement externe du conteneur sont désormais explicitement exposés via `agent ls` / `agent doctor`; toute suite doit partir d’un workflow concret encore cassé sans sandbox namespace natif.
-- `dgx-spark-agentic-stack-ssh-push` — activer la configuration SSH pour les agents afin de permettre les pushes vers Forgejo via SSH. La configuration SSH doit être préparée lors du premier démarrage de la stack (`first-up`), incluant la génération et la distribution des clés SSH pour chaque agent.
-
-Objectif :
-- traiter ces sujets comme un chantier transverse post-chemin-critique, sans régression sur les invariants CDC (bind loopback, pas de `docker.sock`, traçabilité/rollback stricts).
-- définir une politique explicite d’élévation intra-conteneur pour les agents (`sudo` local au conteneur uniquement), documenter l’écart éventuel avec le hardening (`no-new-privileges`, `cap_drop`) et ajouter les contrôles associés dans `agent doctor`.
-- permettre aux agents de cloner des dépôts Git, compiler du code, et gérer des artefacts tout en isolant les credentials SSH par agent.
-
----
-
-## Définition “terminé” (objectif final)
-La stack est “opérable” quand :
-- `agent doctor` est vert de façon stable
-- egress libre impossible (proxy + DOCKER-USER prouvés)
-- Ollama local-only fonctionne et est consommé via `ollama-gate` (queue+sticky+metrics)
-- si activé, backend TRT-LLM (modèles NVFP4) est routé via `ollama-gate` vers le conteneur `trtllm` sans exposition host
-- agents CLI persistants (tmux) confinés (non-root, NNP, cap_drop ALL, rootfs ro), incluant `agentic-vibestral` avec Vibe CLI initialisé et `agentic-hermes` intégré selon un contrat stack-managed explicite depuis `NousResearch/hermes-agent`.
-- UIs demandées (OpenWebUI, OpenHands, ComfyUI) bind local + auth, et ne cassent pas la posture
-- observabilité exploitable (CPU/RAM/disque/GPU, logs, erreurs proxy, drops DOCKER-USER)
-- update/rollback stricts par digest reproductibles
-- rollback hôte disponible pour les modifications nécessitant `sudo` (au minimum DOCKER-USER), testé et journalisé
-- routage LLM externe via `ollama-gate` possible (OpenAI/OpenRouter) avec API client stable `/v1/*`
-- mode `agent llm mode <local|hybrid|remote>` permet d’arrêter les backends locaux (`ollama`/`trtllm`) sans interrompre l’usage agentique en mode `remote`
-- quotas tokens/coût des appels externes actifs et auditables (blocage explicite au dépassement)
-- les agents locaux peuvent interroger un MCP local pour connaître le modèle effectif servi par `ollama-gate` et le quota/tokens externes restants
-- backup incrémental “time machine” des dossiers persistants + config non-secrète, avec restauration testée
-
-Critères de clôture par profil :
-- `strict-prod` : tous les points ci-dessus sont obligatoires et bloquants.
-- `rootless-dev` : mode accepté pour développement local, avec traçabilité claire des écarts non validables sans root.
-- `strict-prod` sur VM dédiée : accepté pour validation “prod-like” du pipeline A→L avec petit modèle Ollama ; tests de charge/modèles lourds restent hors périmètre de cette VM contrainte.
-
----
-
-## Ordre d’exécution imposé (chemin critique)
-A → B → C → D → E → F → G → H → I → J → K → L
-
-Validation complémentaire recommandée après chemin critique :
-- V1 (VM dédiée `strict-prod` prod-like)
-
-Stop condition générale : si une étape exige des privilèges élevés non compensés (root + caps + accès host), elle reste désactivée, et on documente le refus dans `deployments/changes.log`.
+# DGX Spark Agentic Platform v2 — Plan stratégique de réécriture et de migration
+
+## 0. Statut et gouvernance
+
+Ce document est la source de vérité du projet v2. La v1 reste la référence fonctionnelle jusqu’à validation explicite de chaque domaine migré.
+
+Référence v1 :
+
+- branche : `archive/pre-v2-rewrite-2026-06-25` ;
+- commit : `f76778e342d43fdafaa17e05ad887f6e9853aa7d`.
+
+La pull request reste en brouillon tant que les décisions bloquantes ne sont pas closes.
+
+### 0.1 Statuts de décision
+
+- **DÉCISION** : choix interne sous notre contrôle ;
+- **CIBLE** : direction retenue, à valider avant généralisation ;
+- **HYPOTHÈSE** : capacité plausible mais non démontrée ;
+- **BLOQUANT** : preuve nécessaire avant la phase dépendante.
+
+Une hypothèse ne devient jamais implicitement une dépendance de production.
+
+### 0.2 Règles
+
+- Beads reste l’unique backlog opérationnel ;
+- chaque capacité v1 reçoit `conserver`, `remplacer`, `reconstruire` ou `retirer` ;
+- `retirer` exige une décision humaine documentée ;
+- toute dépendance externe est épinglée par version ou digest et entourée d’un adapter ;
+- aucune bascule ne partage en écriture un état mutable entre v1 et v2 ;
+- toute migration possède dry-run, rapport, validation et rollback ;
+- sauvegarde et restauration sont testées avant la migration ;
+- toute affirmation sur une capacité amont est reliée à une documentation officielle, une version et un test reproductible.
+
+## 1. Contrat produit
+
+La v2 doit être administrable sur une seule DGX Spark par une petite équipe, sans constellation inutile de microservices et sans exiger des utilisateurs qu’ils comprennent Docker, OpenShell ou les ports internes.
+
+### 1.1 Expérience attendue
+
+- l’utilisateur choisit d’abord un agent, puis éventuellement un projet ;
+- un projet est un contexte de travail, pas le point d’entrée principal ;
+- chaque agent ou application possède une surface explicite : CLI, portail, interface native, ou plusieurs ;
+- une déconnexion SSH ne détruit pas une session reprenable ;
+- les interfaces officielles utiles sont préservées : terminal, web, Desktop, IDE, ACP ou messagerie ;
+- les permissions et l’état restent cohérents entre les surfaces ;
+- la plateforme reste utilisable hors Internet pour les capacités locales ;
+- aucun téléchargement lourd, update, publication ou effacement n’est silencieux ;
+- les erreurs sont actionnables et désignent le composant réellement en cause.
+
+### 1.2 Principes d’implémentation
+
+- préserver les capacités, pas nécessairement les implémentations v1 ;
+- préférer un composant amont mature si son contrat est réellement couvert ;
+- commencer par un monolithe modulaire de contrôle ;
+- conserver agents, applications humaines et services comme objets distincts ;
+- livrer des parcours verticaux complets avant les fonctions avancées ;
+- garder les adapters minces, versionnés et testables ;
+- ne jamais forcer tous les harnesses à utiliser le même protocole modèle ;
+- respecter les orchestrations multi-agent natives au lieu de les réécrire ;
+- maintenir une seule source de vérité par donnée mutable ;
+- faire de la compatibilité v1 une fonctionnalité transitoire explicite.
+
+## 2. Inventaire canonique de la v1
+
+Le registre de parité est généré à partir de `agent --help`, Compose, des répertoires persistants, des README, des tests et de `.beads/issues.jsonl`.
+
+### 2.1 Exploitation
+
+À préserver :
+
+- profils `rootless-dev` et `strict-prod` ;
+- onboarding, prérequis et premier démarrage ;
+- `up`, `down`, `ls`, `ps`, `status`, logs et diagnostic ;
+- `doctor` et suites de tests ;
+- VM de validation strict-prod ;
+- backup, liste et restauration ;
+- cleanup et oubli sélectif ;
+- update, release, snapshot et rollback ;
+- réseau, tunnels et accès distants ;
+- diagnostics GPU, contexte et capacité mémoire ;
+- commandes modèles Ollama et TensorRT-LLM ;
+- `agent ollama bench` et le runner `repo-e2e`.
+
+### 2.2 Harnesses et runtimes agentiques
+
+- Claude Code ;
+- Codex ;
+- OpenCode ;
+- KiloCode ;
+- Mistral Vibe/VibeStral ;
+- Hermes ;
+- Pi, appelé `pi-mono` dans certains tests v1 ;
+- Goose ;
+- OpenClaw, gateway multi-agent permanent ;
+- OpenHands, objet hybride combinant application, agent platform et runtime de code.
+
+### 2.3 Applications principalement destinées aux humains
+
+- OpenWebUI ;
+- ComfyUI et Flux ;
+- n8n ;
+- Forgejo ;
+- Grafana et les vues d’observabilité ;
+- DGX Dashboard NVIDIA ;
+- JupyterLab ;
+- Portainer, uniquement comme outil administrateur de rupture.
+
+Une application humaine ne devient pas artificiellement un `AgentRuntime`. Elle utilise un `ApplicationAdapter` et, si elle exécute du code ou des tâches GPU, un contrat spécialisé supplémentaire.
+
+### 2.4 Services gérés
+
+- `ollama-gate`, futur adapter du `ModelBroker` ;
+- Ollama ;
+- TensorRT-LLM ;
+- service RAG v1 ;
+- Qdrant et OpenSearch optionnel ;
+- PostgreSQL ;
+- reverse proxy, DNS et egress ;
+- Prometheus, Loki et exporters.
+
+### 2.5 Service RAG v1 existant
+
+**DÉCISION :** le RAG n’est pas reconstruit dans le portail. La v1 possède déjà :
+
+- `rag-retriever`, recherche dense et lexicale, fusion RRF et reranking ;
+- `rag-worker`, indexation asynchrone et suivi des tâches ;
+- Qdrant ;
+- OpenSearch optionnel ;
+- embeddings via le gate modèle ;
+- schéma documentaire, états, healthchecks et journaux d’audit ;
+- commandes `agent rag index`, `task`, `config` et `bootstrap-lexical`.
+
+La première v2 l’utilise derrière `RAGServiceAdapter` et préserve les commandes, schémas, résultats de référence et index compatibles.
+
+### 2.6 Skills, rôles et workflows retrouvés dans les Beads
+
+Le Bead historique `dgx-spark-agentic-stack-dy95` mentionne : `Capability Evolver`, `Capability Evolver++`, `Clawflows`, `GOG`, `GitHub`, `Summarize`, `Knowledge Base`, `Mission Control`, `Code Reviewer`, `Decision Assistant`, `Red Team`, `Pre-Mortem`, `Literature Scout`, `Paper Reviewer`, `Grant Writer`, `Citation Auditor`, `Architecture Reviewer`, `Documentation Builder`, `Dependency Auditor`, `Test Engineer`, `Knowledge Curator`, `Knowledge Gap Detector`, `Workspace Cartographer`, `Agent Security Watcher` et `Meeting Synthesizer`.
+
+**DÉCISION :** ces noms sont initialement des `SkillPackage`, `AgentProfile`, `WorkflowTemplate` ou connecteurs OpenClaw. Ils ne sont pas de nouveaux harnesses tant qu’une implémentation indépendante, un état propre et un cycle de vie distinct ne sont pas démontrés.
+
+Le registre distingue toujours :
+
+- le harness qui exécute ;
+- l’identité ou le profil spécialisé ;
+- les skills et outils ;
+- le workflow ;
+- les applications externes appelées.
+
+Les anciens noms comme `Clawdbot` sont des alias historiques d’OpenClaw lorsqu’ils désignent la même lignée.
+
+### 2.7 Compatibilité CLI
+
+**DÉCISION :** `agent` reste la façade pendant la transition.
+
+Chaque commande possède :
+
+- un identifiant de capacité ;
+- une route v1, v2 ou hybride ;
+- un format JSON stable lorsqu’il existe ;
+- des codes de sortie compatibles ;
+- un test de parité ;
+- une condition de retrait.
+
+Le routage peut être activé par utilisateur, agent, projet et capacité.
+
+## 3. Architecture générale
+
+### 3.1 Monolithe modulaire de contrôle
+
+Le plan de contrôle initial comprend :
+
+- API FastAPI/Python ;
+- worker du même codebase pour les tâches longues ;
+- PostgreSQL ;
+- frontend React ou Next.js ;
+- REST versionné ;
+- SSE ou WebSocket pour les flux ;
+- outbox PostgreSQL plutôt qu’un bus distribué au départ ;
+- reconciler état désiré/observé ;
+- idempotence et identifiants de corrélation.
+
+Le monolithe concerne le contrôle, pas les produits externes. Il ne recopie pas les bases internes d’OpenShell, Hermes, OpenClaw, OpenHands, Forgejo, OpenWebUI, ComfyUI, Qdrant ou du service RAG.
+
+### 3.2 Contrats d’adaptation
+
+- `HarnessAdapter` : protocole modèle, sessions, sous-agents, outils, permissions et surfaces ;
+- `AgentRuntimeAdapter` : enveloppe d’exécution OpenShell ;
+- `ApplicationAdapter` : démarrage, santé, URL, droits, sauvegarde et update d’une application ;
+- `GPUJobAdapter` : admission et observation d’une tâche GPU, notamment ComfyUI ;
+- `ManagedServiceAdapter` : service interne ;
+- `ModelBrokerAdapter` : protocoles et backends modèles ;
+- `RAGServiceAdapter` : service RAG v1 ;
+- `GitProviderAdapter` : Forgejo/GitHub ;
+- `ExternalAccessBroker` : GitHub, Hugging Face et futurs services externes.
+
+OpenHands utilise plusieurs contrats : application, harness et runtime. Les adapters exposent les capacités disponibles ; ils ne simulent pas une capacité absente.
+
+### 3.3 Zones de confiance
+
+| Niveau | Exemples | Exigence |
+|---|---|---|
+| contrôle de confiance | API, portail, scheduler, brokers | privilèges minimaux et audit complet |
+| services gérés | PostgreSQL, Forgejo, RAG, Grafana | Docker/Compose durci et réseau interne |
+| applications extensibles | OpenWebUI, ComfyUI, n8n, JupyterLab | plugins contrôlés, droits minimaux |
+| exécution de code | agents, OpenHands runtime, outils autonomes | OpenShell cible |
+| rupture | Portainer, shell hôte, TUI OpenShell direct | admin, réauthentification, audit |
+
+Une interface web n’est pas automatiquement un service de confiance.
+
+### 3.4 Déploiement
+
+- Docker/Compose exécute les services gérés ;
+- OpenShell utilise initialement son pilote Docker ;
+- les agents n’accèdent jamais au socket Docker ;
+- Kubernetes n’est pas requis pour la v2 mono-DGX ;
+- MicroVM et Kubernetes restent des drivers futurs ;
+- aucun parcours utilisateur ne dépend d’un nom de conteneur ou d’un port interne.
+
+## 4. Sources de vérité
+
+| Domaine | Source canonique | Projection |
+|---|---|---|
+| utilisateurs, projets, rôles | PostgreSQL contrôle | portail |
+| définitions et profils agents | PostgreSQL + manifestes Git | harness/OpenShell |
+| état désiré runtime | plan de contrôle | reconciler |
+| état observé sandbox | OpenShell | PostgreSQL |
+| sessions/conversations | harness natif | références PostgreSQL |
+| arbre multi-agent | harness natif | projection pour quotas/audit |
+| dépôts internes | Forgejo/Git | références contrôle |
+| dépôts GitHub | GitHub | références et miroirs autorisés |
+| workspaces | stockage persistant | montages runtime |
+| secrets | SecretStore | credentials temporaires |
+| catalogue modèles | plan de contrôle | ModelBroker |
+| fichiers modèles | store global | catalogue et empreintes |
+| sources RAG | emplacement original | catalogue PostgreSQL |
+| logique RAG | `rag-retriever` | adapter |
+| tâches RAG | `rag-worker` | progression contrôle |
+| index dense | Qdrant, régénérable | snapshots |
+| index lexical | OpenSearch, régénérable | snapshots |
+| logs | Loki ou store structuré | liens contrôle |
+| métriques | Prometheus | Grafana |
+
+Aucune donnée mutable ne possède deux sources actives.
+
+## 5. Identité, projet, session et multi-agent
+
+### 5.1 Objets
+
+- `AgentDefinition` : harness, version, image, capacités et surfaces ;
+- `AgentIdentity` : collaborateur logique persistant ;
+- `RuntimeContext` : exécution pour utilisateur + agent + projet ;
+- `Session` : conversation ou tâche native ;
+- `Run` : exécution corrélée, éventuellement parent ou enfant ;
+- `Project` : droits, workspace, secrets, modèles et collections.
+
+### 5.2 Contextes
+
+La clé d’un contexte est :
+
+```text
+utilisateur + identité d’agent + projet
+```
+
+Le contexte sans projet est personnel. Changer de projet rejoint ou crée un autre `RuntimeContext`, car les politiques fichiers OpenShell sont fixées à la création.
+
+```bash
+agent codex
+agent codex ARTANY
+agent project SEGMENTATION-RTMRI
+```
+
+### 5.3 Persistance
+
+- reconnexion chaude : sandbox et processus vivants ;
+- reprise froide : recréation depuis image, manifeste et politique, puis rattachement de l’état ;
+- reprise native : mécanisme du harness ;
+- checkpoint mémoire : seulement si réellement supporté.
+
+Un HOME mutable partagé entre projets est interdit par défaut.
+
+### 5.4 Orchestration multi-agent
+
+Hermes, OpenClaw, OpenHands, Goose, KiloCode, OpenCode, Claude Code et certaines extensions Pi peuvent créer des sous-agents.
+
+Chaque profil déclare :
+
+- `orchestration_mode` : `none`, `native`, `platform` ou `external-provider` ;
+- profondeur et concurrence maximales ;
+- annulation, reprise et inspection ;
+- héritage des outils, modèles, secrets et droits ;
+- remontée d’usage par enfant.
+
+Invariants :
+
+- un enfant ne reçoit jamais plus de droits que son parent et son projet ;
+- CPU, mémoire, GPU, tokens, coûts et accès externes sont agrégés sur l’arbre ;
+- chaque événement porte `run_id` et `parent_run_id` ;
+- annulation et drainage des orphelins sont testés ;
+- la délégation inter-harness est interdite par défaut ;
+- les cycles Hermes → Goose → Codex → Hermes sont refusés ;
+- la plateforme ne remplace pas l’orchestration native ; elle impose l’enveloppe de ressources et de sécurité.
+
+## 6. ModelBroker et compatibilité des harnesses
+
+### 6.1 Contrat
+
+`ModelBroker` est la capacité cible. `ollama-gate` est l’adapter v1 jusqu’à décision documentée de l’étendre ou de le remplacer.
+
+Responsabilités :
+
+- APIs réellement nécessaires aux clients ;
+- catalogue, alias et santé des modèles ;
+- routage Ollama, TensorRT-LLM, vLLM ou fournisseur distant ;
+- embeddings ;
+- streaming ;
+- identité signée utilisateur/agent/projet/run ;
+- quotas, priorité, usage et coûts ;
+- fallback explicite ;
+- admission GPU avec le scheduler.
+
+OpenShell contrôle l’autorisation réseau et injecte un credential court. Il ne possède ni le catalogue global, ni les quotas projet, ni le scheduler.
+
+### 6.2 `inference.local`
+
+`inference.local` est réservé aux profils à modèle fixe. Pour le routage dynamique, le sandbox joint directement le ModelBroker interne par une route OpenShell autorisée. Les backends Ollama/TRT/vLLM restent inaccessibles aux agents.
+
+### 6.3 Protocoles par composant
+
+| Composant | Protocole à préserver | Validation obligatoire |
+|---|---|---|
+| Claude Code | Anthropic Messages `/v1/messages` | outils, streaming, usage, hooks, sous-agents |
+| Codex | OpenAI Responses `/v1/responses` | événements, outils, approvals, erreurs |
+| OpenCode | Chat Completions ou Responses selon provider | agents, permissions, serveur headless |
+| KiloCode | Ollama natif ou OpenAI-compatible | contexte, timeouts, outils, sous-agents |
+| Vibe | endpoint compatible configuré | agents TOML, trust projet, ACP, hors ligne |
+| Pi | Chat, Responses, Messages ou extension | drapeaux compatibilité, extensions |
+| Goose | provider d’extension/recipe | recipes, ACP, sous-agents externes |
+| Hermes | `chat_completions`, `codex_responses` ou `anthropic_messages` | profils, délégation et dashboard |
+| OpenClaw | Ollama/OpenAI-compatible par agent | sessions, canaux, outils, sous-agents |
+| OpenHands | backend LiteLLM/OpenAI-compatible retenu | outils, streaming, coût, SDK |
+| OpenWebUI | API OpenAI ModelBroker | modèles, streaming, RBAC, outils autorisés |
+
+Un simple `Hello` ne prouve pas la compatibilité. Les tests couvrent tool calling, contexte, usage, erreurs, streaming et fonctions multi-agent.
+
+`ollama launch` sert d’oracle de configuration pour les intégrations qu’il supporte, notamment Claude Code, Codex, OpenCode, Pi et OpenClaw. La production utilise ensuite des profils versionnés générés par la stack.
+
+## 7. OpenShell, NemoClaw, Hermes et OpenHands
+
+### 7.1 OpenShell
+
+**CIBLE :** runtime principal des agents, derrière `AgentRuntimeAdapter`.
+
+Limites intégrées au design :
+
+- projet encore alpha et initialement mono-utilisateur ;
+- politiques fichiers/processus statiques à la création ;
+- pas de scheduler global ;
+- limites CPU/mémoire appliquées par le driver, admission globale externe ;
+- GPU et APIs ressources à valider ;
+- pas de checkpoint générique supposé ;
+- upgrade susceptible de recréer les sandboxes.
+
+Le plan de contrôle est la frontière multi-utilisateur et le seul client normal de la gateway.
+
+### 7.2 OpenClaw avec ou sans NemoClaw
+
+NemoClaw est privilégié pour OpenClaw seulement après parité complète : gateway, agents, workspaces, `agentDir`, sessions, mémoire, skills, canaux, approvals, relay, pièces jointes, Control UI et sous-agents.
+
+OpenClaw reste propriétaire de son arbre d’agents, de ses bindings de canaux et de ses sessions. Le plan de contrôle projette l’état pour quotas et audit sans l’aplatir.
+
+### 7.3 Deux chemins Hermes
+
+**Hermes natif — référence de production :**
+
+- `HermesNativeAdapter` dans une enveloppe OpenShell ;
+- profils indépendants, configurations, mémoire, sessions, skills, cron, messageries et base d’état ;
+- dashboard web, Chat et Desktop ;
+- sous-agents natifs isolés ;
+- Kanban durable partagé entre profils ;
+- limites de concurrence, profondeur et budget ;
+- protocole modèle choisi par profil.
+
+**Hermes NemoClaw — canari :**
+
+- `HermesNemoClawAdapter` et blueprint épinglé ;
+- racine d’état indépendante ;
+- aucun partage en écriture de `HERMES_HOME`, sessions ou base avec le natif ;
+- imports/exports en dry-run ;
+- activation seulement après parité CLI, dashboard, profils, mémoire, outils, délégation, Kanban, cron, messageries, Desktop et reprise.
+
+Si la parité échoue, Hermes natif reste le chemin de production.
+
+### 7.4 OpenHands et la double sandbox
+
+OpenHands est une application et un harness multi-agent avec son propre runtime. M2 compare :
+
+1. UI/contrôle OpenHands avec agent-server piloté par OpenShell ;
+2. runtime natif derrière une enveloppe externe minimale ;
+3. intégration directe de l’Agent SDK OpenHands.
+
+Le choix préserve sous-agents, terminal, navigateur, fichiers, WebSocket, GitHub et reprise. L’édition locale étant mono-utilisateur, la v2 utilise une instance par utilisateur/domaine de sécurité ou une édition officiellement multi-tenant. Aucune superposition de sandboxes n’est acceptée sans bénéfice mesuré.
+
+## 8. Profils d’intégration des harnesses v1
+
+Chaque profil contient version amont, digest, architecture ARM64, protocole modèle, fichiers persistants, surfaces, permissions, sous-agents et tests.
+
+| Harness | État à préserver | Particularités |
+|---|---|---|
+| Claude Code | `CLAUDE.md`, `.claude/agents`, hooks, plugins/skills, MCP, sessions utiles | hooks de permission, sous-agents avec outils propres, Messages API |
+| Codex | `config.toml`, providers, sessions, approvals, règles sandbox | Responses API, CLI principal, app/IDE optionnels |
+| OpenCode | `opencode.json`, auth séparée, agents, permissions, sessions | Chat ou Responses explicite, serveur headless protégé |
+| KiloCode | `.kilo/agents`, modes, permissions, sessions | CLI, IDE, console web, sous-agents natifs, contexte benchmarké |
+| Vibe | `VIBE_HOME`, `config.toml`, agents TOML, `AGENTS.md`, skills | CLI/VS Code/ACP, trust répertoires, local hors ligne, cloud désactivé par défaut |
+| Pi | modèles, packages/extensions, sessions | minimal par défaut ; aucun sous-agent supposé sans package épinglé ; auth hors workspace |
+| Goose | recipes, extensions, sessions, ACP | sous-agents internes/externes, garde anti-récursion |
+| Hermes | profils, dashboard, mémoire, sessions, skills, cron, Kanban | natif et NemoClaw séparés, multi-agent natif |
+| OpenClaw | gateway, agents, `agentDir`, sessions, canaux, relay, UI | processus permanent, multi-agent/multi-canal |
+| OpenHands | UI, settings, conversations, skills/hooks, GitHub, runtime | application + harness ; stratégie sandbox et utilisateur explicites |
+
+Les tests vérifient le vrai binaire officiel, pas seulement un wrapper présent dans le PATH. Ils valident la configuration attendue par la version amont, afin d’éviter les faux positifs déjà rencontrés avec Vibe.
+
+## 9. Applications humaines
+
+### 9.1 Portail
+
+Accueil : agents visibles. Sections séparées :
+
+- Agents ;
+- Applications ;
+- Projets ;
+- Modèles ;
+- Ressources ;
+- Données/RAG ;
+- Système.
+
+Une application peut invoquer un modèle ou un agent sans devenir une identité d’agent.
+
+### 9.2 Profils applicatifs
+
+| Application | Contrat | Exigences |
+|---|---|---|
+| OpenWebUI | `ApplicationAdapter` | multi-utilisateur/RBAC, ModelBroker uniquement, sauvegarde |
+| ComfyUI | `ApplicationAdapter` + `GPUJobAdapter` | WebSocket/API, Flux, racine persistante unique, admission GPU |
+| n8n | `ApplicationAdapter` | workflows, Ollama local, nodes contrôlés, racine persistante |
+| Forgejo | `ApplicationAdapter` + `GitProviderAdapter` | forge interne, comptes, SSH, hooks, branches protégées |
+| Grafana | `ApplicationAdapter` | dashboards/datasources versionnés, lecture majoritaire |
+| DGX Dashboard | launcher admin supporté | pas d’iframe/proxy supposé sans test |
+| JupyterLab | application de code | isolation utilisateur, quotas, accès externes explicites |
+| Portainer | break-glass | désactivé par défaut, admin uniquement |
+
+### 9.3 Sandbox de l'AI Assistant n8n
+
+La sandbox de l'AI Assistant n8n est une capacité optionnelle distincte du moteur de workflows et des `Code` nodes. Elle reste désactivée par défaut et ne doit pas conditionner le démarrage de `optional-n8n`.
+
+Références amont vérifiées le 28 août 2026 :
+
+- [Set up the AI Assistant](https://docs.n8n.io/deploy/host-n8n/configure-n8n/set-up-ai-assistant/) : une sandbox est obligatoire pour la construction de workflows par l'Assistant ;
+- [Install using Docker Compose](https://docs.n8n.io/deploy/host-n8n/install-options/install-using-docker-compose/) : la sandbox native comprend `sandbox-certs`, `sandbox-api` et un runner Docker-in-Docker, reliés par mTLS ;
+- [Linux quickstart](https://github.com/n8n-io/n8n-sandbox-service/blob/main/docs/quickstart-linux.md) : sous Linux, `sysbox-runc` permet d'exécuter le runner DinD sans `privileged: true` ;
+- [Instance AI configuration](https://github.com/n8n-io/n8n/blob/master/packages/%40n8n/instance-ai/docs/configuration.md) : les connexions configurées dans l'UI sont prioritaires sur les variables d'environnement et la sandbox conserve un workspace par conversation.
+
+Décisions d'architecture :
+
+- introduire un profil explicite `optional-n8n-ai`, indépendant de `optional-n8n`, avec n8n et SearXNG sur l'hôte mais toute la sandbox dans une VM Multipass/QEMU locale CPU-only ;
+- utiliser exclusivement `n8n-sandbox` dans ce profil : Daytona et les autres sandboxes distantes ne font pas partie du chemin local demandé ;
+- dimensionner la VM par défaut à 4 vCPU, 8 Gio de RAM et 60 Gio de disque sparse ; ne pas lui exposer le GPU, l'inférence Qwen restant sur l'hôte via `ollama-gate` ;
+- installer `sysbox-runc` uniquement dans la VM afin de suivre le chemin Linux officiel n8n sans modifier Docker, containerd, CUDA ou le runtime NVIDIA du DGX ; aucun fallback vers `privileged: true` n'est autorisé ;
+- ne jamais monter le `docker.sock` de l'hôte et ne jamais monter un répertoire hôte dans la VM sandbox ; le runner utilise uniquement le daemon Docker interne de la VM sous Sysbox ;
+- permettre le travail réseau sans egress direct : Squid reste publié uniquement sur `127.0.0.1:3128` de l'hôte, la VM y accède par une clé SSH dédiée limitée au seul port-forward, et les sandboxes utilisent une image dérivée qui configure `apt`, `npm`, `pip`, `git`, `curl` et `wget` vers ce tunnel ;
+- imposer ce chemin au niveau réseau : une adresse RFC5737 non routable (`192.0.2.1:3128`) est traduite uniquement dans la VM vers le tunnel, tandis que les chaînes guest et runner bloquent toute autre sortie des subnets sandbox ; les domaines autorisés et chaque accès restent visibles dans les logs Squid/Loki ;
+- publier l'API uniquement sur l'IPv4 privée Multipass de la VM, port 8080, et ajouter une règle `DOCKER-USER` hôte limitée à l'IP du conteneur n8n vers cette destination ; seul n8n reste publié sur le loopback de l'hôte ;
+- stocker les quatre secrets sandbox/recherche hors git, dans des fichiers root-only générés au runtime, injectés sans journalisation ;
+- pinner les images et enregistrer leurs digests dans les releases avant activation du profil ;
+- préconfigurer automatiquement l'Assistant avec `AGENTIC_N8N_AI_MODEL=qwen3.8` via `http://ollama-gate:11435/v1`, l'endpoint privé résolu par Multipass et la recherche locale `http://optional-n8n-searxng:8080` ;
+- permettre des overrides explicites, mais conserver le parcours zéro-saisie comme défaut de `AGENTIC_OPTIONAL_MODULES=n8n-ai ./agent up optional`.
+
+Un verrou de compatibilité est obligatoire avant implémentation : la documentation de déploiement n8n utilise actuellement `N8N_INSTANCE_AI_SANDBOX_API_URL` et `N8N_INSTANCE_AI_SANDBOX_API_KEY`, tandis que la documentation du paquet `@n8n/instance-ai` expose `N8N_SANDBOX_SERVICE_URL` et `N8N_SANDBOX_SERVICE_API_KEY`. L'image n8n doit être figée par version/digest, puis le contrat réellement lu par cette version doit être couvert par un test de configuration. Aucun doublon silencieux de variables n'est accepté comme solution permanente.
+
+Plan d'implémentation :
+
+1. **Contrat amont et ADR** : figer une version n8n compatible, relever les variables effectives et documenter la frontière de confiance VM.
+2. **Configuration automatique** : ajouter les options modèle/sandbox/recherche au bootstrap/runtime, générer les secrets et injecter les valeurs locales sans saisie dans l'UI.
+3. **VM** : ajouter `agent n8n-sandbox-vm create|start|stop|status|endpoint|destroy`, provisionner Ubuntu ARM64, Docker et Sysbox dans le guest, puis y lancer mTLS, registre, seed, API et runner.
+4. **Réseau et egress** : garder l'API/registre sur le réseau interne, acheminer seed, gestionnaires de paquets et outils sandbox via le tunnel vers Squid, maintenir une allowlist éditable et prouver qu'un accès direct sans proxy échoue.
+5. **Exploitation** : étendre `agent up`, `agent doctor`, `agent update` et le manifest de release pour exposer fournisseur, santé VM, version et digest sans afficher les clés.
+6. **Conformité** : vérifier absence de Sysbox et de sandbox dans Docker hôte, endpoint VM privé, runner guest non privilégié, absence de `docker.sock`, secrets, `/healthz` et cohérence du fournisseur.
+7. **Tests** : ajouter des tests statiques Compose, un faux provider HTTP pour les tests hors ligne, puis un e2e opt-in qui construit et exécute un workflow minimal avec `qwen3.8` via `ollama-gate` et vérifie nettoyage/expiration du workspace.
+8. **Runbooks** : documenter création et dimensionnement de la VM, démarrage entièrement local, champs UI, rotation, diagnostic, sauvegarde, rollback et désactivation d'urgence.
+
+Critères d'acceptation :
+
+- `optional-n8n` continue de fonctionner sans sandbox ;
+- `optional-n8n-ai` refuse de démarrer si le fournisseur, l'URL ou les secrets requis sont absents ou incohérents ;
+- aucune publication autre que le loopback n8n existant, aucun `docker.sock` et aucun conteneur privilégié n'apparaissent sur le DGX ;
+- `./agent doctor` valide le fournisseur configuré et échoue avec un message actionnable en cas de dérive ;
+- une release contient les versions/digests et peut être restaurée sans perdre les workflows n8n ;
+- un test e2e prouve que l'Assistant peut générer, construire et tester un workflow dans la sandbox sans exécuter de code sur l'hôte n8n.
+- une sandbox peut installer un paquet autorisé via la passerelle monitorée, la requête apparaît dans `proxy/logs/access.log`, et la même destination échoue lorsque la configuration proxy est explicitement contournée.
+
+### 9.3.1 Validation n8n déclenchée par `doctor`
+
+**CIBLE :** ajouter un workflow n8n dédié, créé avec l’Assistant n8n puis
+exécuté par `doctor` comme test fonctionnel local. Le prompt de construction
+est conservé dans la documentation d’exploitation ou dans un artefact de test,
+mais le résultat vérifié par `doctor` est exclusivement le contrat JSON final
+du workflow.
+
+Nom exact du workflow :
+
+```text
+DOCTOR - n8n local Ollama validation
+```
+
+Le workflow doit suivre le chemin :
+
+```text
+Manual Trigger
+  → Prepare Doctor Test Data
+  → Test JavaScript Runtime
+  → Ollama Qwen Local Inference
+  → Validate Ollama Response
+  → DOCTOR PASS
+```
+
+Le test vérifie obligatoirement :
+
+- l’exécution n8n et le runtime JavaScript ;
+- l’accès interne à `ollama-gate`, jamais à `localhost` depuis n8n ;
+- l’inférence locale du modèle exact `qwen3.8:27b` ;
+- le parsing réel de la réponse avec `JSON.parse()` lorsque nécessaire ;
+- la validation stricte de `test_id`, `backend`, `model`, `sum`, `text_received` et `status` ;
+- l’absence d’Agent, de Tool, de fournisseur distant, d’appel Internet, d’accès fichier et de commande système.
+
+Le dernier nœud `DOCTOR PASS` ne doit produire qu’un seul objet :
+
+```json
+{
+  "success": true,
+  "doctor_status": "PASS",
+  "test_id": "N8N-DOCTOR-OLLAMA-001",
+  "n8n_execution": "OK",
+  "javascript_runtime": "OK",
+  "ollama_connection": "OK",
+  "qwen_inference": "OK",
+  "json_parsing": "OK",
+  "response_validation": "OK",
+  "backend": "ollama",
+  "model": "qwen3.8:27b"
+}
+```
+
+Les erreurs de gate indisponible, réponse vide, JSON invalide, mauvais modèle,
+mauvaise somme, texte différent, identifiant incorrect, backend incorrect,
+statut incorrect ou schéma incomplet doivent faire échouer l’exécution avec un
+code explicite. Aucune valeur par défaut ne doit masquer une réponse invalide.
+
+`doctor` exécute le workflow enregistré par la CLI officielle `n8n execute`,
+dans le conteneur n8n, avec un port de broker dédié au sous-processus. Ce
+chemin évite d’exposer une nouvelle API d’exécution et ne nécessite aucune clé
+API supplémentaire. Le workflow a un identifiant stable, est importé ou mis à
+jour par `agent up optional`, et son délai maximal reste un paramètre runtime.
+Aucun secret ne doit apparaître dans les logs ou les artefacts de release.
+
+Le contrôle `doctor` doit :
+
+1. vérifier que n8n est sain et que le workflow attendu existe ;
+2. déclencher une nouvelle exécution par la CLI n8n, sans réutiliser une
+   exécution historique ;
+3. attendre l’état final avec un timeout borné ;
+4. échouer si l’exécution n’est pas réussie ;
+5. vérifier exactement le JSON du nœud `DOCTOR PASS` ;
+6. afficher une erreur actionnable sans afficher de secret ni le contenu
+   sensible des credentials.
+
+Le workflow ne doit pas être considéré comme validé par le seul Assistant n8n :
+la preuve d’acceptation est une exécution réelle réussie et reproductible,
+visible dans les exécutions n8n et dans le rapport de `doctor`. Le test LLM
+reste volontairement sensible aux réponses JSON invalides afin de détecter une
+régression de formatage ou de routage.
+
+Tests à ajouter :
+
+- test statique du workflow : nœuds, connexions, URL de gate, modèle et absence
+  de nœuds interdits ;
+- test offline avec provider simulé pour vérifier le contrat du `doctor` sans
+  charger Qwen ;
+- test e2e opt-in avec `qwen3.8:27b` via `ollama-gate` ;
+- test négatif : gate indisponible, réponse invalide et
+  modèle incorrect doivent tous produire un diagnostic non-zéro ;
+- test de non-fuite vérifiant qu’aucun secret de stack n’apparaît dans la
+  sortie du test, les logs ou les releases.
+
+Critère de terminé :
+
+```text
+./agent doctor
+→ n8n local workflow: PASS
+→ Ollama/Qwen local inference: PASS
+```
+
+Un échec de ce contrôle rend `doctor` non conforme, sauf lorsque le module
+optionnel n8n n’est pas activé ; dans ce cas, le contrôle doit être indiqué
+comme `SKIP` avec une raison explicite.
+
+### 9.4 Extensions à risque
+
+- OpenWebUI Tools, Functions et Pipelines peuvent exécuter du Python : création/import désactivés par défaut, allowlist et revue ;
+- le RAG natif OpenWebUI ne devient pas une seconde source de vérité : il est désactivé ou relié explicitement au RAG de la stack ;
+- ComfyUI custom nodes sont du code tiers : versions/digests, provenance, allowlist, scan et test ;
+- n8n custom nodes et workflows externes sont du code tiers : versions/digests, provenance, allowlist, scan et test, intégration Ollama locale ;
+- JupyterLab est traité comme un environnement de code, pas une simple page web ;
+- les tâches OpenHands restent sous leur politique runtime validée.
+
+### 9.5 Surfaces natives
+
+- Hermes Dashboard et Desktop ;
+- OpenHands UI ;
+- Kilo CLI/IDE/console ;
+- Vibe CLI/VS Code/ACP ;
+- Goose ACP ;
+- OpenWebUI, ComfyUI, n8n, Forgejo et Grafana ;
+- DGX Dashboard et JupyterLab.
+
+Aucun iframe ou reverse proxy par sous-chemin n’est supposé compatible sans preuve. Le portail utilise une URL, un tunnel ou un proxy officiellement validé.
+
+## 10. Secrets, GitHub et Hugging Face
+
+### 10.1 SecretStore
+
+Une seule source canonique assure chiffrement, scopes, rotation, expiration et audit. Aucune valeur secrète n’est stockée dans PostgreSQL, logs, RAG, image ou HOME persistant.
+
+Les providers OpenShell et les fichiers temporaires de service sont des mécanismes de livraison, pas des sources de vérité.
+
+#### 10.1.1 Assistant d’initialisation des secrets
+
+La plateforme doit fournir un outil d’initialisation idempotent qui parcourt un
+inventaire déclaratif des secrets requis par les modules activés et demande à
+l’opérateur uniquement les valeurs absentes, vides ou invalides. Un secret déjà
+présent et conforme n’est jamais affiché, recopié dans un log, demandé à nouveau
+ou remplacé implicitement.
+
+Le parcours doit :
+
+- fonctionner en mode interactif et en `--check` non interactif, avec une sortie
+  actionnable et un code non nul si des secrets requis manquent ;
+- distinguer les secrets obligatoires du profil actif, les secrets optionnels et
+  les valeurs non sensibles ;
+- écrire exclusivement dans `${AGENTIC_ROOT}/secrets/runtime/`, avec dossiers
+  `0700` et fichiers `0600`, après validation de propriété et de permissions ;
+- utiliser un prompt masqué, confirmer les valeurs sensibles si elles sont
+  nouvelles, et ne jamais accepter de les passer en argument de commande ;
+- être rejouable sans rotation involontaire et signaler explicitement toute
+  rotation ou correction de permissions ;
+- couvrir au minimum les credentials d’authentification des services, les clés
+  n8n/sandbox et les secrets ComfyUI déjà définis par les modules existants.
+
+L’outil ne doit pas déduire l’absence d’un secret à partir de `docker inspect`,
+des logs ou d’un fichier `.env` committé. Les tests doivent prouver qu’un
+secret existant reste inchangé et qu’aucune valeur sensible ne se retrouve dans
+la sortie, les artefacts de release ou l’historique shell.
+
+### 10.2 ExternalAccessBroker
+
+Les agents peuvent accéder à GitHub et Hugging Face par capacités explicites.
+
+Capacités minimales :
+
+- `github.contents.read/write` ;
+- `github.pull_requests.read/write` ;
+- `github.issues.read/write` ;
+- `github.actions.read`, les droits d’administration étant séparés ;
+- `hf.models.read/write` ;
+- `hf.datasets.read/write` ;
+- `hf.spaces.read/write`.
+
+#### GitHub
+
+- préférer une GitHub App avec jeton d’installation court, dépôts sélectionnés et permissions minimales ;
+- utiliser un PAT finement granulaire par utilisateur si nécessaire ;
+- distinguer clone/fetch, push, branche, PR, issue, release et workflow ;
+- exiger une politique ou une approbation pour les écritures, releases et workflows ;
+- conserver Forgejo comme forge interne canonique ; synchronisation ou miroir GitHub seulement si demandé.
+
+#### Hugging Face
+
+- tokens fins limités aux ressources nécessaires ;
+- lecture et publication séparées ;
+- cache central `snapshot_download`/HF Hub pour éviter les téléchargements dupliqués ;
+- révision, digest, licence et provenance enregistrés ;
+- publication, suppression et modification de model card soumises à autorisation ;
+- téléchargements lourds soumis au scheduler et aux budgets disque/réseau.
+
+Les credentials courts sont liés à utilisateur, agent, projet et run. `git`, `gh`, `huggingface_hub`, CLI HF ou MCP GitHub les consomment temporairement. Les politiques OpenShell limitent domaines, méthodes et chemins.
+
+## 11. Scheduler et ressources
+
+Le scheduler possède :
+
+- admission CPU, mémoire unifiée, GPU, stockage et réseau ;
+- files, priorités et quotas ;
+- modes normal, burst et exclusif ;
+- réservations et calendrier ;
+- drain et délai de grâce ;
+- coordination ModelBroker, ComfyUI, OpenHands et téléchargements HF ;
+- agrégation parent/enfants des harnesses multi-agent ;
+- séparation interactif/tâche de fond.
+
+Progression : limites fixes, métriques/refus, files, réservations, préemption coopérative, optimisation adaptative. Aucune préemption forcée n’est promise avant validation de la reprise des tâches.
+
+OpenShell applique les limites d’une sandbox mais ne remplace pas ce scheduler.
+
+Les campagnes d’optimisation sont des charges de fond interruptibles, de priorité inférieure aux usages interactifs et aux réservations explicites. Elles doivent pouvoir être mises en pause, drainées puis reprises sans perdre leurs preuves. Un administrateur dispose d’un arrêt global immédiat ; après cet arrêt, aucune campagne ne redémarre sans autorisation explicite. Une campagne ne préempte jamais une charge utilisateur prioritaire. Ces propriétés sont P0.
+
+## 12. RAG, documents et autorisations par lot
+
+### 12.1 Baseline v1
+
+M0 capture : versions, configuration, modèle et dimension d’embedding, schéma, collections Qdrant, index OpenSearch, nombres de documents/chunks, tâches, corpus de référence, requêtes/résultats, état de dry-run, volumes, latence et journaux.
+
+### 12.2 `RAGServiceAdapter`
+
+- `health`, `capabilities`, `config` ;
+- soumission, statut et annulation de tâche ;
+- `retrieve` ;
+- liste des collections ;
+- snapshot/restore ;
+- reconstruction ;
+- usage.
+
+Le plan de contrôle possède catalogue, droits, provenance, autorisation d’indexer et politiques. Le service RAG possède ingestion technique, chunking, embeddings, index, fusion, reranking et état détaillé des tâches.
+
+### 12.3 Multi-projet
+
+La v2 ajoute côté serveur :
+
+- identité signée utilisateur/agent/projet/run ;
+- collection séparée ou filtre payload obligatoire ;
+- ACL avant recherche et restitution ;
+- refus des sources devenues inaccessibles ;
+- audit du scope et des sources retournées ;
+- tests de fuite inter-projet.
+
+Le choix collection par projet, domaine de confidentialité ou collection filtrée est décidé en M2.
+
+### 12.4 Autorisations documentaires par lot
+
+`AuthorizationBatch` permet d’autoriser globalement un ensemble de documents selon :
+
+- fichiers, dossier, collection, projet, type, étiquette ou requête ;
+- action : lire, indexer, rechercher, partager, publier ou supprimer ;
+- bénéficiaires : utilisateurs, groupes, agents ou classes d’agents ;
+- portée : projet, organisation ou globale ;
+- expiration, date de revue ou nombre d’utilisations ;
+- exclusions obligatoires pour secrets, données réglementées et refus explicites.
+
+Un dry-run affiche nombre, volume, classifications, projets et exclusions. L’option « autoriser globalement tous les documents correspondants » est disponible à l’administrateur, explicite, révocable et auditée. Aucun wildcard caché ne contourne les ACL.
+
+Les grants sont appliqués côté serveur par le service RAG et les montages fichiers.
+
+### 12.5 Versionnement et restauration
+
+Un changement de modèle, dimension, chunking ou schéma crée une nouvelle version d’index avec modèle/digest, dimension, sources et collections associées. La réindexation se fait en parallèle, puis bascule atomique après validation.
+
+Migration : gel des indexations, export config/schéma, snapshot Qdrant, sauvegarde OpenSearch, états worker/retriever, restauration isolée et requêtes de référence. Aucun ancien index n’est supprimé automatiquement.
+
+## 13. Migration
+
+### 13.1 Pattern d’étranglement
+
+`agent` route chaque capacité vers v1 ou v2. La migration se fait par parcours vertical :
+
+```text
+utilisateur → CLI/portail → identité → projet → harness/application
+→ runtime → modèle → workspace/données → accès externes → logs → sauvegarde
+```
+
+Aucun parcours n’est migré s’il exige une commande Docker/OpenShell manuelle.
+
+### 13.2 Données
+
+- racines v1/v2 distinctes ;
+- modèles partagés en lecture seule pendant l’ombre ;
+- aucune double écriture ;
+- importeurs versionnés, idempotents et dry-run ;
+- gel/import final/test/rollback par domaine ;
+- exports natifs PostgreSQL, Forgejo, Qdrant et applications ;
+- workspaces snapshotés ;
+- secrets archivés séparément et chiffrés.
+
+## 14. Phases
+
+### M0 — Preuves v1
+
+Inventaire commandes/services/Beads, baseline ressources, `agent ollama bench`, `repo-e2e`, sauvegarde/restauration, baseline RAG et catalogue skills.
+
+**G0 :** v1 restaurée et 100 % des capacités visibles.
+
+### M1 — Contrats
+
+Sources de vérité, adapters, classification harness/application/service/skill, profils d’intégration amont, protocoles modèles et modèle multi-agent.
+
+**G1 :** aucune responsabilité dupliquée ou sans propriétaire.
+
+### M2 — Spikes bloquants sur DGX
+
+- OpenShell ARM64, ressources et isolation ;
+- chaque protocole modèle réel et comparaison `ollama launch` ;
+- Hermes natif/NemoClaw ;
+- OpenClaw NemoClaw ;
+- stratégie sandbox OpenHands ;
+- sous-agents et budgets ;
+- GitHub/HF credentials courts et cache ;
+- ACL RAG, `AuthorizationBatch` et snapshots ;
+- surfaces web/desktop ;
+- SecretStore ;
+- benchmarks de sécurité matérielle.
+
+**G2 :** chaque hypothèse est validée, remplacée ou abandonnée avec preuve.
+
+### M3 — Walking skeleton
+
+Un utilisateur, Codex, contexte personnel/projet, CLI, portail minimal, OpenShell, ModelBroker, workspace, reprise, logs, backup, lecture GitHub et téléchargement HF en cache.
+
+**G3 :** parcours complet sans manipulation d’infrastructure.
+
+### M3U — Première version utilisable
+
+Un utilisateur peut se connecter, lancer Codex dans un contexte personnel ou projet, suivre l’exécution, interrompre puis reprendre une session, accéder aux fichiers produits et comprendre un échec sans connaître Docker, OpenShell, les ports internes ni la disposition des services. Un administrateur peut installer, diagnostiquer, sauvegarder et restaurer ce périmètre par les surfaces officielles. M3U inclut uniquement le minimum de M4 nécessaire à ces parcours.
+
+**G3U :** ces parcours réussissent de bout en bout, leurs erreurs principales sont actionnables et leur récupération est testée avec la boucle produit/runtime.
+
+Non-objectifs de cette première version :
+
+- intégrer simultanément tous les harnesses et toutes les applications ;
+- unifier toutes les interfaces natives ;
+- introduire Kubernetes ;
+- livrer d’emblée le scheduler avancé ou optimal ;
+- remplacer le RAG v1 lorsqu’il fonctionne derrière son adapter ;
+- laisser une capacité hors des parcours M3U retarder la livraison, sauf dépendance P0 démontrée.
+
+### M4 — Fondation production
+
+Auth, rôles, délégations, reconciler, SecretStore et assistant d’initialisation
+des secrets, ExternalAccessBroker, audit, observabilité, admission simple et
+upgrade épinglé.
+
+**G4 :** séparation utilisateurs/projets et restauration validées.
+
+### M5 — Modèles
+
+Contrat ModelBroker, décision sur `ollama-gate`, Ollama/TRT/remote, embeddings, quotas, admission et tests Messages/Responses/Chat/Ollama.
+
+**G5 :** aucun accès backend direct et parité des commandes modèle.
+
+### M6 — Agents de code
+
+Claude, Codex, OpenCode, Kilo, Vibe, Pi et Goose avec profils, protocoles, extensions, surfaces, sous-agents, GitHub/HF et `repo-e2e`.
+
+**G6 :** contrat vertical et tests négatifs verts pour chaque agent.
+
+### M7 — Hermes, OpenClaw, OpenHands
+
+Hermes natif référence, NemoClaw canari isolé, OpenClaw NemoClaw après parité, choix runtime OpenHands, arbres multi-agent, dashboards, canaux et reprise.
+
+**G7 :** aucune double écriture, double orchestration ou double sandbox non justifiée.
+
+### M8 — Applications humaines
+
+OpenWebUI, ComfyUI/Flux, n8n, Forgejo, Grafana, DGX Dashboard et JupyterLab avec RBAC, plugins gouvernés, admission GPU et sauvegarde.
+
+L’assistant d’initialisation des secrets est intégré au démarrage des modules
+optionnels : il ne demande que les secrets requis par les profils sélectionnés
+et permet de valider une installation déjà configurée sans ressaisie.
+
+#### Sécurisation de l’initialisation ComfyUI
+
+Le mot de passe Basic Auth de ComfyUI ne doit pas être une valeur sensible
+persistée dans `deployments/runtime.env`, passée directement dans
+`environment:` ou reprise dans les artefacts de release. L’utilisateur peut
+rester une configuration non sensible (`COMFYUI_AUTH_USERNAME`), mais le mot
+de passe doit être généré ou demandé lors de l’onboarding, puis conservé hors
+Git dans `${AGENTIC_ROOT}/secrets/runtime/`, avec un dossier en `0700` et un
+fichier en `0600`. Le proxy `comfyui-loopback` doit lire ce secret au démarrage
+et ne jamais l’écrire dans les logs, `docker inspect`, la configuration
+Compose effective ou les snapshots de release.
+
+La migration des installations existantes, la rotation, le diagnostic des
+permissions et les tests de non-fuite sont couverts par le Bead
+`dgx-spark-agentic-stack-ffer`.
+
+**G8 :** accès sans port interne et selon le niveau de confiance.
+
+### M9 — RAG et documents
+
+Adapter v1, collections/index, identité/ACL, versions, `AuthorizationBatch`, portail et mémoire globale/projet.
+
+**G9 :** parité des requêtes, aucune fuite, snapshots restaurés.
+
+### M10 — Scheduler avancé et collaboration
+
+Files, réservations, calendrier, préemption coopérative, Mattermost/Dify, bots et garde anti-boucle.
+
+**G10 :** charge maîtrisée sans casser l’interactif.
+
+### M11 — Ombre et canaris
+
+Tâches miroir, canaris par utilisateur/agent/application, benchmark complet, endurance, gel/import par domaine et rollback chronométré.
+
+**G11 :** deux cycles représentatifs sans perte ni incident matériel.
+
+### M12 — Retrait
+
+Retrait des routes v1 validées et du fallback Docker agent lorsqu’inutile. Archives conservées, nettoyage proposé mais jamais automatique.
+
+## 15. Tests et benchmarks DGX Spark
+
+### 15.1 Contrats et sécurité
+
+- CLI v1/v2 et APIs ;
+- adapters ;
+- protocoles modèles ;
+- imports/exports ;
+- refus fichiers/réseau/processus ;
+- fuite inter-projet ;
+- secrets absents des sorties ;
+- droits GitHub/HF ;
+- ACL et lots documentaires ;
+- actions admin réauthentifiées.
+
+### 15.2 Résilience
+
+Redémarrage API, worker, OpenShell, harness, application et backend modèle ; sandbox perdue ; réseau coupé ; disque presque plein ; téléchargement interrompu ; migration interrompue ; restauration racine vierge ; reconstruction RAG.
+
+### 15.3 Suite DGX Spark
+
+La baseline attend une DGX Spark ARM64 avec 128 Go de mémoire unifiée ; les caractéristiques effectives sont détectées et enregistrées, jamais supposées suffisantes.
+
+**Niveau 0 — matériel :** CPU/GPU, mémoire/bande passante, stockage, réseau, températures, puissance, fréquences, throttling et erreurs.
+
+**Niveau 1 — modèles :** chargement/déchargement, mémoire résidente, TTFT, prefill/decode tokens/s, streaming, contextes 8k/32k/64k+, outils et concurrence 1/2/4/8 selon admission.
+
+**Niveau 2 — harnesses :** démarrage chaud/froid, reprise, compaction, `repo-e2e`, Git/GitHub, approvals, sous-agents, profondeur, annulation et coûts.
+
+**Niveau 3 — applications/données :** OpenWebUI, Flux ComfyUI, n8n, tâche OpenHands, RAG index/query, Forgejo, GitHub, HF cache froid/chaud.
+
+**Niveau 4 — mixte/endurance :** charges 1 h, 6 h et 24 h, panne backend, pression disque, perte réseau et échec de modèle.
+
+Coupe-circuits : température, erreurs GPU, mémoire disponible, swap, disque et latence du contrôle. La montée en charge est progressive, avec cooldown. Les seuils d’admission sont dérivés des mesures en réservant explicitement les ressources de l’OS et des services critiques.
+
+#### 15.3.1 Watchdog RAM/VRAM du chemin `rootless-dev`
+
+Le chemin quotidien `rootless-dev` doit disposer d’un watchdog de ressources capable d’arrêter préventivement un conteneur avant qu’une croissance mémoire ne bloque la DGX Spark. La mémoire RAM et la mémoire GPU sont deux budgets distincts : la VRAM est commune aux conteneurs GPU et doit être surveillée globalement, même lorsque l’usage ne peut pas être attribué parfaitement à un seul conteneur.
+
+**DÉCISION :** le watchdog est un processus utilisateur côté hôte, lancé et arrêté par le wrapper `./agent`, et non un conteneur privilégié. Il ne monte jamais `docker.sock` dans un conteneur et ne requiert aucune modification permanente du système (pas de service système, cron, `daemon.json`, `sysctl` ou règle réseau). `./agent up` le démarre après convergence du stack ; `./agent stop`, `./agent down` et le nettoyage rootless l’arrêtent. S’il ne voit plus de conteneur du projet pendant une période de grâce, il se termine seul.
+
+Un autostart utilisateur `systemd --user` est une option explicite, installée uniquement par `./agent memory install-autostart` et supprimable par `./agent memory uninstall-autostart`. Après reboot, le watchdog n’est donc présent automatiquement que si cette option a été activée ; dans tous les cas il reste dormant lorsque le stack est arrêté.
+
+Le watchdog doit :
+
+- lire la consommation et les limites RAM par conteneur via Docker/cgroups, ainsi que la mémoire disponible et la pression mémoire de l’hôte ;
+- lire la VRAM totale, utilisée et libre via NVML/`nvidia-smi` ou DCGM, conserver une réserve GPU configurable et détecter les processus CUDA ;
+- associer les PID GPU aux cgroups/conteneurs lorsque le runtime le permet, avec un mode dégradé global lorsque l’attribution est incertaine ;
+- appliquer des seuils d’alerte et d’arrêt avec hystérésis, durée de dépassement et arrêt gracieux puis forcé ;
+- sélectionner une victime selon des labels de priorité (`preemptible`, `normal`, `critical`), arrêter en premier les workloads optionnels et placer la victime en quarantaine pour empêcher un redémarrage immédiat ;
+- écrire un journal append-only dans `${AGENTIC_ROOT}/logs`, exposer un état lisible par `agent memory status` et produire des métriques d’observabilité ;
+- fonctionner en `--dry-run` avant activation de la préemption réelle.
+
+Les seuils et la réserve GPU sont dérivés des mesures matérielles effectives et configurables par environnement ; aucune capacité de 128 Go de mémoire unifiée ni quantité fixe de VRAM ne doit être supposée. Le watchdog est une deuxième ligne de défense : les `mem_limit`, les limites de concurrence, les tailles de contexte et les politiques de modèles restent obligatoires.
+
+La validation doit couvrir le lancement et l’arrêt liés au cycle de vie Compose, le reboot avec et sans autostart utilisateur, la détection RAM, la détection VRAM commune, l’attribution dégradée, la quarantaine anti-restart et l’arrêt avant épuisement de la mémoire hôte. Un test consommant volontairement RAM ou VRAM est opt-in et séparé des smoke tests.
+
+Les smoke tests CI restent bornés. Les benchmarks lourds ont une fenêtre dédiée et ne chargent jamais plusieurs gros modèles sans admission. Les artefacts enregistrent firmware, noyau, driver, digests, modèles, versions et commit.
+
+Une release est bloquée sur régression au-delà des budgets validés ou sur OOM, reboot, corruption, fuite de secret ou throttling durable.
+
+#### 15.3.2 Test de saturation contrôlée de la fenêtre Codex
+
+Ajouter un test dédié, distinct de L17, qui charge progressivement les œuvres complètes de Jules Verne dans une session Codex unique jusqu’à un seuil configurable proche de la fenêtre de contexte, sans dépasser brutalement la limite ni mettre la DGX Spark en danger.
+
+Le test devra :
+
+- utiliser un corpus Gutenberg versionné ou dont les empreintes sont enregistrées ;
+- charger les textes par morceaux et mesurer `input_tokens`, `cached_input_tokens` et `context_fill_percent` à chaque tour ;
+- viser par défaut 90 %, avec un seuil d’arrêt dur configurable avant 100 % ;
+- interrompre proprement la campagne si Codex refuse un tour, si la mémoire disponible passe sous la réserve ou si le watchdog signale une pression ;
+- produire un rapport JSON/Markdown indiquant le dernier tour accepté, le pic d’occupation, les œuvres et morceaux chargés, les digests, le modèle et la fenêtre configurée ;
+- rester opt-in et ne jamais faire partie des smoke tests ou de la suite CI standard ;
+- vérifier qu’un dépassement contrôlé est signalé comme résultat attendu, et non comme panne silencieuse.
+
+Le test doit être reproductible avec un manifest local, un mode dry-run de calcul de campagne et un timeout global. La validation live sur DGX Spark est requise avant de conclure sur la capacité réelle de saturation.
+
+### 15.4 Boucles d’optimisation automatique de l’implémentation v2
+
+**DÉCISION :** l’implémentation de la v2 est pilotée par deux boucles automatiques complémentaires et normatives :
+
+1. une **boucle produit/runtime**, qui mesure si les parcours réels réussissent de manière sûre, efficiente et récupérable ;
+2. une **boucle d’ingénierie**, qui mesure si l’architecture reste rapide à modifier, vérifiable, réversible et résistante aux régressions.
+
+Ces boucles sont applicables dès M0 pour établir la baseline v1, deviennent obligatoires pour le walking skeleton M3 et conditionnent ensuite toute promotion. Elles ne remplacent pas les gates G0 à G11 : elles fournissent les preuves machine qui permettent de les déclarer satisfaits.
+
+#### 15.4.1 Principe de décision : gates puis frontière de Pareto
+
+Une implémentation candidate est évaluée en deux temps :
+
+1. les critères éliminatoires sont vérifiés ; tout échec rejette ou met en quarantaine le candidat ;
+2. les candidats admissibles sont comparés sur une frontière de Pareto, sans score pondéré unique susceptible de masquer une dégradation critique.
+
+Un candidat est **dominé** s’il n’est meilleur sur aucune métrique retenue et s’il est moins bon sur au moins une métrique, au-delà de la marge d’incertitude et de l’effet minimal significatif définis dans le manifeste d’évaluation.
+
+Une promotion automatique exige que le candidat :
+
+- franchisse tous les gates P0 ;
+- respecte les règles de non-infériorité P0/P1/P2 ;
+- ne soit pas dominé par la dernière version saine ou par un candidat conservé sur la frontière ;
+- améliore au moins une métrique au-delà de son effet minimal significatif, ferme un échec connu ou réduit une dette technique mesurée ;
+- possède un rollback testé et des artefacts complets ;
+- ne repose sur aucune tolérance expirée.
+
+#### 15.4.2 Classification hybride P0, P1 et P2
+
+La criticité est définie par une liste P0 explicite, puis par des règles de classement P1/P2. Une capacité peut être surclassée manuellement. Une capacité P0 ne peut jamais être déclassée automatiquement.
+
+**P0 non négociable :**
+
+- absence de fuite de secrets ou de données entre utilisateurs, projets et domaines de sécurité ;
+- intégrité des données, source de vérité unique et absence de double écriture incohérente ;
+- migrations idempotentes avec dry-run, validation, restauration et rollback ;
+- absence d’accès direct non autorisé au socket Docker, aux backends modèles et aux services internes ;
+- respect des droits, quotas et agrégation des ressources des arbres multi-agents ;
+- annulation des descendants, drainage des orphelins et refus des cycles de délégation ;
+- audit corrélé complet des actions sensibles ;
+- absence de reboot, corruption, OOM répété, erreur GPU persistante ou throttling durable ;
+- arrêt administratif immédiat des campagnes d’optimisation, sans redémarrage automatique ni préemption d’un usage prioritaire ;
+- capacité démontrée à restaurer la dernière version saine ;
+- capacité démontrée à restituer la DGX dans l’état de référence enregistré lorsqu’une restitution est demandée.
+
+**Règles automatiques :** une capacité touchant aux secrets, droits, données mutables, migrations, identité, isolation, accès externes, GPU, rollback ou cycle de vie multi-agent est P0. Une capacité nécessaire à un parcours utilisateur supporté, à l’observabilité ou à la compatibilité v1 est P1. Une capacité expérimentale, de confort ou non requise pour un parcours supporté est P2, sauf surclassement explicite.
+
+Le registre versionné des capacités contient au minimum : `capability_id`, description, propriétaire, classe, justification, oracle, corpus, métriques, dépendances et règle de retrait.
+
+#### 15.4.3 Tolérances temporaires
+
+Une tolérance n’est possible que pour une exigence P1 ou P2 non liée à la sécurité, à l’isolation, aux secrets, à l’intégrité des données ou à la récupérabilité P0.
+
+Chaque tolérance est un objet versionné contenant :
+
+- `waiver_id` et `capability_id` ;
+- écart maximal autorisé ;
+- justification et preuve ;
+- responsable ;
+- Bead associé ;
+- date de création et date d’expiration ;
+- test prouvant sa suppression ;
+- statut `active`, `expired`, `removed` ou `revoked`.
+
+Une tolérance expirée bloque toute promotion. L’évaluateur candidat ne peut ni créer, ni prolonger, ni élargir une tolérance.
+
+#### 15.4.4 Non-infériorité par rapport à la v1
+
+La v1 est exécutée plusieurs fois en M0 afin de mesurer sa variabilité avant toute comparaison. Les baselines sont épinglées par commit, configuration, corpus, versions, modèles, matériel et conditions thermiques.
+
+Pour le taux de réussite sûr et récupérable, la promotion exige que la borne inférieure à 95 % de la différence appariée `TPSR_v2 - TPSR_v1` respecte :
+
+- P0 : `>= 0,00` ;
+- P1 : `>= -0,03`, uniquement avec une tolérance active ;
+- P2 : `>= -0,05`, uniquement avec une tolérance active.
+
+Sans tolérance active, P1 et P2 doivent également être non inférieurs. Une moyenne favorable ne compense jamais une borne inférieure non conforme.
+
+#### 15.4.5 Boucle produit/runtime
+
+Le critère principal est le **TPSR — taux de parcours sûrs et récupérables** :
+
+```text
+TPSR = nombre de parcours fonctionnellement réussis,
+       sans violation de gate et avec récupération validée
+       / nombre total de tentatives valides
+```
+
+Une tentative n’est comptée comme réussite que si :
+
+- le résultat fonctionnel satisfait l’oracle ;
+- les droits, l’isolation, les quotas et l’audit sont conformes ;
+- aucune ressource orpheline ou altération non déclarée n’est créée ;
+- la panne injectée, lorsqu’elle fait partie du scénario, est détectée et récupérée ;
+- les artefacts nécessaires au diagnostic sont complets.
+
+La boucle produit mesure au minimum :
+
+- TPSR observé et borne inférieure à 95 % ;
+- taux de réussite par capacité et par classe P0/P1/P2 ;
+- latence médiane et p95 ;
+- temps de démarrage froid et chaud ;
+- GPU-secondes, CPU-secondes et pic de mémoire unifiée ;
+- tokens et coût externe lorsqu’ils existent ;
+- énergie mesurée ou estimée, avec méthode enregistrée ;
+- interventions humaines ;
+- temps de détection et temps de récupération ;
+- taux de rollback et de restauration réussis ;
+- erreurs, retries, timeouts et ressources orphelines.
+
+Les objectifs de Pareto maximisent le TPSR et minimisent la latence, les ressources, le coût, les interventions et le temps de récupération. Une métrique indisponible est `null` avec une justification ; elle ne vaut jamais zéro implicitement.
+
+Les cinq parcours initiaux obligatoires du walking skeleton sont :
+
+1. bootstrap, démarrage et `doctor` ;
+2. Codex : modifier, tester, committer et pousser un dépôt autorisé ;
+3. isolation personnel/projet avec test négatif de fuite ;
+4. panne d’un backend modèle, fallback explicite et récupération ;
+5. snapshot, mutation, restauration et rollback.
+
+Le corpus est ensuite étendu aux harnesses, applications, RAG, multi-agent, scheduler et migrations décrits dans ce plan.
+
+#### 15.4.6 Boucle d’ingénierie et de changeabilité
+
+La boucle d’ingénierie part d’un commit candidat et demande à un agent évaluateur indépendant d’effectuer des modifications représentatives dans un workspace jetable. Le résultat n’est pas fusionné : il sert à mesurer la qualité de l’architecture candidate.
+
+Le corpus est hiérarchisé :
+
+- **rapide, à chaque modification** : ajouter une variable de configuration, une commande CLI ou une règle simple ;
+- **complet, avant promotion** : ajouter un adapter modèle, une application, une migration de données, une règle de quota GPU ou une capacité d’audit ;
+- **évolutif** : toute régression ou difficulté réelle produit un scénario candidat, placé en quarantaine avant de rejoindre le corpus de référence.
+
+La boucle mesure au minimum :
+
+- temps jusqu’au premier résultat vert et temps total jusqu’à validation ;
+- taux de réussite au premier essai et nombre d’itérations ;
+- nombre de fichiers, modules et contrats modifiés ;
+- taille du diff, enregistrée mais jamais optimisée isolément ;
+- violations des frontières architecturales ;
+- couverture des tests et mutation score lorsque pertinent ;
+- régressions fonctionnelles ou de sécurité introduites ;
+- duplication ajoutée ou supprimée ;
+- complexité et dette technique selon les analyseurs épinglés ;
+- temps de revert ou de rollback ;
+- complétude de la documentation, des migrations et des tests négatifs.
+
+Un changement plus petit n’est pas automatiquement meilleur : la mesure porte sur la localisation correcte des responsabilités, la vérifiabilité et la réversibilité, pas sur la seule quantité de code.
+
+#### 15.4.7 Corpus visibles, cachés et évolutifs
+
+Chaque corpus possède un identifiant immuable et un `corpus_version`. Il comprend :
+
+- des scénarios visibles stables, utilisables pour le développement ;
+- des scénarios cachés stables, inaccessibles à la branche candidate ;
+- des scénarios issus des incidents, régressions, limites et migrations réelles.
+
+Un nouveau scénario reste en quarantaine jusqu’à ce qu’il ait :
+
+- un oracle non ambigu ;
+- réussi au moins trois relectures indépendantes sur une version saine connue ;
+- démontré qu’il échoue sur la régression qu’il vise lorsqu’un cas reproductible existe ;
+- défini sa classe, son coût, ses timeouts et ses conditions de nettoyage.
+
+L’évaluateur protégé, les tests cachés, les oracles de référence et l’historique signé sont montés en lecture seule depuis une ref, un dépôt ou un store séparé. Le candidat peut modifier librement le code du projet, les tests visibles et le corpus visible, mais ne peut pas modifier les éléments protégés utilisés pour sa propre décision de promotion.
+
+#### 15.4.8 Répétitions et décision statistique
+
+Les tests déterministes doivent réussir à 100 %. Les tests non déterministes utilisent une évaluation séquentielle adaptative :
+
+- P0 : 10 essais minimum, 20 maximum ;
+- P1 : 7 essais minimum, 20 maximum ;
+- P2 : 5 essais minimum, 12 maximum.
+
+Le TPSR utilise une borne inférieure de Wilson à 95 %. Les différences v1/v2 utilisent un intervalle apparié à 95 % par bootstrap à graine enregistrée, ou une méthode exacte documentée si elle est plus adaptée.
+
+L’évaluation s’arrête avant le maximum uniquement si l’intervalle permet déjà de conclure que le candidat est conforme, inférieur ou éliminé. Une exécution invalide pour cause d’évaluateur défaillant ou de matériel indisponible est marquée `invalid` et n’est pas transformée en échec du candidat.
+
+#### 15.4.9 Fichiers de spécification et de sortie
+
+Les spécifications versionnées minimales sont :
+
+```text
+evaluation/spec/capabilities.yaml
+evaluation/spec/architecture.yaml
+evaluation/spec/metrics.yaml
+evaluation/spec/promotion.yaml
+evaluation/spec/recovery.yaml
+evaluation/spec/retention.yaml
+evaluation/corpora/visible/<corpus_version>/manifest.yaml
+evaluation/tasks/engineering/<corpus_version>/manifest.yaml
+```
+
+Les artefacts d’une évaluation sont écrits hors du workspace candidat sous :
+
+```text
+artifacts/evaluations/<evaluation_id>/
+├── evaluation.json
+├── manifest.json
+├── gates.json
+├── runtime.json
+├── engineering.json
+├── pareto.json
+├── recovery.json
+├── report.md
+├── logs/
+├── traces/
+└── attempts/
+```
+
+`evaluation.json` est le résumé machine canonique et contient au minimum :
+
+- `schema_version`, `evaluation_id`, `campaign_id` et timestamps ;
+- commits v1, candidat, évaluateur et corpus ;
+- environnement, matériel, firmware, noyau, driver, images, modèles et digests ;
+- statut global et état de la machine de décision ;
+- gates P0/P1/P2 et tolérances appliquées ;
+- TPSR, intervalles de confiance et différences à la baseline ;
+- métriques de Pareto avec unités ;
+- résultats de la boucle d’ingénierie ;
+- décision `reject`, `quarantine`, `pareto`, `promote` ou `rollback` ;
+- raisons structurées, liens vers preuves et version du schéma.
+
+Tous les fichiers JSON sont validés par JSON Schema. Les logs bruts ne sont jamais l’unique preuve d’une décision.
+
+**Confidentialité et rétention :** les métriques et artefacts restent locaux par défaut ; toute télémétrie externe est désactivée sauf consentement explicite. Les secrets sont expurgés avant écriture et les prompts, sorties, traces, diffs et fichiers de travail sont classifiés. Chaque campagne déclare un quota et une politique de rétention distinguant les résumés durables des logs bruts temporaires. Tout nettoyage possède un dry-run et ne peut supprimer une preuve liée à une release active, une décision, un incident non clos ou un rollback encore supporté.
+
+#### 15.4.10 Pipeline de promotion automatique
+
+Le pipeline suit cet ordre :
+
+1. analyse statique, format, types, secrets, dépendances, licences, SBOM et règles d’architecture ;
+2. tests unitaires, propriétés, migrations et contrats d’adapters ;
+3. protocoles modèles et parité sémantique v1/v2 ;
+4. VM ou racine `rootless-dev` ;
+5. VM `strict-prod` ;
+6. campagne contrôlée sur la DGX avec coupe-circuits ;
+7. faute injectée, endurance adaptée au risque et récupération ;
+8. ombre ou canari lorsqu’un parcours existant est remplacé ;
+9. mise à jour de la frontière de Pareto et promotion.
+
+L’agent d’optimisation dispose d’une autonomie C+ dans le périmètre du projet. Il peut créer et modifier des branches, code, tests visibles, documentation, migrations et architecture ; ouvrir, mettre à jour et fusionner des PR ; abandonner une piste ; revenir à une version saine ; et lancer une autre stratégie.
+
+Il ne peut pas :
+
+- affaiblir un gate P0, modifier l’évaluateur protégé ou ses tests cachés ;
+- supprimer un test pour faire disparaître une régression sans décision de corpus tracée ;
+- falsifier ou réécrire les artefacts d’une évaluation terminée ;
+- promouvoir un candidat dont les preuves sont incomplètes ;
+- retirer une capacité v1 sans l’approbation humaine prévue en M12.
+
+La fusion automatique vise la branche d’implémentation v2. Une release de production reste soumise aux règles d’update, d’ombre, de canari et de retrait du présent plan.
+
+#### 15.4.11 Obligation de progression
+
+Une campagne conserve une fenêtre glissante de cinq cycles. Un cycle est considéré comme progressif s’il réalise au moins une des actions suivantes sans introduire d’échec P0 :
+
+- améliore une métrique de Pareto au-delà de son effet minimal significatif ;
+- résout un échec ou une régression identifiée ;
+- réduit une dette technique mesurée ;
+- produit une preuve nouvelle qui invalide une hypothèse et entraîne un changement explicite de stratégie.
+
+Après trois cycles consécutifs sans progrès, la boucle doit changer d’hypothèse, d’outil, de découpage ou de zone du code. Après cinq cycles sans progrès, elle restaure le dernier commit sain, archive la piste, crée ou met à jour le Bead correspondant et sélectionne un autre objectif. Répéter indéfiniment le même essai avec les mêmes paramètres est interdit.
+
+#### 15.4.12 Exécution sur la DGX et restitution différée
+
+Une campagne d’optimisation peut conserver entre ses cycles des conteneurs, caches, volumes, modèles et services dédiés afin d’éviter un nettoyage coûteux à chaque itération. Elle doit toutefois rendre chaque ressource traçable par `campaign_id`, propriétaire, date de création, politique de rétention et état désiré.
+
+Avant la première mutation d’une campagne, la boucle enregistre :
+
+```text
+artifacts/campaigns/<campaign_id>/state-before.json
+artifacts/campaigns/<campaign_id>/resources.json
+artifacts/campaigns/<campaign_id>/restore-plan.json
+```
+
+La DGX n’est pas restaurée après chaque cycle. En revanche, une restitution peut être demandée à tout moment et devient obligatoire à la clôture définitive de la campagne. La commande cible est idempotente, supporte un dry-run et produit :
+
+```text
+artifacts/campaigns/<campaign_id>/restore-report.json
+artifacts/campaigns/<campaign_id>/post-restore-doctor.json
+```
+
+La restitution :
+
+- arrête les agents, jobs, processus et services propres à la campagne ;
+- supprime ou archive selon le manifeste les conteneurs, réseaux, volumes et fichiers temporaires ;
+- libère les ports, la mémoire GPU, la RAM et l’espace disque réservés ;
+- retire les secrets et configurations temporaires ;
+- restaure les services et configurations préexistants modifiés ;
+- conserve uniquement les caches, images, modèles ou artefacts explicitement présents dans l’état initial ou marqués à conserver ;
+- liste tout élément supprimé, restauré, conservé ou non résolu ;
+- exécute un `post-restore doctor` prouvant la disponibilité de la DGX pour d’autres usages.
+
+La capacité de restitution est un gate P0 architectural. Son exécution est testée avant la première promotion sur DGX, à chaque release et après toute modification du cycle de vie, du stockage, du réseau, des secrets ou du scheduler.
+
+#### 15.4.13 Récupération et états de la boucle
+
+La machine d’état minimale est :
+
+```text
+PROPOSED → EVALUATING → PARETO → PROMOTED
+                    ↘ REJECTED
+                    ↘ QUARANTINED → EVALUATING
+PROMOTED → ROLLED_BACK
+CAMPAIGN_ACTIVE → RESTORING → RESTORED
+```
+
+Règles de récupération :
+
+- un échec P0 arrête la progression du candidat, préserve les preuves et déclenche le rollback vers la dernière version saine ;
+- un échec de l’évaluateur invalide l’essai sans pénaliser le candidat ; l’évaluateur est restauré avant reprise ;
+- un coupe-circuit DGX arrête les nouvelles admissions, draine ce qui peut l’être, capture l’état et restaure la plateforme si elle est instable ;
+- un échec post-fusion entraîne un revert automatique et une nouvelle évaluation de la version restaurée ;
+- aucune migration destructive ne peut être rejouée tant que sa récupération précédente n’est pas démontrée ;
+- les artefacts d’un candidat rejeté sont conservés pour empêcher la répétition aveugle de la même stratégie.
+
+La dernière version saine est définie par un commit, des digests, une version de données, un manifeste de ressources et une évaluation verte complète. Un simple commit Git ne constitue pas à lui seul un point de récupération.
+
+### 15.5 Gouvernance de l’expérience utilisateur et décisions de conception
+
+**DÉCISION :** la v2 ne reproduit pas les parcours de la v1 par défaut. La compatibilité fonctionnelle n’implique pas la conservation de son interface, de son organisation, de ses commandes ni de ses concepts visibles. La v1 est un inventaire de capacités et une baseline de non-régression, pas un modèle d’expérience utilisateur.
+
+Le parcours utilisateur idéal n’est pas considéré comme connu au début de la refonte. Il est construit progressivement à partir des usages réels, des difficultés observées dans la v1, de prototypes, d’alternatives comparées, des directives du concepteur, des retours utilisateurs et des mesures d’utilisabilité.
+
+#### 15.5.1 Principes de conception centrée utilisateur
+
+Toute capacité visible doit :
+
+- présenter d’abord l’objectif et le vocabulaire de l’utilisateur, pas l’infrastructure technique ;
+- masquer Docker, OpenShell, les conteneurs, les ports internes, les noms de services et les fichiers internes dans les parcours ordinaires ;
+- proposer un parcours principal simple, avec divulgation progressive des fonctions avancées ;
+- utiliser des valeurs par défaut sûres, compréhensibles et réversibles ;
+- rendre visibles l’état, l’attente, la progression, les conséquences d’une action et la prochaine étape possible ;
+- permettre l’annulation, la reprise, le retry ou le retour arrière lorsqu’ils sont techniquement possibles ;
+- utiliser une terminologie cohérente entre portail, CLI, API et interfaces natives ;
+- fournir des erreurs actionnables, reliées au composant réellement en cause sans exposer inutilement sa complexité ;
+- éviter toute étape manuelle qui n’apporte pas une décision réelle à l’utilisateur ;
+- distinguer le parcours ordinaire du mode expert ou break-glass.
+
+Une fonctionnalité ne doit pas être ajoutée au portail uniquement parce qu’un service ou une API existe. Inversement, une capacité nécessaire à un parcours peut disposer temporairement d’une surface simple et documentée avant son interface définitive.
+
+#### 15.5.2 Détection des choix UX structurants
+
+L’agent d’implémentation doit identifier explicitement les décisions ayant un effet durable sur l’expérience utilisateur. Une revue de conception est requise notamment lorsqu’un changement :
+
+- modifie un parcours principal ;
+- introduit un nouveau concept, terme, écran ou objet visible ;
+- impose une étape manuelle supplémentaire ;
+- expose un détail d’infrastructure ;
+- détermine une valeur par défaut importante ;
+- oppose simplicité, sécurité, performance, flexibilité ou compatibilité ;
+- modifie les droits, la visibilité, la propriété ou la durée de conservation des données ;
+- rend une action destructive, difficilement réversible ou coûteuse à corriger après déploiement ;
+- retire ou remplace une capacité visible de la v1 ;
+- laisse plusieurs alternatives non dominées sans critère objectif suffisant pour les départager.
+
+Un choix local, facilement réversible, conforme à une directive active et sans effet sur un parcours principal peut être pris automatiquement et simplement enregistré.
+
+#### 15.5.3 Alternatives soumises au concepteur
+
+Lorsqu’une décision structurante ne possède pas de solution manifestement supérieure, l’agent ne choisit pas silencieusement. Il soumet au concepteur entre deux et quatre alternatives comprenant au minimum :
+
+- le problème utilisateur et le contexte ;
+- le ou les profils concernés ;
+- le parcours proposé pour chaque alternative ;
+- les avantages et inconvénients ;
+- les conséquences techniques, opérationnelles et de sécurité ;
+- le coût relatif d’implémentation et de maintenance ;
+- la réversibilité et le coût d’un changement ultérieur ;
+- les effets attendus sur les métriques produit/runtime et d’ingénierie ;
+- une recommandation argumentée ;
+- les hypothèses encore incertaines ;
+- les conditions qui justifieraient un réexamen.
+
+Lorsque la solution la plus complète risque de complexifier fortement l’usage, une alternative volontairement simple doit être proposée. Les alternatives peuvent être illustrées par une maquette, une séquence de commandes simulée, un prototype jetable ou un walkthrough documenté.
+
+La demande de décision ne bloque pas les travaux indépendants. L’agent poursuit les tâches qui ne dépendent pas de l’arbitrage et peut prototyper plusieurs options sans les promouvoir en production.
+
+Chaque demande de décision possède une condition ou une date de résolution. En l’absence de réponse, l’agent peut retenir temporairement l’alternative la plus simple, réversible et la moins exposée, avec le statut `experimental`, puis poursuivre. Cette règle ne permet jamais de rendre stable une décision `needs-design-review`, ni de trancher automatiquement une action destructive ou un changement P0 de sécurité, de droits ou de données.
+
+#### 15.5.4 Directives du concepteur
+
+Le concepteur peut définir des directives générales ou particulières, par exemple :
+
+- privilégier la simplicité par rapport à l’exhaustivité ;
+- éviter toute configuration avant le premier résultat utile ;
+- privilégier une surface native, le portail ou la CLI pour un type de tâche ;
+- ne pas exposer une fonction expérimentale aux utilisateurs ordinaires ;
+- imposer une confirmation avant une action déterminée ;
+- préserver un comportement jugé essentiel malgré une implémentation différente.
+
+Les directives sont versionnées dans :
+
+```text
+docs/ux/directives.yaml
+```
+
+Chaque directive contient au minimum :
+
+- `directive_id` ;
+- auteur et date ;
+- portée globale, persona, parcours, capacité ou composant ;
+- texte normatif ;
+- justification lorsqu’elle est connue ;
+- statut `active`, `experimental`, `superseded` ou `revoked` ;
+- directive remplacée, le cas échéant ;
+- conditions ou date de réexamen ;
+- liens vers les décisions et tests concernés.
+
+Une directive active s’applique aux nouvelles décisions dans sa portée. Une directive n’est jamais supprimée de l’historique ; elle est remplacée ou révoquée avec justification.
+
+#### 15.5.5 Registre des décisions UX
+
+Les décisions d’expérience utilisateur sont conservées sous forme de `UX Decision Records` distincts des décisions purement techniques.
+
+Structure cible :
+
+```text
+docs/ux/
+├── principles.md
+├── directives.yaml
+├── open-questions.md
+├── journeys/
+├── prototypes/
+└── decisions/
+    └── UXDR-<number>-<title>.md
+```
+
+Chaque `UXDR` contient au minimum :
+
+- identifiant, statut, auteur et date ;
+- capacité et parcours concernés ;
+- problème utilisateur ;
+- profils concernés ;
+- observations ou difficultés de la v1 à ne pas reproduire ;
+- alternatives étudiées ;
+- prototypes, mesures ou preuves disponibles ;
+- décision retenue et justification ;
+- conséquences connues ;
+- directive applicable ;
+- conditions de réexamen ;
+- tests d’acceptation associés.
+
+Les statuts autorisés sont :
+
+```text
+proposed
+needs-design-review
+accepted
+experimental
+superseded
+rejected
+```
+
+Une décision `experimental` possède obligatoirement une date ou un événement de réévaluation. Une décision `needs-design-review` ne peut pas être promue silencieusement en comportement stable.
+
+#### 15.5.6 Traçabilité de l’expérience utilisateur
+
+Toute fonctionnalité visible doit être reliée à :
+
+- un problème, besoin ou parcours utilisateur ;
+- une directive active ou un `UXDR` ;
+- un test d’acceptation ;
+- les principaux états d’attente et d’erreur ;
+- une procédure de récupération lorsqu’elle est nécessaire ;
+- une métrique ou une observation permettant de juger son usage réel.
+
+Les liens sont enregistrés dans le registre de capacités ou dans un manifeste UX versionné. Une fonctionnalité sans justification utilisateur explicite est mise en quarantaine de conception avant promotion.
+
+#### 15.5.7 Prototypage et réévaluation
+
+Pour les parcours structurants, la séquence privilégiée est :
+
+```text
+problème utilisateur
+→ alternatives
+→ prototype léger
+→ revue du concepteur
+→ walkthrough ou test utilisateur
+→ décision tracée
+→ implémentation
+→ mesure
+→ réévaluation éventuelle
+```
+
+Les prototypes peuvent être des maquettes, des interfaces non connectées, des commandes simulées ou des parcours documentés. Ils ne deviennent pas automatiquement des composants de production et peuvent être supprimés après archivage des enseignements utiles.
+
+Une décision doit être réexaminée lorsqu’au moins une condition survient :
+
+- son hypothèse principale est invalidée ;
+- les utilisateurs échouent ou contournent régulièrement le parcours ;
+- une nouvelle alternative réduit clairement la complexité ;
+- une évolution amont change les possibilités d’intégration ;
+- les métriques montrent une dégradation significative ;
+- le concepteur modifie ou révoque une directive liée.
+
+#### 15.5.8 Mesures d’utilisabilité
+
+La boucle produit/runtime enregistre, lorsque le parcours le permet :
+
+- le temps jusqu’au premier résultat utile ;
+- le nombre d’étapes et de décisions demandées ;
+- le nombre de concepts techniques exposés ;
+- le taux de réussite sans assistance ;
+- les erreurs, retries, abandons et retours arrière ;
+- le recours à la documentation ou au support ;
+- les interventions administrateur nécessaires ;
+- les divergences de comportement entre portail, CLI, API et interfaces natives ;
+- les points où l’utilisateur ne sait pas clairement ce qui se passe ou quoi faire ensuite.
+
+Ces mesures servent à comparer des alternatives et à détecter les régressions. Elles ne remplacent pas le jugement qualitatif du concepteur ni les retours d’utilisateurs représentatifs.
+
+#### 15.5.9 Gate de conception utilisateur
+
+Une capacité visible ne peut être déclarée terminée que si :
+
+- le problème utilisateur est décrit ;
+- un parcours principal et ses états d’erreur sont documentés ;
+- les choix structurants sont reliés à une directive ou à un `UXDR` ;
+- les alternatives pertinentes ont été examinées lorsque nécessaire ;
+- les valeurs par défaut sont justifiées ;
+- les actions destructives et leurs conséquences sont explicites ;
+- le parcours ordinaire ne nécessite aucune manipulation d’infrastructure non prévue ;
+- les erreurs principales sont compréhensibles et actionnables ;
+- les tests d’acceptation sont verts ;
+- toute décision expérimentale possède une condition de réévaluation.
+
+Ce gate ne doit pas multiplier artificiellement les validations humaines. Il empêche les choix d’interface implicites, opportunistes ou dictés uniquement par l’architecture de devenir des comportements durables sans arbitrage conscient.
+
+## 16. Risques bloquants
+
+| Risque | Traitement |
+|---|---|
+| OpenShell alpha/mono-utilisateur initial | adapter, pinning, spike isolation |
+| protocole modèle uniformisé | matrice Messages/Responses/Chat/Ollama |
+| double orchestration | arbre corrélé, mode natif déclaré, anti-cycle |
+| Hermes natif/NemoClaw partageant un état | racines séparées et promotion contrôlée |
+| OpenHands multi-tenant supposé | instance/domaine isolé ou édition adaptée |
+| double sandbox OpenHands | décision M2 mesurée |
+| tokens GitHub/HF persistants | ExternalAccessBroker et credentials courts |
+| téléchargements HF dupliqués | cache central et admission |
+| RAG OpenWebUI parallèle | désactivation ou pont explicite |
+| Tools OpenWebUI/custom nodes ComfyUI/n8n workflows | allowlist, pinning, scan, sandbox |
+| changement embedding | version d’index séparée |
+| Qdrant pris pour source canonique | sources et catalogue restaurables |
+| proxy dashboard supposé | chemin officiel testé |
+| sauvegarde fichier incohérente | exports natifs orchestrés |
+| surcharge DGX | benchmark, réserve, admission, coupe-circuits |
+| réécriture trop large | walking skeleton et vertical slices |
+| reproduction implicite de l’UX v1 | alternatives, prototypes, directives et UXDR |
+| décisions d’interface non tracées | gate UX et registre versionné |
+
+## 17. Update et exploitation
+
+- versions et digests épinglés ;
+- matrice de compatibilité plateforme/harnesses/apps/modèles ;
+- aucune mise à jour automatique de production ;
+- validation dans racine/VM de test ;
+- rollback code par digest ;
+- rollback données par restauration ;
+- SBOM, provenance et scan ;
+- mode break-glass ;
+- runbooks incidents, capacité, backup et restauration.
+
+## 18. Définition de terminé
+
+La v1 ne peut être retirée que si :
+
+- toutes ses capacités ont une décision et un test ;
+- chaque harness/application possède un profil validé contre sa documentation amont ;
+- la première version utilisable a franchi G3U avant l’élargissement aux capacités avancées ;
+- CLI et portail sont utilisables sans connaissance de l’infrastructure ;
+- les sources de vérité sont uniques et restaurables ;
+- le protocole modèle natif de chaque harness fonctionne ;
+- les sous-agents natifs sont gouvernés sans double orchestration ;
+- Hermes natif est opérationnel et le statut NemoClaw décidé par parité ;
+- OpenHands possède une stratégie runtime et utilisateur démontrée ;
+- GitHub et Hugging Face utilisent des capacités minimales et credentials temporaires ;
+- agents et applications humaines restent correctement séparés ;
+- le service RAG v1 conserve ses capacités, ACL et restauration ;
+- `AuthorizationBatch` est audité et révocable ;
+- les applications exécutant du code sont gouvernées ;
+- benchmarks, endurance et coupe-circuits définissent une enveloppe sûre DGX Spark ;
+- les deux boucles d’optimisation produisent des artefacts conformes, une frontière de Pareto versionnée et des décisions reproductibles ;
+- la non-infériorité P0/P1/P2 et les tolérances temporaires sont vérifiées automatiquement ;
+- les campagnes d’optimisation peuvent être arrêtées administrativement sans redémarrage automatique et sans préempter les usages prioritaires ;
+- les artefacts respectent la politique de confidentialité, de quota et de rétention ;
+- chaque capacité visible possède un problème utilisateur, un parcours principal, des tests d’acceptation et une décision UX traçable ;
+- les directives du concepteur et les `UXDR` sont versionnés, reliés à l’implémentation et réexaminés lorsque leurs hypothèses changent ;
+- aucune interface de la v1 n’est reproduite par défaut sans justification explicite ;
+- update, rollback et restauration ont été répétés ;
+- une campagne d’optimisation peut restituer sur demande la DGX dans son état de référence et le `post-restore doctor` est vert ;
+- une personne peut diagnostiquer, sauvegarder, restaurer et mettre à jour avec les runbooks ;
+- l’administrateur approuve explicitement chaque retrait v1.

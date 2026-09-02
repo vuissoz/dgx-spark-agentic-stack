@@ -86,6 +86,39 @@ workspace_marker_file="${workspace_host_dir}/README.md"
 provider_bridge_status_file="${agentic_root}/openclaw/state/provider-bridge-status.json"
 declare -a compose_cmd=(docker compose --project-name "${AGENTIC_COMPOSE_PROJECT}" -f "${core_compose_file}")
 
+assert_relay_host_publication() {
+  local container_id="$1"
+  local phase="$2"
+  local bindings_json
+  bindings_json="$(docker inspect --format '{{json .NetworkSettings.Ports}}' "${container_id}")" \
+    || fail "openclaw-relay Docker port inspection failed ${phase}"
+
+  python3 - "${bindings_json}" "${OPENCLAW_RELAY_HOST_PORT}" <<'PY' \
+    || fail "openclaw-relay must publish 8113 on 127.0.0.1:${OPENCLAW_RELAY_HOST_PORT} ${phase}"
+import json
+import sys
+
+bindings = json.loads(sys.argv[1])
+expected_port = sys.argv[2]
+entries = bindings.get("8113/tcp") or []
+assert any(
+    isinstance(entry, dict)
+    and entry.get("HostIp") == "127.0.0.1"
+    and entry.get("HostPort") == expected_port
+    for entry in entries
+)
+PY
+
+  python3 - "${OPENCLAW_RELAY_HOST_PORT}" <<'PY' \
+    || fail "openclaw-relay queue endpoint is not reachable through loopback ${phase}"
+import sys
+import urllib.request
+
+with urllib.request.urlopen(f"http://127.0.0.1:{sys.argv[1]}/v1/queue/status", timeout=10) as response:
+    assert response.status == 200
+PY
+}
+
 install -d -m 0700 "${agentic_root}/secrets/runtime"
 
 printf '%s\n' "k17-openclaw-token-$(date +%s)" >"${agentic_root}/secrets/runtime/openclaw.token"
@@ -141,6 +174,7 @@ gateway_cid_before="$(require_service_container openclaw-gateway)" || exit 1
 relay_cid_before="$(require_service_container openclaw-relay)" || exit 1
 wait_for_container_ready "${gateway_cid_before}" 120 || fail "openclaw-gateway did not become ready before recreation"
 wait_for_container_ready "${relay_cid_before}" 120 || fail "openclaw-relay did not become ready before recreation"
+assert_relay_host_publication "${relay_cid_before}" "before recreation"
 
 install -d -m 0750 \
   "$(dirname "${telegram_state_file}")" \
@@ -187,6 +221,7 @@ gateway_cid_after="$(require_service_container openclaw-gateway)" || exit 1
 relay_cid_after="$(require_service_container openclaw-relay)" || exit 1
 wait_for_container_ready "${gateway_cid_after}" 120 || fail "openclaw-gateway did not become ready after recreation"
 wait_for_container_ready "${relay_cid_after}" 120 || fail "openclaw-relay did not become ready after recreation"
+assert_relay_host_publication "${relay_cid_after}" "after recreation"
 
 [[ "${openclaw_cid_before}" != "${openclaw_cid_after}" ]] \
   || fail "openclaw container id must change after recreation"

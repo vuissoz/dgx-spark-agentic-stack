@@ -375,7 +375,36 @@ Mapping rapide:
 - upstream `openclaw onboard` -> stack `./agent openclaw init [project]`
 - upstream `openclaw gateway run` -> stack `./agent up core`
 
-## 11. References utiles
+## 11. Catalogue ClawHub vs CLI `clawhub`
+
+Dans cette stack, l'usage normal du catalogue ClawHub passe par le CLI natif
+`openclaw`.
+
+Commandes baseline a utiliser:
+- `openclaw skills search <query>`
+- `openclaw skills install <skill-slug>`
+- `openclaw skills update <skill-slug>`
+- `openclaw plugins install clawhub:<package>`
+
+Important: le binaire autonome `clawhub` n'est volontairement **pas** installe
+dans les conteneurs OpenClaw manages.
+
+Pourquoi:
+- la stack baseline a seulement besoin des flux catalogue
+  recherche/installation/mise a jour,
+- ces flux fonctionnent deja via `openclaw`,
+- les operations registre authentifiees comme `clawhub login`,
+  `clawhub publish` ou `clawhub sync` demanderaient des secrets supplementaires
+  et une politique de tracabilite qui ne font pas partie du contrat baseline.
+
+Concretement:
+- `./agent doctor` verifie l'acces catalogue via
+  `openclaw skills search --json --limit 1 calendar`,
+- l'allowlist proxy inclut `clawhub.ai` et `www.clawhub.ai`,
+- si un workflow futur exige le vrai CLI `clawhub`, il devra etre ajoute comme
+  extension suivie explicitement, pas comme dependance implicite de la stack.
+
+## 12. References utiles
 
 - Site OpenClaw: https://openclaw.ai/
 - Docs OpenClaw (getting started): https://docs.openclaw.ai/start/getting-started

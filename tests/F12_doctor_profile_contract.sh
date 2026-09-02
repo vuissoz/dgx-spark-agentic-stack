@@ -357,6 +357,7 @@ cat >"${runtime_root}/optional/git/bootstrap/git-forge-bootstrap.json" <<'JSON'
       "agent/openclaw",
       "agent/claude",
       "agent/opencode",
+      "agent/kilocode",
       "agent/openhands",
       "agent/pi-mono",
       "agent/goose",

@@ -1,0 +1,121 @@
+schema_version: "model-broker.v1"
+date: "2026-07-13"
+
+description: >
+  The ModelBroker is the target capability for model access. ollama-gate is the v1 adapter
+  until a decision documents extending or replacing it. The Broker sits between agent/runtime
+  clients and model backends (Ollama, TensorRT-LLM, vLLM, remote providers), enforcing:
+    - Signed user/agent/project/run identity on every request
+    - Model catalog with health checks and alias resolution
+    - Explicit routing, fallback, and quota enforcement
+    - GPU admission via scheduler integration
+    - Usage tracking for cost and audit purposes
+
+api_version: "1.0"
+
+endpoints:
+  /health:
+    method: GET
+    description: Returns broker status, backend health, and routing config summary
+    required_headers: none
+    response_schema:
+      broker_status: string   # healthy | degraded | unhealthy
+      backends: object
+
+  /v1/models:
+    method: GET
+    description: Model catalog with health metadata, aliases, capabilities
+    required_headers: none
+    response_schema:
+      models: array of model objects
+
+  /v1/generate:
+    method: POST
+    description: >
+      Generation request with signed identity. Broker validates identity, enforces quotas,
+      selects backend via routing, returns response (streaming or non-streaming).
+    required_headers:
+      - X-Agent-Id: string
+      - X-User-Id: string
+      - X-Project-Id: string  # optional for personal context
+      - X-Run-Id: string     # correlated run ID for multi-agent trees
+    response_schema:
+      non_streaming:
+        id: string
+        model: string
+        usage: object
+        finish_reason: string
+        content: string
+      streaming:
+        type: string   # "chunk" | "done"
+        delta_content: string
+
+  /v1/chat/completions:
+    method: POST
+    description: Conversational chat with message history and tool call support
+    required_headers: same as /v1/generate
+
+  /v1/embeddings:
+    method: POST
+    description: Embedding vector generation for RAG indexing and retrieval
+    required_headers: same as /v1/generate
+
+  /v1/health/backends:
+    method: GET
+    description: Detailed backend health with latency metrics
+
+  /v1/quotas/{scope}/{id}:
+    method: GET
+    description: Current quota consumption for user, agent, or project identity bucket
+    parameters:
+      scope: string   # user | agent | project
+      id: string      # Identity identifier
+
+  /v1/routing/config:
+    method: GET
+    description: Active routing configuration (mode, backend selection, fallback rules)
+
+contract:
+  security:
+    signed_identity_required: true
+    audit_logging: true
+
+  fallback:
+    explicit: true
+    description: >
+      Fallback MUST be explicit and logged. When a backend is unhealthy or overloaded,
+      the Broker attempts the next backend in the configured chain without losing request
+      context or identity attribution.
+
+  quotas:
+    enforced: true
+    description: >
+      Per-user, per-agent, per-project quota limits enforced at request time. Exceeded
+      limits return HTTP 429 with clear error text and reset time.
+
+  gpu_admission:
+    integrated_with_scheduler: true
+    description: >
+      GPU models coordinate with the scheduler for admission. No GPU available triggers
+      queueing or fallback to alternative backend.
+
+metrics:
+  - tokens_per_second
+  - time_to_first_token_seconds
+  - time_to_complete_seconds
+  - tokens_total
+  - cost_estimate_total
+  - fallback_count
+  - quota_exceeded_count
+  - backend_errors
+  - gpu_admission_denied_count
+
+test_oracle: >
+  Valid when:
+    1. Every API call includes and verifies signed identity headers
+    2. /v1/models catalog accurately reflects available backends
+    3. Backend failure triggers explicit fallback
+    4. Quotas enforced at request time
+    5. Usage counts accurate and audit-logged
+    6. GPU admission coordinated with scheduler
+    7. Streaming responses carry chunked content without identity leakage

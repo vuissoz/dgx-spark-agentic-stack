@@ -8,8 +8,10 @@ openclaw_prefix="${OPENCLAW_PREFIX:-/opt/agentic/openclaw}"
 codex_spec="${CODEX_CLI_NPM_SPEC:-@openai/codex@latest}"
 claude_spec="${CLAUDE_CODE_NPM_SPEC:-@anthropic-ai/claude-code@latest}"
 opencode_spec="${OPENCODE_NPM_SPEC:-opencode-ai@latest}"
-kilocode_spec="${KILOCODE_CLI_NPM_SPEC:-@kilocode/cli@latest}"
+kilocode_spec="${KILOCODE_CLI_NPM_SPEC:-@kilocode/cli@7.4.5}"
 pi_spec="${PI_CODING_AGENT_NPM_SPEC:-@mariozechner/pi-coding-agent@latest}"
+goose_spec="${GOOSE_CLI_NPM_SPEC:-}"
+goose_github_url="${GOOSE_GITHUB_URL:-https://github.com/aaif-goose/goose}"
 openhands_install_script="${OPENHANDS_INSTALL_SCRIPT:-https://install.openhands.dev/install.sh}"
 openclaw_install_script="${OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}"
 openclaw_install_version="${OPENCLAW_INSTALL_VERSION:-latest}"
@@ -203,6 +205,48 @@ install_npm_cli() {
   fi
 }
 
+install_goose_cli() {
+  local cli="goose"
+  local github_url="$1"
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  local archive="${temp_dir}/goose.tar.gz"
+  local extract_dir="${temp_dir}/goose"
+
+  # Try aarch64 (ARM64) first, then fall back to x86_64
+  local arch="aarch64-unknown-linux-gnu"
+  local archive_name="goose-${arch}.tar.gz"
+  local download_url="${github_url}/releases/latest/download/${archive_name}"
+
+  if ! curl -fsSL -o "${archive}" "${download_url}"; then
+    # Try musl variant
+    archive_name="goose-${arch}-musl.tar.gz"
+    download_url="${github_url}/releases/latest/download/${archive_name}"
+    if ! curl -fsSL -o "${archive}" "${download_url}"; then
+      # Fallback to x86_64
+      archive_name="goose-x86_64-unknown-linux-gnu.tar.gz"
+      download_url="${github_url}/releases/latest/download/${archive_name}"
+      if ! curl -fsSL -o "${archive}" "${download_url}"; then
+        record_cli_path "${cli}" "" "missing"
+        fail_or_warn "unable to download Goose binary from ${github_url}"
+        return 1
+      fi
+    fi
+  fi
+
+  install -d -m 0755 "${npm_prefix}/bin"
+  if tar -xzf "${archive}" -C "${npm_prefix}/bin" --strip-components=1 ./goose 2>/dev/null; then
+    chmod +x "${npm_prefix}/bin/goose"
+    track_cli_after_install "${cli}" "${npm_prefix}/bin/${cli}" || fail_or_warn "Goose install succeeded but executable was not found"
+  else
+    record_cli_path "${cli}" "" "missing"
+    fail_or_warn "unable to extract Goose binary"
+    return 1
+  fi
+
+  rm -rf "${temp_dir}"
+}
+
 run_script_install() {
   local script_url="$1"
   shift || true
@@ -260,6 +304,7 @@ install_npm_cli codex "${codex_spec}"
 install_npm_cli claude "${claude_spec}"
 install_npm_cli opencode "${opencode_spec}"
 install_npm_cli kilo "${kilocode_spec}"
+install_goose_cli "${goose_github_url}" || true
 if ensure_node_version_at_least "20.6.0"; then
   install_npm_cli pi "${pi_spec}"
 else
@@ -292,7 +337,7 @@ fi
 
 install_hermes_cli "${hermes_git_url}" "${hermes_git_ref}" "${hermes_git_sha}" "${hermes_pip_extras}" || true
 
-for cli in codex claude opencode kilo pi vibe openhands openclaw hermes; do
+for cli in codex claude opencode kilo goose pi vibe openhands openclaw hermes; do
   if [[ ! -f "/etc/agentic/${cli}-real-path" ]]; then
     record_cli_path "${cli}" "" "missing"
   fi

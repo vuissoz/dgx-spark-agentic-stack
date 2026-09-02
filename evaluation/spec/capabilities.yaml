@@ -1,0 +1,66 @@
+{
+  "schema_version": "v2-capabilities.v0",
+  "source": "PLAN.md sections 14 and 15.4",
+  "capabilities": [
+    {
+      "capability_id": "bootstrap_doctor",
+      "description": "Bootstrap the local stack, start the baseline services, and run doctor with actionable failures.",
+      "class": "P0",
+      "owner": "control-plane",
+      "justification": "A usable and recoverable platform must prove installation and diagnosis before any higher-level journey.",
+      "oracle": "agent first-up and agent doctor complete without public binds, docker.sock mounts, or missing release evidence.",
+      "corpus": "visible:v2-walking-skeleton-v0/bootstrap-doctor",
+      "metrics": ["tpsr", "time_to_first_ready_seconds", "manual_interventions"],
+      "dependencies": [],
+      "retirement_rule": "Retire only when a v2 bootstrap path fully replaces the v1 wrapper with equivalent rollback evidence."
+    },
+    {
+      "capability_id": "codex_project_run",
+      "description": "Run Codex for a personal or project workspace and complete a modify/test/commit/push workflow.",
+      "class": "P1",
+      "owner": "agent-runtime",
+      "justification": "This is the first user-facing walking-skeleton agent journey.",
+      "oracle": "A disposable authorized repository is modified, tested, committed, pushed, and audited with a correlated run id.",
+      "corpus": "visible:v2-walking-skeleton-v0/codex-repo-change",
+      "metrics": ["tpsr", "latency_p50_seconds", "latency_p95_seconds", "tokens_total"],
+      "dependencies": ["bootstrap_doctor", "model_broker_basic", "workspace_isolation"],
+      "retirement_rule": "Retire the v1 route only after the v2 route passes canary and rollback gates."
+    },
+    {
+      "capability_id": "workspace_isolation",
+      "description": "Separate personal and project contexts, including negative checks for file and data leakage.",
+      "class": "P0",
+      "owner": "control-plane",
+      "justification": "Project/user data separation is a non-negotiable security and integrity gate.",
+      "oracle": "A run in one context cannot read or mutate files, secrets, sessions, or RAG data from another context.",
+      "corpus": "visible:v2-walking-skeleton-v0/context-isolation",
+      "metrics": ["tpsr", "isolation_violations"],
+      "dependencies": ["bootstrap_doctor"],
+      "retirement_rule": "No retirement; isolation remains a permanent P0 regression gate."
+    },
+    {
+      "capability_id": "model_broker_basic",
+      "description": "Broker model calls through the approved internal route with explicit backend health, fallback, usage, and errors.",
+      "class": "P0",
+      "owner": "model-broker",
+      "justification": "Agents must not reach model backends directly and failures must be recoverable.",
+      "oracle": "A model backend failure is detected, direct backend access is refused, fallback is explicit, and usage is recorded.",
+      "corpus": "visible:v2-walking-skeleton-v0/model-backend-failure",
+      "metrics": ["tpsr", "time_to_detect_seconds", "time_to_recover_seconds"],
+      "dependencies": ["bootstrap_doctor"],
+      "retirement_rule": "Retire the v1 ollama-gate adapter only after ModelBroker protocol parity is proven."
+    },
+    {
+      "capability_id": "snapshot_restore_rollback",
+      "description": "Snapshot state, perform a controlled mutation, restore state, and rollback the deployed release deterministically.",
+      "class": "P0",
+      "owner": "operations",
+      "justification": "Recovery and deterministic rollback are required before any v2 promotion.",
+      "oracle": "The release, data, runtime resources, and doctor evidence match the selected healthy checkpoint after restore.",
+      "corpus": "visible:v2-walking-skeleton-v0/snapshot-restore-rollback",
+      "metrics": ["tpsr", "rollback_seconds", "restore_seconds", "unresolved_resources"],
+      "dependencies": ["bootstrap_doctor"],
+      "retirement_rule": "No retirement; recovery remains a permanent P0 gate."
+    }
+  ]
+}

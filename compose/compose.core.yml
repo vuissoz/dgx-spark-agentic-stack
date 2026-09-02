@@ -46,12 +46,15 @@ services:
       context: ..
       dockerfile: deployments/gate/Dockerfile
     restart: unless-stopped
+    ports:
+      - 127.0.0.1:11435:11435
     cpus: ${AGENTIC_LIMIT_OLLAMA_GATE_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
     mem_limit: ${AGENTIC_LIMIT_OLLAMA_GATE_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
     user: "${GATE_CONTAINER_USER:-${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}}"
     read_only: true
     tmpfs:
       - /tmp
+      - /gate
     cap_drop:
       - ALL
     security_opt:
@@ -109,7 +112,6 @@ services:
       start_period: 15s
     networks:
       - agentic
-      - agentic-llm
 
   gate-mcp:
     image: agentic/gate-mcp:local
@@ -156,6 +158,56 @@ services:
     networks:
       - agentic
 
+  model-broker:
+    image: agentic/model-broker:local
+    build:
+      context: ..
+      dockerfile: deployments/model_broker/Dockerfile
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:11437:11434
+    cpus: ${AGENTIC_LIMIT_MODEL_BROKER_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_MODEL_BROKER_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      ollama-gate:
+        condition: service_healthy
+    environment:
+      MODEL_BROKER_HOST: 0.0.0.0
+      MODEL_BROKER_PORT: 11434
+      MODEL_BROKER_STATE_DIR: /srv/agentic/model_broker/state
+      MODEL_BROKER_MAX_TOKENS_DAY: ${AGENTIC_MODEL_BROKER_MAX_TOKENS_DAY:-1000000}
+      MODEL_BROKER_MAX_REQUESTS_HOUR: ${AGENTIC_MODEL_BROKER_MAX_REQUESTS_HOUR:-1000}
+      MODEL_BROKER_MAX_GPU_MINUTES: ${AGENTIC_MODEL_BROKER_MAX_GPU_MINUTES:-120.0}
+      OLLAMA_GATE_URL: http://ollama-gate:11435
+      TRTLLM_URL: http://trtllm:11436
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/model_broker/state:/srv/agentic/model_broker/state
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:11434/health", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      agentic:
+        priority: 100
+      agentic-egress:
+        priority: 1000
+
   openclaw:
     image: agentic/optional-modules:local
     build:
@@ -198,9 +250,9 @@ services:
       OPENCLAW_APPROVALS_STATE_DIR: /state/approvals
       OPENCLAW_APPROVALS_PENDING_TTL_SEC: ${OPENCLAW_APPROVALS_PENDING_TTL_SEC:-604800}
       OPENCLAW_RELAY_ATTACHMENTS_MOUNT_ROOT: /relay-attachments
-      OPENCLAW_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}}
+      OPENCLAW_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}
       AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}
-      AGENTIC_AGENT_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}}
+      AGENTIC_AGENT_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}
       AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}
       OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}}
       AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT: ${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}
@@ -217,6 +269,8 @@ services:
       OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw.operator-overlay.json
       OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-home/openclaw.state.json
       OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw.token
+      OPENCLAW_GATEWAY_URL: ws://openclaw-gateway:8114
+      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: "1"
       OPENCLAW_TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram.bot_token
       OPENCLAW_DISCORD_BOT_TOKEN_FILE: /run/secrets/discord.bot_token
       OPENCLAW_SLACK_BOT_TOKEN_FILE: /run/secrets/slack.bot_token
@@ -226,7 +280,7 @@ services:
       AGENTIC_GIT_FORGE_SHARED_NAMESPACE: ${GIT_FORGE_SHARED_NAMESPACE:-agentic}
       HTTP_PROXY: http://egress-proxy:3128
       HTTPS_PROXY: http://egress-proxy:3128
-      NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,openclaw,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
+      NO_PROXY: ollama-gate,optional-forgejo,unbound,egress-proxy,openclaw,openclaw-gateway,openclaw-sandbox,openclaw-relay,localhost,127.0.0.1
     depends_on:
       openclaw-provider-bridge:
         condition: service_healthy
@@ -454,7 +508,7 @@ services:
       OPENCLAW_SANDBOX_PROFILE_FILE: /config/integration-profile.current.json
       OPENCLAW_SANDBOX_OPERATOR_RUNTIME_FILE: /config/operator-runtime.v1.json
       OPENCLAW_SANDBOX_MODULE_MANIFEST_FILE: /config/module/openclaw.module-manifest.v1.json
-      OPENCLAW_SANDBOX_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3-coder:30b}}
+      OPENCLAW_SANDBOX_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}
       OPENCLAW_SANDBOX_DEFAULT_SESSION_ID: ${OPENCLAW_SANDBOX_DEFAULT_SESSION_ID:-default-session}
       OPENCLAW_SANDBOX_PROVIDER_LABEL: ${OPENCLAW_SANDBOX_PROVIDER_LABEL:-ollama-gate}
       OPENCLAW_SANDBOX_SESSION_TTL_SEC: ${OPENCLAW_SANDBOX_SESSION_TTL_SEC:-1800}
@@ -574,8 +628,326 @@ services:
     networks:
       - agentic
 
+  openclaw-nemoclaw:
+    image: agentic/optional-modules:local
+    build:
+      context: ..
+      dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_NEMOCLAW_VERSION:-latest}
+    profiles:
+      - m7
+      - openclaw-nemoclaw
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPENCLAW_NEMOCLAW_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPENCLAW_NEMOCLAW_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - openclaw-nemoclaw
+    environment:
+      OPTIONAL_BIND_HOST: 0.0.0.0
+      OPTIONAL_BIND_PORT: 8115
+      AUDIT_LOG_PATH: /logs/audit.jsonl
+      OPENCLAW_NEMOCLAW_AUTH_TOKEN_FILE: /run/secrets/openclaw-nemoclaw.token
+      OPENCLAW_NEMOCLAW_PROFILE_FILE: /config/integration-profile.nemoclaw.json
+      OPENCLAW_NEMOCLAW_OPERATOR_RUNTIME_FILE: /config/operator-runtime.nemoclaw.v1.json
+      OPENCLAW_NEMOCLAW_MODULE_MANIFEST_FILE: /config/module/openclaw-nemoclaw.module-manifest.v1.json
+      # NemoClaw specific: blueprint pinned, independent state root, parity validated
+      OPENCLAW_NEMOCLAW_BLUEPRINT_PINNED: "true"
+      OPENCLAW_NEMOCLAW_INDEPENDENT_STATE: "true"
+      OPENCLAW_NEMOCLAW_PARITY_VALIDATED: "true"
+      OPENCLAW_SANDBOX_URL: http://openclaw-nemoclaw-sandbox:8116
+      OPENCLAW_SANDBOX_LIFECYCLE_URL: http://openclaw-nemoclaw-sandbox:8116/v1/internal/sandboxes/lease
+      OPENCLAW_SANDBOX_TIMEOUT_SEC: 3
+      OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw-nemoclaw.token
+      OPENCLAW_SANDBOX_STATUS_URL: http://openclaw-nemoclaw-sandbox:8116/v1/sandboxes/status
+      OPENCLAW_DASHBOARD_ENABLED: "1"
+      OPENCLAW_RELAY_STATUS_URL: http://openclaw-nemoclaw-relay:8117/v1/queue/status
+      OPENCLAW_APPROVALS_STATE_DIR: /state/approvals
+      OPENCLAW_APPROVALS_PENDING_TTL_SEC: ${OPENCLAW_APPROVALS_PENDING_TTL_SEC:-604800}
+      OPENCLAW_RELAY_ATTACHMENTS_MOUNT_ROOT: /relay-attachments
+      OPENCLAW_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}
+      AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}
+      AGENTIC_AGENT_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}
+      AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW: ${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-${AGENTIC_AGENT_DEFAULT_MODEL_CONTEXT_WINDOW:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-50909}}}
+      AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT: ${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}
+      AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT: ${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}
+      AGENTIC_CONTEXT_BUDGET_TOKENS: ${AGENTIC_CONTEXT_BUDGET_TOKENS:-50909}
+      AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS: ${AGENTIC_CONTEXT_COMPACTION_SOFT_TOKENS:-38181}
+      AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS: ${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-45818}
+      HOME: /state/cli/openclaw-nemoclaw-home
+      OPENCLAW_HOME: /state/cli/openclaw-nemoclaw-home
+      OPENCLAW_STATE_DIR: /state/cli/openclaw-nemoclaw-home/.openclaw
+      OPENCLAW_CONFIG_PATH: /tmp/openclaw-nemoclaw.effective.json
+      OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw-nemoclaw.stack-config.v1.json
+      OPENCLAW_PROVIDER_BRIDGE_FILE: /config/bridge/openclaw-nemoclaw.provider-bridge.json
+      OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw-nemoclaw.operator-overlay.json
+      OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-nemoclaw-home/openclaw.state.json
+      OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw-nemoclaw.token
+      AGENTIC_GIT_FORGE_BASE_URL: http://optional-forgejo:3000
+      AGENTIC_GIT_FORGE_SHARED_NAMESPACE: ${GIT_FORGE_SHARED_NAMESPACE:-agentic}
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw-nemoclaw,openclaw-nemoclaw-sandbox,openclaw-nemoclaw-relay,localhost,127.0.0.1
+    depends_on:
+      openclaw-nemoclaw-provider-bridge:
+        condition: service_healthy
+      openclaw-nemoclaw-sandbox:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${OPENCLAW_NEMOCLAW_WEBHOOK_HOST_PORT:-18115}:8115
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/config/bridge:/config/bridge:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/config/overlay:/overlay
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/logs:/logs
+      - ${AGENTIC_OPENCLAW_NEMOCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/workspaces}:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw-nemoclaw.token:/run/secrets/openclaw-nemoclaw.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw-nemoclaw.webhook_secret:/run/secrets/openclaw-nemoclaw.webhook_secret:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/openclaw-nemoclaw.password:/run/secrets/git-forge.password:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8115/healthz", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic
+      - agentic-egress
+
+  openclaw-nemoclaw-provider-bridge:
+    image: agentic/optional-modules:local
+    build:
+      context: ..
+      dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_NEMOCLAW_VERSION:-latest}
+    profiles:
+      - m7
+      - openclaw-nemoclaw
+    entrypoint:
+      - python3
+      - /app/openclaw_nemoclaw_provider_bridge.py
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPENCLAW_NEMOCLAW_PROVIDER_BRIDGE_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPENCLAW_NEMOCLAW_PROVIDER_BRIDGE_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      HOME: /state/cli/openclaw-nemoclaw-home
+      OPENCLAW_HOME: /state/cli/openclaw-nemoclaw-home
+      OPENCLAW_STATE_DIR: /state/cli/openclaw-nemoclaw-home/.openclaw
+      OPENCLAW_CONFIG_PATH: /tmp/openclaw-nemoclaw.effective.json
+      OPENCLAW_IMMUTABLE_CONFIG_FILE: /config/immutable/openclaw-nemoclaw.stack-config.v1.json
+      OPENCLAW_PROVIDER_BRIDGE_FILE: /config/bridge/openclaw-nemoclaw.provider-bridge.json
+      OPENCLAW_PROVIDER_BRIDGE_STATUS_FILE: /state/provider-bridge-status-nemoclaw.json
+      OPENCLAW_OPERATOR_OVERLAY_FILE: /overlay/openclaw-nemoclaw.operator-overlay.json
+      OPENCLAW_STATE_CONFIG_FILE: /state/cli/openclaw-nemoclaw-home/openclaw.state.json
+      OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE: /run/secrets/openclaw-nemoclaw.token
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw-nemoclaw,openclaw-nemoclaw-gateway,openclaw-nemoclaw-sandbox,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/config/bridge:/config/bridge
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/config/overlay:/overlay
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw-nemoclaw.token:/run/secrets/openclaw-nemoclaw.token:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import json,pathlib,sys;
+          payload=json.loads(pathlib.Path("/state/provider-bridge-status-nemoclaw.json").read_text(encoding="utf-8"));
+          sys.exit(0 if isinstance(payload, dict) and "ready" in payload else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic
+      - agentic-egress
+
+  openclaw-nemoclaw-sandbox:
+    image: agentic/optional-modules:local
+    build:
+      context: ..
+      dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_NEMOCLAW_VERSION:-latest}
+    profiles:
+      - m7
+      - openclaw-nemoclaw
+    command:
+      - openclaw-nemoclaw-sandbox
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPENCLAW_NEMOCLAW_SANDBOX_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPENCLAW_NEMOCLAW_SANDBOX_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OPTIONAL_BIND_HOST: 0.0.0.0
+      OPTIONAL_BIND_PORT: 8116
+      AUDIT_LOG_PATH: /logs/audit.jsonl
+      OPENCLAW_SANDBOX_AUTH_TOKEN_FILE: /run/secrets/openclaw-nemoclaw.token
+      OPENCLAW_SANDBOX_TOOL_ALLOWLIST_FILE: /config/tool_allowlist.txt
+      OPENCLAW_SANDBOX_PROFILE_FILE: /config/integration-profile.nemoclaw.json
+      OPENCLAW_SANDBOX_OPERATOR_RUNTIME_FILE: /config/operator-runtime.nemoclaw.v1.json
+      OPENCLAW_SANDBOX_MODULE_MANIFEST_FILE: /config/module/openclaw-nemoclaw.module-manifest.v1.json
+      OPENCLAW_SANDBOX_DEFAULT_MODEL: ${AGENTIC_AGENT_DEFAULT_MODEL:-${AGENTIC_DEFAULT_MODEL:-qwen3.8:27b}}
+      OPENCLAW_SANDBOX_DEFAULT_SESSION_ID: ${OPENCLAW_SANDBOX_DEFAULT_SESSION_ID:-default-session}
+      OPENCLAW_SANDBOX_PROVIDER_LABEL: ${OPENCLAW_SANDBOX_PROVIDER_LABEL:-ollama-gate}
+      OPENCLAW_SANDBOX_SESSION_TTL_SEC: ${OPENCLAW_SANDBOX_SESSION_TTL_SEC:-1800}
+      OPENCLAW_SANDBOX_REAP_INTERVAL_SEC: ${OPENCLAW_SANDBOX_REAP_INTERVAL_SEC:-15}
+      OPENCLAW_SANDBOX_REGISTRY_FILE: /state/session-sandboxes-nemoclaw.json
+      OPENCLAW_SANDBOX_OPERATOR_REGISTRY_FILE: /state/openclaw-nemoclaw-state-registry.v1.json
+      OPENCLAW_SANDBOX_STATE_ROOT: /state/sandboxes
+      OPENCLAW_SANDBOX_WORKSPACES_DIR: /sandbox-workspaces
+      OPENCLAW_SANDBOX_ATTACHMENTS_ROOT: /relay-attachments
+      OPENCLAW_APPROVALS_STATE_DIR: /approvals
+      OPENCLAW_APPROVALS_PENDING_TTL_SEC: ${OPENCLAW_APPROVALS_PENDING_TTL_SEC:-604800}
+      HOME: /state/cli/openclaw-nemoclaw-home
+      XDG_CACHE_HOME: /state/cli/openclaw-nemoclaw-home/.cache
+      WHISPER_CACHE_DIR: /state/cli/openclaw-nemoclaw-home/.cache/whisper
+      TORCH_HOME: /state/cli/openclaw-nemoclaw-home/.cache/torch
+      HF_HOME: /state/cli/openclaw-nemoclaw-home/.cache/huggingface
+      MPLCONFIGDIR: /state/cli/openclaw-nemoclaw-home/.cache/matplotlib
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw-nemoclaw,openclaw-nemoclaw-sandbox,localhost,127.0.0.1
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/sandbox/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/sandbox/workspaces:/sandbox-workspaces
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/relay/state/attachments:/relay-attachments:ro
+      - ${AGENTIC_OPENCLAW_NEMOCLAW_WORKSPACES_DIR:-${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/workspaces}:/workspace
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/state/approvals:/approvals
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw-nemoclaw.token:/run/secrets/openclaw-nemoclaw.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/git-forge/openclaw-nemoclaw.password:/run/secrets/git-forge.password:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/ssh/openclaw-nemoclaw:/state/cli/openclaw-nemoclaw-home/.ssh:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8116/healthz", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic
+
+  openclaw-nemoclaw-relay:
+    image: agentic/optional-modules:local
+    build:
+      context: ..
+      dockerfile: deployments/optional/Dockerfile
+      args:
+        OPENCLAW_INSTALL_CLI_SCRIPT: ${AGENTIC_OPENCLAW_INSTALL_CLI_SCRIPT:-https://openclaw.ai/install-cli.sh}
+        OPENCLAW_INSTALL_VERSION: ${AGENTIC_OPENCLAW_NEMOCLAW_VERSION:-latest}
+    profiles:
+      - m7
+      - openclaw-nemoclaw
+    command:
+      - openclaw-nemoclaw-relay
+    restart: unless-stopped
+    cpus: ${AGENTIC_LIMIT_OPENCLAW_NEMOCLAW_RELAY_CPUS:-${AGENTIC_LIMIT_CORE_CPUS:-${AGENTIC_LIMIT_DEFAULT_CPUS:-1.00}}}
+    mem_limit: ${AGENTIC_LIMIT_OPENCLAW_NEMOCLAW_RELAY_MEM:-${AGENTIC_LIMIT_CORE_MEM:-${AGENTIC_LIMIT_DEFAULT_MEM:-1g}}}
+    user: "${AGENT_RUNTIME_UID:-1000}:${AGENT_RUNTIME_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OPTIONAL_BIND_HOST: 0.0.0.0
+      OPTIONAL_BIND_PORT: 8117
+      AUDIT_LOG_PATH: /logs/relay-audit.jsonl
+      OPENCLAW_RELAY_PROVIDER_TARGETS_FILE: /config/relay_targets.nemoclaw.json
+      OPENCLAW_RELAY_TELEGRAM_SECRET_FILE: /run/secrets/openclaw-nemoclaw.relay.telegram.secret
+      OPENCLAW_RELAY_WHATSAPP_SECRET_FILE: /run/secrets/openclaw-nemoclaw.relay.whatsapp.secret
+      OPENCLAW_RELAY_ATTACHMENTS_ROOT: /state/attachments
+      OPENCLAW_RELAY_ATTACHMENTS_MOUNT_ROOT: /relay-attachments
+      OPENCLAW_RELAY_ATTACHMENT_MAX_COUNT: ${OPENCLAW_RELAY_ATTACHMENT_MAX_COUNT:-8}
+      OPENCLAW_RELAY_ATTACHMENT_MAX_BYTES: ${OPENCLAW_RELAY_ATTACHMENT_MAX_BYTES:-26214400}
+      OPENCLAW_RELAY_FORWARD_URL: http://openclaw-nemoclaw:8115/v1/webhooks/dm
+      OPENCLAW_RELAY_OPENCLAW_TOKEN_FILE: /run/secrets/openclaw-nemoclaw.token
+      OPENCLAW_RELAY_OPENCLAW_WEBHOOK_SECRET_FILE: /run/secrets/openclaw-nemoclaw.webhook_secret
+      OPENCLAW_RELAY_FORWARD_TIMEOUT_SEC: ${OPENCLAW_RELAY_FORWARD_TIMEOUT_SEC:-4}
+      OPENCLAW_RELAY_MAX_ATTEMPTS: ${OPENCLAW_RELAY_MAX_ATTEMPTS:-10}
+      OPENCLAW_RELAY_RETRY_BASE_SEC: ${OPENCLAW_RELAY_RETRY_BASE_SEC:-2}
+      OPENCLAW_RELAY_RETRY_MAX_SEC: ${OPENCLAW_RELAY_RETRY_MAX_SEC:-120}
+      OPENCLAW_RELAY_POLL_INTERVAL_SEC: ${OPENCLAW_RELAY_POLL_INTERVAL_SEC:-1.5}
+      OPENCLAW_RELAY_SIGNATURE_HEADER: ${OPENCLAW_RELAY_SIGNATURE_HEADER:-X-Relay-Signature}
+      OPENCLAW_RELAY_TIMESTAMP_HEADER: ${OPENCLAW_TIMESTAMP_HEADER:-X-Relay-Timestamp}
+      OPENCLAW_RELAY_EVENT_ID_HEADER: ${OPENCLAW_RELAY_EVENT_ID_HEADER:-X-Provider-Event-ID}
+      OPENCLAW_RELAY_MAX_SKEW_SEC: ${OPENCLAW_RELAY_MAX_SKEW_SEC:-300}
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: ollama-gate,unbound,egress-proxy,openclaw-nemoclaw,openclaw-nemoclaw-relay,localhost,127.0.0.1
+    depends_on:
+      openclaw-nemoclaw:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${OPENCLAW_NEMOCLAW_RELAY_HOST_PORT:-18117}:8117
+    volumes:
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/config:/config:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/relay/state:/state
+      - ${AGENTIC_ROOT:-/srv/agentic}/openclaw-nemoclaw/relay/logs:/logs
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw-nemoclaw.token:/run/secrets/openclaw-nemoclaw.token:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw-nemoclaw.relay.telegram.secret:/run/secrets/openclaw-nemoclaw.relay.telegram.secret:ro
+      - ${AGENTIC_ROOT:-/srv/agentic}/secrets/runtime/openclaw-nemoclaw.relay.whatsapp.secret:/run/secrets/openclaw-nemoclaw.relay.whatsapp.secret:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python3 -c 'import sys,urllib.request;
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8117/healthz", timeout=3).status == 200 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentic
+
   trtllm:
     image: agentic/trtllm-runtime:local
+    labels:
+      agentic.resource.gpu: "true"
+      agentic.resource.priority: "preemptible"
     build:
       context: ..
       dockerfile: deployments/trtllm/Dockerfile
@@ -742,6 +1114,10 @@ services:
       - SETUID
     security_opt:
       - no-new-privileges:true
+    ports:
+      # Loopback-only endpoint used by the restricted SSH tunnel from the
+      # local n8n sandbox VM. It is never reachable from LAN/Tailscale.
+      - 127.0.0.1:${AGENTIC_PROXY_HOST_PORT:-3128}:3128
     volumes:
       - ${AGENTIC_ROOT:-/srv/agentic}/proxy/config/squid.conf:/etc/squid/squid.conf:ro
       - ${AGENTIC_ROOT:-/srv/agentic}/proxy/allowlist.txt:/etc/squid/allowlist.txt:ro

@@ -13,6 +13,13 @@ source "${AGENTIC_REPO_ROOT}/tests/lib/common.sh"
 
 AGENT_RELEASE_VALIDATE_LATEST_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/validate_latest_resolution.py"
 AGENT_RELEASE_VALIDATE_ARTIFACTS_SCRIPT="${AGENTIC_REPO_ROOT}/deployments/releases/validate_release_artifacts.py"
+AGENT_GENERATE_HARNESS_PROFILES_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/generate_harness_profiles.py"
+AGENT_SECRETS_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/secrets_assistant.py"
+HARNESS_PROFILES_CONFIG="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles_config.yaml"
+HARNESS_PROFILES_PY="${AGENTIC_REPO_ROOT}/src/agentic/implementations/harness_profiles.py"
+N8N_DOCTOR_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/n8n_doctor.py"
+N8N_DOCTOR_WORKFLOW="${AGENTIC_REPO_ROOT}/examples/optional/n8n-workflows/doctor-n8n-local-ollama-validation.json"
+MEMORY_WATCHDOG_SCRIPT="${AGENTIC_REPO_ROOT}/scripts/memory_watchdog.sh"
 
 status=0
 fix_net=0
@@ -92,8 +99,122 @@ Environment:
   AGENTIC_DOCTOR_STREAM_MODEL=<model> (default: AGENTIC_DEFAULT_MODEL)
   AGENTIC_DOCTOR_STREAM_TIMEOUT_SEC=<seconds> (default: 90)
   AGENTIC_DOCTOR_STREAM_GATE_QUEUE_TIMEOUT_SEC=<seconds> (default: 20)
+  AGENTIC_DOCTOR_N8N_TIMEOUT_SEC=<seconds> (default: 300)
   AGENTIC_OLLAMA_GPU_EXPECTED=1|0 (default: 1)
 USAGE
+}
+
+# These checks are called from the main validation flow below.  Keep their
+# definitions above that flow: Bash executes this script sequentially, so
+# definitions placed after the final `exit` are never available to a call.
+check_memory_footprint() {
+  if [[ "${AGENTIC_PROFILE}" != "rootless-dev" ]]; then
+    return 0
+  fi
+
+  local total_mem_kb
+  total_mem_kb=$(awk '/MemTotal/ { print $2 }' /proc/meminfo)
+  if [[ -z "${total_mem_kb:-}" ]]; then
+    warn "cannot determine system memory (check_memory_footprint)"
+    return 0
+  fi
+
+  local used_mem_kb=0
+  local cid mem
+  while IFS= read -r cid; do
+    mem=$(docker inspect --format='{{.HostConfig.Memory}}' "${cid}" 2>/dev/null || echo "0")
+    if [[ -n "${mem}" && "${mem}" != "0" ]]; then
+      used_mem_kb=$((used_mem_kb + mem / 1024))
+    fi
+  done < <(docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}')
+
+  local total_limit_mb="${AGENTIC_LIMIT_ROOTLESS_DEV_MEMORY_MB:-307200}"
+  local current_limit_mb=$((used_mem_kb / 1024))
+  local limit_gb=$((total_limit_mb / 1024))
+  if (( current_limit_mb > total_limit_mb )); then
+    doctor_fail "rootless-dev memory footprint exceeds ${limit_gb}GB limit (${current_limit_mb}MB configured)"
+  else
+    ok "memory footprint is within the rootless-dev ${limit_gb}GB cap (${current_limit_mb}MB / ${total_limit_mb}MB configured)"
+  fi
+}
+
+check_openhands_process_sandbox() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+
+  local cid volume_mounts
+  cid="$(service_container_id openhands)"
+  [[ -n "${cid}" ]] || return 0
+  volume_mounts="$(docker inspect --format='{{range .Mounts}}{{.Type}} {{.Source}} -> {{.Destination}}; {{end}}' "${cid}" 2>/dev/null)"
+
+  if grep -q "docker.sock" <<<"${volume_mounts}"; then
+    doctor_fail "openhands should not mount docker.sock in rootless-dev (use process sandbox)"
+  else
+    ok "openhands process sandbox has no docker.sock mount"
+  fi
+}
+
+check_harness_memory_caps() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+
+  local total_cap_mb=0 service_count=0 cid mem_limit_bytes mem_mb
+  while IFS= read -r cid; do
+    mem_limit_bytes="$(docker inspect --format='{{.HostConfig.Memory}}' "${cid}" 2>/dev/null || echo "0")"
+    [[ "${mem_limit_bytes}" =~ ^[0-9]+$ ]] || continue
+    mem_mb=$((mem_limit_bytes / 1024 / 1024))
+    if (( mem_mb > 0 )); then
+      total_cap_mb=$((total_cap_mb + mem_mb))
+      service_count=$((service_count + 1))
+    fi
+  done < <(docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}')
+
+  local allowed_cap_mb=6144
+  if (( total_cap_mb > allowed_cap_mb )); then
+    warn "harness memory caps total ${total_cap_mb}MB across ${service_count} running services (reference ${allowed_cap_mb}MB); reduce enabled services or limits"
+  else
+    ok "harness memory caps are within the rootless-dev reference (${total_cap_mb}MB / ${allowed_cap_mb}MB across ${service_count} services)"
+  fi
+}
+
+check_memory_watchdog() {
+  [[ "${AGENTIC_PROFILE}" == "rootless-dev" ]] || return 0
+  if [[ ! -x "${MEMORY_WATCHDOG_SCRIPT}" ]]; then
+    doctor_fail "rootless-dev memory watchdog is missing or not executable"
+    return
+  fi
+  local name value
+  for name in \
+    AGENTIC_MEMORY_WATCHDOG_INTERVAL_SEC \
+    AGENTIC_MEMORY_WATCHDOG_CONTAINER_WARN_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_CONTAINER_STOP_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_HOST_WARN_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_HOST_CRITICAL_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_GPU_WARN_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_GPU_STOP_PERCENT \
+    AGENTIC_MEMORY_WATCHDOG_GPU_RESERVED_MB; do
+    value="${!name:-}"
+    if ! [[ "${value}" =~ ^[0-9]+$ ]] || (( value < 1 )); then
+      doctor_fail "${name} must be a positive integer (got '${value}')"
+    fi
+  done
+  if (( AGENTIC_MEMORY_WATCHDOG_CONTAINER_WARN_PERCENT >= AGENTIC_MEMORY_WATCHDOG_CONTAINER_STOP_PERCENT )); then
+    doctor_fail "memory watchdog container warn threshold must be below stop threshold"
+  fi
+  if (( AGENTIC_MEMORY_WATCHDOG_HOST_CRITICAL_PERCENT >= AGENTIC_MEMORY_WATCHDOG_HOST_WARN_PERCENT )); then
+    doctor_fail "memory watchdog host critical threshold must be below warn threshold"
+  fi
+  if [[ "${AGENTIC_MEMORY_WATCHDOG_ENABLED:-0}" == "1" ]]; then
+    if docker ps --filter "label=com.docker.compose.project=${AGENTIC_COMPOSE_PROJECT}" --format '{{.ID}}' 2>/dev/null | grep -q .; then
+      if [[ -s "${AGENTIC_ROOT}/runtime/memory-watchdog.pid" ]] && kill -0 "$(cat "${AGENTIC_ROOT}/runtime/memory-watchdog.pid")" 2>/dev/null; then
+        ok "rootless-dev memory watchdog is running"
+      else
+        doctor_fail "rootless-dev stack is running but memory watchdog is not running; run './agent memory watchdog'"
+      fi
+    else
+      ok "rootless-dev memory watchdog is configured (stack is stopped)"
+    fi
+  else
+    warn "rootless-dev memory watchdog is disabled"
+  fi
 }
 
 critical_ports=()
@@ -107,6 +228,7 @@ openclaw_webhook_host_port="${OPENCLAW_WEBHOOK_HOST_PORT:-18111}"
 openclaw_gateway_host_port="${OPENCLAW_GATEWAY_HOST_PORT:-18789}"
 openclaw_relay_host_port="${OPENCLAW_RELAY_HOST_PORT:-18112}"
 openclaw_gateway_metrics_port="${OPENCLAW_GATEWAY_PROXY_METRICS_PORT:-9114}"
+n8n_host_port="${N8N_HOST_PORT:-5678}"
 goose_context_limit_expected="${AGENTIC_GOOSE_CONTEXT_LIMIT:-${AGENTIC_DEFAULT_MODEL_CONTEXT_WINDOW:-262144}}"
 compaction_soft_percent_expected="${AGENTIC_CONTEXT_COMPACTION_SOFT_PERCENT:-75}"
 compaction_danger_percent_expected="${AGENTIC_CONTEXT_COMPACTION_DANGER_PERCENT:-90}"
@@ -117,7 +239,7 @@ compaction_danger_tokens_expected="${AGENTIC_CONTEXT_COMPACTION_DANGER_TOKENS:-}
 service_requires_proxy_env() {
   local service="$1"
   case "${service}" in
-    agentic-claude|agentic-codex|agentic-opencode|agentic-kilocode|agentic-vibestral|agentic-hermes|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|ollama-gate)
+    agentic-claude|agentic-codex|agentic-opencode|agentic-kilocode|agentic-vibestral|agentic-hermes|openwebui|openhands|comfyui|openclaw|openclaw-gateway|openclaw-provider-bridge|openclaw-sandbox|openclaw-relay|optional-mcp-catalog|optional-pi-mono|optional-goose|optional-n8n|ollama-gate)
       return 0
       ;;
     *)
@@ -139,15 +261,7 @@ service_allows_root_user() {
 }
 
 service_allows_readwrite_rootfs() {
-  local service="$1"
-  case "${service}" in
-    ollama|egress-proxy|opensearch|optional-forgejo)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  agentic_service_allows_readwrite_rootfs "$1"
 }
 
 service_git_forge_ssh_private_key_path() {
@@ -217,13 +331,10 @@ assert_agent_sudo_mode_hardening() {
 
   IFS='|' read -r readonly cap_drop security_opt <<<"${inspect_out}"
 
-  # Forgejo rootless container cannot use readonly rootfs due to SSH and write requirements
-  if [[ "${service}" != "optional-forgejo" ]]; then
-    [[ "${readonly}" == "true" ]] || {
-      fail "${cid}: readonly rootfs is not enabled"
-      return 1
-    }
-  fi
+  [[ "${readonly}" == "true" ]] || {
+    fail "${cid}: readonly rootfs is not enabled"
+    return 1
+  }
   [[ ",${cap_drop}," == *",ALL,"* ]] || {
     fail "${cid}: cap_drop does not include ALL"
     return 1
@@ -1406,6 +1517,13 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 ok "doctor profile=${AGENTIC_PROFILE}"
+if [[ ! -x "${AGENT_SECRETS_SCRIPT}" ]]; then
+  doctor_fail "runtime secret assistant is missing or not executable: ${AGENT_SECRETS_SCRIPT}"
+elif ! python3 "${AGENT_SECRETS_SCRIPT}" --check; then
+  doctor_fail "required runtime secret inventory check failed; run './agent secrets' in an interactive terminal"
+else
+  ok "required runtime secrets match the versioned inventory"
+fi
 if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES}" == "false" ]]; then
   warn "agent sudo-mode is enabled (AGENTIC_AGENT_NO_NEW_PRIVILEGES=false)"
 fi
@@ -1533,8 +1651,11 @@ for row in "${running_services[@]}"; do
   fi
 
   if service_allows_readwrite_rootfs "${service}"; then
+    rootfs_exception_reason="$(agentic_service_readwrite_rootfs_exception_reason "${service}" || true)"
     if ! assert_container_runtime_restrictions "${cid}"; then
       doctor_fail_or_warn "service '${service}' runtime restriction baseline failed"
+    elif [[ -n "${rootfs_exception_reason}" ]]; then
+      ok "service '${service}' uses the documented writable-rootfs exception (${rootfs_exception_reason})"
     fi
   else
     if [[ "${AGENTIC_AGENT_NO_NEW_PRIVILEGES}" == "false" ]] && service_is_agent_cli "${service}"; then
@@ -2068,9 +2189,60 @@ check_default_model_tool_call_regression_notice
 check_default_model_context_resources
 check_llm_backend_runtime_policy
 check_observability_retention_policy
+check_memory_footprint
+check_openhands_process_sandbox
+check_harness_memory_caps
+check_memory_watchdog
 check_default_model_tool_call_health
 
 comfyui_cid="$(service_container_id comfyui)"
+comfyui_loopback_cid="$(service_container_id comfyui-loopback)"
+comfyui_secret_dir="${AGENTIC_ROOT}/secrets/runtime"
+comfyui_password_file="${comfyui_secret_dir}/comfyui.auth_password"
+comfyui_secret_expected=0
+if [[ -n "${comfyui_cid}" || -n "${comfyui_loopback_cid}" || -e "${comfyui_password_file}" ]] \
+  || agentic_csv_contains "ui" "${COMPOSE_PROFILES:-}" \
+  || agentic_csv_contains "m8" "${COMPOSE_PROFILES:-}"; then
+  comfyui_secret_expected=1
+fi
+
+if [[ "${comfyui_secret_expected}" -eq 1 ]]; then
+  if [[ ! -d "${comfyui_secret_dir}" ]]; then
+    doctor_fail "ComfyUI secret directory is missing: ${comfyui_secret_dir}"
+  elif [[ "$(stat -c '%a' "${comfyui_secret_dir}" 2>/dev/null || true)" != "700" ]]; then
+    doctor_fail "ComfyUI secret directory must use mode 700: ${comfyui_secret_dir}"
+  fi
+
+  if [[ ! -s "${comfyui_password_file}" ]]; then
+    doctor_fail "ComfyUI authentication password is missing or empty: ${comfyui_password_file}; run './agent up ui'"
+  elif [[ "$(stat -c '%a' "${comfyui_password_file}" 2>/dev/null || true)" != "600" ]]; then
+    doctor_fail "ComfyUI authentication password must use mode 600: ${comfyui_password_file}"
+  elif [[ "$(tr -d '\r\n' <"${comfyui_password_file}")" == "change-me" ]]; then
+    doctor_fail "ComfyUI authentication password still uses the forbidden change-me value: ${comfyui_password_file}"
+  else
+    ok "comfyui authentication password is file-backed with restrictive permissions"
+  fi
+fi
+
+if [[ -f "${AGENTIC_ROOT}/deployments/runtime.env" ]] \
+  && grep -Eq '^COMFYUI_AUTH_PASSWORD=' "${AGENTIC_ROOT}/deployments/runtime.env"; then
+  doctor_fail "deprecated COMFYUI_AUTH_PASSWORD must not be stored in ${AGENTIC_ROOT}/deployments/runtime.env; run './agent up ui' to migrate it"
+fi
+
+if [[ -n "${comfyui_loopback_cid}" ]]; then
+  comfyui_loopback_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${comfyui_loopback_cid}" 2>/dev/null || true)"
+  if printf '%s\n' "${comfyui_loopback_env}" | grep -Eq '^COMFYUI_AUTH_PASSWORD='; then
+    doctor_fail "comfyui-loopback exposes COMFYUI_AUTH_PASSWORD in container environment"
+  fi
+  if ! printf '%s\n' "${comfyui_loopback_env}" | grep -qx 'COMFYUI_AUTH_PASSWORD_FILE=/run/secrets/comfyui.auth_password'; then
+    doctor_fail "comfyui-loopback is missing the file-backed password contract"
+  fi
+  comfyui_secret_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/comfyui.auth_password"}}{{println .Source "|" .RW}}{{end}}{{end}}' "${comfyui_loopback_cid}" 2>/dev/null || true)"
+  if [[ "${comfyui_secret_mount}" != "${comfyui_password_file} | false" ]]; then
+    doctor_fail "comfyui-loopback must mount ${comfyui_password_file} read-only at /run/secrets/comfyui.auth_password"
+  fi
+fi
+
 proxy_allowlist_file="${AGENTIC_ROOT}/proxy/allowlist.txt"
 if [[ -n "${comfyui_cid}" ]]; then
   if [[ ! -d "${AGENTIC_ROOT}/comfyui" ]]; then
@@ -2079,7 +2251,7 @@ if [[ -n "${comfyui_cid}" ]]; then
   if [[ ! -f "${proxy_allowlist_file}" ]]; then
     doctor_fail_or_warn "proxy allowlist file is missing: ${proxy_allowlist_file}"
   else
-    for required_domain in api.comfy.org registry.comfy.org; do
+    for required_domain in api.comfy.org registry.comfy.org huggingface.co us.aws.cdn.hf.co; do
       if ! allowlist_has_entry "${proxy_allowlist_file}" "${required_domain}"; then
         doctor_fail_or_warn "proxy allowlist missing required ComfyUI domain '${required_domain}' in ${proxy_allowlist_file}"
       fi
@@ -3118,6 +3290,111 @@ if [[ -n "${optional_portainer_cid}" ]]; then
   fi
 fi
 
+optional_n8n_cid="$(service_container_id optional-n8n)"
+if [[ -n "${optional_n8n_cid}" ]]; then
+  optional_n8n_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_n8n_cid}" 2>/dev/null || true)"
+  if grep -q '^N8N_BASIC_AUTH_PASSWORD=' <<<"${optional_n8n_env}"; then
+    doctor_fail "optional-n8n must not expose its Basic Auth password in the container environment"
+  fi
+  grep -q '^N8N_BASIC_AUTH_PASSWORD_FILE=/run/secrets/n8n.auth_password$' <<<"${optional_n8n_env}" \
+    || doctor_fail "optional-n8n must use N8N_BASIC_AUTH_PASSWORD_FILE=/run/secrets/n8n.auth_password"
+  if ! mount_destination_present "${optional_n8n_cid}" "/run/secrets/n8n.auth_password"; then
+    doctor_fail "optional-n8n must mount /run/secrets/n8n.auth_password"
+  elif ! mount_destination_read_only "${optional_n8n_cid}" "/run/secrets/n8n.auth_password"; then
+    doctor_fail "optional-n8n Basic Auth password mount must be read-only"
+  fi
+  if ! python3 "${AGENT_SECRETS_SCRIPT}" --check --modules n8n; then
+    doctor_fail "optional-n8n runtime secret inventory check failed; run './agent secrets --modules n8n'"
+  fi
+  if ! assert_no_public_bind "${n8n_host_port}"; then
+    doctor_fail "optional n8n host bind must stay loopback-only on port ${n8n_host_port}"
+  fi
+  if ! mount_destination_present "${optional_n8n_cid}" "/home/node/.n8n"; then
+    doctor_fail "optional n8n must mount /home/node/.n8n for persistent workflow data"
+  fi
+  if mount_destination_present "${optional_n8n_cid}" "/home/node/.n8n/config"; then
+    doctor_fail "optional n8n must not mount a directory at /home/node/.n8n/config; n8n reserves that path for its instance settings file"
+  fi
+  n8n_status="$(curl -sS -o /tmp/doctor-n8n.out -w '%{http_code}' "http://127.0.0.1:${n8n_host_port}/healthz" 2>/dev/null || true)"
+  if [[ ! "${n8n_status}" =~ ^(200|401|403)$ ]]; then
+    doctor_fail "optional n8n endpoint is unreachable on loopback (http_status=${n8n_status:-none})"
+  elif [[ ! -x "${N8N_DOCTOR_SCRIPT}" ]]; then
+    doctor_fail "n8n doctor runner is missing or not executable: ${N8N_DOCTOR_SCRIPT}"
+  elif [[ ! -f "${N8N_DOCTOR_WORKFLOW}" ]]; then
+    doctor_fail "n8n doctor workflow template is missing: ${N8N_DOCTOR_WORKFLOW}"
+  else
+    n8n_doctor_timeout="${AGENTIC_DOCTOR_N8N_TIMEOUT_SEC:-300}"
+    if ! [[ "${n8n_doctor_timeout}" =~ ^[0-9]+$ ]] || (( n8n_doctor_timeout < 10 )); then
+      doctor_fail "AGENTIC_DOCTOR_N8N_TIMEOUT_SEC must be an integer >= 10 (got: ${n8n_doctor_timeout})"
+    elif ! python3 "${N8N_DOCTOR_SCRIPT}" \
+      --workflow "${N8N_DOCTOR_WORKFLOW}" \
+      --container "${optional_n8n_cid}" \
+      --timeout-seconds "${n8n_doctor_timeout}"; then
+      doctor_fail "n8n local Ollama validation workflow failed"
+    else
+      ok "n8n local Ollama validation workflow passed"
+    fi
+  fi
+fi
+
+if agentic_csv_contains "n8n-ai" "${AGENTIC_OPTIONAL_MODULES:-}"; then
+  for n8n_ai_secret in api.key registration.token runner.key searxng.key; do
+    n8n_ai_secret_path="${AGENTIC_ROOT}/secrets/runtime/n8n-sandbox/${n8n_ai_secret}"
+    if [[ ! -s "${n8n_ai_secret_path}" ]]; then
+      doctor_fail "n8n-ai secret is missing or empty: ${n8n_ai_secret_path}"
+    elif [[ "$(stat -c '%a' "${n8n_ai_secret_path}" 2>/dev/null || true)" != "600" ]]; then
+      doctor_fail "n8n-ai secret must use mode 600: ${n8n_ai_secret_path}"
+    fi
+  done
+
+  n8n_sandbox_vm_script="${AGENTIC_REPO_ROOT}/deployments/vm/manage_n8n_sandbox_vm.sh"
+  if [[ ! -x "${n8n_sandbox_vm_script}" ]] || ! n8n_sandbox_vm_status="$("${n8n_sandbox_vm_script}" status 2>/dev/null)"; then
+    doctor_fail "n8n-ai requires a healthy local sandbox VM (run: ./agent n8n-sandbox-vm create)"
+  else
+    n8n_sandbox_vm_endpoint="$("${n8n_sandbox_vm_script}" endpoint 2>/dev/null || true)"
+    [[ "${n8n_sandbox_vm_endpoint}" =~ ^http://10\.[0-9]+\.[0-9]+\.[0-9]+:8080$ ]] \
+      || doctor_fail "n8n sandbox VM endpoint must remain on the private Multipass network (got: ${n8n_sandbox_vm_endpoint:-none})"
+    curl -fsS --max-time 3 "${n8n_sandbox_vm_endpoint}/healthz" >/dev/null 2>&1 \
+      || doctor_fail "n8n sandbox VM health endpoint is unreachable: ${n8n_sandbox_vm_endpoint}"
+
+    n8n_vm_runner_contract="$(multipass exec "${AGENTIC_N8N_SANDBOX_VM_NAME:-agentic-n8n-sandbox}" -- \
+      sudo docker inspect --format '{{.HostConfig.Runtime}}|{{.HostConfig.Privileged}}|{{json .Mounts}}' \
+      n8n-sandbox-runner-1 2>/dev/null || true)"
+    [[ "${n8n_vm_runner_contract}" == sysbox-runc\|false\|* ]] \
+      || doctor_fail "sandbox VM runner must use unprivileged sysbox-runc"
+    [[ "${n8n_vm_runner_contract}" != *docker.sock* ]] \
+      || doctor_fail "sandbox VM runner must not mount docker.sock"
+    n8n_vm_egress_contract="$(multipass exec "${AGENTIC_N8N_SANDBOX_VM_NAME:-agentic-n8n-sandbox}" -- \
+      sudo sh -ec '
+        systemctl is-active --quiet n8n-sandbox-egress-tunnel.service
+        docker exec n8n-sandbox-runner-1 docker image inspect registry:5000/n8n-sandbox:proxied --format "{{json .Config.Env}}" | grep -q "HTTP_PROXY=http://192.0.2.1:3128"
+        docker exec n8n-sandbox-runner-1 iptables -S AGENTIC-SBX-EGRESS | grep -q -- "-A AGENTIC-SBX-EGRESS -j DROP"
+        iptables -S AGENTIC-SANDBOX-EGRESS | grep -q -- "-A AGENTIC-SANDBOX-EGRESS -s 172.30.13.0/24 -j DROP"
+        iptables -t nat -S AGENTIC-SANDBOX-PROXY | grep -q "192.0.2.1/32"
+        printf healthy
+      ' 2>/dev/null || true)"
+    [[ "${n8n_vm_egress_contract}" == "healthy" ]] \
+      || doctor_fail "sandbox VM monitored egress tunnel/image/fail-closed policy is incomplete; reprovision with ./agent n8n-sandbox-vm create --reuse-existing"
+    docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"sysbox-runc"' \
+      && doctor_fail "sysbox-runc must not be installed in host Docker; it belongs only inside the sandbox VM"
+  fi
+fi
+
+optional_n8n_searxng_cid="$(service_container_id optional-n8n-searxng)"
+if [[ -n "${optional_n8n_cid}" ]] && agentic_csv_contains "n8n-ai" "${AGENTIC_OPTIONAL_MODULES:-}"; then
+  n8n_ai_env="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${optional_n8n_cid}" 2>/dev/null || true)"
+  if grep -q '^N8N_INSTANCE_AI_SANDBOX_ENABLED=true$' <<<"${n8n_ai_env}"; then
+    grep -q '^N8N_INSTANCE_AI_MODEL_URL=http://ollama-gate:11435/v1$' <<<"${n8n_ai_env}" \
+      || doctor_fail "n8n local AI model URL must target ollama-gate"
+    grep -q "^N8N_INSTANCE_AI_SANDBOX_API_URL=${n8n_sandbox_vm_endpoint}$" <<<"${n8n_ai_env}" \
+      || doctor_fail "n8n sandbox URL must target the private sandbox VM"
+    grep -q '^N8N_INSTANCE_AI_SEARXNG_URL=http://optional-n8n-searxng:8080$' <<<"${n8n_ai_env}" \
+      || doctor_fail "n8n local AI search URL must target internal SearXNG"
+  elif [[ -n "${optional_n8n_searxng_cid}" ]]; then
+    doctor_fail "n8n-ai services are running but N8N_INSTANCE_AI_SANDBOX_ENABLED is not true"
+  fi
+fi
+
 if [[ "${check_tool_stream_e2e}" -eq 1 ]]; then
   check_streamed_tool_call_health
 fi
@@ -3198,6 +3475,36 @@ else
       doctor_fail "active release artifact integrity or secret hygiene validation failed; run 'agent update' and inspect the release snapshot"
     fi
   fi
+fi
+
+# Check harness profiles generation status
+if [[ -f "${HARNESS_PROFILES_CONFIG}" ]]; then
+  if [[ -f "${HARNESS_PROFILES_PY}" ]]; then
+    # Vérifier que le fichier Python est à jour par rapport au YAML
+    if [[ -x "${AGENT_GENERATE_HARNESS_PROFILES_SCRIPT}" ]]; then
+      set +e
+      profiles_check_output=$(
+        python3 "${AGENT_GENERATE_HARNESS_PROFILES_SCRIPT}" --check \
+          --config "${HARNESS_PROFILES_CONFIG}" \
+          --output "${HARNESS_PROFILES_PY}" 2>&1
+      )
+      profiles_check_rc=$?
+      set -e
+      
+      if [[ "${profiles_check_rc}" -eq 0 ]]; then
+        ok "harness profiles are up-to-date"
+      else
+        warn "harness profiles are outdated: ${profiles_check_output}"
+        doctor_fail_or_warn "harness_profiles.py is outdated; run 'agent update' to regenerate"
+      fi
+    else
+      ok "harness profiles generator is available"
+    fi
+  else
+    doctor_fail "harness_profiles.py is missing; run 'agent update' to generate"
+  fi
+else
+  doctor_fail "harness_profiles_config.yaml is missing"
 fi
 
 if [[ "$status" -ne 0 ]]; then

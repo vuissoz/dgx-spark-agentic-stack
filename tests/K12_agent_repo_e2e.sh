@@ -33,6 +33,9 @@ cat >"${bootstrap_dir}/git-forge-bootstrap.json" <<'JSON'
   "reference_repository": "eight-queens-agent-e2e",
   "reference_clone_url_host": "http://127.0.0.1:13010/agentic/eight-queens-agent-e2e.git",
   "reference_clone_url_internal": "http://optional-forgejo:3000/agentic/eight-queens-agent-e2e.git",
+  "full_reference_repository": "agent-stack-full-e2e",
+  "full_reference_clone_url_host": "http://127.0.0.1:13010/agentic/agent-stack-full-e2e.git",
+  "full_reference_clone_url_internal": "http://optional-forgejo:3000/agentic/agent-stack-full-e2e.git",
   "reference_branch_policy": {
     "protected_branch": "main",
     "main_push_allowlist_users": ["system-manager"],
@@ -77,6 +80,59 @@ grep -q "selected agents:" "${summary_stderr}" \
   || fail "agent_repo_e2e must emit progress logs to stderr during dry-run"
 grep -q "building dry-run attempt plans" "${summary_stderr}" \
   || fail "agent_repo_e2e stderr must mention dry-run planning"
+
+verbose_summary_json="${runtime_root}/summary-verbose.json"
+verbose_summary_stderr="${runtime_root}/summary-verbose.stderr.log"
+verbose_artifacts_dir="${runtime_root}/deployments/validation/agent-repo-e2e-verbose"
+AGENTIC_ROOT="${runtime_root}" AGENTIC_COMPOSE_PROJECT="agentic-dev" \
+  python3 "${REPO_ROOT}/deployments/optional/agent_repo_e2e.py" \
+    --dry-run --attempts 1 --agents codex,openclaw --verbose --artifacts-dir "${verbose_artifacts_dir}" >"${verbose_summary_json}" 2>"${verbose_summary_stderr}" \
+  || fail "agent_repo_e2e verbose dry-run planner failed"
+
+grep -q "verbose: campaign preflight summary emitted" "${verbose_summary_stderr}" \
+  || fail "verbose mode must emit the campaign preflight marker"
+grep -q "verbose: attempt 1/1 agent=codex phase=plan" "${verbose_summary_stderr}" \
+  || fail "verbose mode must emit per-agent plan phase markers"
+grep -q "artifacts=" "${verbose_summary_stderr}" \
+  || fail "verbose mode must expose the attempt artifact directory"
+if grep -q "verbose:" "${summary_stderr}"; then
+  fail "default repo-e2e output must remain concise without verbose markers"
+fi
+python3 - "${verbose_summary_json}" <<'PY' || fail "verbose repo-e2e mode must preserve JSON stdout"
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+assert [item["agent"] for item in payload["results"]] == ["codex", "openclaw"]
+PY
+
+full_summary_json="${runtime_root}/summary-full.json"
+full_artifacts_dir="${runtime_root}/deployments/validation/agent-repo-e2e-full"
+AGENTIC_ROOT="${runtime_root}" AGENTIC_COMPOSE_PROJECT="agentic-dev" \
+  python3 "${REPO_ROOT}/deployments/optional/agent_repo_e2e.py" \
+    --dry-run --repo agent-stack-full-e2e --agents codex,openclaw --attempts 1 --artifacts-dir "${full_artifacts_dir}" >"${full_summary_json}" \
+  || fail "agent_repo_e2e full reference dry-run planner failed"
+
+python3 - "${full_summary_json}" <<'PY' || fail "full reference scenario must select its dedicated task contract"
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+results = payload["results"]
+assert [entry["agent"] for entry in results] == ["codex", "openclaw"]
+assert payload["preflight"]["reference_repository"] == "agent-stack-full-e2e"
+assert payload["preflight"]["openclaw_repo_solver_allowlist"]["tool"] == "repo.normalize_identifier.solve"
+for entry in results:
+    assert entry["workspace"].startswith("/workspace/agent-stack-full-e2e-")
+    plan = json.load(open(entry["artifacts_dir"] + "/plan.json", encoding="utf-8"))
+    prompt = plan["prompt"]
+    assert "src/normalize.py" in prompt
+    assert "Implement normalize_identifier()" in prompt
+    assert 'git commit -m "Implement normalize_identifier()"' in prompt
+    assert "src/eight_queens.py" not in prompt
+    assert "solve_eight_queens" not in prompt
+PY
+ok "agent_repo_e2e verbose mode adds terminal progress without changing JSON stdout"
 
 python3 - "${summary_json}" <<'PY' || fail "agent_repo_e2e dry-run summary schema is invalid"
 import json
@@ -256,6 +312,17 @@ assert ok is False
 assert "repo.eight_queens.solve" in detail
 assert "allowlisted" in detail
 assert (runtime_root / "fail" / "openclaw-allowlist.stderr.log").is_file()
+
+module.configure_reference_scenario("agent-stack-full-e2e")
+module.docker_exec = lambda *_args, **_kwargs: subprocess.CompletedProcess(
+    args=[],
+    returncode=0,
+    stdout="allowlist_file=/config/tool_allowlist.txt\nrequired_tool=repo.normalize_identifier.solve\n",
+    stderr="",
+)
+ok, detail = module.verify_openclaw_repo_solver_allowlist("cid-full", runtime_root / "full")
+assert ok is True
+assert "repo.normalize_identifier.solve" in detail
 PY
 
 python3 - "${REPO_ROOT}" "${runtime_root}" <<'PY' || fail "agent_repo_e2e managed host workspace cleanup failed"
@@ -335,7 +402,7 @@ codex_files = module.build_workspace_instruction_files("codex", "agent/codex", "
 assert "CODEX.md" in codex_files
 PY
 
-python3 - "${REPO_ROOT}" <<'PY' || fail "repo.eight_queens.solve must use canonical Forgejo SSH path"
+python3 - "${REPO_ROOT}" <<'PY' || fail "OpenClaw reference solvers must use canonical Forgejo SSH paths"
 from pathlib import Path
 import re
 import sys
@@ -348,6 +415,8 @@ assert "ssh://git@" in source
 assert "/state/cli/openclaw-home/.ssh" in source
 assert "UserKnownHostsFile=" in source
 assert "StrictHostKeyChecking=yes" in source
+assert "repo.normalize_identifier.solve" in source
+assert "Implement normalize_identifier()" in source
 PY
 
 python3 - "${REPO_ROOT}" "${runtime_root}" <<'PY' || fail "agent_repo_e2e branch reset integration failed"

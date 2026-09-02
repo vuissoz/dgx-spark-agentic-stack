@@ -14,7 +14,7 @@ assert_cmd docker
 assert_cmd timeout
 assert_cmd python3
 
-default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-nemotron-cascade-2:30b}}"
+default_model="${AGENTIC_DEFAULT_MODEL:-${OLLAMA_PRELOAD_GENERATE_MODEL:-qwen3.8:27b}}"
 tool_timeout="${AGENTIC_DEFAULT_MODEL_TOOL_SMOKE_TIMEOUT_SECONDS:-360}"
 
 services=(agentic-claude agentic-codex agentic-opencode agentic-kilocode agentic-vibestral agentic-hermes openhands)

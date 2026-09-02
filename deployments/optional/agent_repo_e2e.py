@@ -32,6 +32,25 @@ DEFAULT_ARTIFACTS_ROOT = AGENTIC_ROOT / "deployments" / "validation" / "agent-re
 OPENHANDS_HOST_PORT = os.environ.get("OPENHANDS_HOST_PORT", "3000")
 REFERENCE_PROBLEM_FILE = "src/eight_queens.py"
 REFERENCE_PROBLEM_SENTINEL = 'raise NotImplementedError("Implement solve_eight_queens()")'
+REFERENCE_TASK = "Implement solve_eight_queens()"
+REFERENCE_COMMIT_MESSAGE = "Implement solve_eight_queens()"
+REFERENCE_TEST_COMMAND = "python3 -m pytest -q"
+REFERENCE_SCENARIOS = {
+    "eight-queens-agent-e2e": (
+        "src/eight_queens.py",
+        'raise NotImplementedError("Implement solve_eight_queens()")',
+        "Implement solve_eight_queens()",
+        "Implement solve_eight_queens()",
+        "repo.eight_queens.solve",
+    ),
+    "agent-stack-full-e2e": (
+        "src/normalize.py",
+        'raise NotImplementedError("Implement normalize_identifier()")',
+        "Implement normalize_identifier()",
+        "Implement normalize_identifier()",
+        "repo.normalize_identifier.solve",
+    ),
+}
 GIT_FORGE_SECRET_DIR = AGENTIC_ROOT / "secrets" / "runtime" / "git-forge"
 PYTEST_IMPORT_CHECK = "python3 -c 'import pytest' >/dev/null"
 AGENT_DEFAULTS_FILE = "/state/bootstrap/ollama-gate-defaults.env"
@@ -46,6 +65,7 @@ SUCCESS_THRESHOLD = 1
 OPENCLAW_REPO_SOLVER_TOOL = "repo.eight_queens.solve"
 OPENCLAW_TOKEN_FILE = "/run/secrets/openclaw.token"
 KILOCODE_MIN_INVOKE_TIMEOUT = 1800
+VERBOSE = False
 COMMON_INSTRUCTION_FILES = ("AGENTS.md", "AGENT.md", "SKILLS.md")
 MODE_INSTRUCTION_FILE = {
     "codex": "CODEX.md",
@@ -79,9 +99,48 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def configure_reference_scenario(repo_name: str) -> None:
+    global REFERENCE_PROBLEM_FILE, REFERENCE_PROBLEM_SENTINEL, REFERENCE_TASK, REFERENCE_COMMIT_MESSAGE, OPENCLAW_REPO_SOLVER_TOOL
+    scenario = REFERENCE_SCENARIOS.get(repo_name)
+    if scenario is None:
+        return
+    (
+        REFERENCE_PROBLEM_FILE,
+        REFERENCE_PROBLEM_SENTINEL,
+        REFERENCE_TASK,
+        REFERENCE_COMMIT_MESSAGE,
+        OPENCLAW_REPO_SOLVER_TOOL,
+    ) = scenario
+
+
+def reference_metadata(state: dict[str, object], repo_name: str) -> tuple[str, str, str]:
+    """Return the state keys belonging to a supported seeded reference repository."""
+    primary = str(state.get("reference_repository") or "")
+    full = str(state.get("full_reference_repository") or "")
+    if repo_name == primary:
+        return (
+            primary,
+            str(state.get("reference_clone_url_internal") or ""),
+            str(state.get("reference_clone_url_host") or ""),
+        )
+    if repo_name == full:
+        return (
+            full,
+            str(state.get("full_reference_clone_url_internal") or ""),
+            str(state.get("full_reference_clone_url_host") or ""),
+        )
+    fail(f"unsupported stack-managed reference repository '{repo_name}'")
+
+
 def log_progress(message: str) -> None:
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     print(f"[repo-e2e {timestamp}] {message}", file=sys.stderr, flush=True)
+
+
+def log_verbose(message: str) -> None:
+    """Emit extra operator progress without changing the JSON stdout contract."""
+    if VERBOSE:
+        log_progress(f"verbose: {message}")
 
 
 def write_json(path: pathlib.Path, payload: object) -> None:
@@ -258,7 +317,7 @@ def build_workspace_instruction_files(mode: str, branch: str, workspace: str) ->
         "# Repo-E2E Instructions\n\n"
         "This repository is a stack-managed reference task for a non-interactive agent harness.\n\n"
         "## Task\n\n"
-        f"- Implement `solve_eight_queens()` in `{REFERENCE_PROBLEM_FILE}`.\n"
+        f"- {REFERENCE_TASK} in `{REFERENCE_PROBLEM_FILE}`.\n"
         "- Do not rename files or add unrelated changes.\n"
         "- Verify with `python3 -m pytest -q`.\n\n"
         "## Runtime Contract\n\n"
@@ -272,7 +331,7 @@ def build_workspace_instruction_files(mode: str, branch: str, workspace: str) ->
         "## Publish Contract\n\n"
         "- Start with `git pull --ff-only origin <branch>`.\n"
         f"- Stage only `{REFERENCE_PROBLEM_FILE}`.\n"
-        '- Commit with `git commit -m "Implement solve_eight_queens()"`.\n'
+        f'- Commit with `git commit -m "{REFERENCE_COMMIT_MESSAGE}"`.\n'
         "- Push with `git push origin HEAD:<branch>`.\n"
         "- Leave the worktree clean after push.\n"
     )
@@ -282,7 +341,7 @@ def build_workspace_instruction_files(mode: str, branch: str, workspace: str) ->
         "Use this sequence:\n\n"
         "1. Read `AGENTS.md` and the harness-specific instruction file.\n"
         "2. Read the known local tools manifest.\n"
-        "3. Inspect `src/eight_queens.py` and `tests/test_eight_queens.py`.\n"
+        f"3. Inspect `{REFERENCE_PROBLEM_FILE}` and its tests.\n"
         "4. Edit only the target solver file.\n"
         "5. Run `python3 -m pytest -q`.\n"
         "6. Commit and push only after tests pass.\n"
@@ -322,7 +381,7 @@ def build_standard_prompt(repo_name: str, branch: str, workspace: str, mode: str
         "The shell is '/bin/sh', so use POSIX-compatible commands only. "
         f"When you publish, run 'git add {REFERENCE_PROBLEM_FILE}', then create the commit with a simple "
         "single-line command such as "
-        "'git commit -m \"Implement solve_eight_queens()\"', then push with "
+        f"'git commit -m \"{REFERENCE_COMMIT_MESSAGE}\"', then push with "
         f"'git push origin HEAD:{branch}'. "
         "Do not use here-strings, heredocs, or shell redirections to build the commit command. "
         "After your push, the repository must be completely clean: no staged, modified, or untracked files may remain. "
@@ -422,7 +481,7 @@ def warm_default_model(artifact_dir: pathlib.Path, *, timeout_seconds: int = OLL
     default_model = (
         os.environ.get("AGENTIC_DEFAULT_MODEL")
         or os.environ.get("OLLAMA_PRELOAD_GENERATE_MODEL")
-        or "nemotron-cascade-2:30b"
+        or "qwen3.8:27b"
     )
     env = os.environ.copy()
     env["OLLAMA_API_URL"] = env.get("OLLAMA_API_URL", OLLAMA_SMOKE_API_URL)
@@ -606,7 +665,7 @@ def publish_workspace_changes(
             "python3 -m pytest -q",
             f"git add {shlex.quote(REFERENCE_PROBLEM_FILE)}",
             "if ! git diff --cached --quiet; then",
-            "  git commit -m 'Implement solve_eight_queens()'",
+            f"  git commit -m {shlex.quote(REFERENCE_COMMIT_MESSAGE)}",
             "fi",
             f"git push origin HEAD:{shlex.quote(branch)}",
             "git status --short",
@@ -710,7 +769,7 @@ def reset_agent_branches_if_requested(
         payload = {
             "status": "skipped",
             "reset_agent_branches": False,
-            "reference_repository": str(state.get("reference_repository") or ""),
+            "reference_repository": repo_name,
             "main_branch": "main",
             "selected_agents": selected_agents,
             "branches": branch_summary,
@@ -718,14 +777,7 @@ def reset_agent_branches_if_requested(
         (preflight_dir / "preflight.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         return payload
 
-    reference_repo = str(state.get("reference_repository") or "")
-    if repo_name != reference_repo:
-        fail(
-            "--reset-agent-branches only supports the stack-managed reference repository "
-            f"'{reference_repo}', got '{repo_name}'"
-        )
-    reference_clone_url_internal = str(state.get("reference_clone_url_internal") or "")
-    reference_clone_url_host = str(state.get("reference_clone_url_host") or "")
+    reference_repo, reference_clone_url_internal, reference_clone_url_host = reference_metadata(state, repo_name)
     allowed_clone_urls = {
         reference_clone_url_internal,
         reference_clone_url_host,
@@ -1586,17 +1638,27 @@ def parse_args() -> argparse.Namespace:
         help="Destructively realign selected remote agent/<tool> branches to main before the run",
     )
     parser.add_argument("--dry-run", action="store_true", help="Resolve plan and artifacts without invoking agents")
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Emit per-agent/per-attempt phase and artifact progress to stderr",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
+    global VERBOSE
     args = parse_args()
+    VERBOSE = args.verbose
     if args.attempts < 1:
         fail("--attempts must be >= 1")
     log_progress("loading git-forge bootstrap state")
     state = load_bootstrap_state()
     repo_name = args.repo or str(state.get("reference_repository") or "")
-    clone_url = args.clone_url or str(state.get("reference_clone_url_internal") or "")
+    configure_reference_scenario(repo_name)
+    _, reference_clone_url_internal, _ = reference_metadata(state, repo_name)
+    clone_url = args.clone_url or reference_clone_url_internal
     if not repo_name or not clone_url:
         fail("reference repository metadata is missing from git-forge bootstrap state")
 
@@ -1609,11 +1671,13 @@ def main() -> None:
         + ", ".join(selected_agents)
         + f" | attempts={args.attempts} | repo={repo_name} | dry_run={'yes' if args.dry_run else 'no'}"
     )
+    log_verbose("campaign preflight summary emitted; JSON result remains on stdout")
 
     timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     artifact_root = pathlib.Path(args.artifacts_dir) if args.artifacts_dir else DEFAULT_ARTIFACTS_ROOT / timestamp
     artifact_root.mkdir(parents=True, exist_ok=True)
     log_progress(f"artifacts directory: {artifact_root}")
+    log_verbose(f"artifacts will contain _preflight plus one directory per attempt and agent")
 
     log_progress("running branch reset preflight")
     preflight = reset_agent_branches_if_requested(
@@ -1658,6 +1722,10 @@ def main() -> None:
                 workspace = f"/workspace/{sanitize_name(repo_name)}-{sanitize_name(agent_name)}"
                 attempt_artifact_dir = artifact_root / f"attempt-{attempt:02d}" / agent_name
                 attempt_artifact_dir.mkdir(parents=True, exist_ok=True)
+                log_verbose(
+                    f"attempt {attempt}/{args.attempts} agent={agent_name} phase=plan "
+                    f"workspace={workspace} artifacts={attempt_artifact_dir}"
+                )
                 write_json(
                     attempt_artifact_dir / "plan.json",
                     {
@@ -1711,6 +1779,10 @@ def main() -> None:
                 }
             for agent_name in selected_agents:
                 log_progress(f"attempt {attempt}/{args.attempts}: invoking {agent_name}")
+                log_verbose(
+                    f"attempt {attempt}/{args.attempts} agent={agent_name} "
+                    "phases=clone,baseline,execute,validate,publish"
+                )
                 attempt_result = run_agent_once(
                     agent_name,
                     clone_url=clone_url,
@@ -1729,6 +1801,11 @@ def main() -> None:
                     f"attempt {attempt}/{args.attempts}: {agent_name} -> "
                     f"{attempt_result.get('status')} at {attempt_result.get('stage')} "
                     f"({attempt_result.get('detail')})"
+                )
+                log_verbose(
+                    f"attempt {attempt}/{args.attempts} agent={agent_name} "
+                    f"artifacts={attempt_result.get('artifacts_dir')} "
+                    f"category={attempt_result.get('category')}"
                 )
 
     results = [

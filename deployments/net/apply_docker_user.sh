@@ -203,6 +203,9 @@ main() {
   local unbound_ip
   local gate_ip
   local ollama_ip
+  local n8n_sandbox_vm_endpoint
+  local n8n_sandbox_vm_ip="${N8N_SANDBOX_VM_IP:-}"
+  local n8n_ai_ip
   local backup_id
   local -a source_networks=()
   local -a resolution_networks=()
@@ -215,6 +218,7 @@ main() {
   local -a gate_ips=()
   local -a ollama_source_ips=()
   local -a ollama_ips=()
+  local -a n8n_ai_ips=()
   local -a proxy_upstream_ports=()
   declare -A seen_networks=()
 
@@ -262,6 +266,26 @@ main() {
   collect_service_ips_with_retry "${AGENTIC_GATE_SERVICE}" gate_ips "${resolution_networks[@]}" || true
   collect_service_ips_with_retry "${AGENTIC_OLLAMA_SERVICE}" ollama_ips "${resolution_networks[@]}" || true
   collect_service_ips_with_retry "${AGENTIC_OLLAMA_SERVICE}" ollama_source_ips "${AGENTIC_EGRESS_NETWORK}" || true
+
+  if agentic_csv_contains "n8n-ai" "${AGENTIC_OPTIONAL_MODULES:-}"; then
+    if [[ -z "${n8n_sandbox_vm_ip}" ]]; then
+      n8n_sandbox_vm_endpoint="$(
+        "${AGENTIC_REPO_ROOT}/deployments/vm/manage_n8n_sandbox_vm.sh" endpoint 2>/dev/null || true
+      )"
+      n8n_sandbox_vm_ip="${n8n_sandbox_vm_endpoint#http://}"
+      n8n_sandbox_vm_ip="${n8n_sandbox_vm_ip%:8080}"
+    fi
+    python3 - "${n8n_sandbox_vm_ip}" <<'PY' >/dev/null \
+      || die "invalid or unavailable private n8n sandbox VM IPv4 address: ${n8n_sandbox_vm_ip:-none}"
+import ipaddress
+import sys
+address = ipaddress.ip_address(sys.argv[1])
+if address.version != 4 or not address.is_private:
+    raise SystemExit(1)
+PY
+    collect_service_ips_with_retry "optional-n8n" n8n_ai_ips "${AGENTIC_NETWORK}" \
+      || die "cannot resolve optional-n8n IP before allowing private sandbox VM traffic"
+  fi
 
   IFS=',' read -r -a proxy_upstream_ports <<<"${AGENTIC_PROXY_UPSTREAM_PORTS}"
 
@@ -312,6 +336,12 @@ main() {
       -j LOG --log-prefix "${AGENTIC_DOCKER_USER_LOG_PREFIX}" --log-level 4
     iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" -s "${ollama_ip}/32" -j DROP
     log "constrained ${AGENTIC_OLLAMA_SERVICE} egress source ${ollama_ip} to internal mesh, ${AGENTIC_UNBOUND_SERVICE}, and ${AGENTIC_PROXY_SERVICE}"
+  done
+
+  for n8n_ai_ip in "${n8n_ai_ips[@]}"; do
+    iptables -A "${AGENTIC_DOCKER_USER_CHAIN}" \
+      -s "${n8n_ai_ip}/32" -d "${n8n_sandbox_vm_ip}/32" -p tcp --dport 8080 -j ACCEPT
+    log "allowed n8n sandbox traffic from ${n8n_ai_ip} to private VM ${n8n_sandbox_vm_ip}:8080"
   done
 
   for src_subnet in "${source_subnets[@]}"; do

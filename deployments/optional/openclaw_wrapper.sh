@@ -63,6 +63,13 @@ gateway_token_file="${OPENCLAW_CONFIG_GATEWAY_TOKEN_FILE:-${OPENCLAW_GATEWAY_TOK
 capture_on_exit="${OPENCLAW_CAPTURE_LAYER_STATE_ON_EXIT:-1}"
 openclaw_home="${OPENCLAW_HOME:-/state/cli/openclaw-home}"
 
+# OPENCLAW_GATEWAY_URL deliberately targets the stack-private gateway proxy in
+# the operator container. Upstream requires the matching token in the
+# environment and will not reuse config credentials for an URL override.
+if [[ -n "${OPENCLAW_GATEWAY_URL:-}" ]]; then
+  export_secret_env OPENCLAW_GATEWAY_TOKEN "${gateway_token_file}"
+fi
+
 export_secret_env TELEGRAM_BOT_TOKEN "${OPENCLAW_TELEGRAM_BOT_TOKEN_FILE:-/run/secrets/telegram.bot_token}"
 export_secret_env DISCORD_BOT_TOKEN "${OPENCLAW_DISCORD_BOT_TOKEN_FILE:-/run/secrets/discord.bot_token}"
 export_secret_env SLACK_BOT_TOKEN "${OPENCLAW_SLACK_BOT_TOKEN_FILE:-/run/secrets/slack.bot_token}"

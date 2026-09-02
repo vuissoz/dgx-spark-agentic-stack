@@ -17,6 +17,29 @@ assert_cmd python3
 agent_bin="${REPO_ROOT}/agent"
 [[ -x "${agent_bin}" ]] || fail "agent binary is missing or not executable"
 
+python3 - "${REPO_ROOT}/scripts/comfyui_flux_setup.sh" <<'PY' \
+  || fail "embedded Flux downloader Python is invalid or lacks integrity imports"
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+marker = "      python3 - <<'PY'\n"
+start = source.index(marker) + len(marker)
+end = source.index("\nPY\n", start)
+downloader = source[start:end]
+compile(downloader, "comfyui_flux_downloader", "exec")
+for required_import in ("import fcntl", "import hashlib"):
+    if required_import not in downloader:
+        raise SystemExit(f"missing downloader import: {required_import}")
+PY
+
+# Keep the negative download path deterministic. The setup helper otherwise
+# discovers a host-managed Hugging Face token and can start a real, long-running
+# gated download during a regression test. An explicit empty file disables that
+# fallback while still exercising the same CLI contract.
+empty_hf_token_file="$(mktemp)"
+trap 'rm -f "${empty_hf_token_file}"' EXIT
+
 comfy_cid="$(require_service_container comfyui)" || exit 1
 wait_for_container_ready "${comfy_cid}" 180 || fail "comfyui is not ready"
 
@@ -34,10 +57,11 @@ import sys
 manifest_path = sys.argv[1]
 payload = json.loads(open(manifest_path, "r", encoding="utf-8").read())
 files = payload.get("files")
-if not isinstance(files, list) or len(files) < 4:
+if not isinstance(files, list) or len(files) < 5:
     raise SystemExit("manifest files array is missing or too small")
 required_targets = {
     "diffusion_models/flux1-dev.safetensors",
+    "diffusion_models/flux1-fill-dev.safetensors",
     "vae/ae.safetensors",
     "text_encoders/clip_l.safetensors",
     "text_encoders/t5xxl_fp16.safetensors",
@@ -46,6 +70,11 @@ seen_targets = {item.get("target") for item in files if isinstance(item, dict)}
 missing = sorted(required_targets - seen_targets)
 if missing:
     raise SystemExit(f"manifest missing required targets: {missing}")
+fill = next(item for item in files if item.get("target") == "diffusion_models/flux1-fill-dev.safetensors")
+if fill.get("expected_size") != 23804922408:
+    raise SystemExit("Flux.1 Fill expected size is not pinned")
+if fill.get("sha256") != "03e289f530df51d014f48e675a9ffa2141bc003259bf5f25d75b957e920a41ca":
+    raise SystemExit("Flux.1 Fill SHA-256 is not pinned")
 PY
 ok "flux manifest contains required Flux.1-dev runtime targets"
 
@@ -55,17 +84,29 @@ for subdir in diffusion_models text_encoders vae checkpoints clip; do
 done
 ok "flux bootstrap ensured comfyui model directories and legacy compatibility locations"
 
-set +e
-"${agent_bin}" comfyui flux-1-dev --download --no-egress-check >/tmp/agent-i2-flux-download.out 2>&1
-download_rc=$?
-set -e
-if [[ "${download_rc}" -ne 0 ]]; then
+missing_gated_count="$(python3 - "${manifest_path}" "${AGENTIC_ROOT:-/srv/agentic}/comfyui/models" <<'PY'
+import json
+import pathlib
+import sys
+
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+models_root = pathlib.Path(sys.argv[2])
+print(sum(1 for item in manifest["files"] if item.get("gated") and not (models_root / item["target"]).exists()))
+PY
+)"
+if (( missing_gated_count > 0 )); then
+  set +e
+  env -u HF_TOKEN "${agent_bin}" comfyui flux-1-dev --download \
+    --hf-token-file "${empty_hf_token_file}" --no-egress-check >/tmp/agent-i2-flux-download.out 2>&1
+  download_rc=$?
+  set -e
+  [[ "${download_rc}" -ne 0 ]] || fail "tokenless download unexpectedly succeeded with missing gated files"
   if ! rg -q "missing HF token for gated repo" /tmp/agent-i2-flux-download.out; then
     fail "expected missing HF token error in download output when download path fails"
   fi
   ok "flux download path enforces HF token requirement when gated files are missing"
 else
-  ok "flux download path is idempotent when required files are already present"
+  ok "flux long-running download path skipped because gated runtime files are already present"
 fi
 
 ok "I2_comfyui_flux_bootstrap passed"
