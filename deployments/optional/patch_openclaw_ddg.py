@@ -70,7 +70,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Patch OpenClaw DuckDuckGo client to use POST requests.")
     parser.add_argument("roots", nargs="+", help="Directories to scan for ddg-client-*.js files")
     parser.add_argument("--require-match", action="store_true", help="Fail when no candidate file is found")
+    parser.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help="Allow no candidate file; the DDG plugin may be installed later at runtime",
+    )
     args = parser.parse_args()
+
+    if args.require_match and args.allow_missing:
+        parser.error("--require-match and --allow-missing are mutually exclusive")
 
     changed = 0
     seen = 0
@@ -87,6 +95,11 @@ def main() -> int:
     if args.require_match and seen == 0:
         print("no ddg-client-*.js candidates found", file=sys.stderr)
         return 1
+    if args.allow_missing and seen == 0:
+        print(
+            "no ddg-client-*.js candidates found; OpenClaw may install the DDG plugin at runtime",
+            file=sys.stderr,
+        )
     return 0
 
 

@@ -46,3 +46,20 @@ grep -q 'body: body.toString()' "${fixture_file}" \
   || { echo "patch must send the search body payload" >&2; exit 1; }
 
 echo "OK: OpenClaw DDG patch rewrites GET html search to POST form submission"
+
+missing_dir="${tmpdir}/missing"
+mkdir -p "${missing_dir}"
+python3 "${REPO_ROOT}/deployments/optional/patch_openclaw_ddg.py" --allow-missing "${missing_dir}" \
+  >/tmp/f18-ddg-missing.out 2>/tmp/f18-ddg-missing.err
+grep -q 'OpenClaw may install the DDG plugin at runtime' /tmp/f18-ddg-missing.err \
+  || { echo "missing DDG plugin must be explicitly reported as deferred" >&2; exit 1; }
+
+if python3 "${REPO_ROOT}/deployments/optional/patch_openclaw_ddg.py" --require-match "${missing_dir}" \
+  >/tmp/f18-ddg-required.out 2>/tmp/f18-ddg-required.err; then
+  echo "--require-match must fail when no DDG candidate exists" >&2
+  exit 1
+fi
+grep -q 'no ddg-client-\*.js candidates found' /tmp/f18-ddg-required.err \
+  || { echo "strict DDG patch mode must report missing candidates" >&2; exit 1; }
+
+echo "OK: OpenClaw DDG patch handles deferred external plugin installation"
